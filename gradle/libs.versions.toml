@@ -23,8 +23,11 @@ roomCompiler = "2.6.1"
 roomKtx = "2.6.1"
 datastorePreferences = "1.0.0"
 hilt = "2.48"
+material3Lint = "1.5.0-alpha04"
+#javapoet = "1.13.0"
 
 [libraries]
+androidx-compose-material-icons-extended = { module = "androidx.compose.material:material-icons-extended" }
 androidx-core-ktx = { group = "androidx.core", name = "core-ktx", version.ref = "coreKtx" }
 androidx-lifecycle-runtime-ktx = { group = "androidx.lifecycle", name = "lifecycle-runtime-ktx", version.ref = "lifecycleRuntimeKtx" }
 androidx-activity-compose = { group = "androidx.activity", name = "activity-compose", version.ref = "activityCompose" }
@@ -53,6 +56,8 @@ datastore-preferences = { group = "androidx.datastore", name = "datastore-prefer
 junit = { group = "junit", name = "junit", version.ref = "junit" }
 androidx-junit = { group = "androidx.test.ext", name = "junit", version.ref = "junitVersion" }
 androidx-espresso-core = { group = "androidx.test.espresso", name = "espresso-core", version.ref = "espressoCore" }
+androidx-compose-material3-lint = { group = "androidx.compose.material3", name = "material3-lint", version.ref = "material3Lint" }
+#javapoet = { group = "com.squareup", name = "javapoet", version.ref = "javapoet" }
 
 [plugins]
 android-application = { id = "com.android.application", version.ref = "agp" }

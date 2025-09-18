@@ -1,3 +1,24 @@
 <resources>
     <string name="app_name">IMFIT</string>
+
+    <string name="label_email">Email</string>
+    <string name="label_username">Nama Pengguna</string>
+    <string name="label_password">Kata Sandi</string>
+    <string name="label_fullname">Nama Lengkap</string>
+    <string name="label_date_of_birth">Tanggal Lahir</string>
+    <string name="show_password_description">Tampilkan kata sandi</string>
+    <string name="hide_password_description">Sembunyikan kata sandi</string>
+
+    <string name="login_title">Masuk</string>
+    <string name="login_email_or_username_label">Nama Pengguna atau Email</string>
+    <string name="login_remember_me">Ingat saya</string>
+    <string name="login_button">Masuk</string>
+    <string name="login_redirect_prompt">Belum punya akun?</string>
+    <string name="login_redirect_action">Daftar</string>
+
+    <string name="register_title">Daftar</string>
+    <string name="register_profile_picture_placeholder">Unggah Foto Profil</string>
+    <string name="register_button">Daftar</string>
+    <string name="register_redirect_prompt">Sudah punya akun?</string>
+    <string name="register_redirect_action">Masuk</string>
 </resources>

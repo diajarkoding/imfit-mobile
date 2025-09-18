@@ -29,20 +29,22 @@ android {
             )
         }
     }
+
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_11
         targetCompatibility = JavaVersion.VERSION_11
     }
+
     kotlinOptions {
         jvmTarget = "11"
     }
+
     buildFeatures {
         compose = true
     }
 }
 
 dependencies {
-
     // --- CORE & UI ---
     implementation(libs.androidx.core.ktx)
     implementation(libs.androidx.lifecycle.runtime.ktx)
@@ -52,6 +54,7 @@ dependencies {
     implementation(libs.androidx.compose.ui.graphics)
     implementation(libs.androidx.compose.ui.tooling.preview)
     implementation(libs.androidx.compose.material3)
+    implementation(libs.androidx.compose.material.icons.extended)
 
     // --- STATE MANAGEMENT & LIFECYCLE ---
     implementation(libs.androidx.lifecycle.viewmodel.compose)
@@ -59,7 +62,7 @@ dependencies {
     // --- NAVIGATION ---
     implementation(libs.androidx.navigation.compose)
 
-    // --- DEPENDENCY INJECTION ---
+    // --- DEPENDENCY INJECTION (HILT) ---
     implementation(libs.hilt.android)
     kapt(libs.hilt.compiler)
     implementation(libs.androidx.hilt.navigation.compose)

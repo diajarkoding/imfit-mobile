@@ -42,28 +42,24 @@ fun LoginScreen(
     }
 
     AuthScreenLayout(title = stringResource(id = R.string.login_title)) {
-        // Tampilkan error jika ada
-        state.error?.let {
-            Text(
-                text = it,
-                color = MaterialTheme.colorScheme.error,
-                modifier = Modifier.padding(bottom = 16.dp)
-            )
-        }
 
         AuthTextField(
             value = state.emailOrUsername,
             // 4. Kirim event ke ViewModel saat ada perubahan
             onValueChange = { viewModel.onEvent(LoginEvent.EmailOrUsernameChanged(it)) },
             label = stringResource(id = R.string.login_email_or_username_label),
-            modifier = Modifier.fillMaxWidth()
+            modifier = Modifier.fillMaxWidth(),
+            isError = state.emailOrUsernameError != null,
+            errorMessage = state.emailOrUsernameError
         )
         Spacer(modifier = Modifier.height(16.dp))
         PasswordTextField(
             value = state.password,
             onValueChange = { viewModel.onEvent(LoginEvent.PasswordChanged(it)) },
             label = stringResource(id = R.string.label_password),
-            modifier = Modifier.fillMaxWidth()
+            modifier = Modifier.fillMaxWidth(),
+            isError = state.passwordError != null,
+            errorMessage = state.passwordError
         )
         Spacer(modifier = Modifier.height(8.dp))
         Row(

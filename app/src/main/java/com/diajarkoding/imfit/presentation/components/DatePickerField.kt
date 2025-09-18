@@ -27,7 +27,9 @@ fun DatePickerField(
     value: String,
     onValueChange: (String) -> Unit,
     label: String,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    isError: Boolean = false,
+    errorMessage: String? = null
 ) {
     val context = LocalContext.current
     val calendar = Calendar.getInstance()
@@ -89,13 +91,23 @@ fun DatePickerField(
                 modifier = Modifier.clickable { showDatePicker = true }
             )
         },
-        readOnly = true,
-        enabled = false,
         colors = OutlinedTextFieldDefaults.colors(
             disabledTextColor = MaterialTheme.colorScheme.onSurface,
             disabledBorderColor = MaterialTheme.colorScheme.outline,
             disabledLabelColor = MaterialTheme.colorScheme.onSurfaceVariant,
             disabledTrailingIconColor = MaterialTheme.colorScheme.onSurfaceVariant
-        )
+        ),
+        isError = isError,
+        supportingText = {
+            if (isError) {
+                Text(
+                    text = errorMessage ?: "",
+                    color = MaterialTheme.colorScheme.error,
+                    style = MaterialTheme.typography.labelSmall
+                )
+            }
+        },
+        readOnly = true,
+        enabled = false,
     )
 }

@@ -7,7 +7,7 @@ import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
 import com.diajarkoding.imfit.presentation.ui.auth.LoginScreen
 import com.diajarkoding.imfit.presentation.ui.auth.RegisterScreen
-import com.diajarkoding.imfit.presentation.ui.auth.SplashScreen
+import com.diajarkoding.imfit.presentation.ui.SplashScreen
 
 // Mendefinisikan rute sebagai object agar aman dari typo
 object Routes {

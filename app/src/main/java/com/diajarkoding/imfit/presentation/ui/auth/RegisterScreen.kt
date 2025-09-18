@@ -157,13 +157,7 @@ fun RegisterScreen(
                 .verticalScroll(rememberScrollState()),
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
-            state.error?.let {
-                Text(
-                    text = it,
-                    color = MaterialTheme.colorScheme.error,
-                    modifier = Modifier.padding(bottom = 16.dp)
-                )
-            }
+
 
             // Placeholder untuk Upload Foto Profil (sama seperti sebelumnya)
             Box(
@@ -202,7 +196,9 @@ fun RegisterScreen(
                 value = state.fullname,
                 onValueChange = { viewModel.onEvent(RegisterEvent.FullnameChanged(it)) },
                 label = stringResource(id = R.string.label_fullname),
-                modifier = Modifier.fillMaxWidth()
+                modifier = Modifier.fillMaxWidth(),
+                isError = state.fullnameError != null,
+                errorMessage = state.fullnameError
             )
             Spacer(modifier = Modifier.height(16.dp))
 
@@ -210,7 +206,9 @@ fun RegisterScreen(
                 value = state.username,
                 onValueChange = { viewModel.onEvent(RegisterEvent.UsernameChanged(it)) },
                 label = stringResource(id = R.string.label_username),
-                modifier = Modifier.fillMaxWidth()
+                modifier = Modifier.fillMaxWidth(),
+                isError = state.usernameError != null,
+                errorMessage = state.usernameError
             )
             Spacer(modifier = Modifier.height(16.dp))
 
@@ -219,7 +217,9 @@ fun RegisterScreen(
                 onValueChange = { viewModel.onEvent(RegisterEvent.EmailChanged(it)) },
                 label = stringResource(id = R.string.label_email),
                 keyboardType = androidx.compose.ui.text.input.KeyboardType.Email,
-                modifier = Modifier.fillMaxWidth()
+                modifier = Modifier.fillMaxWidth(),
+                isError = state.emailError != null,
+                errorMessage = state.emailError
             )
             Spacer(modifier = Modifier.height(16.dp))
 
@@ -227,7 +227,9 @@ fun RegisterScreen(
                 value = state.password,
                 onValueChange = { viewModel.onEvent(RegisterEvent.PasswordChanged(it)) },
                 label = stringResource(id = R.string.label_password),
-                modifier = Modifier.fillMaxWidth()
+                modifier = Modifier.fillMaxWidth(),
+                isError = state.passwordError != null,
+                errorMessage = state.passwordError
             )
             Spacer(modifier = Modifier.height(16.dp))
 
@@ -235,7 +237,9 @@ fun RegisterScreen(
                 value = state.dateOfBirth,
                 onValueChange = { viewModel.onEvent(RegisterEvent.DateOfBirthChanged(it)) },
                 label = stringResource(id = R.string.label_date_of_birth),
-                modifier = Modifier.fillMaxWidth()
+                modifier = Modifier.fillMaxWidth(),
+                isError = state.dateOfBirthError != null,
+                errorMessage = state.dateOfBirthError
             )
 
             Spacer(modifier = Modifier.height(32.dp))

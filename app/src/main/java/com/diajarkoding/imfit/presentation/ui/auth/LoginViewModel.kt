@@ -19,57 +19,50 @@ class LoginViewModel @Inject constructor() : ViewModel() {
 
     fun onEvent(event: LoginEvent) {
         when (event) {
+            // Saat pengguna mengetik, hapus error untuk field tersebut
             is LoginEvent.EmailOrUsernameChanged -> {
-                _state.update { it.copy(emailOrUsername = event.value) }
+                _state.update { it.copy(emailOrUsername = event.value, emailOrUsernameError = null) }
             }
-
             is LoginEvent.PasswordChanged -> {
-                _state.update { it.copy(password = event.value) }
+                _state.update { it.copy(password = event.value, passwordError = null) }
             }
-
             is LoginEvent.RememberMeChanged -> {
                 _state.update { it.copy(rememberMe = event.value) }
             }
-
             LoginEvent.LoginButtonPressed -> {
-                login()
+                validateAndLogin()
             }
         }
     }
 
-    private fun login() {
+    private fun validateAndLogin() {
         val currentState = _state.value
+        var hasError = false
 
-        // --- VALIDASI ---
+        // Reset semua error sebelum validasi ulang
+        _state.update { it.copy(emailOrUsernameError = null, passwordError = null) }
+
         if (!Validator.isNotEmpty(currentState.emailOrUsername)) {
-            _state.update { it.copy(error = "Email atau nama pengguna tidak boleh kosong.") }
-            return
+            _state.update { it.copy(emailOrUsernameError = "Email atau nama pengguna tidak boleh kosong.") }
+            hasError = true
         }
+
         if (!Validator.isNotEmpty(currentState.password)) {
-            _state.update { it.copy(error = "Kata sandi tidak boleh kosong.") }
+            _state.update { it.copy(passwordError = "Kata sandi tidak boleh kosong.") }
+            hasError = true
+        }
+
+        // Hentikan proses jika ada error
+        if (hasError) {
             return
         }
-        // --- AKHIR VALIDASI ---
-        
+
+        // Lanjutkan ke proses login jika tidak ada error
         viewModelScope.launch {
-            // 1. Tampilkan loading
-            _state.update { it.copy(isLoading = true, error = null) }
-
-            // 2. Simulasi panggilan jaringan
+            _state.update { it.copy(isLoading = true) }
             delay(2000)
-
-            // 3. Logika validasi (nanti akan diganti dengan panggilan ke UseCase/Repository)
-            val currentState = _state.value
-            if (currentState.emailOrUsername.isNotBlank() && currentState.password.isNotBlank()) {
-                // Simulasi login sukses
-                _state.update {
-                    it.copy(isLoading = false, loginSuccess = true)
-                }
-            } else {
-                // Simulasi login gagal
-                _state.update {
-                    it.copy(isLoading = false, error = "Email dan kata sandi tidak boleh kosong.")
-                }
+            _state.update {
+                it.copy(isLoading = false, loginSuccess = true)
             }
         }
     }

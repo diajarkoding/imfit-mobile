@@ -2,6 +2,7 @@ package com.diajarkoding.imfit.presentation.ui.auth
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.diajarkoding.imfit.core.utils.Validator
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -37,6 +38,19 @@ class LoginViewModel @Inject constructor() : ViewModel() {
     }
 
     private fun login() {
+        val currentState = _state.value
+
+        // --- VALIDASI ---
+        if (!Validator.isNotEmpty(currentState.emailOrUsername)) {
+            _state.update { it.copy(error = "Email atau nama pengguna tidak boleh kosong.") }
+            return
+        }
+        if (!Validator.isNotEmpty(currentState.password)) {
+            _state.update { it.copy(error = "Kata sandi tidak boleh kosong.") }
+            return
+        }
+        // --- AKHIR VALIDASI ---
+        
         viewModelScope.launch {
             // 1. Tampilkan loading
             _state.update { it.copy(isLoading = true, error = null) }

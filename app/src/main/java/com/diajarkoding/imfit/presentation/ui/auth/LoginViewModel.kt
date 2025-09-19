@@ -1,7 +1,9 @@
 package com.diajarkoding.imfit.presentation.ui.auth
 
+import android.app.Application
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.diajarkoding.imfit.R
 import com.diajarkoding.imfit.core.utils.Validator
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.delay
@@ -12,7 +14,9 @@ import kotlinx.coroutines.launch
 import javax.inject.Inject
 
 @HiltViewModel
-class LoginViewModel @Inject constructor() : ViewModel() {
+class LoginViewModel @Inject constructor(
+    private val application: Application
+) : ViewModel() {
 
     private val _state = MutableStateFlow(LoginState())
     val state = _state.asStateFlow()
@@ -21,14 +25,22 @@ class LoginViewModel @Inject constructor() : ViewModel() {
         when (event) {
             // Saat pengguna mengetik, hapus error untuk field tersebut
             is LoginEvent.EmailOrUsernameChanged -> {
-                _state.update { it.copy(emailOrUsername = event.value, emailOrUsernameError = null) }
+                _state.update {
+                    it.copy(
+                        emailOrUsername = event.value,
+                        emailOrUsernameError = null
+                    )
+                }
             }
+
             is LoginEvent.PasswordChanged -> {
                 _state.update { it.copy(password = event.value, passwordError = null) }
             }
+
             is LoginEvent.RememberMeChanged -> {
                 _state.update { it.copy(rememberMe = event.value) }
             }
+
             LoginEvent.LoginButtonPressed -> {
                 validateAndLogin()
             }
@@ -43,12 +55,12 @@ class LoginViewModel @Inject constructor() : ViewModel() {
         _state.update { it.copy(emailOrUsernameError = null, passwordError = null) }
 
         if (!Validator.isNotEmpty(currentState.emailOrUsername)) {
-            _state.update { it.copy(emailOrUsernameError = "Email atau nama pengguna tidak boleh kosong.") }
+            _state.update { it.copy(emailOrUsernameError = application.getString(R.string.validator_emailOrUsername)) }
             hasError = true
         }
 
         if (!Validator.isNotEmpty(currentState.password)) {
-            _state.update { it.copy(passwordError = "Kata sandi tidak boleh kosong.") }
+            _state.update { it.copy(passwordError = application.getString(R.string.validator_password)) }
             hasError = true
         }
 

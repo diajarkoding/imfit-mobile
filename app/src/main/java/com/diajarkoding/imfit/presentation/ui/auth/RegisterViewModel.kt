@@ -1,7 +1,9 @@
 package com.diajarkoding.imfit.presentation.ui.auth
 
+import android.app.Application
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.diajarkoding.imfit.R
 import com.diajarkoding.imfit.core.utils.Validator
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.delay
@@ -12,18 +14,50 @@ import kotlinx.coroutines.launch
 import javax.inject.Inject
 
 @HiltViewModel
-class RegisterViewModel @Inject constructor() : ViewModel() {
+class RegisterViewModel @Inject constructor(
+    private val application: Application
+) : ViewModel() {
     private val _state = MutableStateFlow(RegisterState())
     val state = _state.asStateFlow()
 
     fun onEvent(event: RegisterEvent) {
         when (event) {
             // Saat pengguna mengetik, hapus error untuk field tersebut
-            is RegisterEvent.FullnameChanged -> _state.update { it.copy(fullname = event.value, fullnameError = null) }
-            is RegisterEvent.UsernameChanged -> _state.update { it.copy(username = event.value, usernameError = null) }
-            is RegisterEvent.EmailChanged -> _state.update { it.copy(email = event.value, emailError = null) }
-            is RegisterEvent.PasswordChanged -> _state.update { it.copy(password = event.value, passwordError = null) }
-            is RegisterEvent.DateOfBirthChanged -> _state.update { it.copy(dateOfBirth = event.value, dateOfBirthError = null) }
+            is RegisterEvent.FullnameChanged -> _state.update {
+                it.copy(
+                    fullname = event.value,
+                    fullnameError = null
+                )
+            }
+
+            is RegisterEvent.UsernameChanged -> _state.update {
+                it.copy(
+                    username = event.value,
+                    usernameError = null
+                )
+            }
+
+            is RegisterEvent.EmailChanged -> _state.update {
+                it.copy(
+                    email = event.value,
+                    emailError = null
+                )
+            }
+
+            is RegisterEvent.PasswordChanged -> _state.update {
+                it.copy(
+                    password = event.value,
+                    passwordError = null
+                )
+            }
+
+            is RegisterEvent.DateOfBirthChanged -> _state.update {
+                it.copy(
+                    dateOfBirth = event.value,
+                    dateOfBirthError = null
+                )
+            }
+
             is RegisterEvent.ProfilePictureChanged -> _state.update { it.copy(profileImageUri = event.uri) }
             RegisterEvent.RegisterButtonPressed -> validateAndRegister()
             else -> {}
@@ -32,40 +66,58 @@ class RegisterViewModel @Inject constructor() : ViewModel() {
 
     private fun validateAndRegister() {
         val currentState = _state.value
+        var hasError = false
 
         // Reset semua error sebelum validasi ulang
-        var hasError = false
-        _state.update { it.copy(
-            fullnameError = null,
-            usernameError = null,
-            emailError = null,
-            passwordError = null,
-            dateOfBirthError = null
-        )}
+        _state.update {
+            it.copy(
+                fullnameError = null,
+                usernameError = null,
+                emailError = null,
+                passwordError = null,
+                dateOfBirthError = null
+            )
+        }
 
+        // --- Validasi Full Name ---
         if (!Validator.isNotEmpty(currentState.fullname)) {
-            _state.update { it.copy(fullnameError = "Nama lengkap tidak boleh kosong.") }
-            hasError = true
-        }
-        if (!Validator.isNotEmpty(currentState.username)) {
-            _state.update { it.copy(usernameError = "Nama pengguna tidak boleh kosong.") }
-            hasError = true
-        }
-        if (!Validator.isEmailValid(currentState.email)) {
-            _state.update { it.copy(emailError = "Format email tidak valid.") }
-            hasError = true
-        }
-        if (!Validator.isPasswordValid(currentState.password)) {
-            _state.update { it.copy(passwordError = "Kata sandi tidak valid.") }
-            hasError = true
-        }
-        if (!Validator.isNotEmpty(currentState.dateOfBirth)) {
-            _state.update { it.copy(dateOfBirthError = "Tanggal lahir harus diisi.") }
+            _state.update { it.copy(fullnameError = application.getString(R.string.validator_fullName)) }
             hasError = true
         }
 
+        // --- Validasi Username ---
+        if (!Validator.isNotEmpty(currentState.username)) {
+            _state.update { it.copy(usernameError = application.getString(R.string.validator_username)) }
+            hasError = true
+        }
+
+        // --- Validasi Email ---
+        if (!Validator.isNotEmpty(currentState.email)) {
+            _state.update { it.copy(emailError = application.getString(R.string.validator_email)) }
+            hasError = true
+        } else if (!Validator.isEmailValid(currentState.email)) {
+            _state.update { it.copy(emailError = application.getString(R.string.validator_email_format)) }
+            hasError = true
+        }
+
+        // --- Validasi Password ---
+        if (!Validator.isNotEmpty(currentState.password)) {
+            _state.update { it.copy(passwordError = application.getString(R.string.validator_password)) }
+            hasError = true
+        } else if (!Validator.isPasswordValid(currentState.password)) {
+            _state.update { it.copy(passwordError = application.getString(R.string.validator_password_format)) }
+            hasError = true
+        }
+
+        // --- Validasi Date of Birth ---
+        if (!Validator.isNotEmpty(currentState.dateOfBirth)) {
+            _state.update { it.copy(dateOfBirthError = application.getString(R.string.validator_dateOfBirth)) }
+            hasError = true
+        }
+
+        // Hentikan proses jika ada error
         if (hasError) {
-            return // Hentikan proses jika ada error
+            return
         }
 
         // Lanjutkan ke proses registrasi jika tidak ada error

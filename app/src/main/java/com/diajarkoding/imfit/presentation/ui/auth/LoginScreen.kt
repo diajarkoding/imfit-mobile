@@ -8,11 +8,15 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.Checkbox
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Scaffold
+import androidx.compose.material3.SnackbarHost
+import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
@@ -29,72 +33,81 @@ import com.diajarkoding.imfit.presentation.components.PrimaryButton
 fun LoginScreen(
     onNavigateToRegister: () -> Unit,
     onLoginSuccess: () -> Unit,
-    viewModel: LoginViewModel = hiltViewModel() // 1. Inject ViewModel
+    viewModel: LoginViewModel = hiltViewModel()
 ) {
-    // 2. Ambil state dari ViewModel
     val state by viewModel.state.collectAsState()
+    val snackbarHostState = remember { SnackbarHostState() }
 
-    // 3. Handle navigasi saat login sukses
+    LaunchedEffect(key1 = state.snackbarMessage) {
+        state.snackbarMessage?.let {
+            snackbarHostState.showSnackbar(message = it)
+            viewModel.onEvent(LoginEvent.SnackbarDismissed)
+        }
+    }
+
     LaunchedEffect(key1 = state.loginSuccess) {
         if (state.loginSuccess) {
             onLoginSuccess()
         }
     }
 
-    AuthScreenLayout(title = stringResource(id = R.string.login_title)) {
-
-        AuthTextField(
-            value = state.emailOrUsername,
-            // 4. Kirim event ke ViewModel saat ada perubahan
-            onValueChange = { viewModel.onEvent(LoginEvent.EmailOrUsernameChanged(it)) },
-            label = stringResource(id = R.string.login_email_or_username_label),
-            modifier = Modifier.fillMaxWidth(),
-            isError = state.emailOrUsernameError != null,
-            errorMessage = state.emailOrUsernameError
-        )
-        Spacer(modifier = Modifier.height(16.dp))
-        PasswordTextField(
-            value = state.password,
-            onValueChange = { viewModel.onEvent(LoginEvent.PasswordChanged(it)) },
-            label = stringResource(id = R.string.label_password),
-            modifier = Modifier.fillMaxWidth(),
-            isError = state.passwordError != null,
-            errorMessage = state.passwordError
-        )
-        Spacer(modifier = Modifier.height(8.dp))
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            verticalAlignment = Alignment.CenterVertically
+    Scaffold(
+        snackbarHost = { SnackbarHost(hostState = snackbarHostState) }
+    ) { paddingValues ->
+        AuthScreenLayout(
+            title = stringResource(id = R.string.login_title),
+            modifier = Modifier.padding(paddingValues)
         ) {
-            Checkbox(
-                checked = state.rememberMe,
-                onCheckedChange = { viewModel.onEvent(LoginEvent.RememberMeChanged(it)) }
+            AuthTextField(
+                value = state.emailOrUsername,
+                onValueChange = { viewModel.onEvent(LoginEvent.EmailOrUsernameChanged(it)) },
+                label = stringResource(id = R.string.login_email_or_username_label),
+                modifier = Modifier.fillMaxWidth(),
+                isError = state.emailOrUsernameError != null,
+                errorMessage = state.emailOrUsernameError
             )
-            Text(
-                text = stringResource(id = R.string.login_remember_me),
-                style = MaterialTheme.typography.bodyMedium
+            Spacer(modifier = Modifier.height(16.dp))
+
+            PasswordTextField(
+                value = state.password,
+                onValueChange = { viewModel.onEvent(LoginEvent.PasswordChanged(it)) },
+                label = stringResource(id = R.string.label_password),
+                modifier = Modifier.fillMaxWidth(),
+                isError = state.passwordError != null,
+                errorMessage = state.passwordError
+            )
+
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Checkbox(
+                    checked = state.rememberMe,
+                    onCheckedChange = { viewModel.onEvent(LoginEvent.RememberMeChanged(it)) }
+                )
+                Text(
+                    text = stringResource(id = R.string.login_remember_me),
+                    style = MaterialTheme.typography.bodyMedium
+                )
+            }
+            Spacer(modifier = Modifier.height(24.dp))
+
+            if (state.isLoading) {
+                CircularProgressIndicator()
+            } else {
+                PrimaryButton(
+                    text = stringResource(id = R.string.login_button),
+                    onClick = { viewModel.onEvent(LoginEvent.LoginButtonPressed) },
+                    enabled = !state.isLoading
+                )
+            }
+
+            Spacer(modifier = Modifier.weight(1f))
+            AuthRedirectText(
+                promptText = stringResource(id = R.string.login_redirect_prompt),
+                clickableText = stringResource(id = R.string.login_redirect_action),
+                onClick = onNavigateToRegister
             )
         }
-        Spacer(modifier = Modifier.height(24.dp))
-
-        // 5. Tampilkan loading atau tombol
-        if (state.isLoading) {
-            CircularProgressIndicator()
-        } else {
-            PrimaryButton(
-                text = stringResource(id = R.string.login_button),
-                onClick = { viewModel.onEvent(LoginEvent.LoginButtonPressed) },
-                enabled = !state.isLoading
-            )
-        }
-
-        Spacer(modifier = Modifier.weight(1f))
-        AuthRedirectText(
-            promptText = stringResource(id = R.string.login_redirect_prompt),
-            clickableText = stringResource(id = R.string.login_redirect_action),
-            onClick = onNavigateToRegister
-        )
-        Spacer(modifier = Modifier.height(32.dp))
-
     }
 }

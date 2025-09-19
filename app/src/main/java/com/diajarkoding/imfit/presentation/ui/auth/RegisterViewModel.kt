@@ -5,8 +5,10 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.diajarkoding.imfit.R
 import com.diajarkoding.imfit.core.utils.Validator
+import com.diajarkoding.imfit.data.remote.dto.RegisterRequest
+import com.diajarkoding.imfit.domain.model.Result
+import com.diajarkoding.imfit.domain.usecase.RegisterUserUseCase
 import dagger.hilt.android.lifecycle.HiltViewModel
-import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
@@ -15,7 +17,8 @@ import javax.inject.Inject
 
 @HiltViewModel
 class RegisterViewModel @Inject constructor(
-    private val application: Application
+    private val application: Application,
+    private val registerUserUseCase: RegisterUserUseCase,
 ) : ViewModel() {
     private val _state = MutableStateFlow(RegisterState())
     val state = _state.asStateFlow()
@@ -123,8 +126,26 @@ class RegisterViewModel @Inject constructor(
         // Lanjutkan ke proses registrasi jika tidak ada error
         viewModelScope.launch {
             _state.update { it.copy(isLoading = true) }
-            delay(2000)
-            _state.update { it.copy(isLoading = false, registerSuccess = true) }
+
+            val currentState = _state.value
+            val registerRequest = RegisterRequest(
+                fullname = currentState.fullname,
+                username = currentState.username,
+                email = currentState.email,
+                password = currentState.password,
+                passwordConfirmation = currentState.password, // Asumsi password confirmation sama
+                dateOfBirth = currentState.dateOfBirth
+            )
+
+            when (val result = registerUserUseCase(registerRequest)) {
+                is Result.Success -> {
+                    _state.update { it.copy(isLoading = false, registerSuccess = true) }
+                }
+
+                is Result.Error -> {
+                    _state.update { it.copy(isLoading = false, snackbarMessage = result.message) }
+                }
+            }
         }
     }
 }

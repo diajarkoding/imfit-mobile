@@ -15,5 +15,6 @@ data class RegisterState(
     val usernameError: String? = null,
     val emailError: String? = null,
     val passwordError: String? = null,
-    val dateOfBirthError: String? = null
+    val dateOfBirthError: String? = null,
+    val snackbarMessage: String? = null
 )

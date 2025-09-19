@@ -5,4 +5,5 @@ sealed class LoginEvent {
     data class PasswordChanged(val value: String) : LoginEvent()
     data class RememberMeChanged(val value: Boolean) : LoginEvent()
     object LoginButtonPressed : LoginEvent()
+    object SnackbarDismissed : LoginEvent()
 }

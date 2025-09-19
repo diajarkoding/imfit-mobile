@@ -21,11 +21,25 @@ android {
     }
 
     buildTypes {
+        debug {
+            // ✅ Base URL untuk debug (localhost / emulator)
+            buildConfigField(
+                "String",
+                "BASE_URL",
+                "\"http://10.30.46.88:8080/api/\""
+            )
+        }
         release {
             isMinifyEnabled = false
             proguardFiles(
                 getDefaultProguardFile("proguard-android-optimize.txt"),
                 "proguard-rules.pro"
+            )
+            // ✅ Base URL untuk release (production server)
+            buildConfigField(
+                "String",
+                "BASE_URL",
+                "\"https://api.production.com/\""
             )
         }
     }
@@ -41,6 +55,7 @@ android {
 
     buildFeatures {
         compose = true
+        buildConfig = true
     }
 }
 
@@ -92,4 +107,8 @@ dependencies {
     androidTestImplementation(libs.androidx.compose.ui.test.junit4)
     debugImplementation(libs.androidx.compose.ui.tooling)
     debugImplementation(libs.androidx.compose.ui.test.manifest)
+}
+
+kapt {
+    correctErrorTypes = true
 }

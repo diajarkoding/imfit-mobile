@@ -1,12 +1,13 @@
 package com.diajarkoding.imfit.presentation.ui.auth
 
-import android.app.Application
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
-import com.diajarkoding.imfit.R
+import com.diajarkoding.imfit.core.data.SessionManager
 import com.diajarkoding.imfit.core.utils.Validator
+import com.diajarkoding.imfit.data.remote.dto.LoginRequest
+import com.diajarkoding.imfit.domain.model.Result
+import com.diajarkoding.imfit.domain.usecase.LoginUserUseCase
 import dagger.hilt.android.lifecycle.HiltViewModel
-import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
@@ -15,7 +16,8 @@ import javax.inject.Inject
 
 @HiltViewModel
 class LoginViewModel @Inject constructor(
-    private val application: Application
+    private val loginUserUseCase: LoginUserUseCase,
+    private val sessionManager: SessionManager
 ) : ViewModel() {
 
     private val _state = MutableStateFlow(LoginState())
@@ -23,7 +25,6 @@ class LoginViewModel @Inject constructor(
 
     fun onEvent(event: LoginEvent) {
         when (event) {
-            // Saat pengguna mengetik, hapus error untuk field tersebut
             is LoginEvent.EmailOrUsernameChanged -> {
                 _state.update {
                     it.copy(
@@ -37,44 +38,48 @@ class LoginViewModel @Inject constructor(
                 _state.update { it.copy(password = event.value, passwordError = null) }
             }
 
-            is LoginEvent.RememberMeChanged -> {
-                _state.update { it.copy(rememberMe = event.value) }
-            }
-
-            LoginEvent.LoginButtonPressed -> {
-                validateAndLogin()
-            }
+            is LoginEvent.RememberMeChanged -> _state.update { it.copy(rememberMe = event.value) }
+            LoginEvent.LoginButtonPressed -> validateAndLogin()
+            LoginEvent.SnackbarDismissed -> _state.update { it.copy(snackbarMessage = null) }
         }
     }
 
     private fun validateAndLogin() {
         val currentState = _state.value
-        var hasError = false
 
-        // Reset semua error sebelum validasi ulang
-        _state.update { it.copy(emailOrUsernameError = null, passwordError = null) }
+        // --- TAHAP 1: Validasi Lokal ---
+        val isEmailEmpty = !Validator.isNotEmpty(currentState.emailOrUsername)
+        val isPasswordEmpty = !Validator.isNotEmpty(currentState.password)
 
-        if (!Validator.isNotEmpty(currentState.emailOrUsername)) {
-            _state.update { it.copy(emailOrUsernameError = application.getString(R.string.validator_emailOrUsername)) }
-            hasError = true
+        _state.update {
+            it.copy(
+                emailOrUsernameError = if (isEmailEmpty) "Email atau nama pengguna tidak boleh kosong." else null,
+                passwordError = if (isPasswordEmpty) "Kata sandi tidak boleh kosong." else null
+            )
         }
 
-        if (!Validator.isNotEmpty(currentState.password)) {
-            _state.update { it.copy(passwordError = application.getString(R.string.validator_password)) }
-            hasError = true
+        if (isEmailEmpty || isPasswordEmpty) {
+            return // Hentikan jika validasi lokal gagal
         }
 
-        // Hentikan proses jika ada error
-        if (hasError) {
-            return
-        }
-
-        // Lanjutkan ke proses login jika tidak ada error
+        // --- TAHAP 2: Panggil API jika validasi lokal lolos ---
         viewModelScope.launch {
             _state.update { it.copy(isLoading = true) }
-            delay(2000)
-            _state.update {
-                it.copy(isLoading = false, loginSuccess = true)
+            val loginRequest = LoginRequest(
+                login = currentState.emailOrUsername,
+                password = currentState.password
+            )
+
+            when (val result = loginUserUseCase(loginRequest)) {
+                is Result.Success -> {
+                    sessionManager.saveAuthToken(result.data)
+                    _state.update { it.copy(isLoading = false, loginSuccess = true) }
+                }
+
+                is Result.Error -> {
+                    // Tampilkan error dari server di Snackbar
+                    _state.update { it.copy(isLoading = false, snackbarMessage = result.message) }
+                }
             }
         }
     }

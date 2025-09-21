@@ -1,6 +1,7 @@
 package com.diajarkoding.imfit.presentation.ui.auth
 
 import android.app.Application
+import android.net.Uri
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.diajarkoding.imfit.R
@@ -62,8 +63,8 @@ class RegisterViewModel @Inject constructor(
             }
 
             is RegisterEvent.ProfilePictureChanged -> _state.update { it.copy(profileImageUri = event.uri) }
+            is RegisterEvent.SnackbarDismissed -> _state.update { it.copy(snackbarMessage = null) }
             RegisterEvent.RegisterButtonPressed -> validateAndRegister()
-            else -> {}
         }
     }
 
@@ -137,7 +138,9 @@ class RegisterViewModel @Inject constructor(
                 dateOfBirth = currentState.dateOfBirth
             )
 
-            when (val result = registerUserUseCase(registerRequest)) {
+            // PENJELASAN PERBAIKAN:
+            // Tambahkan parameter kedua (currentState.profileImageUri) saat memanggil use case.
+            when (val result = registerUserUseCase(registerRequest, currentState.profileImageUri)) {
                 is Result.Success -> {
                     _state.update { it.copy(isLoading = false, registerSuccess = true) }
                 }
@@ -149,3 +152,4 @@ class RegisterViewModel @Inject constructor(
         }
     }
 }
+

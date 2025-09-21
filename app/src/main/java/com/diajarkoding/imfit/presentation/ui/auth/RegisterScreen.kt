@@ -1,6 +1,8 @@
 package com.diajarkoding.imfit.presentation.ui.auth
 
 import android.Manifest
+import android.content.Context
+import android.content.pm.PackageManager
 import android.net.Uri
 import android.os.Build
 import android.widget.Toast
@@ -43,6 +45,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
+import androidx.core.content.ContextCompat
 import androidx.core.content.FileProvider
 import androidx.hilt.navigation.compose.hiltViewModel
 import coil.compose.AsyncImage
@@ -54,6 +57,9 @@ import com.diajarkoding.imfit.presentation.components.DatePickerField
 import com.diajarkoding.imfit.presentation.components.PasswordTextField
 import com.diajarkoding.imfit.presentation.components.PrimaryButton
 import java.io.File
+import java.text.SimpleDateFormat
+import java.util.Date
+import java.util.Objects
 
 @Composable
 fun RegisterScreen(
@@ -81,28 +87,68 @@ fun RegisterScreen(
         }
     }
 
-    // ... (Semua launcher untuk gambar & izin tetap sama seperti sebelumnya) ...
-    val tempImageUri = remember { mutableStateOf<Uri?>(null) }
+    // --- Launcher untuk Gambar & Izin ---
+
+    var tempImageUri by remember { mutableStateOf<Uri?>(null) }
+
     val galleryLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.GetContent(),
         onResult = { uri -> viewModel.onEvent(RegisterEvent.ProfilePictureChanged(uri)) }
     )
+
     val cameraLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.TakePicture(),
         onResult = { success ->
             if (success) {
-                viewModel.onEvent(RegisterEvent.ProfilePictureChanged(tempImageUri.value))
+                viewModel.onEvent(RegisterEvent.ProfilePictureChanged(tempImageUri))
             }
         }
     )
-    val permissionLauncher = rememberLauncherForActivityResult(
+
+    // PENJELASAN PERUBAHAN #1: Buat fungsi untuk membuka kamera agar tidak duplikat kode
+    fun launchCameraAction() {
+        // Membuat file sementara untuk menyimpan gambar dari kamera
+        val timeStamp = SimpleDateFormat("yyyyMMdd_HHmmss").format(Date())
+        val storageDir: File? = context.getExternalFilesDir(null)
+        val file = File.createTempFile(
+            "JPEG_${timeStamp}_",
+            ".jpg",
+            storageDir
+        )
+        val uri = FileProvider.getUriForFile(
+            Objects.requireNonNull(context),
+            "${context.packageName}.provider", file
+        )
+        tempImageUri = uri
+        cameraLauncher.launch(uri)
+    }
+
+
+    // PENJELASAN PERUBAHAN #2: Logika membuka kamera dipindah ke dalam `onResult`
+    val cameraPermissionLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.RequestPermission(),
         onResult = { isGranted ->
-            if (!isGranted) {
-                Toast.makeText(context, "Izin ditolak.", Toast.LENGTH_SHORT).show()
+            if (isGranted) {
+                // Jika izin DIBERIKAN, baru buka kamera
+                launchCameraAction()
+            } else {
+                Toast.makeText(context, "Izin kamera ditolak.", Toast.LENGTH_SHORT).show()
             }
         }
     )
+
+    val storagePermissionLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.RequestPermission(),
+        onResult = { isGranted ->
+            if (isGranted) {
+                // Jika izin DIBERIKAN, baru buka galeri
+                galleryLauncher.launch("image/*")
+            } else {
+                Toast.makeText(context, "Izin galeri ditolak.", Toast.LENGTH_SHORT).show()
+            }
+        }
+    )
+
 
     // --- Dialog Pilihan Gambar ---
     if (showImageSourceDialog) {
@@ -112,27 +158,37 @@ fun RegisterScreen(
             confirmButton = {
                 TextButton(onClick = {
                     showImageSourceDialog = false
-                    permissionLauncher.launch(Manifest.permission.CAMERA)
-                    val file = File.createTempFile("imfit_profile_", ".jpg", context.cacheDir)
-                    val uri =
-                        FileProvider.getUriForFile(context, "${context.packageName}.provider", file)
-                    tempImageUri.value = uri
-                    cameraLauncher.launch(uri)
+                    // PENJELASAN PERUBAHAN #3: Cek izin SEBELUM membuka kamera
+                    val permission = Manifest.permission.CAMERA
+                    val permissionCheckResult = ContextCompat.checkSelfPermission(context, permission)
+                    if (permissionCheckResult == PackageManager.PERMISSION_GRANTED) {
+                        // Jika izin sudah ada, langsung buka kamera
+                        launchCameraAction()
+                    } else {
+                        // Jika belum ada, minta izin. Callback akan menangani sisanya.
+                        cameraPermissionLauncher.launch(permission)
+                    }
                 }) { Text("Kamera") }
             },
             dismissButton = {
                 TextButton(onClick = {
                     showImageSourceDialog = false
                     val permission =
-                        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) Manifest.permission.READ_MEDIA_IMAGES else Manifest.permission.READ_EXTERNAL_STORAGE
-                    permissionLauncher.launch(permission)
-                    galleryLauncher.launch("image/*")
+                        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) Manifest.permission.READ_MEDIA_IMAGES
+                        else Manifest.permission.READ_EXTERNAL_STORAGE
+
+                    val permissionCheckResult = ContextCompat.checkSelfPermission(context, permission)
+                    if (permissionCheckResult == PackageManager.PERMISSION_GRANTED) {
+                        galleryLauncher.launch("image/*")
+                    } else {
+                        storagePermissionLauncher.launch(permission)
+                    }
                 }) { Text("Galeri") }
             }
         )
     }
 
-    // --- UI Utama dengan Scaffold ---
+    // --- UI Utama (Tidak ada perubahan di sini) ---
     Scaffold(
         snackbarHost = { SnackbarHost(hostState = snackbarHostState) }
     ) { paddingValues ->
@@ -146,7 +202,6 @@ fun RegisterScreen(
                     .verticalScroll(rememberScrollState()),
                 horizontalAlignment = Alignment.CenterHorizontally
             ) {
-                // ... UI untuk upload foto ...
                 Box(
                     modifier = Modifier
                         .size(100.dp)
@@ -169,8 +224,7 @@ fun RegisterScreen(
                         )
                     }
                 }
-
-                // --- Form Input dengan Validasi per-field ---
+                Spacer(modifier = Modifier.height(16.dp))
                 AuthTextField(
                     value = state.fullname,
                     onValueChange = { viewModel.onEvent(RegisterEvent.FullnameChanged(it)) },

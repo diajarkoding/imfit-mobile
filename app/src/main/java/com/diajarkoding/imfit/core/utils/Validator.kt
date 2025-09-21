@@ -8,6 +8,9 @@ object Validator {
         return text.isNotBlank()
     }
 
+    fun isUsernameValid(email: String): Boolean {
+        return Patterns.EMAIL_ADDRESS.matcher(email).matches()
+    }
     fun isEmailValid(email: String): Boolean {
         return Patterns.EMAIL_ADDRESS.matcher(email).matches()
     }

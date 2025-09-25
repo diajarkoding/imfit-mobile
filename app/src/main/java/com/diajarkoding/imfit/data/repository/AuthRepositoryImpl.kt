@@ -4,7 +4,6 @@ import android.app.Application
 import android.net.Uri
 import com.diajarkoding.imfit.core.error.ErrorHandler
 import com.diajarkoding.imfit.data.remote.api.AuthApiService
-import com.diajarkoding.imfit.data.remote.dto.ErrorResponse
 import com.diajarkoding.imfit.data.remote.dto.LoginRequest
 import com.diajarkoding.imfit.data.remote.dto.RegisterRequest
 import com.diajarkoding.imfit.domain.model.Result
@@ -13,10 +12,7 @@ import com.squareup.moshi.Moshi
 import okhttp3.MediaType.Companion.toMediaTypeOrNull
 import okhttp3.MultipartBody
 import okhttp3.RequestBody.Companion.toRequestBody
-import retrofit2.HttpException
-import java.io.IOException
 import javax.inject.Inject
-
 
 
 class AuthRepositoryImpl @Inject constructor(
@@ -28,16 +24,23 @@ class AuthRepositoryImpl @Inject constructor(
 ) : AuthRepository {
 
 
-
-    override suspend fun register(registerRequest: RegisterRequest, profileImageUri: Uri?): Result<Unit> {
+    override suspend fun register(
+        registerRequest: RegisterRequest,
+        profileImageUri: Uri?
+    ): Result<Unit> {
         return try {
             // PENJELASAN #2: Ubah semua data String dari DTO menjadi RequestBody.
-            val fullnamePart = registerRequest.fullname.toRequestBody("text/plain".toMediaTypeOrNull())
-            val usernamePart = registerRequest.username.toRequestBody("text/plain".toMediaTypeOrNull())
+            val fullnamePart =
+                registerRequest.fullname.toRequestBody("text/plain".toMediaTypeOrNull())
+            val usernamePart =
+                registerRequest.username.toRequestBody("text/plain".toMediaTypeOrNull())
             val emailPart = registerRequest.email.toRequestBody("text/plain".toMediaTypeOrNull())
-            val passwordPart = registerRequest.password.toRequestBody("text/plain".toMediaTypeOrNull())
-            val passwordConfirmationPart = registerRequest.passwordConfirmation.toRequestBody("text/plain".toMediaTypeOrNull())
-            val dateOfBirthPart = registerRequest.dateOfBirth.toRequestBody("text/plain".toMediaTypeOrNull())
+            val passwordPart =
+                registerRequest.password.toRequestBody("text/plain".toMediaTypeOrNull())
+            val passwordConfirmationPart =
+                registerRequest.passwordConfirmation.toRequestBody("text/plain".toMediaTypeOrNull())
+            val dateOfBirthPart =
+                registerRequest.dateOfBirth.toRequestBody("text/plain".toMediaTypeOrNull())
 
             // PENJELASAN #3: Ubah Uri gambar menjadi file yang bisa dikirim (MultipartBody.Part).
             var imagePart: MultipartBody.Part? = null
@@ -87,6 +90,19 @@ class AuthRepositoryImpl @Inject constructor(
                 Result.Success(response.data.token)
             } else {
                 Result.Error(response.message ?: "Kredensial tidak valid.")
+            }
+        } catch (e: Exception) {
+            ErrorHandler.handleException(e, moshi)
+        }
+    }
+
+    override suspend fun logout(): Result<Unit> {
+        return try {
+            val response = api.logout()
+            if (response.status == "success") {
+                Result.Success(Unit)
+            } else {
+                Result.Error(response.message ?: "Logout gagal.")
             }
         } catch (e: Exception) {
             ErrorHandler.handleException(e, moshi)

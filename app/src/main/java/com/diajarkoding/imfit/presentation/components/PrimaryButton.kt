@@ -10,6 +10,7 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
+import com.diajarkoding.imfit.theme.IMFITCornerRadius
 
 @Composable
 fun PrimaryButton(
@@ -23,13 +24,13 @@ fun PrimaryButton(
         modifier = modifier
             .fillMaxWidth()
             .height(52.dp),
-        shape = RoundedCornerShape(12.dp),
+        shape = RoundedCornerShape(IMFITCornerRadius.medium),
         colors = ButtonDefaults.buttonColors(
             containerColor = MaterialTheme.colorScheme.primary,
             contentColor = MaterialTheme.colorScheme.onPrimary
         ),
         enabled = enabled
     ) {
-        Text(text = text.uppercase(), style = MaterialTheme.typography.titleMedium)
+        Text(text = text.uppercase(), style = MaterialTheme.typography.titleSmall)
     }
 }

@@ -1,7 +1,6 @@
 package com.diajarkoding.imfit.presentation.ui.auth
 
 import android.Manifest
-import android.content.Context
 import android.content.pm.PackageManager
 import android.net.Uri
 import android.os.Build
@@ -56,6 +55,7 @@ import com.diajarkoding.imfit.presentation.components.AuthTextField
 import com.diajarkoding.imfit.presentation.components.DatePickerField
 import com.diajarkoding.imfit.presentation.components.PasswordTextField
 import com.diajarkoding.imfit.presentation.components.PrimaryButton
+import com.diajarkoding.imfit.theme.IMFITSpacing
 import java.io.File
 import java.text.SimpleDateFormat
 import java.util.Date
@@ -160,7 +160,8 @@ fun RegisterScreen(
                     showImageSourceDialog = false
                     // PENJELASAN PERUBAHAN #3: Cek izin SEBELUM membuka kamera
                     val permission = Manifest.permission.CAMERA
-                    val permissionCheckResult = ContextCompat.checkSelfPermission(context, permission)
+                    val permissionCheckResult =
+                        ContextCompat.checkSelfPermission(context, permission)
                     if (permissionCheckResult == PackageManager.PERMISSION_GRANTED) {
                         // Jika izin sudah ada, langsung buka kamera
                         launchCameraAction()
@@ -177,7 +178,8 @@ fun RegisterScreen(
                         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) Manifest.permission.READ_MEDIA_IMAGES
                         else Manifest.permission.READ_EXTERNAL_STORAGE
 
-                    val permissionCheckResult = ContextCompat.checkSelfPermission(context, permission)
+                    val permissionCheckResult =
+                        ContextCompat.checkSelfPermission(context, permission)
                     if (permissionCheckResult == PackageManager.PERMISSION_GRANTED) {
                         galleryLauncher.launch("image/*")
                     } else {
@@ -224,7 +226,7 @@ fun RegisterScreen(
                         )
                     }
                 }
-                Spacer(modifier = Modifier.height(16.dp))
+                Spacer(modifier = Modifier.height(IMFITSpacing.md))
                 AuthTextField(
                     value = state.fullname,
                     onValueChange = { viewModel.onEvent(RegisterEvent.FullnameChanged(it)) },
@@ -233,7 +235,7 @@ fun RegisterScreen(
                     isError = state.fullnameError != null,
                     errorMessage = state.fullnameError
                 )
-                Spacer(modifier = Modifier.height(16.dp))
+                Spacer(modifier = Modifier.height(IMFITSpacing.md))
                 AuthTextField(
                     value = state.username,
                     onValueChange = { viewModel.onEvent(RegisterEvent.UsernameChanged(it)) },
@@ -242,7 +244,7 @@ fun RegisterScreen(
                     isError = state.usernameError != null,
                     errorMessage = state.usernameError
                 )
-                Spacer(modifier = Modifier.height(16.dp))
+                Spacer(modifier = Modifier.height(IMFITSpacing.md))
                 AuthTextField(
                     value = state.email,
                     onValueChange = { viewModel.onEvent(RegisterEvent.EmailChanged(it)) },
@@ -252,7 +254,7 @@ fun RegisterScreen(
                     isError = state.emailError != null,
                     errorMessage = state.emailError
                 )
-                Spacer(modifier = Modifier.height(16.dp))
+                Spacer(modifier = Modifier.height(IMFITSpacing.md))
                 PasswordTextField(
                     value = state.password,
                     onValueChange = { viewModel.onEvent(RegisterEvent.PasswordChanged(it)) },
@@ -261,7 +263,7 @@ fun RegisterScreen(
                     isError = state.passwordError != null,
                     errorMessage = state.passwordError
                 )
-                Spacer(modifier = Modifier.height(16.dp))
+                Spacer(modifier = Modifier.height(IMFITSpacing.md))
                 DatePickerField(
                     value = state.dateOfBirth,
                     onValueChange = { viewModel.onEvent(RegisterEvent.DateOfBirthChanged(it)) },
@@ -270,7 +272,7 @@ fun RegisterScreen(
                     isError = state.dateOfBirthError != null,
                     errorMessage = state.dateOfBirthError
                 )
-                Spacer(modifier = Modifier.height(32.dp))
+                Spacer(modifier = Modifier.height(IMFITSpacing.xl))
                 if (state.isLoading) {
                     CircularProgressIndicator()
                 } else {
@@ -280,13 +282,13 @@ fun RegisterScreen(
                         enabled = !state.isLoading
                     )
                 }
-                Spacer(modifier = Modifier.height(16.dp))
+                Spacer(modifier = Modifier.height(IMFITSpacing.md))
             }
             AuthRedirectText(
                 promptText = stringResource(id = R.string.register_redirect_prompt),
                 clickableText = stringResource(id = R.string.register_redirect_action),
                 onClick = onNavigateToLogin,
-                modifier = Modifier.padding(top = 16.dp)
+                modifier = Modifier.padding(top = IMFITSpacing.md)
             )
         }
     }

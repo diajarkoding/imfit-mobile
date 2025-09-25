@@ -1,4 +1,3 @@
-// file: presentation/ui/auth/SplashScreen.kt
 package com.diajarkoding.imfit.presentation.ui
 
 import androidx.compose.foundation.layout.Box
@@ -20,12 +19,11 @@ import kotlinx.coroutines.delay
 
 @Composable
 fun SplashScreen(
-    onNavigateToLogin: () -> Unit,
-    // onNavigateToHome: () -> Unit
+    onTimeout: () -> Unit
 ) {
     LaunchedEffect(key1 = true) {
-        delay(2000)
-        onNavigateToLogin()
+        delay(1500)
+        onTimeout()
     }
 
     Box(

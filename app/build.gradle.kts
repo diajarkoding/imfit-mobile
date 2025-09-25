@@ -26,7 +26,7 @@ android {
             buildConfigField(
                 "String",
                 "BASE_URL",
-                "\"http://192.168.1.4:8000/api/\""
+                "\"http://10.30.46.88:8000/api/\""
             )
         }
         release {
@@ -70,6 +70,7 @@ dependencies {
     implementation(libs.androidx.compose.ui.tooling.preview)
     implementation(libs.androidx.compose.material3)
     implementation(libs.androidx.compose.material.icons.extended)
+    implementation(libs.androidx.core.splashscreen)
 
     // --- STATE MANAGEMENT & LIFECYCLE ---
     implementation(libs.androidx.lifecycle.viewmodel.compose)

@@ -17,7 +17,7 @@ import javax.inject.Inject
 @HiltViewModel
 class LoginViewModel @Inject constructor(
     private val loginUserUseCase: LoginUserUseCase,
-    private val sessionManager: SessionManager
+    private val sessionManager: SessionManager,
 ) : ViewModel() {
 
     private val _state = MutableStateFlow(LoginState())
@@ -65,6 +65,7 @@ class LoginViewModel @Inject constructor(
         // --- TAHAP 2: Panggil API jika validasi lokal lolos ---
         viewModelScope.launch {
             _state.update { it.copy(isLoading = true) }
+
             val loginRequest = LoginRequest(
                 login = currentState.emailOrUsername,
                 password = currentState.password

@@ -40,5 +40,5 @@ interface AuthApiService {
     ): BaseResponse<LoginResponse>
 
     @POST("logout")
-    suspend fun logout(): BaseResponse<Unit>
+    suspend fun logout(): BaseResponse<Any?>
 }

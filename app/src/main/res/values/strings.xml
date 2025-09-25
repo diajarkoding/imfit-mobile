@@ -29,4 +29,20 @@
     <string name="validator_dateOfBirth">Tanggal lahir harus diisi.</string>
     <string name="validator_emailOrUsername">Email atau nama pengguna tidak boleh kosong.</string>
     <string name="validator_password">Kata sandi tidak boleh kosong.</string>
+
+    <string name="nav_home">Beranda</string>
+    <string name="nav_workout">Latihan</string>
+    <string name="nav_exercises">Otot</string>
+    <string name="nav_progress">Progres</string>
+
+    <string name="title_profile">Profil</string>
+
+    <string name="desc_home_screen">Ini adalah Halaman Beranda (Dashboard).</string>
+    <string name="desc_workout_screen">Ini adalah Halaman Latihan (Workout).</string>
+    <string name="desc_exercises_screen">Ini adalah Halaman Latihan Otot (Exercises).</string>
+    <string name="desc_progress_screen">Ini adalah Halaman Progres.</string>
+    <string name="desc_profile_screen">Ini adalah Halaman Profil Pengguna.</string>
+
+    <string name="action_logout">Keluar</string>
+    <string name="action_go_to_profile">Buka Profil</string>
 </resources>

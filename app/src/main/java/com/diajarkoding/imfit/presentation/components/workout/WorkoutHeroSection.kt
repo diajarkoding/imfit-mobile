@@ -1,5 +1,6 @@
 package com.diajarkoding.imfit.presentation.components.workout
 
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -7,7 +8,9 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.MoreVert
@@ -24,9 +27,12 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import coil.compose.AsyncImage
+import com.diajarkoding.imfit.R
 
 @Composable
 fun WorkoutHeroSection(
@@ -42,8 +48,14 @@ fun WorkoutHeroSection(
             .fillMaxWidth()
             .height(200.dp)
     ) {
-        AsyncImage(
-            model = imageUrl, // Menggunakan URL dari parameter
+//        AsyncImage(
+//            model = imageUrl, // Menggunakan URL dari parameter
+//            contentDescription = null,
+//            modifier = Modifier.fillMaxSize(),
+//            contentScale = ContentScale.Crop
+//        )
+        Image(
+            painter = painterResource(id = R.drawable.workout),
             contentDescription = null,
             modifier = Modifier.fillMaxSize(),
             contentScale = ContentScale.Crop
@@ -61,17 +73,14 @@ fun WorkoutHeroSection(
                 )
         )
         Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(16.dp)
-                .align(Alignment.TopEnd),
+            modifier = Modifier.fillMaxWidth().padding(16.dp).align(Alignment.TopEnd),
             horizontalArrangement = Arrangement.End
         ) {
             IconButton(onClick = onShareClick) {
-                Icon(Icons.Default.Share, contentDescription = "Share", tint = Color.White)
+                Icon(Icons.Default.Share, contentDescription = stringResource(R.string.workout_hero_share), tint = Color.White)
             }
             IconButton(onClick = onMoreClick) {
-                Icon(Icons.Default.MoreVert, contentDescription = "More", tint = Color.White)
+                Icon(Icons.Default.MoreVert, contentDescription = stringResource(R.string.workout_hero_more), tint = Color.White)
             }
         }
         Row(
@@ -90,12 +99,10 @@ fun WorkoutHeroSection(
             )
             Button(
                 onClick = onAllPlansClick,
-                colors = ButtonDefaults.buttonColors(
-                    containerColor = Color.Black.copy(alpha = 0.7f)
-                ),
+                colors = ButtonDefaults.buttonColors(containerColor = Color.Black.copy(alpha = 0.7f)),
                 shape = RoundedCornerShape(20.dp)
             ) {
-                Text("All Plans", color = Color.White, style = MaterialTheme.typography.bodyMedium)
+                Text(stringResource(R.string.workout_hero_all_plans), color = Color.White, style = MaterialTheme.typography.bodyMedium)
             }
         }
     }

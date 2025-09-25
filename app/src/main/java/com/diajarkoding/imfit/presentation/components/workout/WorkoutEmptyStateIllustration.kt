@@ -39,6 +39,20 @@ fun WorkoutEmptyStateIllustration(
             EmptyStateDot(color = Color(0xFFE3F2FD))
             EmptyStateDot(size = 80.dp, color = Color(0xFF2196F3), isBar = true)
         }
+        Row(
+            horizontalArrangement = Arrangement.spacedBy(16.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            EmptyStateDot(color = Color(0xFFE3F2FD))
+            EmptyStateDot(size = 100.dp, color = Color(0xFF2196F3), isBar = true)
+        }
+        Row(
+            horizontalArrangement = Arrangement.spacedBy(16.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            EmptyStateDot(color = Color(0xFFE3F2FD))
+            EmptyStateDot(size = 80.dp, color = Color(0xFF2196F3), isBar = true)
+        }
     }
 }
 

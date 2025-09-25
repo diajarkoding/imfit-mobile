@@ -18,6 +18,7 @@ import androidx.navigation.compose.composable
 import com.diajarkoding.imfit.R
 import com.diajarkoding.imfit.presentation.ui.home.HomeScreen
 import com.diajarkoding.imfit.presentation.ui.profile.ProfileScreen
+import com.diajarkoding.imfit.presentation.ui.workout.WorkoutScreen
 
 // Perbarui object Routes
 object Routes {
@@ -49,10 +50,7 @@ fun MainNavigation(
             HomeScreen(modifier = Modifier)
         }
         composable(BottomNavItem.Workout.route) {
-            PlaceholderScreen(
-                stringResource(R.string.nav_workout),
-                stringResource(R.string.desc_workout_screen)
-            )
+            WorkoutScreen(modifier = Modifier)
         }
         composable(BottomNavItem.Exercises.route) {
             PlaceholderScreen(

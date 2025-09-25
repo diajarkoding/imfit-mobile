@@ -1,9 +1,18 @@
+import java.util.Properties
+import java.io.FileInputStream
+
 plugins {
     alias(libs.plugins.android.application)
     alias(libs.plugins.kotlin.android)
     alias(libs.plugins.kotlin.compose)
     id("kotlin-kapt")
     alias(libs.plugins.hilt)
+}
+
+val localProperties = Properties()
+val localPropertiesFile = rootProject.file("local.properties")
+if (localPropertiesFile.exists()) {
+    localProperties.load(FileInputStream(localPropertiesFile))
 }
 
 android {
@@ -26,7 +35,7 @@ android {
             buildConfigField(
                 "String",
                 "BASE_URL",
-                "\"http://10.30.46.88:8000/api/\""
+                "\"${localProperties.getProperty("BASE_URL")}\""
             )
         }
         release {

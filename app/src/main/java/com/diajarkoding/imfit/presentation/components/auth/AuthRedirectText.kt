@@ -1,4 +1,4 @@
-package com.diajarkoding.imfit.presentation.components
+package com.diajarkoding.imfit.presentation.components.auth
 
 import androidx.compose.foundation.text.ClickableText
 import androidx.compose.material3.MaterialTheme

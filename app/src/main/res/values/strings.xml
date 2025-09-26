@@ -54,7 +54,7 @@
     <string name="workout_empty_find_plan">Cari Rencana</string>
     <string name="workout_empty_create_from_scratch">Buat dari Awal</string>
 
-    <string name="workout_hero_all_plans">Semua Rencana</string>
+    <string name="workout_hero_all_plans">Semua\nRencana</string>
     <string name="workout_hero_share">Bagikan</string>
     <string name="workout_hero_more">Lainnya</string>
 
@@ -70,18 +70,19 @@
 
     <string name="workout_day_limit">Batas Hari • %d hari</string>
 
-    <string name="workout_tab_overview">Ringkasan</string>
-    <string name="workout_tab_day_details">Detail Hari</string>
-    <string name="workout_add_exercise">Tambah Latihan</string>
-    <string name="workout_exercise_description">set x repetisi • interval</string>
+    <string name="workout_estimated_time">Estimasi %s</string>
     <string name="workout_exercise_count">%d latihan</string>
-    <string name="workout_edit_exercises">Edit latihan</string>
-    <string name="workout_copy_this_day">Salin hari ini</string>
-    <string name="workout_delete_this_day">Hapus hari ini</string>
-    <string name="workout_edit_day">Edit hari</string>
-    <string name="workout_save">Simpan</string>
-    <string name="workout_cd_more_options">Opsi lainnya</string>
-    <string name="workout_cd_back">Kembali</string>
-    <string name="workout_cd_help">Bantuan</string>
-    <string name="workout_cd_close">Tutup</string>
+    <string name="workout_add_exercise">Tambah Latihan</string>
+    <string name="workout_add_exercise_desc">set x repetisi • interval</string>
+    <string name="workout_more_options">Pilihan lain</string>
+
+    <string name="workout_edit_exercises">Ubah Latihan</string>
+    <string name="workout_copy_day">Salin Hari Ini</string>
+    <string name="workout_delete_day">Hapus Hari Ini</string>
+
+    <string name="workout_edit_day_title">Ubah Hari</string>
+    <string name="workout_edit_day_help">Bantuan</string>
+    <string name="workout_edit_day_save">Simpan</string>
+    <string name="workout_edit_day_close">Tutup</string>
+    <string name="action_back">Kembali</string>
 </resources>

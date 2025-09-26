@@ -21,11 +21,11 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
 import androidx.hilt.navigation.compose.hiltViewModel
 import com.diajarkoding.imfit.R
-import com.diajarkoding.imfit.presentation.components.AuthRedirectText
-import com.diajarkoding.imfit.presentation.components.AuthScreenLayout
-import com.diajarkoding.imfit.presentation.components.AuthTextField
 import com.diajarkoding.imfit.presentation.components.PasswordTextField
 import com.diajarkoding.imfit.presentation.components.PrimaryButton
+import com.diajarkoding.imfit.presentation.components.auth.AuthRedirectText
+import com.diajarkoding.imfit.presentation.components.auth.AuthScreenLayout
+import com.diajarkoding.imfit.presentation.components.auth.AuthTextField
 import com.diajarkoding.imfit.theme.IMFITSpacing
 
 @Composable

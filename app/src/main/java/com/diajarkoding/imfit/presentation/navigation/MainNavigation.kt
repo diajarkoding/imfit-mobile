@@ -1,26 +1,19 @@
 // file: presentation/navigation/MainNavigation.kt
 package com.diajarkoding.imfit.presentation.navigation
 
-import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.padding
-import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
-import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
-import androidx.compose.ui.text.style.TextAlign
-import androidx.compose.ui.unit.dp
 import androidx.navigation.NavHostController
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import com.diajarkoding.imfit.R
 import com.diajarkoding.imfit.presentation.ui.home.HomeScreen
+import com.diajarkoding.imfit.presentation.ui.main.PlaceholderScreen
 import com.diajarkoding.imfit.presentation.ui.profile.ProfileScreen
+import com.diajarkoding.imfit.presentation.ui.workout.EditWorkoutDayScreen
 import com.diajarkoding.imfit.presentation.ui.workout.WorkoutScreen
 
-// Perbarui object Routes
 object Routes {
     const val SPLASH = "splash"
     const val LOGIN = "login"
@@ -29,6 +22,10 @@ object Routes {
 
     // Rute baru setelah login
     const val MAIN_GRAPH = "main_graph"
+
+    const val EDIT_WORKOUT_DAY = "edit_workout_day"
+    fun editWorkoutDay(dayId: String, dayName: String) = "$EDIT_WORKOUT_DAY/$dayId?dayName=$dayName"
+
     const val PROFILE = "profile"
 }
 
@@ -50,8 +47,11 @@ fun MainNavigation(
             HomeScreen(modifier = Modifier)
         }
         composable(BottomNavItem.Workout.route) {
-            WorkoutScreen(modifier = Modifier)
+            WorkoutScreen(
+                navController = navController,
+            )
         }
+
         composable(BottomNavItem.Exercises.route) {
             PlaceholderScreen(
                 stringResource(R.string.nav_exercises),
@@ -72,17 +72,24 @@ fun MainNavigation(
                 hideLoading = hideLoading
             )
         }
+
+        composable(
+            route = Routes.editWorkoutDay("{dayId}", "{dayName}"),
+
+//                "${Routes.EDIT_WORKOUT_DAY}/{dayId}?dayName={dayName}"
+        ) { backStackEntry ->
+            val dayId = backStackEntry.arguments?.getString("dayId")
+            val dayName = backStackEntry.arguments?.getString("dayName")
+            EditWorkoutDayScreen(
+                dayName = dayName ?: "MON",
+                workoutTitle = "Push Day",
+                onBackClick = { navController.navigateUp() },
+                onSaveClick = { /* TODO */ },
+                onAddExercise = { /* TODO */ },
+                onDeleteDay = { /* TODO */ }
+            )
+        }
+
     }
 }
 
-@Composable
-fun PlaceholderScreen(title: String, description: String) {
-    Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-        Text(
-            text = "$title\n\n$description",
-            style = MaterialTheme.typography.bodyLarge,
-            textAlign = TextAlign.Center,
-            modifier = Modifier.padding(24.dp)
-        )
-    }
-}

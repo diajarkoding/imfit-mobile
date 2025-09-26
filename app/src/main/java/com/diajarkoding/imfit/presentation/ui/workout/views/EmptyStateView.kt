@@ -12,7 +12,6 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
@@ -23,7 +22,10 @@ import com.diajarkoding.imfit.presentation.components.workout.WorkoutEmptyStateI
 import com.diajarkoding.imfit.theme.IMFITSpacing
 
 @Composable
-fun EmptyStateView(onFindPlan: () -> Unit, onCreateFromScratch: () -> Unit) {
+fun EmptyStateView(
+    modifier: Modifier = Modifier,
+    onFindPlan: () -> Unit, onCreateFromScratch: () -> Unit
+) {
     Column(
         modifier = Modifier.fillMaxSize(),
         horizontalAlignment = Alignment.CenterHorizontally,

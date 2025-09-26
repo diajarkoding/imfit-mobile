@@ -1,4 +1,4 @@
-package com.diajarkoding.imfit.presentation.components
+package com.diajarkoding.imfit.presentation.components.auth
 
 import androidx.activity.ComponentActivity
 import androidx.compose.foundation.layout.Box
@@ -17,14 +17,16 @@ import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
+import androidx.lifecycle.viewmodel.compose.viewModel
 import com.diajarkoding.imfit.MainViewModel
+import com.diajarkoding.imfit.presentation.components.GlobalLoadingIndicator
 import com.diajarkoding.imfit.presentation.ui.main.activityViewModel
 import com.diajarkoding.imfit.theme.IMFITSpacing
 
 @Composable
 fun activityViewModel(): MainViewModel {
     val context = LocalContext.current
-    return androidx.lifecycle.viewmodel.compose.viewModel(context as ComponentActivity)
+    return viewModel(context as ComponentActivity)
 }
 
 @Composable

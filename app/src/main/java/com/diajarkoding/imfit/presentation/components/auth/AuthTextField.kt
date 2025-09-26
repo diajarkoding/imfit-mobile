@@ -1,4 +1,4 @@
-package com.diajarkoding.imfit.presentation.components
+package com.diajarkoding.imfit.presentation.components.auth
 
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.text.KeyboardOptions

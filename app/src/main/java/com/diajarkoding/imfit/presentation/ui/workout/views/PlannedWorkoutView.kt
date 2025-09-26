@@ -11,9 +11,9 @@ import com.diajarkoding.imfit.presentation.components.workout.AddDaySection
 import com.diajarkoding.imfit.presentation.components.workout.WorkoutContentTabs
 import com.diajarkoding.imfit.presentation.components.workout.WorkoutDayCard
 import com.diajarkoding.imfit.presentation.components.workout.WorkoutHeroSection
-import com.diajarkoding.imfit.presentation.ui.workout.WorkoutDay
-import com.diajarkoding.imfit.presentation.ui.workout.WorkoutPlan
-import com.diajarkoding.imfit.presentation.ui.workout.WorkoutView
+import com.diajarkoding.imfit.presentation.ui.workout.viewmodel.WorkoutDay
+import com.diajarkoding.imfit.presentation.ui.workout.viewmodel.WorkoutPlan
+import com.diajarkoding.imfit.presentation.ui.workout.viewmodel.WorkoutView
 import com.diajarkoding.imfit.theme.IMFITSpacing
 
 @Composable
@@ -28,8 +28,9 @@ fun PlannedWorkoutView(
     onMoreMenuClick: (WorkoutDay) -> Unit,
     onDismissDropdown: () -> Unit,
     onEditDayClicked: (WorkoutDay) -> Unit,
+    onAddExercise: () -> Unit
 
-    ) {
+) {
     Box(modifier = modifier.fillMaxSize()) {
         when (currentView) {
             is WorkoutView.Overview -> {
@@ -72,7 +73,7 @@ fun PlannedWorkoutView(
                     planImageUrl = plan.imageUrl,
                     isDropdownExpanded = isDropdownExpanded,
                     onMoreClick = { onMoreMenuClick(currentView.day) },
-                    onAddExercise = { /* TODO */ },
+                    onAddExercise = onAddExercise,
                     onTabSelected = onTabSelected,
                     onDismissDropdown = onDismissDropdown,
                     onEditDayClicked = { onEditDayClicked(currentView.day) }

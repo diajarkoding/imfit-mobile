@@ -1,12 +1,14 @@
 package com.diajarkoding.imfit.presentation.ui.workout.views
 
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
 import androidx.compose.runtime.Composable
 import com.diajarkoding.imfit.presentation.components.workout.AddExerciseCard
+import com.diajarkoding.imfit.presentation.components.workout.AddedExerciseItem
 import com.diajarkoding.imfit.presentation.components.workout.WorkoutContentTabs
 import com.diajarkoding.imfit.presentation.components.workout.WorkoutDayHeader
 import com.diajarkoding.imfit.presentation.components.workout.WorkoutHeroSection
-import com.diajarkoding.imfit.presentation.ui.workout.WorkoutDay
+import com.diajarkoding.imfit.presentation.ui.workout.viewmodel.WorkoutDay
 
 @Composable
 fun WorkoutDayDetailView(
@@ -41,6 +43,9 @@ fun WorkoutDayDetailView(
                 onCopyDay = { /* TODO */ },
                 onDeleteDay = { /* TODO */ }
             )
+        }
+        items(day.exercises) { exercise ->
+            AddedExerciseItem(exercise = exercise)
         }
         item {
             AddExerciseCard(onAddExercise = onAddExercise)

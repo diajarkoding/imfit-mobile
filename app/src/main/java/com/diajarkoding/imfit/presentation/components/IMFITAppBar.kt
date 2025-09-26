@@ -3,6 +3,7 @@ package com.diajarkoding.imfit.presentation.components
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.AccountCircle
+import androidx.compose.material.icons.filled.Add
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -40,25 +41,22 @@ fun IMFITAppBar(
         TopAppBar(
             title = {
                 val backStackEntry = navController.currentBackStackEntry
-                val title = when {
-                    currentDestination?.route?.startsWith(Routes.EDIT_WORKOUT_DAY) == true -> {
-                        // Ambil argumen "dayName" kalau ada, fallback ke static string
-                        val dynamicDayName = backStackEntry?.arguments?.getString("dayName")
-                        if (!dynamicDayName.isNullOrBlank()) {
-                            dynamicDayName
-                        } else {
-                            stringResource(R.string.workout_edit_day_title)
+                val title =
+                    when { // Gunakan when tanpa argumen untuk pengecekan route yang lebih kompleks
+                        currentDestination?.route == Routes.PROFILE -> stringResource(R.string.title_profile)
+                        currentDestination?.route?.startsWith(Routes.EDIT_WORKOUT_DAY_PREFIX) == true -> stringResource(
+                            R.string.workout_edit_day_title
+                        )
+
+                        currentDestination?.route?.startsWith(Routes.ADD_EXERCISES_PREFIX) == true -> stringResource(
+                            R.string.add_exercises_title
+                        ) // <-- TAMBAHKAN INI
+                        else -> {
+                            val titleResId =
+                                bottomNavItems.find { it.route == currentDestination?.route }?.titleResId
+                            stringResource(id = titleResId ?: R.string.app_name)
                         }
                     }
-
-                    currentDestination?.route == Routes.PROFILE -> stringResource(R.string.title_profile)
-
-                    else -> {
-                        val titleResId =
-                            bottomNavItems.find { it.route == currentDestination?.route }?.titleResId
-                        stringResource(id = titleResId ?: R.string.app_name)
-                    }
-                }
                 TwoToneTitle(text = title)
             },
             navigationIcon = {
@@ -93,7 +91,18 @@ fun IMFITAppBar(
                             )
                         }
                     }
+
+                    currentDestination?.route?.startsWith(Routes.ADD_EXERCISES_PREFIX) == true -> {
+                        IconButton(onClick = { /* TODO: Buka halaman buat latihan kustom */ }) {
+                            Icon(
+                                imageVector = Icons.Default.Add,
+                                contentDescription = "Tambah Latihan Kustom",
+                                tint = MaterialTheme.customColors.textPrimary
+                            )
+                        }
+                    }
                 }
+                
             },
             colors = TopAppBarDefaults.topAppBarColors(
                 containerColor = MaterialTheme.customColors.backgroundPrimary

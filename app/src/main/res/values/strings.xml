@@ -85,4 +85,10 @@
     <string name="workout_edit_day_save">Simpan</string>
     <string name="workout_edit_day_close">Tutup</string>
     <string name="action_back">Kembali</string>
+
+    <string name="add_exercises_title">Tambah Latihan</string>
+    <string name="search_exercise_hint">Cari nama latihan</string>
+    <string name="all_exercises">Semua Latihan</string>
+    <string name="sort_popular">Populer</string>
+    <string name="add_n_exercises">Tambah %d Latihan</string>
 </resources>

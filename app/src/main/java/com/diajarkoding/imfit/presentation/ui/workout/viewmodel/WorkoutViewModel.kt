@@ -1,7 +1,8 @@
-package com.diajarkoding.imfit.presentation.ui.workout
+package com.diajarkoding.imfit.presentation.ui.workout.viewmodel
 
 import androidx.lifecycle.ViewModel
 import com.diajarkoding.imfit.presentation.navigation.Routes
+import com.diajarkoding.imfit.presentation.ui.exercises.Exercise
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -21,6 +22,7 @@ data class WorkoutDay(
     val title: String,
     val estimatedTime: String,
     val exerciseCount: String,
+    val exercises: List<Exercise> = emptyList(),
     val status: String,
 )
 
@@ -50,6 +52,8 @@ sealed class WorkoutEvent {
     object NavigationHandled : WorkoutEvent()
     object CreatePlanFromScratch : WorkoutEvent()
     object AddDayClicked : WorkoutEvent()
+    object AddExerciseClicked : WorkoutEvent()
+    data class ExercisesAdded(val exerciseIds: List<String>) : WorkoutEvent()
 }
 
 // State global layar Workout
@@ -88,15 +92,36 @@ class WorkoutViewModel @Inject constructor() : ViewModel() {
                 title = "Push Pull Workout",
                 imageUrl = "https://placehold.co/600x400/7B1FA2/FFFFFF?text=IMFit",
                 days = listOf(
-                    WorkoutDay("d1", "TUE Legs", "57m", "6 exercises", "Completed"),
-                    WorkoutDay("d2", "ANY Push", "1h 49m", "14 exercises", "Not Started"),
-                    WorkoutDay("d3", "ANY Pull", "1h 38m", "13 exercises", "Not Started")
+                    // Perbaiki urutan dan tipe data argumen di sini
+                    WorkoutDay(
+                        id = "d1",
+                        title = "TUE Legs",
+                        estimatedTime = "57m",
+                        exerciseCount = "6", // Ubah menjadi jumlah saja
+                        exercises = emptyList(), // Sediakan list kosong
+                        status = "Completed"
+                    ),
+                    WorkoutDay(
+                        id = "d2",
+                        title = "ANY Push",
+                        estimatedTime = "1h 49m",
+                        exerciseCount = "14",
+                        exercises = emptyList(),
+                        status = "Not Started"
+                    ),
+                    WorkoutDay(
+                        id = "d3",
+                        title = "ANY Pull",
+                        estimatedTime = "1h 38m",
+                        exerciseCount = "13",
+                        exercises = emptyList(),
+                        status = "Not Started"
+                    )
                 )
             )
 
             else -> null
         }
-
         _state.update { it.copy(plan = dummyPlan) }
     }
 
@@ -157,6 +182,7 @@ class WorkoutViewModel @Inject constructor() : ViewModel() {
                         title = "New Day ${currentPlan.days.size + 1}",
                         estimatedTime = "0m",
                         exerciseCount = "0 exercises",
+                        exercises = emptyList(),
                         status = "Not Started"
                     )
                     val updatedPlan = currentPlan.copy(days = currentPlan.days + newDay)
@@ -169,7 +195,67 @@ class WorkoutViewModel @Inject constructor() : ViewModel() {
                 }
             }
 
+            WorkoutEvent.AddExerciseClicked -> {
+                // Pastikan kita berada di tampilan detail untuk mendapatkan ID hari
+                val currentView = _state.value.currentView
+                if (currentView is WorkoutView.DayDetail) {
+                    _state.update {
+                        it.copy(navigateTo = Routes.addExercises(currentView.day.id))
+                    }
+                }
+            }
+
+            is WorkoutEvent.ExercisesAdded -> {
+                addExercisesToDay(event.exerciseIds)
+            }
+
             else -> {}
         }
     }
+
+    private fun addExercisesToDay(exerciseIds: List<String>) {
+        val currentView = _state.value.currentView
+        val currentPlan = _state.value.plan
+
+        // Pastikan kita berada di DayDetail dan ada plan yang aktif
+        if (currentView is WorkoutView.DayDetail && currentPlan != null) {
+            val dayIdToUpdate = currentView.day.id
+
+            // Buat daftar latihan baru dari ID yang diterima (menggunakan data dummy)
+            val newExercises = exerciseIds.map { id ->
+                // TODO: Di aplikasi nyata, Anda akan mengambil detail latihan dari repository berdasarkan ID
+                Exercise(
+                    id = id,
+                    name = "Latihan Baru ${id.replaceFirst("ex-", "")}",
+                    targetMuscle = "Otot Target",
+                    imageUrl = "https://placehold.co/100x100/CCCCCC/000000?text=Ex"
+                )
+            }
+
+            // Perbarui daftar hari (days) di dalam rencana (plan)
+            val updatedDays = currentPlan.days.map { day ->
+                if (day.id == dayIdToUpdate) {
+                    // Jika hari cocok, tambahkan latihan baru ke daftar yang sudah ada
+                    val updatedExercises = day.exercises + newExercises
+                    day.copy(
+                        exercises = updatedExercises,
+                        exerciseCount = updatedExercises.size.toString() // Perbarui jumlah latihan
+                    )
+                } else {
+                    day
+                }
+            }
+
+            // Perbarui state dengan rencana yang sudah dimodifikasi
+            val updatedPlan = currentPlan.copy(days = updatedDays)
+            _state.update {
+                it.copy(
+                    plan = updatedPlan,
+                    // Perbarui juga currentView agar UI langsung me-render data baru
+                    currentView = WorkoutView.DayDetail(updatedDays.find { it.id == dayIdToUpdate }!!)
+                )
+            }
+        }
+    }
+
 }

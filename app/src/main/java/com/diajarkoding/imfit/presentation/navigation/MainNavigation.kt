@@ -88,24 +88,19 @@ fun MainNavigation(
         }
 
         composable(
-            route = "${Routes.EDIT_WORKOUT_DAY_PREFIX}/{dayId}?dayName={dayName}",
+            route = Routes.EDIT_WORKOUT_DAY,
             arguments = listOf(
                 navArgument("dayId") { type = NavType.StringType },
                 navArgument("dayName") { type = NavType.StringType; nullable = true }
             )
         ) { backStackEntry ->
-            val dayId = backStackEntry.arguments?.getString("dayId")
             val dayName = backStackEntry.arguments?.getString("dayName")?.let {
-                // Decode dayName saat diterima
                 URLDecoder.decode(it, StandardCharsets.UTF_8.name())
             }
             EditWorkoutDayScreen(
-                dayName = dayName ?: "MON", // Fallback jika dayName null
+                navController = navController, // Teruskan NavController
                 workoutTitle = "Push Day", // TODO: Ambil dari ViewModel berdasarkan dayId
-                onBackClick = { navController.navigateUp() },
-                onSaveClick = { /* TODO */ },
-                onAddExercise = { /* TODO */ },
-                onDeleteDay = { /* TODO */ }
+                onBackClick = { navController.navigateUp() }
             )
         }
 

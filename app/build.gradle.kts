@@ -1,5 +1,5 @@
-import java.util.Properties
 import java.io.FileInputStream
+import java.util.Properties
 
 plugins {
     alias(libs.plugins.android.application)
@@ -108,6 +108,7 @@ dependencies {
     kapt(libs.room.compiler)
     implementation(libs.room.ktx)
     implementation(libs.datastore.preferences)
+    implementation(libs.androidx.compose.runtime.livedata)
 
     // --- TESTING ---
     testImplementation(libs.junit)

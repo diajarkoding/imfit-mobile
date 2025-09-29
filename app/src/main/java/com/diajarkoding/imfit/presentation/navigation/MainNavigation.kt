@@ -16,7 +16,6 @@ import com.diajarkoding.imfit.presentation.ui.main.PlaceholderScreen
 import com.diajarkoding.imfit.presentation.ui.profile.ProfileScreen
 import com.diajarkoding.imfit.presentation.ui.workout.EditWorkoutDayScreen
 import com.diajarkoding.imfit.presentation.ui.workout.WorkoutScreen
-import java.net.URLDecoder
 import java.net.URLEncoder
 import java.nio.charset.StandardCharsets
 
@@ -93,13 +92,10 @@ fun MainNavigation(
                 navArgument("dayId") { type = NavType.StringType },
                 navArgument("dayName") { type = NavType.StringType; nullable = true }
             )
-        ) { backStackEntry ->
-            val dayName = backStackEntry.arguments?.getString("dayName")?.let {
-                URLDecoder.decode(it, StandardCharsets.UTF_8.name())
-            }
+        ) {
+            // Pemanggilan EditWorkoutDayScreen sekarang lebih sederhana
             EditWorkoutDayScreen(
-                navController = navController, // Teruskan NavController
-                workoutTitle = "Push Day", // TODO: Ambil dari ViewModel berdasarkan dayId
+                navController = navController,
                 onBackClick = { navController.navigateUp() }
             )
         }

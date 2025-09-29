@@ -9,8 +9,10 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.DragHandle
 import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -28,7 +30,8 @@ import com.diajarkoding.imfit.theme.customColors
 @Composable
 fun AddedExerciseItem(
     exercise: Exercise,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    onDelete: (() -> Unit)? = null
 ) {
     Row(
         modifier = modifier
@@ -57,6 +60,15 @@ fun AddedExerciseItem(
                 style = MaterialTheme.typography.bodyMedium,
                 color = MaterialTheme.customColors.textSecondary
             )
+        }
+        if (onDelete != null) {
+            IconButton(onClick = onDelete) {
+                Icon(
+                    imageVector = Icons.Default.Close,
+                    contentDescription = "Hapus Latihan",
+                    tint = MaterialTheme.customColors.textTertiary
+                )
+            }
         }
     }
 }

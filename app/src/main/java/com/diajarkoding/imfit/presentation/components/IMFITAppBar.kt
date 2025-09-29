@@ -9,13 +9,10 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
-import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.res.stringResource
-import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.navigation.NavController
 import androidx.navigation.NavDestination
@@ -32,81 +29,76 @@ fun IMFITAppBar(
     topLevelRoutes: Set<String>,
     bottomNavItems: List<BottomNavItem>
 ) {
-    val isTopLevelScreen = currentDestination?.route in topLevelRoutes
+    // Daftar rute yang akan mengelola AppBar-nya sendiri
+    val screensWithCustomAppBar = setOf(
+        Routes.EDIT_WORKOUT_DAY_PREFIX
+        // Tambahkan rute prefix lain di sini jika perlu AppBar kustom
+    )
 
-    Surface(
-        color = MaterialTheme.customColors.backgroundPrimary,
-        shadowElevation = 0.dp
-    ) {
-        TopAppBar(
-            title = {
-                val backStackEntry = navController.currentBackStackEntry
-                val title =
-                    when { // Gunakan when tanpa argumen untuk pengecekan route yang lebih kompleks
-                        currentDestination?.route == Routes.PROFILE -> stringResource(R.string.title_profile)
-                        currentDestination?.route?.startsWith(Routes.EDIT_WORKOUT_DAY_PREFIX) == true -> stringResource(
-                            R.string.workout_edit_day_title
-                        )
+    val currentRoutePrefix = currentDestination?.route?.substringBefore('/')
+    val isCustomAppBarScreen = currentRoutePrefix in screensWithCustomAppBar
 
-                        currentDestination?.route?.startsWith(Routes.ADD_EXERCISES_PREFIX) == true -> stringResource(
-                            R.string.add_exercises_title
-                        ) // <-- TAMBAHKAN INI
-                        else -> {
-                            val titleResId =
-                                bottomNavItems.find { it.route == currentDestination?.route }?.titleResId
-                            stringResource(id = titleResId ?: R.string.app_name)
+    if (!isCustomAppBarScreen) {
+        Surface(
+            color = MaterialTheme.customColors.backgroundPrimary,
+            shadowElevation = 0.dp
+        ) {
+            TopAppBar(
+                title = {
+                    val title =
+                        when {
+                            currentDestination?.route == Routes.PROFILE -> stringResource(R.string.title_profile)
+                            currentDestination?.route?.startsWith(Routes.ADD_EXERCISES_PREFIX) == true -> stringResource(
+                                R.string.add_exercises_title
+                            )
+
+                            else -> {
+                                val titleResId =
+                                    bottomNavItems.find { it.route == currentDestination?.route }?.titleResId
+                                stringResource(id = titleResId ?: R.string.app_name)
+                            }
                         }
-                    }
-                TwoToneTitle(text = title)
-            },
-            navigationIcon = {
-                if (!isTopLevelScreen) {
-                    IconButton(onClick = { navController.navigateUp() }) {
-                        Icon(
-                            imageVector = Icons.AutoMirrored.Filled.ArrowBack,
-                            contentDescription = stringResource(R.string.action_back),
-                            tint = MaterialTheme.customColors.textPrimary
-                        )
-                    }
-                }
-            },
-            actions = {
-                when {
-                    currentDestination?.route == BottomNavItem.Progress.route -> {
-                        IconButton(onClick = { navController.navigate(Routes.PROFILE) }) {
+                    TwoToneTitle(text = title)
+                },
+                navigationIcon = {
+                    val isTopLevelScreen = currentDestination?.route in topLevelRoutes
+                    if (!isTopLevelScreen) {
+                        IconButton(onClick = { navController.navigateUp() }) {
                             Icon(
-                                imageVector = Icons.Default.AccountCircle,
-                                contentDescription = stringResource(R.string.action_go_to_profile),
+                                imageVector = Icons.AutoMirrored.Filled.ArrowBack,
+                                contentDescription = stringResource(R.string.action_back),
                                 tint = MaterialTheme.customColors.textPrimary
                             )
                         }
                     }
+                },
+                actions = {
+                    when {
+                        currentDestination?.route == BottomNavItem.Progress.route -> {
+                            IconButton(onClick = { navController.navigate(Routes.PROFILE) }) {
+                                Icon(
+                                    imageVector = Icons.Default.AccountCircle,
+                                    contentDescription = stringResource(R.string.action_go_to_profile),
+                                    tint = MaterialTheme.customColors.textPrimary
+                                )
+                            }
+                        }
 
-                    currentDestination?.route?.startsWith(Routes.EDIT_WORKOUT_DAY) == true -> {
-                        TextButton(onClick = { /* TODO: Panggil fungsi onSaveClick */ }) {
-                            Text(
-                                stringResource(R.string.workout_edit_day_save),
-                                style = MaterialTheme.typography.bodyLarge,
-                                fontWeight = FontWeight.Medium
-                            )
+                        currentDestination?.route?.startsWith(Routes.ADD_EXERCISES_PREFIX) == true -> {
+                            IconButton(onClick = { /* TODO: Buka halaman buat latihan kustom */ }) {
+                                Icon(
+                                    imageVector = Icons.Default.Add,
+                                    contentDescription = "Tambah Latihan Kustom",
+                                    tint = MaterialTheme.customColors.textPrimary
+                                )
+                            }
                         }
                     }
-
-                    currentDestination?.route?.startsWith(Routes.ADD_EXERCISES_PREFIX) == true -> {
-                        IconButton(onClick = { /* TODO: Buka halaman buat latihan kustom */ }) {
-                            Icon(
-                                imageVector = Icons.Default.Add,
-                                contentDescription = "Tambah Latihan Kustom",
-                                tint = MaterialTheme.customColors.textPrimary
-                            )
-                        }
-                    }
-                }
-                
-            },
-            colors = TopAppBarDefaults.topAppBarColors(
-                containerColor = MaterialTheme.customColors.backgroundPrimary
+                },
+                colors = TopAppBarDefaults.topAppBarColors(
+                    containerColor = MaterialTheme.customColors.backgroundPrimary
+                )
             )
-        )
+        }
     }
 }

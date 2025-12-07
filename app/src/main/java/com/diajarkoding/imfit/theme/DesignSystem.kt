@@ -8,20 +8,18 @@ import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
 
-// Extension untuk mendapatkan warna custom berdasarkan tema
 object IMFITColors {
     val gradientBrush: Brush
         @Composable
         @ReadOnlyComposable
         get() = Brush.horizontalGradient(
-            colors = listOf(GradientStart, GradientEnd)
+            colors = listOf(Primary, Secondary)
         )
 
     val successColor: Color get() = SuccessGreen
     val warningColor: Color get() = WarningOrange
     val errorColor: Color get() = ErrorRed
 
-    // Dynamic colors based on theme
     val textPrimary: Color
         @Composable
         @ReadOnlyComposable
@@ -47,21 +45,16 @@ object IMFITColors {
         @ReadOnlyComposable
         get() = if (isSystemInDarkTheme()) BackgroundSecondaryDark else BackgroundSecondaryLight
 
-    val bottomNavActive: Color get() = BottomNavActive
-    val bottomNavInactive: Color
+    val navActive: Color get() = NavActive
+    val navInactive: Color
         @Composable
         @ReadOnlyComposable
-        get() = if (isSystemInDarkTheme()) BottomNavInactiveDark else BottomNavInactiveLight
+        get() = if (isSystemInDarkTheme()) NavInactiveDark else NavInactiveLight
 
-    val bottomNavBackground: Color
+    val navBackground: Color
         @Composable
         @ReadOnlyComposable
-        get() = if (isSystemInDarkTheme()) BottomNavBackgroundDark else BottomNavBackgroundLight
-
-    val bottomNavShadow: Color
-        @Composable
-        @ReadOnlyComposable
-        get() = if (isSystemInDarkTheme()) BottomNavShadowDark else BottomNavShadowLight
+        get() = if (isSystemInDarkTheme()) NavBackgroundDark else NavBackgroundLight
 
     val cardShadow: Color
         @Composable
@@ -79,7 +72,6 @@ object IMFITColors {
         get() = if (isSystemInDarkTheme()) DividerDark else DividerLight
 }
 
-// Extension untuk MaterialTheme colors
 val MaterialTheme.customColors: IMFITCustomColors
     @Composable
     @ReadOnlyComposable
@@ -119,21 +111,16 @@ object IMFITCustomColors {
         @ReadOnlyComposable
         get() = IMFITColors.backgroundSecondary
 
-    val bottomNavActive: Color get() = IMFITColors.bottomNavActive
-    val bottomNavInactive: Color
+    val navActive: Color get() = IMFITColors.navActive
+    val navInactive: Color
         @Composable
         @ReadOnlyComposable
-        get() = IMFITColors.bottomNavInactive
+        get() = IMFITColors.navInactive
 
-    val bottomNavBackground: Color
+    val navBackground: Color
         @Composable
         @ReadOnlyComposable
-        get() = IMFITColors.bottomNavBackground
-
-    val bottomNavShadow: Color
-        @Composable
-        @ReadOnlyComposable
-        get() = IMFITColors.bottomNavShadow
+        get() = IMFITColors.navBackground
 
     val surfaceElevated: Color
         @Composable

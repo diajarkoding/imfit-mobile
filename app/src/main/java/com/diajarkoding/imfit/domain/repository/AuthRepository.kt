@@ -1,12 +1,11 @@
 package com.diajarkoding.imfit.domain.repository
 
-import android.net.Uri
-import com.diajarkoding.imfit.data.remote.dto.LoginRequest
-import com.diajarkoding.imfit.data.remote.dto.RegisterRequest
-import com.diajarkoding.imfit.domain.model.Result
+import com.diajarkoding.imfit.domain.model.User
 
 interface AuthRepository {
-    suspend fun register(registerRequest: RegisterRequest, profileImageUri: Uri?): Result<Unit>
-    suspend fun login(loginRequest: LoginRequest): Result<String> // Mengembalikan token (String)
-    suspend fun logout(): Result<Unit>
+    suspend fun register(name: String, email: String, password: String): Result<User>
+    suspend fun login(email: String, password: String): Result<User>
+    suspend fun logout()
+    fun getCurrentUser(): User?
+    fun isLoggedIn(): Boolean
 }

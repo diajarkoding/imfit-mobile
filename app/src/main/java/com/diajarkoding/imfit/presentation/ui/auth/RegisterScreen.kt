@@ -1,15 +1,9 @@
 package com.diajarkoding.imfit.presentation.ui.auth
 
-import android.Manifest
-import android.content.pm.PackageManager
-import android.net.Uri
-import android.os.Build
-import android.widget.Toast
-import androidx.activity.compose.rememberLauncherForActivityResult
-import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -17,49 +11,37 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.AccountCircle
-import androidx.compose.material3.AlertDialog
-import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material.icons.filled.FitnessCenter
 import androidx.compose.material3.Icon
-import androidx.compose.material3.Scaffold
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
-import androidx.compose.ui.layout.ContentScale
-import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.res.stringResource
+import androidx.compose.foundation.background
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.imePadding
+import androidx.compose.foundation.layout.navigationBars
+import androidx.compose.foundation.layout.statusBars
+import androidx.compose.foundation.layout.windowInsetsPadding
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardType
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
-import androidx.core.content.ContextCompat
-import androidx.core.content.FileProvider
 import androidx.hilt.navigation.compose.hiltViewModel
-import coil.compose.AsyncImage
-import com.diajarkoding.imfit.R
-import com.diajarkoding.imfit.presentation.components.DatePickerField
-import com.diajarkoding.imfit.presentation.components.PasswordTextField
-import com.diajarkoding.imfit.presentation.components.PrimaryButton
-import com.diajarkoding.imfit.presentation.components.auth.AuthRedirectText
-import com.diajarkoding.imfit.presentation.components.auth.AuthScreenLayout
-import com.diajarkoding.imfit.presentation.components.auth.AuthTextField
-import com.diajarkoding.imfit.theme.IMFITSpacing
-import java.io.File
-import java.text.SimpleDateFormat
-import java.util.Date
-import java.util.Objects
+import com.diajarkoding.imfit.presentation.components.common.IMFITButton
+import com.diajarkoding.imfit.presentation.components.common.IMFITPasswordField
+import com.diajarkoding.imfit.presentation.components.common.IMFITTextField
 
 @Composable
 fun RegisterScreen(
@@ -68,228 +50,140 @@ fun RegisterScreen(
     viewModel: RegisterViewModel = hiltViewModel()
 ) {
     val state by viewModel.state.collectAsState()
-    val context = LocalContext.current
     val snackbarHostState = remember { SnackbarHostState() }
-    var showImageSourceDialog by remember { mutableStateOf(false) }
 
-    // --- Menangani efek samping (Side Effects) ---
-    LaunchedEffect(key1 = state.snackbarMessage) {
-        state.snackbarMessage?.let {
-            snackbarHostState.showSnackbar(message = it)
-            viewModel.onEvent(RegisterEvent.SnackbarDismissed)
-        }
-    }
-
-    LaunchedEffect(key1 = state.registerSuccess) {
+    LaunchedEffect(state.registerSuccess) {
         if (state.registerSuccess) {
-            Toast.makeText(context, "Registrasi Berhasil! Silakan Masuk.", Toast.LENGTH_LONG).show()
             onRegisterSuccess()
         }
     }
 
-    // --- Launcher untuk Gambar & Izin ---
-
-    var tempImageUri by remember { mutableStateOf<Uri?>(null) }
-
-    val galleryLauncher = rememberLauncherForActivityResult(
-        contract = ActivityResultContracts.GetContent(),
-        onResult = { uri -> viewModel.onEvent(RegisterEvent.ProfilePictureChanged(uri)) }
-    )
-
-    val cameraLauncher = rememberLauncherForActivityResult(
-        contract = ActivityResultContracts.TakePicture(),
-        onResult = { success ->
-            if (success) {
-                viewModel.onEvent(RegisterEvent.ProfilePictureChanged(tempImageUri))
-            }
+    LaunchedEffect(state.errorMessage) {
+        state.errorMessage?.let { message ->
+            snackbarHostState.showSnackbar(message)
+            viewModel.clearError()
         }
-    )
-
-    // PENJELASAN PERUBAHAN #1: Buat fungsi untuk membuka kamera agar tidak duplikat kode
-    fun launchCameraAction() {
-        // Membuat file sementara untuk menyimpan gambar dari kamera
-        val timeStamp = SimpleDateFormat("yyyyMMdd_HHmmss").format(Date())
-        val storageDir: File? = context.getExternalFilesDir(null)
-        val file = File.createTempFile(
-            "JPEG_${timeStamp}_",
-            ".jpg",
-            storageDir
-        )
-        val uri = FileProvider.getUriForFile(
-            Objects.requireNonNull(context),
-            "${context.packageName}.provider", file
-        )
-        tempImageUri = uri
-        cameraLauncher.launch(uri)
     }
 
-
-    // PENJELASAN PERUBAHAN #2: Logika membuka kamera dipindah ke dalam `onResult`
-    val cameraPermissionLauncher = rememberLauncherForActivityResult(
-        contract = ActivityResultContracts.RequestPermission(),
-        onResult = { isGranted ->
-            if (isGranted) {
-                // Jika izin DIBERIKAN, baru buka kamera
-                launchCameraAction()
-            } else {
-                Toast.makeText(context, "Izin kamera ditolak.", Toast.LENGTH_SHORT).show()
-            }
-        }
-    )
-
-    val storagePermissionLauncher = rememberLauncherForActivityResult(
-        contract = ActivityResultContracts.RequestPermission(),
-        onResult = { isGranted ->
-            if (isGranted) {
-                // Jika izin DIBERIKAN, baru buka galeri
-                galleryLauncher.launch("image/*")
-            } else {
-                Toast.makeText(context, "Izin galeri ditolak.", Toast.LENGTH_SHORT).show()
-            }
-        }
-    )
-
-
-    // --- Dialog Pilihan Gambar ---
-    if (showImageSourceDialog) {
-        AlertDialog(
-            onDismissRequest = { showImageSourceDialog = false },
-            title = { Text("Pilih Sumber Gambar") },
-            confirmButton = {
-                TextButton(onClick = {
-                    showImageSourceDialog = false
-                    // PENJELASAN PERUBAHAN #3: Cek izin SEBELUM membuka kamera
-                    val permission = Manifest.permission.CAMERA
-                    val permissionCheckResult =
-                        ContextCompat.checkSelfPermission(context, permission)
-                    if (permissionCheckResult == PackageManager.PERMISSION_GRANTED) {
-                        // Jika izin sudah ada, langsung buka kamera
-                        launchCameraAction()
-                    } else {
-                        // Jika belum ada, minta izin. Callback akan menangani sisanya.
-                        cameraPermissionLauncher.launch(permission)
-                    }
-                }) { Text("Kamera") }
-            },
-            dismissButton = {
-                TextButton(onClick = {
-                    showImageSourceDialog = false
-                    val permission =
-                        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) Manifest.permission.READ_MEDIA_IMAGES
-                        else Manifest.permission.READ_EXTERNAL_STORAGE
-
-                    val permissionCheckResult =
-                        ContextCompat.checkSelfPermission(context, permission)
-                    if (permissionCheckResult == PackageManager.PERMISSION_GRANTED) {
-                        galleryLauncher.launch("image/*")
-                    } else {
-                        storagePermissionLauncher.launch(permission)
-                    }
-                }) { Text("Galeri") }
-            }
-        )
-    }
-
-    // --- UI Utama (Tidak ada perubahan di sini) ---
-    Scaffold(
-        snackbarHost = { SnackbarHost(hostState = snackbarHostState) }
-    ) { paddingValues ->
-        AuthScreenLayout(
-            title = stringResource(id = R.string.register_title),
-            modifier = Modifier.padding(paddingValues)
+    Box(
+        modifier = Modifier
+            .fillMaxSize()
+            .background(MaterialTheme.colorScheme.background)
+            .windowInsetsPadding(WindowInsets.statusBars)
+            .imePadding()
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .verticalScroll(rememberScrollState())
+                .padding(horizontal = 24.dp)
+                .padding(vertical = 24.dp),
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.Center
         ) {
-            Column(
-                modifier = Modifier
-                    .weight(1f)
-                    .verticalScroll(rememberScrollState()),
-                horizontalAlignment = Alignment.CenterHorizontally
-            ) {
-                Box(
-                    modifier = Modifier
-                        .size(100.dp)
-                        .clip(CircleShape)
-                        .clickable { showImageSourceDialog = true },
-                    contentAlignment = Alignment.Center
-                ) {
-                    if (state.profileImageUri != null) {
-                        AsyncImage(
-                            model = state.profileImageUri,
-                            contentDescription = "Foto Profil",
-                            modifier = Modifier.fillMaxSize(),
-                            contentScale = ContentScale.Crop
-                        )
-                    } else {
-                        Icon(
-                            imageVector = Icons.Default.AccountCircle,
-                            contentDescription = "Placeholder",
-                            modifier = Modifier.size(80.dp)
-                        )
-                    }
-                }
-                Spacer(modifier = Modifier.height(IMFITSpacing.md))
-                AuthTextField(
-                    value = state.fullname,
-                    onValueChange = { viewModel.onEvent(RegisterEvent.FullnameChanged(it)) },
-                    label = stringResource(id = R.string.label_fullname),
-                    modifier = Modifier.fillMaxWidth(),
-                    isError = state.fullnameError != null,
-                    errorMessage = state.fullnameError
-                )
-                Spacer(modifier = Modifier.height(IMFITSpacing.md))
-                AuthTextField(
-                    value = state.username,
-                    onValueChange = { viewModel.onEvent(RegisterEvent.UsernameChanged(it)) },
-                    label = stringResource(id = R.string.label_username),
-                    modifier = Modifier.fillMaxWidth(),
-                    isError = state.usernameError != null,
-                    errorMessage = state.usernameError
-                )
-                Spacer(modifier = Modifier.height(IMFITSpacing.md))
-                AuthTextField(
-                    value = state.email,
-                    onValueChange = { viewModel.onEvent(RegisterEvent.EmailChanged(it)) },
-                    label = stringResource(id = R.string.label_email),
-                    keyboardType = KeyboardType.Email,
-                    modifier = Modifier.fillMaxWidth(),
-                    isError = state.emailError != null,
-                    errorMessage = state.emailError
-                )
-                Spacer(modifier = Modifier.height(IMFITSpacing.md))
-                PasswordTextField(
-                    value = state.password,
-                    onValueChange = { viewModel.onEvent(RegisterEvent.PasswordChanged(it)) },
-                    label = stringResource(id = R.string.label_password),
-                    modifier = Modifier.fillMaxWidth(),
-                    isError = state.passwordError != null,
-                    errorMessage = state.passwordError
-                )
-                Spacer(modifier = Modifier.height(IMFITSpacing.md))
-                DatePickerField(
-                    value = state.dateOfBirth,
-                    onValueChange = { viewModel.onEvent(RegisterEvent.DateOfBirthChanged(it)) },
-                    label = stringResource(id = R.string.label_date_of_birth),
-                    modifier = Modifier.fillMaxWidth(),
-                    isError = state.dateOfBirthError != null,
-                    errorMessage = state.dateOfBirthError
-                )
-                Spacer(modifier = Modifier.height(IMFITSpacing.xl))
-                if (state.isLoading) {
-                    CircularProgressIndicator()
-                } else {
-                    PrimaryButton(
-                        text = stringResource(id = R.string.register_button),
-                        onClick = { viewModel.onEvent(RegisterEvent.RegisterButtonPressed) },
-                        enabled = !state.isLoading
-                    )
-                }
-                Spacer(modifier = Modifier.height(IMFITSpacing.md))
-            }
-            AuthRedirectText(
-                promptText = stringResource(id = R.string.register_redirect_prompt),
-                clickableText = stringResource(id = R.string.register_redirect_action),
-                onClick = onNavigateToLogin,
-                modifier = Modifier.padding(top = IMFITSpacing.md)
+            Icon(
+                imageVector = Icons.Default.FitnessCenter,
+                contentDescription = "IMFIT Logo",
+                modifier = Modifier.size(64.dp),
+                tint = MaterialTheme.colorScheme.primary
             )
+
+            Spacer(modifier = Modifier.height(16.dp))
+
+            Text(
+                text = "Create Account",
+                style = MaterialTheme.typography.headlineMedium,
+                fontWeight = FontWeight.Bold,
+                color = MaterialTheme.colorScheme.onBackground
+            )
+
+            Spacer(modifier = Modifier.height(8.dp))
+
+            Text(
+                text = "Start your fitness journey today",
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                textAlign = TextAlign.Center
+            )
+
+            Spacer(modifier = Modifier.height(32.dp))
+
+            IMFITTextField(
+                value = state.name,
+                onValueChange = { viewModel.onNameChange(it) },
+                label = "Full Name",
+                placeholder = "Enter your name",
+                error = state.nameError,
+                imeAction = ImeAction.Next
+            )
+
+            Spacer(modifier = Modifier.height(16.dp))
+
+            IMFITTextField(
+                value = state.email,
+                onValueChange = { viewModel.onEmailChange(it) },
+                label = "Email",
+                placeholder = "Enter your email",
+                error = state.emailError,
+                keyboardType = KeyboardType.Email,
+                imeAction = ImeAction.Next
+            )
+
+            Spacer(modifier = Modifier.height(16.dp))
+
+            IMFITPasswordField(
+                value = state.password,
+                onValueChange = { viewModel.onPasswordChange(it) },
+                label = "Password",
+                error = state.passwordError,
+                imeAction = ImeAction.Next
+            )
+
+            Spacer(modifier = Modifier.height(16.dp))
+
+            IMFITPasswordField(
+                value = state.confirmPassword,
+                onValueChange = { viewModel.onConfirmPasswordChange(it) },
+                label = "Confirm Password",
+                error = state.confirmPasswordError,
+                imeAction = ImeAction.Done,
+                onImeAction = { viewModel.register() }
+            )
+
+            Spacer(modifier = Modifier.height(32.dp))
+
+            IMFITButton(
+                text = "Create Account",
+                onClick = { viewModel.register() },
+                isLoading = state.isLoading
+            )
+
+            Spacer(modifier = Modifier.height(24.dp))
+
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.Center
+            ) {
+                Text(
+                    text = "Already have an account? ",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+                Text(
+                    text = "Sign In",
+                    style = MaterialTheme.typography.bodyMedium,
+                    fontWeight = FontWeight.SemiBold,
+                    color = MaterialTheme.colorScheme.primary,
+                    modifier = Modifier.clickable { onNavigateToLogin() }
+                )
+            }
         }
+
+        SnackbarHost(
+            hostState = snackbarHostState,
+            modifier = Modifier
+                .align(Alignment.BottomCenter)
+                .windowInsetsPadding(WindowInsets.navigationBars)
+        )
     }
 }

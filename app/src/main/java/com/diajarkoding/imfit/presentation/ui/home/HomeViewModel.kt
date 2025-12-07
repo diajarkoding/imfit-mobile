@@ -1,56 +1,67 @@
 package com.diajarkoding.imfit.presentation.ui.home
 
 import androidx.lifecycle.ViewModel
+import androidx.lifecycle.viewModelScope
+import com.diajarkoding.imfit.domain.model.WorkoutLog
+import com.diajarkoding.imfit.domain.model.WorkoutTemplate
+import com.diajarkoding.imfit.domain.repository.AuthRepository
+import com.diajarkoding.imfit.domain.repository.WorkoutRepository
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.update
+import kotlinx.coroutines.launch
 import javax.inject.Inject
 
-// Data class untuk menampung data dummy
-data class ProgressItem(
-    val progress: Float,
-    val current: Int,
-    val total: Int,
-    val title: String,
-    val timeRemaining: String
-)
-
-data class CategoryItem(val name: String, val isSelected: Boolean)
-data class ExerciseItem(
-    val imageRes: Int,
-    val title: String,
-    val exerciseCount: Int,
-    val duration: String
-)
-
 data class HomeState(
-    val progressItems: List<ProgressItem> = emptyList(),
-    val categories: List<CategoryItem> = emptyList(),
-    val exercises: List<ExerciseItem> = emptyList()
+    val userName: String = "User",
+    val templates: List<WorkoutTemplate> = emptyList(),
+    val lastWorkout: WorkoutLog? = null,
+    val isLoading: Boolean = false
 )
 
 @HiltViewModel
-class HomeViewModel @Inject constructor() : ViewModel() {
+class HomeViewModel @Inject constructor(
+    private val authRepository: AuthRepository,
+    private val workoutRepository: WorkoutRepository
+) : ViewModel() {
+
     private val _state = MutableStateFlow(HomeState())
     val state = _state.asStateFlow()
 
     init {
-        // Isi dengan data dummy untuk prototyping UI
-        _state.value = HomeState(
-            progressItems = listOf(
-                ProgressItem(0.41f, 5, 12, "Latihan Dada", "15 menit tersisa"),
-                ProgressItem(0.15f, 3, 20, "Latihan Kaki", "23 menit tersisa")
-            ),
-            categories = listOf(
-                CategoryItem("Semua", true),
-                CategoryItem("Full Body", false),
-                CategoryItem("Kardio", false),
-                CategoryItem("Kekuatan", false)
-            ),
-            exercises = listOf(
-                ExerciseItem(android.R.drawable.ic_menu_camera, "Latihan Pagi", 10, "30 menit"),
-                ExerciseItem(android.R.drawable.ic_menu_gallery, "Latihan Malam", 8, "25 menit")
-            )
-        )
+        loadData()
+    }
+
+    private fun loadData() {
+        viewModelScope.launch {
+            _state.update { it.copy(isLoading = true) }
+
+            val user = authRepository.getCurrentUser()
+            val userId = user?.id ?: "user_1"
+            val userName = user?.name ?: "User"
+
+            val templates = workoutRepository.getTemplates(userId)
+            val lastWorkout = workoutRepository.getLastWorkoutLog(userId)
+
+            _state.update {
+                it.copy(
+                    userName = userName,
+                    templates = templates,
+                    lastWorkout = lastWorkout,
+                    isLoading = false
+                )
+            }
+        }
+    }
+
+    fun logout() {
+        viewModelScope.launch {
+            authRepository.logout()
+        }
+    }
+
+    fun refresh() {
+        loadData()
     }
 }

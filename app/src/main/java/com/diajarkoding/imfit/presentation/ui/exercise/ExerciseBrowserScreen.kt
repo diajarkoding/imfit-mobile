@@ -1,134 +1,166 @@
 package com.diajarkoding.imfit.presentation.ui.exercise
 
+import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
-
+import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-
-import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.lazy.grid.GridCells
+import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
+import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.ArrowBack
 import androidx.compose.material.icons.filled.FitnessCenter
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
+import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.collectAsState
-import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
-import androidx.hilt.navigation.compose.hiltViewModel
-import com.diajarkoding.imfit.domain.model.Exercise
 import com.diajarkoding.imfit.domain.model.MuscleCategory
 import com.diajarkoding.imfit.theme.IMFITShapes
+import com.diajarkoding.imfit.theme.IMFITSizes
+import com.diajarkoding.imfit.theme.IMFITSpacing
+import com.diajarkoding.imfit.theme.Primary
+import com.diajarkoding.imfit.theme.PrimaryLight
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun ExerciseBrowserScreen(
     onNavigateBack: () -> Unit,
-    viewModel: ExerciseBrowserViewModel = hiltViewModel()
+    onCategorySelected: (MuscleCategory) -> Unit
 ) {
-    val state by viewModel.state.collectAsState()
-
     Scaffold(
+        contentWindowInsets = WindowInsets(0),
         topBar = {
             TopAppBar(
-                title = { Text("Exercise Library") },
-                navigationIcon = {
-                    IconButton(onClick = onNavigateBack) {
-                        Icon(Icons.Default.ArrowBack, contentDescription = "Back")
+                title = {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Box(
+                            modifier = Modifier
+                                .size(40.dp)
+                                .clip(IMFITShapes.IconContainer)
+                                .background(
+                                    Brush.linearGradient(listOf(Primary, PrimaryLight))
+                                ),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.FitnessCenter,
+                                contentDescription = null,
+                                tint = MaterialTheme.colorScheme.onPrimary,
+                                modifier = Modifier.size(IMFITSizes.iconSm)
+                            )
+                        }
+                        Spacer(modifier = Modifier.width(IMFITSpacing.md))
+                        Text(
+                            text = "Exercises",
+                            style = MaterialTheme.typography.titleLarge,
+                            fontWeight = FontWeight.Bold
+                        )
                     }
-                }
+                },
+                colors = TopAppBarDefaults.topAppBarColors(
+                    containerColor = MaterialTheme.colorScheme.surface
+                ),
+                windowInsets = WindowInsets(0)
             )
         }
     ) { padding ->
-        LazyColumn(
+        LazyVerticalGrid(
+            columns = GridCells.Fixed(3),
             modifier = Modifier
                 .fillMaxSize()
                 .padding(padding),
-            contentPadding = PaddingValues(16.dp),
-            verticalArrangement = Arrangement.spacedBy(16.dp)
+            contentPadding = PaddingValues(IMFITSpacing.screenHorizontal),
+            horizontalArrangement = Arrangement.spacedBy(IMFITSpacing.sm),
+            verticalArrangement = Arrangement.spacedBy(IMFITSpacing.sm)
         ) {
-            MuscleCategory.entries.forEach { category ->
-                val exercises = state.exercisesByCategory[category] ?: emptyList()
-                if (exercises.isNotEmpty()) {
-                    item {
-                        Text(
-                            text = category.displayName,
-                            style = MaterialTheme.typography.titleMedium,
-                            fontWeight = FontWeight.SemiBold,
-                            color = MaterialTheme.colorScheme.primary
-                        )
-                    }
-
-                    items(exercises) { exercise ->
-                        ExerciseCard(exercise = exercise)
-                    }
-
-                    item {
-                        Spacer(modifier = Modifier.height(8.dp))
-                    }
-                }
+            items(MuscleCategory.entries) { category ->
+                MuscleCategoryCard(
+                    category = category,
+                    onClick = { onCategorySelected(category) }
+                )
             }
         }
     }
 }
 
 @Composable
-private fun ExerciseCard(exercise: Exercise) {
+private fun MuscleCategoryCard(
+    category: MuscleCategory,
+    onClick: () -> Unit
+) {
     Card(
-        modifier = Modifier.fillMaxWidth(),
+        modifier = Modifier
+            .fillMaxWidth()
+            .aspectRatio(0.85f)
+            .clickable { onClick() },
         shape = IMFITShapes.Card,
         colors = CardDefaults.cardColors(
             containerColor = MaterialTheme.colorScheme.surface
         ),
-        elevation = CardDefaults.cardElevation(defaultElevation = 1.dp)
+        elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
     ) {
-        Row(
+        Box(
             modifier = Modifier
-                .fillMaxWidth()
-                .padding(16.dp),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Icon(
-                imageVector = Icons.Default.FitnessCenter,
-                contentDescription = null,
-                tint = MaterialTheme.colorScheme.primary,
-                modifier = Modifier.size(32.dp)
-            )
-
-            Column(
-                modifier = Modifier
-                    .padding(start = 16.dp)
-                    .weight(1f)
-            ) {
-                Text(
-                    text = exercise.name,
-                    style = MaterialTheme.typography.titleSmall,
-                    fontWeight = FontWeight.Medium
+                .fillMaxSize()
+                .background(
+                    Brush.verticalGradient(
+                        listOf(
+                            Primary.copy(alpha = 0.08f),
+                            Primary.copy(alpha = 0.02f)
+                        )
+                    )
                 )
-                Spacer(modifier = Modifier.height(4.dp))
+                .padding(IMFITSpacing.md),
+            contentAlignment = Alignment.Center
+        ) {
+            Column(
+                horizontalAlignment = Alignment.CenterHorizontally,
+                verticalArrangement = Arrangement.Center
+            ) {
+                Box(
+                    modifier = Modifier
+                        .size(40.dp)
+                        .clip(IMFITShapes.IconContainer)
+                        .background(MaterialTheme.colorScheme.primaryContainer),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.FitnessCenter,
+                        contentDescription = null,
+                        tint = Primary,
+                        modifier = Modifier.size(IMFITSizes.iconSm)
+                    )
+                }
+                Spacer(modifier = Modifier.size(IMFITSpacing.sm))
                 Text(
-                    text = exercise.description,
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    text = category.displayName,
+                    style = MaterialTheme.typography.labelMedium,
+                    fontWeight = FontWeight.Bold,
+                    color = MaterialTheme.colorScheme.onSurface,
+                    textAlign = TextAlign.Center,
                     maxLines = 2
                 )
             }

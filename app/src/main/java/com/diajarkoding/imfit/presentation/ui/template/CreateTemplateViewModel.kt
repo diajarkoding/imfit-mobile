@@ -4,6 +4,7 @@ import androidx.lifecycle.SavedStateHandle
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.diajarkoding.imfit.domain.model.Exercise
+import com.diajarkoding.imfit.domain.model.TemplateExercise
 import com.diajarkoding.imfit.domain.repository.AuthRepository
 import com.diajarkoding.imfit.domain.repository.WorkoutRepository
 import dagger.hilt.android.lifecycle.HiltViewModel
@@ -16,7 +17,7 @@ import javax.inject.Inject
 data class CreateTemplateState(
     val tempTemplateId: String = "temp_${System.currentTimeMillis()}",
     val templateName: String = "",
-    val selectedExercises: List<Exercise> = emptyList(),
+    val selectedExercises: List<TemplateExercise> = emptyList(),
     val nameError: String? = null,
     val isLoading: Boolean = false,
     val isSaved: Boolean = false
@@ -51,15 +52,15 @@ class CreateTemplateViewModel @Inject constructor(
         val currentExercises = _state.value.selectedExercises.toMutableList()
         exercises.forEach { exercise ->
             if (currentExercises.none { it.id == exercise.id }) {
-                currentExercises.add(exercise)
+                currentExercises.add(TemplateExercise(exercise = exercise))
             }
         }
         _state.update { it.copy(selectedExercises = currentExercises) }
     }
 
-    fun removeExercise(exercise: Exercise) {
+    fun removeExercise(templateExercise: TemplateExercise) {
         val currentExercises = _state.value.selectedExercises.toMutableList()
-        currentExercises.remove(exercise)
+        currentExercises.remove(templateExercise)
         _state.update { it.copy(selectedExercises = currentExercises) }
     }
 

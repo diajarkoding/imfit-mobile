@@ -14,7 +14,8 @@ data class ExerciseSelectionState(
     val allExercises: List<Exercise> = emptyList(),
     val filteredExercises: List<Exercise> = emptyList(),
     val selectedExercises: List<Exercise> = emptyList(),
-    val selectedCategory: MuscleCategory? = null
+    val selectedCategory: MuscleCategory? = null,
+    val searchQuery: String = ""
 )
 
 @HiltViewModel
@@ -40,19 +41,29 @@ class ExerciseSelectionViewModel @Inject constructor(
     }
 
     fun selectCategory(category: MuscleCategory?) {
+        _state.update { it.copy(selectedCategory = category) }
+        applyFilters()
+    }
+
+    fun onSearchQueryChange(query: String) {
+        _state.update { it.copy(searchQuery = query) }
+        applyFilters()
+    }
+
+    private fun applyFilters() {
         val allExercises = _state.value.allExercises
-        val filtered = if (category == null) {
-            allExercises
-        } else {
-            allExercises.filter { it.muscleCategory == category }
+        val category = _state.value.selectedCategory
+        val query = _state.value.searchQuery.lowercase().trim()
+
+        val filtered = allExercises.filter { exercise ->
+            val matchesCategory = category == null || exercise.muscleCategory == category
+            val matchesSearch = query.isEmpty() || 
+                exercise.name.lowercase().contains(query) ||
+                exercise.muscleCategory.displayName.lowercase().contains(query)
+            matchesCategory && matchesSearch
         }
 
-        _state.update {
-            it.copy(
-                selectedCategory = category,
-                filteredExercises = filtered
-            )
-        }
+        _state.update { it.copy(filteredExercises = filtered) }
     }
 
     fun toggleExercise(exercise: Exercise) {

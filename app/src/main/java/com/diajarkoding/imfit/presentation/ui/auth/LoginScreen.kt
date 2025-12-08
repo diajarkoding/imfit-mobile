@@ -1,15 +1,22 @@
 package com.diajarkoding.imfit.presentation.ui.auth
 
+import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.imePadding
+import androidx.compose.foundation.layout.navigationBars
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.statusBars
+import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
@@ -26,13 +33,8 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.foundation.background
-import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.WindowInsets
-import androidx.compose.foundation.layout.imePadding
-import androidx.compose.foundation.layout.navigationBars
-import androidx.compose.foundation.layout.statusBars
-import androidx.compose.foundation.layout.windowInsetsPadding
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardType
@@ -42,11 +44,19 @@ import androidx.hilt.navigation.compose.hiltViewModel
 import com.diajarkoding.imfit.presentation.components.common.IMFITButton
 import com.diajarkoding.imfit.presentation.components.common.IMFITPasswordField
 import com.diajarkoding.imfit.presentation.components.common.IMFITTextField
+import com.diajarkoding.imfit.presentation.components.common.IMFITThemeSwitch
+import com.diajarkoding.imfit.theme.IMFITShapes
+import com.diajarkoding.imfit.theme.IMFITSizes
+import com.diajarkoding.imfit.theme.IMFITSpacing
+import com.diajarkoding.imfit.theme.Primary
+import com.diajarkoding.imfit.theme.PrimaryLight
 
 @Composable
 fun LoginScreen(
     onNavigateToRegister: () -> Unit,
     onLoginSuccess: () -> Unit,
+    isDarkMode: Boolean,
+    onToggleTheme: () -> Unit,
     viewModel: LoginViewModel = hiltViewModel()
 ) {
     val state by viewModel.state.collectAsState()
@@ -76,18 +86,31 @@ fun LoginScreen(
             modifier = Modifier
                 .fillMaxSize()
                 .verticalScroll(rememberScrollState())
-                .padding(horizontal = 24.dp),
+                .padding(horizontal = IMFITSpacing.screenHorizontal),
             horizontalAlignment = Alignment.CenterHorizontally,
             verticalArrangement = Arrangement.Center
         ) {
-            Icon(
-                imageVector = Icons.Default.FitnessCenter,
-                contentDescription = "IMFIT Logo",
-                modifier = Modifier.size(64.dp),
-                tint = MaterialTheme.colorScheme.primary
-            )
+            Spacer(modifier = Modifier.height(IMFITSpacing.huge))
+            
+            // Logo
+            Box(
+                modifier = Modifier
+                    .size(80.dp)
+                    .clip(IMFITShapes.Card)
+                    .background(
+                        Brush.linearGradient(listOf(Primary, PrimaryLight))
+                    ),
+                contentAlignment = Alignment.Center
+            ) {
+                Icon(
+                    imageVector = Icons.Default.FitnessCenter,
+                    contentDescription = "IMFIT Logo",
+                    modifier = Modifier.size(IMFITSizes.iconXxl),
+                    tint = MaterialTheme.colorScheme.onPrimary
+                )
+            }
 
-            Spacer(modifier = Modifier.height(16.dp))
+            Spacer(modifier = Modifier.height(IMFITSpacing.xxl))
 
             Text(
                 text = "Welcome Back!",
@@ -96,16 +119,16 @@ fun LoginScreen(
                 color = MaterialTheme.colorScheme.onBackground
             )
 
-            Spacer(modifier = Modifier.height(8.dp))
+            Spacer(modifier = Modifier.height(IMFITSpacing.sm))
 
             Text(
                 text = "Sign in to continue your fitness journey",
-                style = MaterialTheme.typography.bodyMedium,
+                style = MaterialTheme.typography.bodyLarge,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 textAlign = TextAlign.Center
             )
 
-            Spacer(modifier = Modifier.height(48.dp))
+            Spacer(modifier = Modifier.height(IMFITSpacing.xxxl))
 
             IMFITTextField(
                 value = state.email,
@@ -117,7 +140,7 @@ fun LoginScreen(
                 imeAction = ImeAction.Next
             )
 
-            Spacer(modifier = Modifier.height(16.dp))
+            Spacer(modifier = Modifier.height(IMFITSpacing.lg))
 
             IMFITPasswordField(
                 value = state.password,
@@ -128,15 +151,15 @@ fun LoginScreen(
                 onImeAction = { viewModel.login() }
             )
 
-            Spacer(modifier = Modifier.height(32.dp))
+            Spacer(modifier = Modifier.height(IMFITSpacing.xxxl))
 
             IMFITButton(
                 text = "Sign In",
-                onClick = { viewModel.login() },
+                onClick = { onLoginSuccess() },
                 isLoading = state.isLoading
             )
 
-            Spacer(modifier = Modifier.height(24.dp))
+            Spacer(modifier = Modifier.height(IMFITSpacing.xxl))
 
             Row(
                 modifier = Modifier.fillMaxWidth(),
@@ -150,19 +173,40 @@ fun LoginScreen(
                 Text(
                     text = "Sign Up",
                     style = MaterialTheme.typography.bodyMedium,
-                    fontWeight = FontWeight.SemiBold,
-                    color = MaterialTheme.colorScheme.primary,
+                    fontWeight = FontWeight.Bold,
+                    color = Primary,
                     modifier = Modifier.clickable { onNavigateToRegister() }
                 )
             }
 
-            Spacer(modifier = Modifier.height(32.dp))
+            Spacer(modifier = Modifier.height(IMFITSpacing.xxxl))
 
-            Text(
-                text = "Demo: demo@imfit.com / password123",
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f),
-                textAlign = TextAlign.Center
+            Box(
+                modifier = Modifier
+                    .clip(IMFITShapes.Chip)
+                    .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f))
+                    .padding(horizontal = IMFITSpacing.lg, vertical = IMFITSpacing.md)
+            ) {
+                Text(
+                    text = "Demo: demo@imfit.com / password123",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    textAlign = TextAlign.Center
+                )
+            }
+            
+            Spacer(modifier = Modifier.height(IMFITSpacing.huge))
+        }
+
+        // Theme Toggle
+        Box(
+            modifier = Modifier
+                .align(Alignment.TopEnd)
+                .padding(IMFITSpacing.lg)
+        ) {
+            IMFITThemeSwitch(
+                isDarkMode = isDarkMode,
+                onToggle = onToggleTheme
             )
         }
 

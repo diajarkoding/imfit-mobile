@@ -101,6 +101,42 @@ class ActiveWorkoutViewModel @Inject constructor(
         startRestTimer()
     }
 
+    fun addSet(exerciseIndex: Int) {
+        val currentSession = _state.value.session ?: return
+
+        val updatedExerciseLogs = currentSession.exerciseLogs.toMutableList()
+        val exerciseLog = updatedExerciseLogs.getOrNull(exerciseIndex) ?: return
+
+        val newSetNumber = exerciseLog.sets.size + 1
+        val newSet = WorkoutSet(setNumber = newSetNumber)
+        val updatedSets = exerciseLog.sets + newSet
+        updatedExerciseLogs[exerciseIndex] = exerciseLog.copy(sets = updatedSets)
+
+        val updatedSession = currentSession.copy(exerciseLogs = updatedExerciseLogs)
+        workoutRepository.updateActiveSession(updatedSession)
+        _state.update { it.copy(session = updatedSession) }
+    }
+
+    fun removeSet(exerciseIndex: Int, setIndex: Int) {
+        val currentSession = _state.value.session ?: return
+
+        val updatedExerciseLogs = currentSession.exerciseLogs.toMutableList()
+        val exerciseLog = updatedExerciseLogs.getOrNull(exerciseIndex) ?: return
+
+        if (exerciseLog.sets.size <= 1) return
+
+        val updatedSets = exerciseLog.sets.toMutableList()
+        updatedSets.removeAt(setIndex)
+        val renumberedSets = updatedSets.mapIndexed { index, set ->
+            set.copy(setNumber = index + 1)
+        }
+        updatedExerciseLogs[exerciseIndex] = exerciseLog.copy(sets = renumberedSets)
+
+        val updatedSession = currentSession.copy(exerciseLogs = updatedExerciseLogs)
+        workoutRepository.updateActiveSession(updatedSession)
+        _state.update { it.copy(session = updatedSession) }
+    }
+
     private fun startRestTimer() {
         restTimerJob?.cancel()
         _state.update {

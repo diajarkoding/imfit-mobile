@@ -17,7 +17,9 @@ data class HomeState(
     val userName: String = "User",
     val templates: List<WorkoutTemplate> = emptyList(),
     val lastWorkout: WorkoutLog? = null,
-    val isLoading: Boolean = false
+    val isLoading: Boolean = false,
+    val newlyCreatedWorkoutId: String? = null,
+    val activeWorkoutTemplateId: String? = null
 )
 
 @HiltViewModel
@@ -43,13 +45,15 @@ class HomeViewModel @Inject constructor(
 
             val templates = workoutRepository.getTemplates(userId)
             val lastWorkout = workoutRepository.getLastWorkoutLog(userId)
+            val activeSession = workoutRepository.getActiveSession()
 
             _state.update {
                 it.copy(
                     userName = userName,
                     templates = templates,
                     lastWorkout = lastWorkout,
-                    isLoading = false
+                    isLoading = false,
+                    activeWorkoutTemplateId = activeSession?.templateId
                 )
             }
         }
@@ -63,5 +67,22 @@ class HomeViewModel @Inject constructor(
 
     fun refresh() {
         loadData()
+    }
+
+    fun createWorkout(name: String) {
+        viewModelScope.launch {
+            val userId = authRepository.getCurrentUser()?.id ?: "user_1"
+            val newWorkout = workoutRepository.createTemplate(
+                userId = userId,
+                name = name,
+                exercises = emptyList()
+            )
+            _state.update { it.copy(newlyCreatedWorkoutId = newWorkout.id) }
+            refresh()
+        }
+    }
+
+    fun clearNewlyCreatedWorkoutId() {
+        _state.update { it.copy(newlyCreatedWorkoutId = null) }
     }
 }

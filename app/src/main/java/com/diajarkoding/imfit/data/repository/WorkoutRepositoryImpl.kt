@@ -2,6 +2,7 @@ package com.diajarkoding.imfit.data.repository
 
 import com.diajarkoding.imfit.data.local.FakeWorkoutDataSource
 import com.diajarkoding.imfit.domain.model.Exercise
+import com.diajarkoding.imfit.domain.model.TemplateExercise
 import com.diajarkoding.imfit.domain.model.WorkoutLog
 import com.diajarkoding.imfit.domain.model.WorkoutSession
 import com.diajarkoding.imfit.domain.model.WorkoutTemplate
@@ -20,12 +21,21 @@ class WorkoutRepositoryImpl @Inject constructor() : WorkoutRepository {
         return FakeWorkoutDataSource.getTemplateById(templateId)
     }
 
-    override fun createTemplate(userId: String, name: String, exercises: List<Exercise>): WorkoutTemplate {
+    override fun createTemplate(userId: String, name: String, exercises: List<TemplateExercise>): WorkoutTemplate {
         return FakeWorkoutDataSource.createTemplate(userId, name, exercises)
     }
 
-    override fun updateTemplate(templateId: String, name: String, exercises: List<Exercise>): WorkoutTemplate? {
+    override fun updateTemplate(templateId: String, name: String, exercises: List<TemplateExercise>): WorkoutTemplate? {
         return FakeWorkoutDataSource.updateTemplate(templateId, name, exercises)
+    }
+
+    override fun updateTemplateExercises(templateId: String, exercises: List<TemplateExercise>): WorkoutTemplate? {
+        val template = getTemplateById(templateId) ?: return null
+        return FakeWorkoutDataSource.updateTemplate(templateId, template.name, exercises)
+    }
+
+    override fun updateTemplateExercise(templateId: String, exerciseId: String, sets: Int, reps: Int, restSeconds: Int): WorkoutTemplate? {
+        return FakeWorkoutDataSource.updateTemplateExercise(templateId, exerciseId, sets, reps, restSeconds)
     }
 
     override fun deleteTemplate(templateId: String): Boolean {

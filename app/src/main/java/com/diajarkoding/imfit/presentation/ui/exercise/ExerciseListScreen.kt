@@ -46,6 +46,8 @@ import com.diajarkoding.imfit.theme.IMFITShapes
 import com.diajarkoding.imfit.theme.IMFITSizes
 import com.diajarkoding.imfit.theme.IMFITSpacing
 import com.diajarkoding.imfit.theme.Primary
+import com.diajarkoding.imfit.R
+import androidx.compose.ui.res.stringResource
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -65,14 +67,14 @@ fun ExerciseListScreen(
                 modifier = Modifier.windowInsetsPadding(WindowInsets.statusBars),
                 title = {
                     Text(
-                        text = category.displayName,
+                        text = stringResource(id = category.stringResourceId),
                         style = MaterialTheme.typography.titleLarge,
                         fontWeight = FontWeight.Bold
                     )
                 },
                 navigationIcon = {
                     IconButton(onClick = onNavigateBack) {
-                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
+                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = stringResource(R.string.action_back))
                     }
                 },
                 colors = TopAppBarDefaults.topAppBarColors(
@@ -100,7 +102,7 @@ fun ExerciseListScreen(
                         contentAlignment = Alignment.Center
                     ) {
                         Text(
-                            text = "No exercises found for this category.",
+                            text = stringResource(R.string.exercise_no_results),
                             style = MaterialTheme.typography.bodyMedium,
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
@@ -141,7 +143,7 @@ private fun ExerciseCard(exercise: Exercise) {
                 Icon(
                     imageVector = Icons.Default.FitnessCenter,
                     contentDescription = null,
-                    tint = Primary,
+                    tint = MaterialTheme.colorScheme.onPrimaryContainer,
                     modifier = Modifier.size(IMFITSizes.iconMd)
                 )
             }

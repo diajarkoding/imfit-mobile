@@ -55,6 +55,8 @@ import com.diajarkoding.imfit.theme.IMFITShapes
 import com.diajarkoding.imfit.theme.IMFITSizes
 import com.diajarkoding.imfit.theme.IMFITSpacing
 import com.diajarkoding.imfit.theme.Primary
+import com.diajarkoding.imfit.R
+import androidx.compose.ui.res.stringResource
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -86,14 +88,14 @@ fun CreateTemplateScreen(
                 modifier = Modifier.windowInsetsPadding(WindowInsets.statusBars),
                 title = {
                     Text(
-                        text = "Create Template",
+                        text = stringResource(R.string.template_create_title),
                         style = MaterialTheme.typography.titleLarge,
                         fontWeight = FontWeight.Bold
                     )
                 },
                 navigationIcon = {
                     IconButton(onClick = onNavigateBack) {
-                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
+                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = stringResource(R.string.action_back))
                     }
                 },
                 colors = TopAppBarDefaults.topAppBarColors(
@@ -120,8 +122,8 @@ fun CreateTemplateScreen(
                     IMFITTextField(
                         value = state.templateName,
                         onValueChange = { viewModel.onNameChange(it) },
-                        label = "Template Name",
-                        placeholder = "e.g., Push Day, Leg Day",
+                        label = stringResource(R.string.template_name_label),
+                        placeholder = stringResource(R.string.template_name_placeholder),
                         error = state.nameError
                     )
                 }
@@ -133,7 +135,7 @@ fun CreateTemplateScreen(
                         verticalAlignment = Alignment.CenterVertically
                     ) {
                         Text(
-                            text = "Exercises (${state.selectedExercises.size})",
+                            text = stringResource(R.string.template_exercises_count, state.selectedExercises.size),
                             style = MaterialTheme.typography.titleMedium,
                             fontWeight = FontWeight.Bold
                         )
@@ -142,7 +144,7 @@ fun CreateTemplateScreen(
 
                 item {
                     IMFITOutlinedButton(
-                        text = "Add Exercise",
+                        text = stringResource(R.string.action_add_exercise),
                         onClick = { onNavigateToExerciseSelection(state.tempTemplateId) },
                         icon = Icons.Default.Add
                     )
@@ -171,7 +173,7 @@ fun CreateTemplateScreen(
                     .padding(vertical = IMFITSpacing.lg)
             ) {
                 IMFITButton(
-                    text = "Save Template",
+                    text = stringResource(R.string.action_save_template),
                     onClick = { viewModel.saveTemplate() },
                     enabled = state.templateName.isNotBlank() && state.selectedExercises.isNotEmpty(),
                     isLoading = state.isLoading
@@ -212,14 +214,14 @@ private fun EmptyExercisePrompt() {
             }
             Spacer(modifier = Modifier.height(IMFITSpacing.lg))
             Text(
-                text = "No exercises added yet",
+                text = stringResource(R.string.template_no_exercises),
                 style = MaterialTheme.typography.titleMedium,
                 fontWeight = FontWeight.SemiBold,
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )
             Spacer(modifier = Modifier.height(IMFITSpacing.xs))
             Text(
-                text = "Add exercises to your template",
+                text = stringResource(R.string.template_add_exercises_hint),
                 style = MaterialTheme.typography.bodyMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f)
             )
@@ -259,7 +261,7 @@ private fun ExerciseItem(
                     Icon(
                         imageVector = Icons.Default.FitnessCenter,
                         contentDescription = null,
-                        tint = Primary,
+                        tint = MaterialTheme.colorScheme.onPrimaryContainer,
                         modifier = Modifier.size(IMFITSizes.iconSm)
                     )
                 }
@@ -273,7 +275,7 @@ private fun ExerciseItem(
                     Spacer(modifier = Modifier.height(IMFITSpacing.xs))
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         Text(
-                            text = templateExercise.muscleCategory.displayName,
+                            text = stringResource(id = templateExercise.muscleCategory.stringResourceId),
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
@@ -290,7 +292,7 @@ private fun ExerciseItem(
             IconButton(onClick = onRemove) {
                 Icon(
                     imageVector = Icons.Default.Close,
-                    contentDescription = "Remove",
+                    contentDescription = stringResource(R.string.action_remove),
                     tint = DeletePink,
                     modifier = Modifier.size(IMFITSizes.iconMd)
                 )

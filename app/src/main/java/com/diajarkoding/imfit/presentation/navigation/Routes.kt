@@ -18,6 +18,7 @@ object Routes {
     const val WORKOUT_HISTORY = "workout_history/{date}"
     const val YEARLY_CALENDAR = "yearly_calendar"
     const val EDIT_WORKOUT = "edit_workout/{workoutId}"
+    const val PROFILE = "profile"
 
     fun editTemplate(templateId: String) = "edit_template/$templateId"
     fun editWorkout(workoutId: String) = "edit_workout/$workoutId"

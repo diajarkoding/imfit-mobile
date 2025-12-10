@@ -10,9 +10,15 @@ import javax.inject.Singleton
 @Singleton
 class AuthRepositoryImpl @Inject constructor() : AuthRepository {
 
-    override suspend fun register(name: String, email: String, password: String): Result<User> {
+    override suspend fun register(
+        name: String,
+        email: String,
+        password: String,
+        birthDate: String?,
+        profilePhotoUri: String?
+    ): Result<User> {
         delay(500) // Simulate network delay
-        return FakeUserDataSource.register(name, email, password)
+        return FakeUserDataSource.register(name, email, password, birthDate, profilePhotoUri)
     }
 
     override suspend fun login(email: String, password: String): Result<User> {

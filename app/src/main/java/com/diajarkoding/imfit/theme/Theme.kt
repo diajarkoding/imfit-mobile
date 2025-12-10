@@ -48,12 +48,12 @@ private val DarkColorScheme = darkColorScheme(
     primary = Primary,
     onPrimary = OnPrimary,
     primaryContainer = PrimaryDark,
-    onPrimaryContainer = PrimaryLight,
+    onPrimaryContainer = OnPrimary,
 
     secondary = Primary,
     onSecondary = OnPrimary,
     secondaryContainer = PrimaryDark,
-    onSecondaryContainer = PrimaryLight,
+    onSecondaryContainer = OnPrimary,
 
     tertiary = Success,
     onTertiary = OnSuccess,
@@ -89,8 +89,11 @@ fun IMFITTheme(
     if (!view.isInEditMode) {
         SideEffect {
             val window = (view.context as Activity).window
-            window.statusBarColor = colorScheme.background.toArgb()
-            WindowCompat.getInsetsController(window, view).isAppearanceLightStatusBars = !darkTheme
+            WindowCompat.setDecorFitsSystemWindows(window, false)
+            WindowCompat.getInsetsController(window, view).apply {
+                isAppearanceLightStatusBars = !darkTheme
+                isAppearanceLightNavigationBars = !darkTheme
+            }
         }
     }
 

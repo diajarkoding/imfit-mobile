@@ -60,6 +60,8 @@ import com.diajarkoding.imfit.theme.IMFITShapes
 import com.diajarkoding.imfit.theme.IMFITSizes
 import com.diajarkoding.imfit.theme.IMFITSpacing
 import com.diajarkoding.imfit.theme.Primary
+import com.diajarkoding.imfit.R
+import androidx.compose.ui.res.stringResource
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -78,14 +80,14 @@ fun ExerciseSelectionScreen(
                 modifier = Modifier.windowInsetsPadding(WindowInsets.statusBars),
                 title = {
                     Text(
-                        text = "Select Exercises",
+                        text = stringResource(R.string.exercise_select_title),
                         style = MaterialTheme.typography.titleLarge,
                         fontWeight = FontWeight.Bold
                     )
                 },
                 navigationIcon = {
                     IconButton(onClick = onNavigateBack) {
-                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
+                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = stringResource(R.string.action_back))
                     }
                 },
                 colors = TopAppBarDefaults.topAppBarColors(
@@ -105,7 +107,7 @@ fun ExerciseSelectionScreen(
                         .padding(vertical = IMFITSpacing.lg)
                 ) {
                     IMFITButton(
-                        text = "Add ${state.selectedExercises.size} Exercise(s)",
+                        text = stringResource(R.string.exercise_add_count, state.selectedExercises.size),
                         onClick = { onExercisesSelected(state.selectedExercises) },
                         icon = Icons.Default.Check
                     )
@@ -126,11 +128,11 @@ fun ExerciseSelectionScreen(
                     .fillMaxWidth()
                     .padding(horizontal = IMFITSpacing.screenHorizontal)
                     .padding(top = IMFITSpacing.sm),
-                placeholder = { Text("Search exercises...") },
+                placeholder = { Text(stringResource(R.string.exercise_search_hint)) },
                 leadingIcon = {
                     Icon(
                         imageVector = Icons.Default.Search,
-                        contentDescription = "Search",
+                        contentDescription = stringResource(R.string.action_search),
                         tint = MaterialTheme.colorScheme.onSurfaceVariant
                     )
                 },
@@ -139,7 +141,7 @@ fun ExerciseSelectionScreen(
                         IconButton(onClick = { viewModel.onSearchQueryChange("") }) {
                             Icon(
                                 imageVector = Icons.Default.Clear,
-                                contentDescription = "Clear",
+                                contentDescription = stringResource(R.string.action_clear),
                                 tint = MaterialTheme.colorScheme.onSurfaceVariant
                             )
                         }
@@ -165,7 +167,7 @@ fun ExerciseSelectionScreen(
                     FilterChip(
                         selected = state.selectedCategory == null,
                         onClick = { viewModel.selectCategory(null) },
-                        label = { Text("All") },
+                        label = { Text(stringResource(R.string.exercise_filter_all)) },
                         leadingIcon = if (state.selectedCategory == null) {
                             {
                                 Icon(
@@ -186,7 +188,7 @@ fun ExerciseSelectionScreen(
                     FilterChip(
                         selected = state.selectedCategory == category,
                         onClick = { viewModel.selectCategory(category) },
-                        label = { Text(category.displayName) },
+                        label = { Text(stringResource(id = category.stringResourceId)) },
                         leadingIcon = if (state.selectedCategory == category) {
                             {
                                 Icon(
@@ -260,7 +262,7 @@ private fun SelectableExerciseCard(
                 Icon(
                     imageVector = Icons.Default.FitnessCenter,
                     contentDescription = null,
-                    tint = Primary,
+                    tint = MaterialTheme.colorScheme.onPrimaryContainer,
                     modifier = Modifier.size(IMFITSizes.iconMd)
                 )
             }
@@ -276,7 +278,7 @@ private fun SelectableExerciseCard(
                 )
                 Spacer(modifier = Modifier.height(IMFITSpacing.xs))
                 Text(
-                    text = exercise.muscleCategory.displayName,
+                    text = stringResource(id = exercise.muscleCategory.stringResourceId),
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )

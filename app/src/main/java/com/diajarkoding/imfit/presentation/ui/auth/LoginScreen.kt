@@ -36,12 +36,15 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
+import com.diajarkoding.imfit.R
 import androidx.hilt.navigation.compose.hiltViewModel
 import com.diajarkoding.imfit.presentation.components.common.IMFITButton
+import com.diajarkoding.imfit.presentation.components.common.IMFITLanguageSwitch
 import com.diajarkoding.imfit.presentation.components.common.IMFITPasswordField
 import com.diajarkoding.imfit.presentation.components.common.IMFITTextField
 import com.diajarkoding.imfit.presentation.components.common.IMFITThemeSwitch
@@ -57,6 +60,8 @@ fun LoginScreen(
     onLoginSuccess: () -> Unit,
     isDarkMode: Boolean,
     onToggleTheme: () -> Unit,
+    isIndonesian: Boolean = true,
+    onToggleLanguage: () -> Unit = {},
     viewModel: LoginViewModel = hiltViewModel()
 ) {
     val state by viewModel.state.collectAsState()
@@ -68,8 +73,9 @@ fun LoginScreen(
         }
     }
 
-    LaunchedEffect(state.errorMessage) {
-        state.errorMessage?.let { message ->
+    val errorMessage = state.errorMessage?.let { stringResource(it) }
+    LaunchedEffect(errorMessage) {
+        errorMessage?.let { message ->
             snackbarHostState.showSnackbar(message)
             viewModel.clearError()
         }
@@ -113,7 +119,7 @@ fun LoginScreen(
             Spacer(modifier = Modifier.height(IMFITSpacing.xxl))
 
             Text(
-                text = "Welcome Back!",
+                text = stringResource(R.string.login_welcome_title),
                 style = MaterialTheme.typography.headlineMedium,
                 fontWeight = FontWeight.Bold,
                 color = MaterialTheme.colorScheme.onBackground
@@ -122,7 +128,7 @@ fun LoginScreen(
             Spacer(modifier = Modifier.height(IMFITSpacing.sm))
 
             Text(
-                text = "Sign in to continue your fitness journey",
+                text = stringResource(R.string.login_welcome_subtitle),
                 style = MaterialTheme.typography.bodyLarge,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 textAlign = TextAlign.Center
@@ -133,9 +139,9 @@ fun LoginScreen(
             IMFITTextField(
                 value = state.email,
                 onValueChange = { viewModel.onEmailChange(it) },
-                label = "Email",
-                placeholder = "Enter your email",
-                error = state.emailError,
+                label = stringResource(R.string.label_email),
+                placeholder = stringResource(R.string.placeholder_email),
+                error = state.emailError?.let { stringResource(it) },
                 keyboardType = KeyboardType.Email,
                 imeAction = ImeAction.Next
             )
@@ -145,8 +151,8 @@ fun LoginScreen(
             IMFITPasswordField(
                 value = state.password,
                 onValueChange = { viewModel.onPasswordChange(it) },
-                label = "Password",
-                error = state.passwordError,
+                label = stringResource(R.string.label_password),
+                error = state.passwordError?.let { stringResource(it) },
                 imeAction = ImeAction.Done,
                 onImeAction = { viewModel.login() }
             )
@@ -154,7 +160,7 @@ fun LoginScreen(
             Spacer(modifier = Modifier.height(IMFITSpacing.xxxl))
 
             IMFITButton(
-                text = "Sign In",
+                text = stringResource(R.string.login_button),
                 onClick = { onLoginSuccess() },
                 isLoading = state.isLoading
             )
@@ -166,12 +172,12 @@ fun LoginScreen(
                 horizontalArrangement = Arrangement.Center
             ) {
                 Text(
-                    text = "Don't have an account? ",
+                    text = stringResource(R.string.login_redirect_prompt),
                     style = MaterialTheme.typography.bodyMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
                 Text(
-                    text = "Sign Up",
+                    text = stringResource(R.string.login_redirect_action),
                     style = MaterialTheme.typography.bodyMedium,
                     fontWeight = FontWeight.Bold,
                     color = Primary,
@@ -188,7 +194,7 @@ fun LoginScreen(
                     .padding(horizontal = IMFITSpacing.lg, vertical = IMFITSpacing.md)
             ) {
                 Text(
-                    text = "Demo: demo@imfit.com / password123",
+                    text = stringResource(R.string.login_demo_hint),
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     textAlign = TextAlign.Center
@@ -198,7 +204,19 @@ fun LoginScreen(
             Spacer(modifier = Modifier.height(IMFITSpacing.huge))
         }
 
-        // Theme Toggle
+        // Language Toggle (Top Left)
+        Box(
+            modifier = Modifier
+                .align(Alignment.TopStart)
+                .padding(IMFITSpacing.lg)
+        ) {
+            IMFITLanguageSwitch(
+                isIndonesian = isIndonesian,
+                onToggle = onToggleLanguage
+            )
+        }
+
+        // Theme Toggle (Top Right)
         Box(
             modifier = Modifier
                 .align(Alignment.TopEnd)

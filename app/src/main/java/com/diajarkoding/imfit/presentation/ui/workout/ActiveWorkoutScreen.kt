@@ -72,6 +72,8 @@ import com.diajarkoding.imfit.theme.Primary
 import com.diajarkoding.imfit.theme.PrimaryLight
 import com.diajarkoding.imfit.theme.RestTimer
 import com.diajarkoding.imfit.theme.SetComplete
+import com.diajarkoding.imfit.R
+import androidx.compose.ui.res.stringResource
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -103,12 +105,12 @@ fun ActiveWorkoutScreen(
     if (state.showCancelDialog) {
         IMFITDialog(
             onDismissRequest = { viewModel.dismissCancelDialog() },
-            title = "Cancel Workout?",
-            message = "All progress will be lost. Are you sure?",
+            title = stringResource(R.string.active_workout_cancel_title),
+            message = stringResource(R.string.active_workout_cancel_message),
             icon = Icons.Default.Close,
             type = IMFITDialogType.DESTRUCTIVE,
-            confirmText = "Cancel Workout",
-            dismissText = "Continue",
+            confirmText = stringResource(R.string.action_cancel_workout),
+            dismissText = stringResource(R.string.action_continue),
             onConfirm = {
                 viewModel.cancelWorkout()
                 onNavigateBack()
@@ -128,7 +130,7 @@ fun ActiveWorkoutScreen(
                             fontWeight = FontWeight.Bold
                         )
                         Text(
-                            text = "${state.elapsedMinutes}m elapsed",
+                            text = stringResource(R.string.active_workout_elapsed, state.elapsedMinutes),
                             style = MaterialTheme.typography.bodySmall,
                             color = SetComplete
                         )
@@ -136,7 +138,7 @@ fun ActiveWorkoutScreen(
                 },
                 navigationIcon = {
                     IconButton(onClick = { viewModel.showCancelDialog() }) {
-                        Icon(Icons.Default.Close, contentDescription = "Cancel")
+                        Icon(Icons.Default.Close, contentDescription = stringResource(R.string.action_cancel))
                     }
                 },
                 colors = TopAppBarDefaults.topAppBarColors(
@@ -161,17 +163,17 @@ fun ActiveWorkoutScreen(
                         horizontalArrangement = Arrangement.SpaceBetween
                     ) {
                         ProgressChip(
-                            label = "Sets",
+                            label = stringResource(R.string.workout_label_sets),
                             value = "${state.session?.totalCompletedSets ?: 0}/${state.session?.totalSets ?: 0}"
                         )
                         ProgressChip(
-                            label = "Volume",
+                            label = stringResource(R.string.label_volume),
                             value = "${String.format("%.0f", state.session?.totalVolume ?: 0f)} kg",
                             isPrimary = true
                         )
                     }
                     IMFITButton(
-                        text = "Finish Workout",
+                        text = stringResource(R.string.action_finish_workout),
                         onClick = { viewModel.finishWorkout() },
                         enabled = (state.session?.totalCompletedSets ?: 0) > 0,
                         icon = Icons.Default.Check
@@ -187,7 +189,7 @@ fun ActiveWorkoutScreen(
                     .padding(padding),
                 contentAlignment = Alignment.Center
             ) {
-                Text("Loading workout...", color = MaterialTheme.colorScheme.onSurfaceVariant)
+                Text(stringResource(R.string.loading_workout), color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
         } else {
             LazyColumn(
@@ -287,7 +289,7 @@ private fun ExerciseSection(
                     Icon(
                         imageVector = Icons.Default.FitnessCenter,
                         contentDescription = null,
-                        tint = Primary,
+                        tint = MaterialTheme.colorScheme.onPrimaryContainer,
                         modifier = Modifier.size(IMFITSizes.iconSm)
                     )
                 }
@@ -299,7 +301,7 @@ private fun ExerciseSection(
                         fontWeight = FontWeight.Bold
                     )
                     Text(
-                        text = exerciseLog.exercise.muscleCategory.displayName,
+                        text = stringResource(id = exerciseLog.exercise.muscleCategory.stringResourceId),
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
@@ -315,11 +317,11 @@ private fun ExerciseSection(
                     .padding(horizontal = IMFITSpacing.xs),
                 horizontalArrangement = Arrangement.SpaceBetween
             ) {
-                Text("SET", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.width(36.dp), textAlign = TextAlign.Center)
-                Text("KG", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.weight(1f), textAlign = TextAlign.Center)
-                Text("REPS", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.weight(1f), textAlign = TextAlign.Center)
+                Text(stringResource(R.string.label_set_header), style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.width(36.dp), textAlign = TextAlign.Center)
+                Text(stringResource(R.string.label_kg_header), style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.weight(1f), textAlign = TextAlign.Center)
+                Text(stringResource(R.string.label_reps_header), style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.weight(1f), textAlign = TextAlign.Center)
                 Spacer(modifier = Modifier.width(32.dp))
-                Text("", modifier = Modifier.width(44.dp))
+                Text(stringResource(R.string.exercise_placeholder), modifier = Modifier.width(44.dp))
             }
 
             Spacer(modifier = Modifier.height(IMFITSpacing.sm))
@@ -353,13 +355,13 @@ private fun ExerciseSection(
             ) {
                 Icon(
                     imageVector = Icons.Default.Add,
-                    contentDescription = "Add Set",
+                    contentDescription = stringResource(R.string.action_add_set),
                     tint = Primary,
                     modifier = Modifier.size(IMFITSizes.iconSm)
                 )
                 Spacer(modifier = Modifier.width(IMFITSpacing.sm))
                 Text(
-                    text = "Add Set",
+                    text = stringResource(R.string.action_add_set),
                     style = MaterialTheme.typography.labelLarge,
                     fontWeight = FontWeight.SemiBold,
                     color = Primary
@@ -503,7 +505,7 @@ private fun SetInputRow(
         ) {
             Icon(
                 imageVector = Icons.Default.Delete,
-                contentDescription = "Delete",
+                contentDescription = stringResource(R.string.action_delete),
                 tint = if (canDelete && !set.isCompleted) DeletePink.copy(alpha = 0.8f) 
                       else MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.2f),
                 modifier = Modifier.size(20.dp)
@@ -559,7 +561,7 @@ private fun RestTimerDialog(
                 Spacer(modifier = Modifier.height(IMFITSpacing.lg))
 
                 Text(
-                    text = "Rest Timer",
+                    text = stringResource(R.string.active_workout_rest_timer),
                     style = MaterialTheme.typography.titleLarge,
                     fontWeight = FontWeight.Bold
                 )
@@ -576,7 +578,7 @@ private fun RestTimerDialog(
                 Spacer(modifier = Modifier.height(IMFITSpacing.xxl))
 
                 IMFITSecondaryButton(
-                    text = "Skip",
+                    text = stringResource(R.string.action_skip),
                     onClick = onDismiss
                 )
             }

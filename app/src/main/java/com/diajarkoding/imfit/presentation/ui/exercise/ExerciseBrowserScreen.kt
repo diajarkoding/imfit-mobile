@@ -35,6 +35,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import com.diajarkoding.imfit.domain.model.MuscleCategory
@@ -74,7 +75,7 @@ fun ExerciseBrowserScreen(
                         }
                         Spacer(modifier = Modifier.width(IMFITSpacing.md))
                         Text(
-                            text = "Exercises",
+                            text = stringResource(id = com.diajarkoding.imfit.R.string.nav_exercises_title),
                             style = MaterialTheme.typography.titleLarge,
                             fontWeight = FontWeight.Bold
                         )
@@ -150,13 +151,13 @@ private fun MuscleCategoryCard(
                     Icon(
                         imageVector = Icons.Default.FitnessCenter,
                         contentDescription = null,
-                        tint = Primary,
+                        tint = MaterialTheme.colorScheme.onPrimaryContainer,
                         modifier = Modifier.size(IMFITSizes.iconSm)
                     )
                 }
                 Spacer(modifier = Modifier.size(IMFITSpacing.sm))
                 Text(
-                    text = category.displayName,
+                    text = stringResource(id = category.stringResourceId),
                     style = MaterialTheme.typography.labelMedium,
                     fontWeight = FontWeight.Bold,
                     color = MaterialTheme.colorScheme.onSurface,

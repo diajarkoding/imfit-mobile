@@ -74,6 +74,8 @@ import com.diajarkoding.imfit.theme.IMFITSpacing
 import com.diajarkoding.imfit.theme.Primary
 import com.diajarkoding.imfit.theme.PrimaryLight
 import com.diajarkoding.imfit.theme.SetComplete
+import com.diajarkoding.imfit.R
+import androidx.compose.ui.res.stringResource
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -101,7 +103,7 @@ fun EditWorkoutScreen(
                 modifier = Modifier.windowInsetsPadding(WindowInsets.statusBars),
                 title = {
                     Text(
-                        text = "Edit Workout",
+                        text = stringResource(R.string.workout_edit_title),
                         style = MaterialTheme.typography.titleLarge,
                         fontWeight = FontWeight.Bold
                     )
@@ -110,7 +112,7 @@ fun EditWorkoutScreen(
                     IconButton(onClick = onNavigateBack) {
                         Icon(
                             imageVector = Icons.AutoMirrored.Filled.ArrowBack,
-                            contentDescription = "Back"
+                            contentDescription = stringResource(R.string.action_back)
                         )
                     }
                 },
@@ -136,7 +138,7 @@ fun EditWorkoutScreen(
                 item {
                     Spacer(modifier = Modifier.height(IMFITSpacing.sm))
                     Text(
-                        text = "Workout Name",
+                        text = stringResource(R.string.workout_name_label),
                         style = MaterialTheme.typography.titleSmall,
                         fontWeight = FontWeight.SemiBold,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
@@ -146,7 +148,7 @@ fun EditWorkoutScreen(
                         value = state.workoutName,
                         onValueChange = { viewModel.updateWorkoutName(it) },
                         modifier = Modifier.fillMaxWidth(),
-                        placeholder = { Text("Enter workout name") },
+                        placeholder = { Text(stringResource(R.string.home_workout_placeholder)) },
                         singleLine = true,
                         shape = IMFITShapes.TextField,
                         colors = OutlinedTextFieldDefaults.colors(
@@ -164,12 +166,12 @@ fun EditWorkoutScreen(
                         verticalAlignment = Alignment.CenterVertically
                     ) {
                         Text(
-                            text = "Exercises",
+                            text = stringResource(R.string.workout_exercises_label),
                             style = MaterialTheme.typography.titleMedium,
                             fontWeight = FontWeight.Bold
                         )
                         Text(
-                            text = "${state.exercises.size} total",
+                            text = stringResource(R.string.workout_exercises_total, state.exercises.size),
                             style = MaterialTheme.typography.bodyMedium,
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
@@ -209,7 +211,7 @@ fun EditWorkoutScreen(
                     .padding(vertical = IMFITSpacing.lg)
             ) {
                 IMFITButton(
-                    text = "Save Changes",
+                    text = stringResource(R.string.action_save_changes),
                     onClick = { viewModel.saveChanges() },
                     enabled = state.workoutName.isNotBlank(),
                     icon = Icons.Default.Check
@@ -240,7 +242,7 @@ private fun EmptyExercisesPlaceholder() {
             )
             Spacer(modifier = Modifier.height(IMFITSpacing.md))
             Text(
-                text = "No exercises yet",
+                text = stringResource(R.string.workout_no_exercises),
                 style = MaterialTheme.typography.bodyLarge,
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )
@@ -264,10 +266,10 @@ private fun EditableExerciseCard(
     if (showDeleteConfirmation) {
         IMFITDialog(
             onDismissRequest = { showDeleteConfirmation = false },
-            title = "Remove Exercise",
-            message = "Remove ${exercise.name} from this workout?",
-            confirmText = "Remove",
-            dismissText = "Cancel",
+            title = stringResource(R.string.dialog_remove_exercise),
+            message = stringResource(R.string.dialog_remove_exercise_message, exercise.name),
+            confirmText = stringResource(R.string.action_remove),
+            dismissText = stringResource(R.string.action_cancel),
             onConfirm = {
                 onRemoveExercise()
                 showDeleteConfirmation = false
@@ -314,7 +316,7 @@ private fun EditableExerciseCard(
             ) {
                 Icon(
                     imageVector = Icons.Default.Delete,
-                    contentDescription = "Delete",
+                    contentDescription = stringResource(R.string.action_delete),
                     tint = Color.White,
                     modifier = Modifier.size(IMFITSizes.iconMd)
                 )
@@ -362,7 +364,7 @@ private fun EditableExerciseCard(
                                 fontWeight = FontWeight.Bold
                             )
                             Text(
-                                text = exercise.exercise.muscleCategory.displayName,
+                                text = stringResource(id = exercise.exercise.muscleCategory.stringResourceId),
                                 style = MaterialTheme.typography.bodySmall,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant
                             )
@@ -371,7 +373,7 @@ private fun EditableExerciseCard(
                     IconButton(onClick = { showDeleteConfirmation = true }) {
                         Icon(
                             imageVector = Icons.Default.Close,
-                            contentDescription = "Remove",
+                            contentDescription = stringResource(R.string.action_remove),
                             tint = MaterialTheme.colorScheme.onSurfaceVariant
                         )
                     }
@@ -385,7 +387,7 @@ private fun EditableExerciseCard(
                     horizontalArrangement = Arrangement.spacedBy(IMFITSpacing.sm)
                 ) {
                     ConfigInput(
-                        label = "Sets",
+                        label = stringResource(R.string.workout_label_sets),
                         value = exercise.sets.toString(),
                         onValueChange = { value ->
                             value.toIntOrNull()?.let { if (it > 0) onUpdateSets(it) }
@@ -393,7 +395,7 @@ private fun EditableExerciseCard(
                         modifier = Modifier.weight(1f)
                     )
                     ConfigInput(
-                        label = "Reps",
+                        label = stringResource(R.string.workout_label_reps),
                         value = exercise.reps.toString(),
                         onValueChange = { value ->
                             value.toIntOrNull()?.let { if (it > 0) onUpdateReps(it) }
@@ -401,7 +403,7 @@ private fun EditableExerciseCard(
                         modifier = Modifier.weight(1f)
                     )
                     ConfigInput(
-                        label = "Rest (s)",
+                        label = stringResource(R.string.workout_label_rest_short),
                         value = exercise.restSeconds.toString(),
                         onValueChange = { value ->
                             value.toIntOrNull()?.let { if (it >= 0) onUpdateRest(it) }
@@ -418,7 +420,7 @@ private fun EditableExerciseCard(
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     Text(
-                        text = "${exercise.sets} sets configured",
+                        text = stringResource(R.string.workout_sets_configured, exercise.sets),
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
@@ -442,7 +444,7 @@ private fun EditableExerciseCard(
                         ) {
                             Icon(
                                 imageVector = Icons.Default.Add,
-                                contentDescription = "Add set",
+                                contentDescription = stringResource(R.string.action_add_set),
                                 tint = SetComplete,
                                 modifier = Modifier.size(18.dp)
                             )

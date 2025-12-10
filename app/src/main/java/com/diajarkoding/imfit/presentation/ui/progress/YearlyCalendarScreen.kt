@@ -53,6 +53,8 @@ import androidx.hilt.navigation.compose.hiltViewModel
 import com.diajarkoding.imfit.theme.IMFITShapes
 import com.diajarkoding.imfit.theme.IMFITSpacing
 import com.diajarkoding.imfit.theme.Primary
+import com.diajarkoding.imfit.R
+import androidx.compose.ui.res.stringResource
 import java.time.LocalDate
 import java.time.Year
 import java.time.YearMonth
@@ -90,7 +92,7 @@ fun YearlyCalendarScreen(
                         ) {
                             Icon(
                                 Icons.AutoMirrored.Filled.KeyboardArrowLeft,
-                                contentDescription = "Previous year",
+                                contentDescription = stringResource(R.string.calendar_previous_year),
                                 tint = Primary
                             )
                         }
@@ -107,7 +109,7 @@ fun YearlyCalendarScreen(
                         ) {
                             Icon(
                                 Icons.AutoMirrored.Filled.KeyboardArrowRight,
-                                contentDescription = "Next year",
+                                contentDescription = stringResource(R.string.calendar_next_year),
                                 tint = if (selectedYear < currentYear) Primary 
                                        else MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.3f)
                             )
@@ -116,7 +118,7 @@ fun YearlyCalendarScreen(
                 },
                 navigationIcon = {
                     IconButton(onClick = onNavigateBack) {
-                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
+                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = stringResource(R.string.action_back))
                     }
                 },
                 colors = TopAppBarDefaults.topAppBarColors(

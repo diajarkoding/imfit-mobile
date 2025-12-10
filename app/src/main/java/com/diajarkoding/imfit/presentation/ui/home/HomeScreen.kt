@@ -60,7 +60,9 @@ import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.res.stringResource
 import androidx.hilt.navigation.compose.hiltViewModel
+import com.diajarkoding.imfit.R
 import com.diajarkoding.imfit.domain.model.WorkoutLog
 import com.diajarkoding.imfit.domain.model.WorkoutTemplate
 import com.diajarkoding.imfit.presentation.components.common.IMFITButton
@@ -99,11 +101,11 @@ fun HomeScreen(
                 showAddDayDialog = false
                 newDayName = ""
             },
-            title = "Create Workout",
-            message = "Give your workout a name",
+            title = stringResource(R.string.home_create_workout_title),
+            message = stringResource(R.string.home_create_workout_message),
             icon = Icons.Default.Add,
-            confirmText = "Create",
-            dismissText = "Cancel",
+            confirmText = stringResource(R.string.action_create),
+            dismissText = stringResource(R.string.action_cancel),
             confirmEnabled = newDayName.isNotBlank(),
             onConfirm = {
                 if (newDayName.isNotBlank()) {
@@ -118,7 +120,7 @@ fun HomeScreen(
                 onValueChange = { newDayName = it },
                 placeholder = {
                     Text(
-                        "e.g., Push Day, Leg Day",
+                        stringResource(R.string.home_workout_placeholder),
                         color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f)
                     )
                 },
@@ -157,7 +159,7 @@ fun HomeScreen(
                         }
                         Spacer(modifier = Modifier.width(IMFITSpacing.md))
                         Text(
-                            text = "IMFIT",
+                            text = stringResource(R.string.app_name),
                             style = MaterialTheme.typography.titleLarge,
                             fontWeight = FontWeight.Bold
                         )
@@ -191,7 +193,7 @@ fun HomeScreen(
             item {
                 Spacer(modifier = Modifier.height(IMFITSpacing.sm))
                 Text(
-                    text = "My Workouts",
+                    text = stringResource(R.string.home_title_my_workouts),
                     style = MaterialTheme.typography.titleMedium,
                     fontWeight = FontWeight.Bold
                 )
@@ -214,7 +216,7 @@ fun HomeScreen(
             item {
                 Spacer(modifier = Modifier.height(IMFITSpacing.sm))
                 IMFITButton(
-                    text = "Add Workout",
+                    text = stringResource(R.string.action_add_workout),
                     onClick = { showAddDayDialog = true },
                     icon = Icons.Default.Add
                 )
@@ -228,14 +230,14 @@ fun HomeScreen(
 private fun WelcomeSection(userName: String) {
     Column {
         Text(
-            text = "Hello, $userName!",
+            text = stringResource(R.string.home_hello, userName),
             style = MaterialTheme.typography.headlineSmall,
             fontWeight = FontWeight.Bold,
             color = MaterialTheme.colorScheme.onBackground
         )
         Spacer(modifier = Modifier.height(IMFITSpacing.xs))
         Text(
-            text = "Ready to crush your workout?",
+            text = stringResource(R.string.home_subtitle),
             style = MaterialTheme.typography.bodyLarge,
             color = MaterialTheme.colorScheme.onSurfaceVariant
         )
@@ -267,7 +269,7 @@ private fun LastWorkoutCard(workout: WorkoutLog) {
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     Text(
-                        text = "Last Workout",
+                        text = stringResource(R.string.home_last_workout),
                         style = MaterialTheme.typography.labelLarge,
                         fontWeight = FontWeight.Medium,
                         color = Primary
@@ -390,7 +392,7 @@ private fun WorkoutCard(
                     else Icons.Default.FitnessCenter,
                     contentDescription = null,
                     tint = if (isActive) MaterialTheme.colorScheme.onPrimary
-                    else Primary,
+                    else MaterialTheme.colorScheme.onPrimaryContainer,
                     modifier = Modifier.size(IMFITSizes.iconMd)
                 )
             }
@@ -416,7 +418,7 @@ private fun WorkoutCard(
                                 .padding(horizontal = 8.dp, vertical = 3.dp)
                         ) {
                             Text(
-                                text = "ACTIVE",
+                                text = stringResource(R.string.home_active),
                                 style = MaterialTheme.typography.labelSmall,
                                 fontWeight = FontWeight.Bold,
                                 color = MaterialTheme.colorScheme.onPrimary
@@ -452,7 +454,7 @@ private fun WorkoutCard(
                         )
                         Spacer(modifier = Modifier.width(IMFITSpacing.xs))
                         Text(
-                            text = "${template.exerciseCount} exercises",
+                            text = stringResource(R.string.home_exercises_count, template.exerciseCount),
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
@@ -462,7 +464,7 @@ private fun WorkoutCard(
 
             Icon(
                 imageVector = Icons.AutoMirrored.Filled.KeyboardArrowRight,
-                contentDescription = "View details",
+                contentDescription = stringResource(R.string.desc_view_details),
                 tint = MaterialTheme.colorScheme.onSurfaceVariant,
                 modifier = Modifier.size(IMFITSizes.iconMd)
             )
@@ -497,20 +499,20 @@ private fun EmptyWorkoutCard(onClick: () -> Unit) {
                 Icon(
                     imageVector = Icons.Default.Add,
                     contentDescription = null,
-                    tint = Primary,
+                    tint = MaterialTheme.colorScheme.onPrimaryContainer,
                     modifier = Modifier.size(IMFITSizes.iconLg)
                 )
             }
             Spacer(modifier = Modifier.height(IMFITSpacing.lg))
             Text(
-                text = "No workouts yet",
+                text = stringResource(R.string.home_no_workouts),
                 style = MaterialTheme.typography.titleMedium,
                 fontWeight = FontWeight.SemiBold,
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )
             Spacer(modifier = Modifier.height(IMFITSpacing.xs))
             Text(
-                text = "Create your first workout to get started",
+                text = stringResource(R.string.home_create_first),
                 style = MaterialTheme.typography.bodyMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f)
             )

@@ -14,6 +14,7 @@ import com.diajarkoding.imfit.presentation.ui.exercise.ExerciseListScreen
 import com.diajarkoding.imfit.presentation.ui.exercise.ExerciseSelectionScreen
 import com.diajarkoding.imfit.presentation.ui.home.HomeScreen
 import com.diajarkoding.imfit.presentation.ui.main.MainScreen
+import com.diajarkoding.imfit.presentation.ui.profile.ProfileScreen
 import com.diajarkoding.imfit.presentation.ui.workout.WorkoutDetailScreen
 import com.diajarkoding.imfit.presentation.ui.splash.SplashScreen
 import com.diajarkoding.imfit.presentation.ui.workout.ActiveWorkoutScreen
@@ -21,14 +22,18 @@ import com.diajarkoding.imfit.presentation.ui.workout.EditWorkoutScreen
 import com.diajarkoding.imfit.presentation.ui.workout.WorkoutSummaryScreen
 import com.diajarkoding.imfit.presentation.ui.progress.WorkoutHistoryDetailScreen
 import com.diajarkoding.imfit.presentation.ui.progress.YearlyCalendarScreen
-import java.time.LocalDate
+import java.text.SimpleDateFormat
+import java.util.Calendar
+import java.util.Locale
 
 @Composable
 fun NavGraph(
     navController: NavHostController = rememberNavController(),
     startDestination: String = Routes.SPLASH,
     isDarkMode: Boolean = false,
-    onToggleTheme: () -> Unit = {}
+    onToggleTheme: () -> Unit = {},
+    isIndonesian: Boolean = true,
+    onToggleLanguage: () -> Unit = {}
 ) {
     NavHost(
         navController = navController,
@@ -60,7 +65,9 @@ fun NavGraph(
                     }
                 },
                 isDarkMode = isDarkMode,
-                onToggleTheme = onToggleTheme
+                onToggleTheme = onToggleTheme,
+                isIndonesian = isIndonesian,
+                onToggleLanguage = onToggleLanguage
             )
         }
 
@@ -91,6 +98,9 @@ fun NavGraph(
                 },
                 onNavigateToYearlyCalendar = {
                     navController.navigate(Routes.YEARLY_CALENDAR)
+                },
+                onNavigateToProfile = {
+                    navController.navigate(Routes.PROFILE)
                 },
                 onLogout = {
                     navController.navigate(Routes.LOGIN) {
@@ -203,7 +213,7 @@ fun NavGraph(
             route = Routes.WORKOUT_HISTORY,
             arguments = listOf(navArgument("date") { type = NavType.StringType })
         ) { backStackEntry ->
-            val date = backStackEntry.arguments?.getString("date") ?: LocalDate.now().toString()
+            val date = backStackEntry.arguments?.getString("date") ?: SimpleDateFormat("yyyy-MM-dd", Locale.getDefault()).format(Calendar.getInstance().time)
             WorkoutHistoryDetailScreen(
                 date = date,
                 onNavigateBack = { navController.navigateUp() }
@@ -216,6 +226,21 @@ fun NavGraph(
                 onDateSelected = { date ->
                     navController.navigate(Routes.workoutHistory(date.toString()))
                 }
+            )
+        }
+
+        composable(Routes.PROFILE) {
+            ProfileScreen(
+                onNavigateBack = { navController.navigateUp() },
+                onLogout = {
+                    navController.navigate(Routes.LOGIN) {
+                        popUpTo(Routes.MAIN) { inclusive = true }
+                    }
+                },
+                isDarkMode = isDarkMode,
+                onToggleTheme = onToggleTheme,
+                isIndonesian = isIndonesian,
+                onToggleLanguage = onToggleLanguage
             )
         }
     }

@@ -51,6 +51,7 @@ fun MainScreen(
     onNavigateToExerciseList: (String) -> Unit,
     onNavigateToWorkoutHistory: (LocalDate) -> Unit = {},
     onNavigateToYearlyCalendar: () -> Unit = {},
+    onNavigateToProfile: () -> Unit = {},
     onLogout: () -> Unit,
     bottomNavController: NavHostController = rememberNavController()
 ) {
@@ -128,9 +129,9 @@ fun MainScreen(
             }
             composable(BottomNavItem.Progress.route) {
                 ProgressScreen(
-                    onLogout = onLogout,
                     onNavigateToWorkoutHistory = onNavigateToWorkoutHistory,
-                    onNavigateToYearlyCalendar = onNavigateToYearlyCalendar
+                    onNavigateToYearlyCalendar = onNavigateToYearlyCalendar,
+                    onNavigateToProfile = onNavigateToProfile
                 )
             }
         }

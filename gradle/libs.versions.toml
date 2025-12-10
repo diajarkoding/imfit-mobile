@@ -26,6 +26,7 @@ datastorePreferences = "1.0.0"
 hilt = "2.48"
 material3Lint = "1.5.0-alpha04"
 runtimeLivedata = "1.9.2"
+desugarJdkLibs = "2.0.4"
 #javapoet = "1.13.0"
 
 [libraries]
@@ -61,6 +62,7 @@ junit = { group = "junit", name = "junit", version.ref = "junit" }
 androidx-junit = { group = "androidx.test.ext", name = "junit", version.ref = "junitVersion" }
 androidx-espresso-core = { group = "androidx.test.espresso", name = "espresso-core", version.ref = "espressoCore" }
 androidx-compose-material3-lint = { group = "androidx.compose.material3", name = "material3-lint", version.ref = "material3Lint" }
+desugar-jdk-libs = { group = "com.android.tools", name = "desugar_jdk_libs", version.ref = "desugarJdkLibs" }
 #javapoet = { group = "com.squareup", name = "javapoet", version.ref = "javapoet" }
 
 [plugins]

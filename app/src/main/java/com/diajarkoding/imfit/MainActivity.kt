@@ -1,5 +1,6 @@
 package com.diajarkoding.imfit
 
+import android.content.Context
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
@@ -14,6 +15,7 @@ import androidx.compose.ui.Modifier
 import androidx.core.splashscreen.SplashScreen.Companion.installSplashScreen
 import com.diajarkoding.imfit.presentation.navigation.NavGraph
 import com.diajarkoding.imfit.theme.IMFITTheme
+import com.diajarkoding.imfit.theme.LocaleManager
 import com.diajarkoding.imfit.theme.LocalIsDarkTheme
 import com.diajarkoding.imfit.theme.ThemeManager
 import dagger.hilt.android.AndroidEntryPoint
@@ -26,13 +28,21 @@ class MainActivity : ComponentActivity() {
     @Inject
     lateinit var themeManager: ThemeManager
 
+    override fun attachBaseContext(newBase: Context) {
+        super.attachBaseContext(LocaleManager.attachBaseContext(newBase))
+    }
+
     override fun onCreate(savedInstanceState: Bundle?) {
         installSplashScreen()
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
 
+        // Initialize LocaleManager
+        LocaleManager.init(this)
+
         setContent {
             val isDarkMode by themeManager.isDarkMode.collectAsState(initial = false)
+            val isIndonesian = LocaleManager.isIndonesian
             val scope = rememberCoroutineScope()
 
             CompositionLocalProvider(LocalIsDarkTheme provides isDarkMode) {
@@ -44,6 +54,10 @@ class MainActivity : ComponentActivity() {
                                 scope.launch {
                                     themeManager.toggleTheme()
                                 }
+                            },
+                            isIndonesian = isIndonesian,
+                            onToggleLanguage = {
+                                LocaleManager.toggleLanguage(this@MainActivity)
                             }
                         )
                     }

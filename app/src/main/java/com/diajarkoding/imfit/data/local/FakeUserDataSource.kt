@@ -18,7 +18,13 @@ object FakeUserDataSource {
         val password: String
     )
 
-    fun register(name: String, email: String, password: String): Result<User> {
+    fun register(
+        name: String,
+        email: String,
+        password: String,
+        birthDate: String? = null,
+        profilePhotoUri: String? = null
+    ): Result<User> {
         if (registeredUsers.any { it.user.email.equals(email, ignoreCase = true) }) {
             return Result.failure(Exception("Email already registered"))
         }
@@ -26,7 +32,9 @@ object FakeUserDataSource {
         val newUser = User(
             id = "user_${System.currentTimeMillis()}",
             name = name,
-            email = email
+            email = email,
+            birthDate = birthDate,
+            profilePhotoUri = profilePhotoUri
         )
 
         registeredUsers.add(UserCredentials(newUser, password))

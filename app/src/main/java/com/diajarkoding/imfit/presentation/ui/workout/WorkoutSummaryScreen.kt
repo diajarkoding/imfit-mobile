@@ -48,6 +48,8 @@ import com.diajarkoding.imfit.theme.IMFITSizes
 import com.diajarkoding.imfit.theme.IMFITSpacing
 import com.diajarkoding.imfit.theme.Primary
 import com.diajarkoding.imfit.theme.SetComplete
+import com.diajarkoding.imfit.R
+import androidx.compose.ui.res.stringResource
 
 @Composable
 fun WorkoutSummaryScreen(
@@ -99,7 +101,7 @@ fun WorkoutSummaryScreen(
                     Spacer(modifier = Modifier.height(IMFITSpacing.xxl))
 
                     Text(
-                        text = "Great Work!",
+                        text = stringResource(R.string.summary_great_work),
                         style = MaterialTheme.typography.headlineMedium,
                         fontWeight = FontWeight.Bold,
                         color = MaterialTheme.colorScheme.onBackground
@@ -125,21 +127,21 @@ fun WorkoutSummaryScreen(
                     SummaryStatCard(
                         modifier = Modifier.weight(1f),
                         icon = Icons.Default.Timer,
-                        value = state.workoutLog?.formattedDuration ?: "0m",
-                        label = "Duration"
+                        value = state.workoutLog?.formattedDuration ?: stringResource(R.string.workout_duration_zero),
+                        label = stringResource(R.string.label_duration)
                     )
                     SummaryStatCard(
                         modifier = Modifier.weight(1f),
                         icon = Icons.Default.FitnessCenter,
-                        value = state.workoutLog?.formattedVolume ?: "0 kg",
-                        label = "Volume"
+                        value = state.workoutLog?.formattedVolume ?: stringResource(R.string.workout_volume_zero),
+                        label = stringResource(R.string.label_volume)
                     )
                 }
             }
 
             item {
                 Text(
-                    text = "Exercise Summary",
+                    text = stringResource(R.string.summary_title),
                     style = MaterialTheme.typography.titleMedium,
                     fontWeight = FontWeight.Bold,
                     modifier = Modifier.padding(top = IMFITSpacing.sm)
@@ -155,7 +157,7 @@ fun WorkoutSummaryScreen(
             item {
                 Spacer(modifier = Modifier.height(IMFITSpacing.lg))
                 IMFITButton(
-                    text = "Done",
+                    text = stringResource(R.string.action_done),
                     onClick = onNavigateToHome,
                     icon = Icons.Default.CheckCircle
                 )
@@ -203,7 +205,7 @@ private fun SummaryStatCard(
                     Icon(
                         imageVector = icon,
                         contentDescription = null,
-                        tint = Primary,
+                        tint = MaterialTheme.colorScheme.onPrimaryContainer,
                         modifier = Modifier.size(IMFITSizes.iconSm)
                     )
                 }
@@ -259,7 +261,7 @@ private fun ExerciseSummaryCard(exerciseLog: ExerciseLog) {
                         Icon(
                             imageVector = Icons.Default.FitnessCenter,
                             contentDescription = null,
-                            tint = Primary,
+                            tint = MaterialTheme.colorScheme.onPrimaryContainer,
                             modifier = Modifier.size(IMFITSizes.iconSm)
                         )
                     }
@@ -271,7 +273,7 @@ private fun ExerciseSummaryCard(exerciseLog: ExerciseLog) {
                             fontWeight = FontWeight.SemiBold
                         )
                         Text(
-                            text = exerciseLog.exercise.muscleCategory.displayName,
+                            text = stringResource(id = exerciseLog.exercise.muscleCategory.stringResourceId),
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
@@ -280,13 +282,13 @@ private fun ExerciseSummaryCard(exerciseLog: ExerciseLog) {
 
                 Column(horizontalAlignment = Alignment.End) {
                     Text(
-                        text = "${exerciseLog.completedSets} sets",
+                        text = stringResource(R.string.summary_sets_count, exerciseLog.completedSets),
                         style = MaterialTheme.typography.labelLarge,
                         fontWeight = FontWeight.Bold,
                         color = Primary
                     )
                     Text(
-                        text = "${String.format("%.0f", exerciseLog.totalVolume)} kg",
+                        text = stringResource(R.string.summary_volume_kg, String.format("%.0f", exerciseLog.totalVolume)),
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
@@ -310,12 +312,12 @@ private fun ExerciseSummaryCard(exerciseLog: ExerciseLog) {
                             horizontalArrangement = Arrangement.SpaceBetween
                         ) {
                             Text(
-                                text = "Set ${set.setNumber}",
+                                text = stringResource(R.string.active_workout_set_number, set.setNumber),
                                 style = MaterialTheme.typography.bodySmall,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant
                             )
                             Text(
-                                text = "${set.weight.toInt()} kg x ${set.reps} reps",
+                                text = stringResource(R.string.summary_set_details, set.weight.toInt(), set.reps),
                                 style = MaterialTheme.typography.bodySmall,
                                 fontWeight = FontWeight.Medium
                             )

@@ -79,6 +79,8 @@ import com.diajarkoding.imfit.theme.IMFITSpacing
 import com.diajarkoding.imfit.theme.Primary
 import com.diajarkoding.imfit.theme.PrimaryLight
 import com.diajarkoding.imfit.theme.SetComplete
+import com.diajarkoding.imfit.R
+import androidx.compose.ui.res.stringResource
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -122,10 +124,10 @@ fun WorkoutDetailScreen(
     if (showDeleteDialog) {
         IMFITDialog(
             onDismissRequest = { showDeleteDialog = false },
-            title = "Delete Workout",
-            message = "Are you sure you want to delete \"${state.workout?.name}\"? This action cannot be undone.",
-            confirmText = "Delete",
-            dismissText = "Cancel",
+            title = stringResource(R.string.dialog_delete_workout),
+            message = stringResource(R.string.dialog_delete_workout_message, state.workout?.name ?: ""),
+            confirmText = stringResource(R.string.action_delete),
+            dismissText = stringResource(R.string.action_cancel),
             onConfirm = {
                 viewModel.deleteWorkout()
                 showDeleteDialog = false
@@ -150,7 +152,7 @@ fun WorkoutDetailScreen(
                     IconButton(onClick = onNavigateBack) {
                         Icon(
                             imageVector = Icons.AutoMirrored.Filled.ArrowBack,
-                            contentDescription = "Back"
+                            contentDescription = stringResource(R.string.action_back)
                         )
                     }
                 },
@@ -158,14 +160,14 @@ fun WorkoutDetailScreen(
                     IconButton(onClick = { onNavigateToEdit(workoutId) }) {
                         Icon(
                             imageVector = Icons.Default.Edit,
-                            contentDescription = "Edit",
+                            contentDescription = stringResource(R.string.action_edit),
                             tint = Primary
                         )
                     }
                     IconButton(onClick = { showDeleteDialog = true }) {
                         Icon(
                             imageVector = Icons.Default.Delete,
-                            contentDescription = "Delete",
+                            contentDescription = stringResource(R.string.action_delete),
                             tint = DeletePink
                         )
                     }
@@ -204,12 +206,12 @@ fun WorkoutDetailScreen(
                         verticalAlignment = Alignment.CenterVertically
                     ) {
                         Text(
-                            text = "Exercises",
+                            text = stringResource(R.string.workout_exercises_label),
                             style = MaterialTheme.typography.titleMedium,
                             fontWeight = FontWeight.Bold
                         )
                         Text(
-                            text = "${state.workout?.exerciseCount ?: 0} total",
+                            text = stringResource(R.string.workout_exercises_total, state.workout?.exerciseCount ?: 0),
                             style = MaterialTheme.typography.bodyMedium,
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
@@ -233,7 +235,7 @@ fun WorkoutDetailScreen(
 
                 item {
                     IMFITOutlinedButton(
-                        text = "Add Exercise",
+                        text = stringResource(R.string.action_add_exercise),
                         onClick = { onNavigateToExerciseSelection(workoutId) },
                         icon = Icons.Default.Add
                     )
@@ -253,13 +255,13 @@ fun WorkoutDetailScreen(
             ) {
                 if (state.isWorkoutActive) {
                     IMFITButton(
-                        text = "End Workout",
+                        text = stringResource(R.string.action_end_workout),
                         onClick = { viewModel.endWorkout() },
                         icon = Icons.Default.Stop
                     )
                 } else {
                     IMFITButton(
-                        text = "Start Workout",
+                        text = stringResource(R.string.action_start_workout),
                         onClick = { onStartWorkout(workoutId) },
                         enabled = (state.workout?.exerciseCount ?: 0) > 0,
                         icon = Icons.Default.PlayArrow
@@ -286,12 +288,12 @@ private fun SwipeToDeleteExerciseItem(
     if (showDeleteConfirmation) {
         IMFITDialog(
             onDismissRequest = { showDeleteConfirmation = false },
-            title = "Remove Exercise",
-            message = "Remove ${templateExercise.name} from this workout?",
+            title = stringResource(R.string.dialog_remove_exercise),
+            message = stringResource(R.string.dialog_remove_exercise_message, templateExercise.name),
             icon = Icons.Default.Delete,
             type = IMFITDialogType.DESTRUCTIVE,
-            confirmText = "Remove",
-            dismissText = "Cancel",
+            confirmText = stringResource(R.string.action_remove),
+            dismissText = stringResource(R.string.action_cancel),
             onConfirm = {
                 onRemove()
                 showDeleteConfirmation = false
@@ -328,7 +330,7 @@ private fun SwipeToDeleteExerciseItem(
                 ) {
                     Icon(
                         imageVector = Icons.Default.Delete,
-                        contentDescription = "Delete",
+                        contentDescription = stringResource(R.string.action_delete),
                         tint = DeletePink,
                         modifier = Modifier.size(IMFITSizes.iconLg)
                     )
@@ -360,8 +362,8 @@ private fun ExerciseItemCard(
             onDismissRequest = { showEditDialog = false },
             title = templateExercise.name,
             icon = Icons.Default.FitnessCenter,
-            confirmText = "Save",
-            dismissText = "Cancel",
+            confirmText = stringResource(R.string.action_save),
+            dismissText = stringResource(R.string.action_cancel),
             onConfirm = {
                 val sets = editSets.toIntOrNull() ?: 3
                 val reps = editReps.toIntOrNull() ?: 8
@@ -371,9 +373,9 @@ private fun ExerciseItemCard(
             }
         ) {
             Column(verticalArrangement = Arrangement.spacedBy(IMFITSpacing.lg)) {
-                EditField(label = "Sets", value = editSets, onValueChange = { editSets = it.filter { c -> c.isDigit() } })
-                EditField(label = "Reps", value = editReps, onValueChange = { editReps = it.filter { c -> c.isDigit() } })
-                EditField(label = "Rest (seconds)", value = editRest, onValueChange = { editRest = it.filter { c -> c.isDigit() } })
+                EditField(label = stringResource(R.string.workout_label_sets), value = editSets, onValueChange = { editSets = it.filter { c -> c.isDigit() } })
+                EditField(label = stringResource(R.string.workout_label_reps), value = editReps, onValueChange = { editReps = it.filter { c -> c.isDigit() } })
+                EditField(label = stringResource(R.string.workout_label_rest), value = editRest, onValueChange = { editRest = it.filter { c -> c.isDigit() } })
             }
         }
     }
@@ -406,7 +408,7 @@ private fun ExerciseItemCard(
                 Icon(
                     imageVector = Icons.Default.FitnessCenter,
                     contentDescription = null,
-                    tint = Primary,
+                    tint = MaterialTheme.colorScheme.onPrimaryContainer,
                     modifier = Modifier.size(IMFITSizes.iconMd)
                 )
             }
@@ -420,7 +422,7 @@ private fun ExerciseItemCard(
                 Spacer(modifier = Modifier.height(IMFITSpacing.xs))
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Text(
-                        text = templateExercise.muscleCategory.displayName,
+                        text = stringResource(id = templateExercise.muscleCategory.stringResourceId),
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
@@ -500,12 +502,12 @@ private fun WorkoutInfoCard(
                 InfoItem(
                     icon = Icons.Default.FitnessCenter,
                     value = "$exerciseCount",
-                    label = "Exercises"
+                    label = stringResource(R.string.workout_exercises_label)
                 )
                 InfoItem(
                     icon = Icons.Default.Schedule,
                     value = if (estimatedMinutes > 0) "~$estimatedMinutes" else "-",
-                    label = "Est. minutes"
+                    label = stringResource(R.string.workout_est_minutes)
                 )
             }
         }
@@ -574,14 +576,14 @@ private fun EmptyExercisesCard() {
             }
             Spacer(modifier = Modifier.height(IMFITSpacing.lg))
             Text(
-                text = "No exercises yet",
+                text = stringResource(R.string.workout_no_exercises),
                 style = MaterialTheme.typography.titleMedium,
                 fontWeight = FontWeight.SemiBold,
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )
             Spacer(modifier = Modifier.height(IMFITSpacing.xs))
             Text(
-                text = "Add exercises to get started",
+                text = stringResource(R.string.workout_add_exercises_hint),
                 style = MaterialTheme.typography.bodyMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f)
             )

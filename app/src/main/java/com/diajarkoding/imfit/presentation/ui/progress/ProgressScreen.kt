@@ -49,6 +49,8 @@ import com.diajarkoding.imfit.theme.IMFITSizes
 import com.diajarkoding.imfit.theme.IMFITSpacing
 import com.diajarkoding.imfit.theme.Primary
 import com.diajarkoding.imfit.theme.PrimaryLight
+import com.diajarkoding.imfit.R
+import androidx.compose.ui.res.stringResource
 import java.time.LocalDate
 import java.time.YearMonth
 import java.time.format.TextStyle
@@ -57,9 +59,9 @@ import java.util.Locale
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun ProgressScreen(
-    onLogout: () -> Unit = {},
     onNavigateToWorkoutHistory: (LocalDate) -> Unit = {},
     onNavigateToYearlyCalendar: () -> Unit = {},
+    onNavigateToProfile: () -> Unit = {},
     viewModel: ProgressViewModel = hiltViewModel()
 ) {
     val state by viewModel.state.collectAsState()
@@ -78,10 +80,7 @@ fun ProgressScreen(
             ProfileHeader(
                 name = state.userName,
                 email = state.userEmail,
-                onLogout = {
-                    viewModel.logout()
-                    onLogout()
-                }
+                onProfileClick = onNavigateToProfile
             )
         }
 
@@ -92,13 +91,13 @@ fun ProgressScreen(
             ) {
                 StatCard(
                     icon = Icons.Default.FitnessCenter,
-                    title = "Total Volume",
+                    title = stringResource(R.string.progress_total_volume),
                     value = "${state.totalVolume.toInt()} kg",
                     modifier = Modifier.weight(1f)
                 )
                 StatCard(
                     icon = Icons.Default.Schedule,
-                    title = "Weekly Time",
+                    title = stringResource(R.string.progress_weekly_time),
                     value = "${state.weeklyWorkoutTimeMinutes} min",
                     modifier = Modifier.weight(1f)
                 )
@@ -123,12 +122,13 @@ fun ProgressScreen(
 private fun ProfileHeader(
     name: String,
     email: String,
-    onLogout: () -> Unit
+    onProfileClick: () -> Unit
 ) {
     Card(
         modifier = Modifier
             .fillMaxWidth()
-            .shadow(6.dp, IMFITShapes.Card, spotColor = Primary.copy(alpha = 0.15f)),
+            .shadow(6.dp, IMFITShapes.Card, spotColor = Primary.copy(alpha = 0.15f))
+            .clickable { onProfileClick() },
         shape = IMFITShapes.Card,
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
     ) {
@@ -177,13 +177,11 @@ private fun ProfileHeader(
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
                 }
-                IconButton(onClick = onLogout) {
-                    Icon(
-                        imageVector = Icons.AutoMirrored.Filled.ExitToApp,
-                        contentDescription = "Logout",
-                        tint = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                }
+                Icon(
+                    imageVector = Icons.AutoMirrored.Filled.KeyboardArrowRight,
+                    contentDescription = stringResource(R.string.desc_go_to_profile),
+                    tint = MaterialTheme.colorScheme.onSurfaceVariant
+                )
             }
         }
     }
@@ -218,7 +216,7 @@ private fun StatCard(
                 Icon(
                     imageVector = icon,
                     contentDescription = null,
-                    tint = Primary,
+                    tint = MaterialTheme.colorScheme.onPrimaryContainer,
                     modifier = Modifier.size(IMFITSizes.iconSm)
                 )
             }
@@ -280,7 +278,7 @@ private fun WorkoutCalendar(
                 ) {
                     Icon(
                         imageVector = Icons.AutoMirrored.Filled.KeyboardArrowRight,
-                        contentDescription = "View yearly calendar",
+                        contentDescription = stringResource(R.string.calendar_view_yearly),
                         tint = Primary
                     )
                 }

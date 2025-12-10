@@ -1,5 +1,6 @@
 package com.diajarkoding.imfit.presentation.ui.auth
 
+import android.net.Uri
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.diajarkoding.imfit.domain.repository.AuthRepository
@@ -15,10 +16,13 @@ data class RegisterState(
     val email: String = "",
     val password: String = "",
     val confirmPassword: String = "",
+    val birthDate: String = "",
+    val profilePhotoUri: Uri? = null,
     val nameError: String? = null,
     val emailError: String? = null,
     val passwordError: String? = null,
     val confirmPasswordError: String? = null,
+    val birthDateError: String? = null,
     val isLoading: Boolean = false,
     val registerSuccess: Boolean = false,
     val errorMessage: String? = null
@@ -48,6 +52,14 @@ class RegisterViewModel @Inject constructor(
         _state.update { it.copy(confirmPassword = confirmPassword, confirmPasswordError = null) }
     }
 
+    fun onBirthDateChange(birthDate: String) {
+        _state.update { it.copy(birthDate = birthDate, birthDateError = null) }
+    }
+
+    fun onProfilePhotoSelected(uri: Uri?) {
+        _state.update { it.copy(profilePhotoUri = uri) }
+    }
+
     fun register() {
         val currentState = _state.value
 
@@ -56,6 +68,7 @@ class RegisterViewModel @Inject constructor(
         var emailError: String? = null
         var passwordError: String? = null
         var confirmPasswordError: String? = null
+        var birthDateError: String? = null
 
         if (currentState.name.isBlank()) {
             nameError = "Name is required"
@@ -86,13 +99,19 @@ class RegisterViewModel @Inject constructor(
             hasError = true
         }
 
+        if (currentState.birthDate.isBlank()) {
+            birthDateError = "Birth date is required"
+            hasError = true
+        }
+
         if (hasError) {
             _state.update {
                 it.copy(
                     nameError = nameError,
                     emailError = emailError,
                     passwordError = passwordError,
-                    confirmPasswordError = confirmPasswordError
+                    confirmPasswordError = confirmPasswordError,
+                    birthDateError = birthDateError
                 )
             }
             return
@@ -104,7 +123,9 @@ class RegisterViewModel @Inject constructor(
             val result = authRepository.register(
                 name = currentState.name,
                 email = currentState.email,
-                password = currentState.password
+                password = currentState.password,
+                birthDate = currentState.birthDate,
+                profilePhotoUri = currentState.profilePhotoUri?.toString()
             )
 
             result.fold(

@@ -37,6 +37,8 @@ import com.diajarkoding.imfit.theme.IMFITSizes
 import com.diajarkoding.imfit.theme.IMFITSpacing
 import com.diajarkoding.imfit.theme.Primary
 import com.diajarkoding.imfit.theme.PrimaryLight
+import com.diajarkoding.imfit.R
+import androidx.compose.ui.res.stringResource
 import kotlinx.coroutines.delay
 
 @Composable
@@ -96,13 +98,13 @@ fun SplashScreen(
         ) {
             Icon(
                 imageVector = Icons.Default.FitnessCenter,
-                contentDescription = "IMFIT Logo",
+                contentDescription = stringResource(R.string.desc_logo),
                 modifier = Modifier.size(IMFITSizes.iconHuge),
                 tint = MaterialTheme.colorScheme.onPrimary
             )
             Spacer(modifier = Modifier.height(IMFITSpacing.xl))
             Text(
-                text = "IMFIT",
+                text = stringResource(R.string.app_name),
                 style = MaterialTheme.typography.headlineLarge.copy(
                     fontWeight = FontWeight.Bold,
                     fontSize = 42.sp,
@@ -112,7 +114,7 @@ fun SplashScreen(
             )
             Spacer(modifier = Modifier.height(IMFITSpacing.sm))
             Text(
-                text = "Your Personal Gym Assistant",
+                text = stringResource(R.string.splash_tagline),
                 style = MaterialTheme.typography.bodyLarge,
                 color = MaterialTheme.colorScheme.onPrimary.copy(alpha = 0.85f)
             )

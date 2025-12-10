@@ -1,7 +1,9 @@
 package com.diajarkoding.imfit.presentation.ui.auth
 
+import androidx.annotation.StringRes
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.diajarkoding.imfit.R
 import com.diajarkoding.imfit.domain.repository.AuthRepository
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -13,11 +15,11 @@ import javax.inject.Inject
 data class LoginState(
     val email: String = "",
     val password: String = "",
-    val emailError: String? = null,
-    val passwordError: String? = null,
+    @StringRes val emailError: Int? = null,
+    @StringRes val passwordError: Int? = null,
     val isLoading: Boolean = false,
     val loginSuccess: Boolean = false,
-    val errorMessage: String? = null
+    @StringRes val errorMessage: Int? = null
 )
 
 @HiltViewModel
@@ -40,22 +42,22 @@ class LoginViewModel @Inject constructor(
         val currentState = _state.value
 
         var hasError = false
-        var emailError: String? = null
-        var passwordError: String? = null
+        var emailError: Int? = null
+        var passwordError: Int? = null
 
         if (currentState.email.isBlank()) {
-            emailError = "Email is required"
+            emailError = R.string.error_email_required
             hasError = true
         } else if (!android.util.Patterns.EMAIL_ADDRESS.matcher(currentState.email).matches()) {
-            emailError = "Invalid email format"
+            emailError = R.string.error_email_invalid
             hasError = true
         }
 
         if (currentState.password.isBlank()) {
-            passwordError = "Password is required"
+            passwordError = R.string.error_password_required
             hasError = true
         } else if (currentState.password.length < 6) {
-            passwordError = "Password must be at least 6 characters"
+            passwordError = R.string.error_password_length
             hasError = true
         }
 
@@ -73,9 +75,9 @@ class LoginViewModel @Inject constructor(
                 onSuccess = {
                     _state.update { it.copy(isLoading = false, loginSuccess = true) }
                 },
-                onFailure = { error ->
+                onFailure = {
                     _state.update {
-                        it.copy(isLoading = false, errorMessage = error.message ?: "Login failed")
+                        it.copy(isLoading = false, errorMessage = R.string.error_login_failed)
                     }
                 }
             )

@@ -36,12 +36,14 @@ class ActiveWorkoutViewModel @Inject constructor(
     private var restTimerJob: Job? = null
 
     fun startWorkout(templateId: String) {
-        val template = workoutRepository.getTemplateById(templateId) ?: return
+        viewModelScope.launch {
+            val template = workoutRepository.getTemplateById(templateId) ?: return@launch
 
-        val session = workoutRepository.startWorkout(template)
-        _state.update { it.copy(session = session) }
+            val session = workoutRepository.startWorkout(template)
+            _state.update { it.copy(session = session) }
 
-        startElapsedTimeCounter()
+            startElapsedTimeCounter()
+        }
     }
 
     private fun startElapsedTimeCounter() {
@@ -63,78 +65,86 @@ class ActiveWorkoutViewModel @Inject constructor(
     }
 
     fun updateSet(exerciseIndex: Int, setIndex: Int, weight: Float, reps: Int) {
-        val currentSession = _state.value.session ?: return
+        viewModelScope.launch {
+            val currentSession = _state.value.session ?: return@launch
 
-        val updatedExerciseLogs = currentSession.exerciseLogs.toMutableList()
-        val exerciseLog = updatedExerciseLogs.getOrNull(exerciseIndex) ?: return
+            val updatedExerciseLogs = currentSession.exerciseLogs.toMutableList()
+            val exerciseLog = updatedExerciseLogs.getOrNull(exerciseIndex) ?: return@launch
 
-        val updatedSets = exerciseLog.sets.toMutableList()
-        val currentSet = updatedSets.getOrNull(setIndex) ?: return
+            val updatedSets = exerciseLog.sets.toMutableList()
+            val currentSet = updatedSets.getOrNull(setIndex) ?: return@launch
 
-        updatedSets[setIndex] = currentSet.copy(weight = weight, reps = reps)
-        updatedExerciseLogs[exerciseIndex] = exerciseLog.copy(sets = updatedSets)
+            updatedSets[setIndex] = currentSet.copy(weight = weight, reps = reps)
+            updatedExerciseLogs[exerciseIndex] = exerciseLog.copy(sets = updatedSets)
 
-        val updatedSession = currentSession.copy(exerciseLogs = updatedExerciseLogs)
-        workoutRepository.updateActiveSession(updatedSession)
-        _state.update { it.copy(session = updatedSession) }
+            val updatedSession = currentSession.copy(exerciseLogs = updatedExerciseLogs)
+            workoutRepository.updateActiveSession(updatedSession)
+            _state.update { it.copy(session = updatedSession) }
+        }
     }
 
     fun completeSet(exerciseIndex: Int, setIndex: Int) {
-        val currentSession = _state.value.session ?: return
+        viewModelScope.launch {
+            val currentSession = _state.value.session ?: return@launch
 
-        val updatedExerciseLogs = currentSession.exerciseLogs.toMutableList()
-        val exerciseLog = updatedExerciseLogs.getOrNull(exerciseIndex) ?: return
+            val updatedExerciseLogs = currentSession.exerciseLogs.toMutableList()
+            val exerciseLog = updatedExerciseLogs.getOrNull(exerciseIndex) ?: return@launch
 
-        val updatedSets = exerciseLog.sets.toMutableList()
-        val currentSet = updatedSets.getOrNull(setIndex) ?: return
+            val updatedSets = exerciseLog.sets.toMutableList()
+            val currentSet = updatedSets.getOrNull(setIndex) ?: return@launch
 
-        if (currentSet.weight <= 0 || currentSet.reps <= 0) return
+            if (currentSet.weight <= 0 || currentSet.reps <= 0) return@launch
 
-        updatedSets[setIndex] = currentSet.copy(isCompleted = true)
-        updatedExerciseLogs[exerciseIndex] = exerciseLog.copy(sets = updatedSets)
+            updatedSets[setIndex] = currentSet.copy(isCompleted = true)
+            updatedExerciseLogs[exerciseIndex] = exerciseLog.copy(sets = updatedSets)
 
-        val updatedSession = currentSession.copy(exerciseLogs = updatedExerciseLogs)
-        workoutRepository.updateActiveSession(updatedSession)
-        _state.update { it.copy(session = updatedSession) }
+            val updatedSession = currentSession.copy(exerciseLogs = updatedExerciseLogs)
+            workoutRepository.updateActiveSession(updatedSession)
+            _state.update { it.copy(session = updatedSession) }
 
-        // Start rest timer
-        startRestTimer()
+            // Start rest timer
+            startRestTimer()
+        }
     }
 
     fun addSet(exerciseIndex: Int) {
-        val currentSession = _state.value.session ?: return
+        viewModelScope.launch {
+            val currentSession = _state.value.session ?: return@launch
 
-        val updatedExerciseLogs = currentSession.exerciseLogs.toMutableList()
-        val exerciseLog = updatedExerciseLogs.getOrNull(exerciseIndex) ?: return
+            val updatedExerciseLogs = currentSession.exerciseLogs.toMutableList()
+            val exerciseLog = updatedExerciseLogs.getOrNull(exerciseIndex) ?: return@launch
 
-        val newSetNumber = exerciseLog.sets.size + 1
-        val newSet = WorkoutSet(setNumber = newSetNumber)
-        val updatedSets = exerciseLog.sets + newSet
-        updatedExerciseLogs[exerciseIndex] = exerciseLog.copy(sets = updatedSets)
+            val newSetNumber = exerciseLog.sets.size + 1
+            val newSet = WorkoutSet(setNumber = newSetNumber)
+            val updatedSets = exerciseLog.sets + newSet
+            updatedExerciseLogs[exerciseIndex] = exerciseLog.copy(sets = updatedSets)
 
-        val updatedSession = currentSession.copy(exerciseLogs = updatedExerciseLogs)
-        workoutRepository.updateActiveSession(updatedSession)
-        _state.update { it.copy(session = updatedSession) }
+            val updatedSession = currentSession.copy(exerciseLogs = updatedExerciseLogs)
+            workoutRepository.updateActiveSession(updatedSession)
+            _state.update { it.copy(session = updatedSession) }
+        }
     }
 
     fun removeSet(exerciseIndex: Int, setIndex: Int) {
-        val currentSession = _state.value.session ?: return
+        viewModelScope.launch {
+            val currentSession = _state.value.session ?: return@launch
 
-        val updatedExerciseLogs = currentSession.exerciseLogs.toMutableList()
-        val exerciseLog = updatedExerciseLogs.getOrNull(exerciseIndex) ?: return
+            val updatedExerciseLogs = currentSession.exerciseLogs.toMutableList()
+            val exerciseLog = updatedExerciseLogs.getOrNull(exerciseIndex) ?: return@launch
 
-        if (exerciseLog.sets.size <= 1) return
+            if (exerciseLog.sets.size <= 1) return@launch
 
-        val updatedSets = exerciseLog.sets.toMutableList()
-        updatedSets.removeAt(setIndex)
-        val renumberedSets = updatedSets.mapIndexed { index, set ->
-            set.copy(setNumber = index + 1)
+            val updatedSets = exerciseLog.sets.toMutableList()
+            updatedSets.removeAt(setIndex)
+            val renumberedSets = updatedSets.mapIndexed { index, set ->
+                set.copy(setNumber = index + 1)
+            }
+            updatedExerciseLogs[exerciseIndex] = exerciseLog.copy(sets = renumberedSets)
+
+            val updatedSession = currentSession.copy(exerciseLogs = updatedExerciseLogs)
+            workoutRepository.updateActiveSession(updatedSession)
+            _state.update { it.copy(session = updatedSession) }
         }
-        updatedExerciseLogs[exerciseIndex] = exerciseLog.copy(sets = renumberedSets)
-
-        val updatedSession = currentSession.copy(exerciseLogs = updatedExerciseLogs)
-        workoutRepository.updateActiveSession(updatedSession)
-        _state.update { it.copy(session = updatedSession) }
     }
 
     private fun startRestTimer() {
@@ -171,18 +181,22 @@ class ActiveWorkoutViewModel @Inject constructor(
     }
 
     fun cancelWorkout() {
-        elapsedTimeJob?.cancel()
-        restTimerJob?.cancel()
-        workoutRepository.cancelWorkout()
+        viewModelScope.launch {
+            elapsedTimeJob?.cancel()
+            restTimerJob?.cancel()
+            workoutRepository.cancelWorkout()
+        }
     }
 
     fun finishWorkout() {
-        elapsedTimeJob?.cancel()
-        restTimerJob?.cancel()
+        viewModelScope.launch {
+            elapsedTimeJob?.cancel()
+            restTimerJob?.cancel()
 
-        val workoutLog = workoutRepository.finishWorkout()
-        workoutLog?.let { log ->
-            _state.update { it.copy(workoutLogId = log.id) }
+            val workoutLog = workoutRepository.finishWorkout()
+            workoutLog?.let { log ->
+                _state.update { it.copy(workoutLogId = log.id) }
+            }
         }
     }
 

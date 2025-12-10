@@ -1,12 +1,14 @@
 package com.diajarkoding.imfit.presentation.ui.workout
 
 import androidx.lifecycle.ViewModel
+import androidx.lifecycle.viewModelScope
 import com.diajarkoding.imfit.domain.model.WorkoutLog
 import com.diajarkoding.imfit.domain.repository.WorkoutRepository
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
+import kotlinx.coroutines.launch
 import javax.inject.Inject
 
 data class WorkoutSummaryState(
@@ -22,7 +24,9 @@ class WorkoutSummaryViewModel @Inject constructor(
     val state = _state.asStateFlow()
 
     fun loadWorkoutLog(workoutLogId: String) {
-        val log = workoutRepository.getWorkoutLogById(workoutLogId)
-        _state.update { it.copy(workoutLog = log) }
+        viewModelScope.launch {
+            val log = workoutRepository.getWorkoutLogById(workoutLogId)
+            _state.update { it.copy(workoutLog = log) }
+        }
     }
 }

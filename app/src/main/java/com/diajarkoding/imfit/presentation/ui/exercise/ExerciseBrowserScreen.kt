@@ -97,7 +97,7 @@ fun ExerciseBrowserScreen(
             horizontalArrangement = Arrangement.spacedBy(IMFITSpacing.sm),
             verticalArrangement = Arrangement.spacedBy(IMFITSpacing.sm)
         ) {
-            items(MuscleCategory.entries) { category ->
+            items(MuscleCategory.entries, key = { it.name }) { category ->
                 MuscleCategoryCard(
                     category = category,
                     onClick = { onCategorySelected(category) }

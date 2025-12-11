@@ -31,7 +31,10 @@ import javax.inject.Singleton
 
 @Singleton
 class WorkoutRepositoryImpl @Inject constructor(
-    private val supabaseClient: SupabaseClient
+    private val supabaseClient: SupabaseClient,
+    private val exerciseLogDao: com.diajarkoding.imfit.data.local.dao.ExerciseLogDao,
+    private val workoutSetDao: com.diajarkoding.imfit.data.local.dao.WorkoutSetDao,
+    private val exerciseDao: com.diajarkoding.imfit.data.local.dao.ExerciseDao
 ) : WorkoutRepository {
 
     private var activeSession: WorkoutSession? = null
@@ -374,6 +377,59 @@ class WorkoutRepositoryImpl @Inject constructor(
         } catch (e: Exception) {
             Log.e("WorkoutRepository", "Error fetching last workout log: ${e.message}", e)
             FakeWorkoutDataSource.getLastWorkoutLog(userId)
+        }
+    }
+
+    override suspend fun getLastExerciseLog(exerciseId: String): ExerciseLog? {
+        return try {
+            // Query Supabase for the last exercise log with this exercise ID
+            val exerciseLogs = supabaseClient.postgrest.from("exercise_logs")
+                .select(Columns.raw("*, exercises(*), workout_sets(*)")) {
+                    filter { eq("exercise_id", exerciseId) }
+                    order("id", io.github.jan.supabase.postgrest.query.Order.DESCENDING)
+                    limit(1)
+                }
+                .decodeList<ExerciseLogDto>()
+            
+            val logDto = exerciseLogs.firstOrNull() ?: return null
+            logDto.toDomain()
+        } catch (e: Exception) {
+            Log.e("WorkoutRepository", "Error getting last exercise log from Supabase: ${e.message}", e)
+            // Fallback to local database
+            try {
+                val logEntity = exerciseLogDao.getLastExerciseLog(exerciseId) ?: return null
+                val exerciseEntity = exerciseDao.getExerciseById(exerciseId) ?: return null
+                val setEntities = workoutSetDao.getSetsForExercise(logEntity.workoutLogId, exerciseId)
+
+                val muscleCategory = com.diajarkoding.imfit.domain.model.MuscleCategory.entries.getOrNull(exerciseEntity.muscleCategoryId - 1)
+                    ?: com.diajarkoding.imfit.domain.model.MuscleCategory.CHEST
+
+                val exercise = com.diajarkoding.imfit.domain.model.Exercise(
+                    id = exerciseEntity.id,
+                    name = exerciseEntity.name,
+                    muscleCategory = muscleCategory,
+                    description = exerciseEntity.description,
+                    imageUrl = exerciseEntity.imageUrl
+                )
+
+                val sets = setEntities.map { entity ->
+                    WorkoutSet(
+                        setNumber = entity.setNumber,
+                        weight = entity.weight,
+                        reps = entity.reps,
+                        isCompleted = entity.isCompleted
+                    )
+                }
+
+                ExerciseLog(
+                    exercise = exercise,
+                    sets = sets,
+                    restSeconds = 60
+                )
+            } catch (localError: Exception) {
+                Log.e("WorkoutRepository", "Error getting last exercise log from local: ${localError.message}", localError)
+                null
+            }
         }
     }
 

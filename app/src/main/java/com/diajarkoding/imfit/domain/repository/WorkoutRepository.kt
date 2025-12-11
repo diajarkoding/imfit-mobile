@@ -1,5 +1,6 @@
 package com.diajarkoding.imfit.domain.repository
 
+import com.diajarkoding.imfit.domain.model.ExerciseLog
 import com.diajarkoding.imfit.domain.model.TemplateExercise
 import com.diajarkoding.imfit.domain.model.WorkoutLog
 import com.diajarkoding.imfit.domain.model.WorkoutSession
@@ -26,4 +27,5 @@ interface WorkoutRepository {
     suspend fun getWorkoutLogs(userId: String): List<WorkoutLog>
     suspend fun getWorkoutLogById(logId: String): WorkoutLog?
     suspend fun getLastWorkoutLog(userId: String): WorkoutLog?
+    suspend fun getLastExerciseLog(exerciseId: String): ExerciseLog?
 }

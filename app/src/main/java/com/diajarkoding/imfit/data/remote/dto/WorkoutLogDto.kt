@@ -77,12 +77,27 @@ fun WorkoutLogDto.toDomain(): WorkoutLog {
         startTime = parseTimestamp(startTime),
         endTime = parseTimestamp(endTime),
         totalVolume = totalVolume.toFloat(),
-        exerciseLogs = exerciseLogs?.mapNotNull { it.toDomain() } ?: emptyList()
+        exerciseLogs = exerciseLogs?.map { it.toDomain() } ?: emptyList()
     )
 }
 
-fun ExerciseLogDto.toDomain(): ExerciseLog? {
-    val exercise = exercises?.toDomain() ?: return null
+fun ExerciseLogDto.toDomain(): ExerciseLog {
+    // Try to use the nested exercise, or create a fallback from DTO data
+    val exercise = exercises?.toDomain() ?: run {
+        // Create fallback exercise using data from the ExerciseLogDto itself
+        val category = try {
+            com.diajarkoding.imfit.domain.model.MuscleCategory.valueOf(muscleCategory.uppercase())
+        } catch (e: Exception) {
+            com.diajarkoding.imfit.domain.model.MuscleCategory.CHEST
+        }
+        com.diajarkoding.imfit.domain.model.Exercise(
+            id = exerciseId,
+            name = exerciseName,
+            muscleCategory = category,
+            description = "",
+            imageUrl = null
+        )
+    }
     return ExerciseLog(
         exercise = exercise,
         sets = workoutSets?.map { it.toDomain() } ?: emptyList()

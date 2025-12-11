@@ -14,7 +14,11 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.gestures.snapping.rememberSnapFlingBehavior
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.rememberLazyListState
+import kotlinx.coroutines.launch
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
@@ -42,6 +46,11 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -79,6 +88,7 @@ fun ActiveWorkoutScreen(
     viewModel: ActiveWorkoutViewModel = hiltViewModel()
 ) {
     val state by viewModel.state.collectAsState()
+    var showRestConfigSheet by remember { mutableStateOf(false) }
 
     LaunchedEffect(templateId) {
         viewModel.startWorkout(templateId)
@@ -94,6 +104,27 @@ fun ActiveWorkoutScreen(
         RestTimerDialog(
             remainingSeconds = state.restTimerSeconds,
             onDismiss = { viewModel.skipRestTimer() }
+        )
+    }
+
+    if (showRestConfigSheet) {
+        RestTimerConfigSheet(
+            currentRestSeconds = state.restTimerSeconds,
+            onDismiss = { showRestConfigSheet = false },
+            onConfirm = { seconds ->
+                // Update for all exercises or current? Requirement: "manually edit the rest time... saved only for current session"
+                // Usually this setting applies to the exercises being performed.
+                // Assuming we update the 'current' exercise or just a global setting if not specific.
+                // But the requirement says "edit timer feature... default 60s".
+                // And "User can manually edit rest time data... in ActiveWorkoutScreen".
+                // If I set it here, does it apply to the *next* rest?
+                // I'll assume it updates the rest time for the *current exercise* or generalized if no current index.
+                // But `ActiveWorkoutState` references `currentExerciseIndex` (via session).
+                // `session.currentExerciseIndex` is valid.
+                val currentIndex = state.session?.currentExerciseIndex ?: 0
+                viewModel.updateRestTimer(currentIndex, seconds)
+                showRestConfigSheet = false
+            }
         )
     }
 
@@ -116,36 +147,59 @@ fun ActiveWorkoutScreen(
 
     Scaffold(
         topBar = {
-            TopAppBar(
-                title = {
-                    Column {
-                        Text(
-                            text = state.session?.templateName ?: "Workout",
-                            style = MaterialTheme.typography.titleMedium,
-                            fontWeight = FontWeight.Bold
-                        )
-                        Text(
-                            text = stringResource(
-                                R.string.active_workout_elapsed,
-                                state.elapsedMinutes
-                            ),
-                            style = MaterialTheme.typography.bodySmall,
-                            color = SetComplete
-                        )
-                    }
-                },
-                navigationIcon = {
-                    IconButton(onClick = { viewModel.showCancelDialog() }) {
-                        Icon(
-                            Icons.Default.Close,
-                            contentDescription = stringResource(R.string.action_cancel)
-                        )
-                    }
-                },
-                colors = TopAppBarDefaults.topAppBarColors(
-                    containerColor = MaterialTheme.colorScheme.surface
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .background(MaterialTheme.colorScheme.surface)
+            ) {
+                TopAppBar(
+                    title = {
+                        Column {
+                            Text(
+                                text = state.session?.templateName ?: "Workout",
+                                style = MaterialTheme.typography.titleMedium,
+                                fontWeight = FontWeight.Bold
+                            )
+                            Text(
+                                text = formatElapsedTime(state.elapsedSeconds),
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = SetComplete,
+                                fontWeight = FontWeight.SemiBold
+                            )
+                        }
+                    },
+                    navigationIcon = {
+                        IconButton(onClick = { viewModel.showCancelDialog() }) {
+                            Icon(
+                                Icons.Default.Close,
+                                contentDescription = stringResource(R.string.action_cancel)
+                            )
+                        }
+                    },
+                    colors = TopAppBarDefaults.topAppBarColors(
+                        containerColor = MaterialTheme.colorScheme.surface
+                    )
                 )
-            )
+
+                // Progress Chips in AppBar
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = IMFITSpacing.screenHorizontal)
+                        .padding(bottom = IMFITSpacing.md),
+                    horizontalArrangement = Arrangement.SpaceBetween
+                ) {
+                    ProgressChip(
+                        label = stringResource(R.string.workout_label_sets),
+                        value = "${state.session?.totalCompletedSets ?: 0}/${state.session?.totalSets ?: 0}"
+                    )
+                    ProgressChip(
+                        label = stringResource(R.string.label_volume),
+                        value = "${String.format("%.0f", state.session?.totalVolume ?: 0f)} kg",
+                        isPrimary = true
+                    )
+                }
+            }
         },
         bottomBar = {
             Box(
@@ -156,29 +210,37 @@ fun ActiveWorkoutScreen(
                     .padding(IMFITSpacing.screenHorizontal)
                     .padding(vertical = IMFITSpacing.lg)
             ) {
-                Column {
-                    Row(
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(IMFITSpacing.md)
+                ) {
+                    // Timer Button - Icon only with proper proportions
+                    Box(
                         modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(bottom = IMFITSpacing.md),
-                        horizontalArrangement = Arrangement.SpaceBetween
+                            .size(56.dp)
+                            .clip(IMFITShapes.Button)
+                            .background(MaterialTheme.colorScheme.surfaceVariant)
+                            .clickable { showRestConfigSheet = true },
+                        contentAlignment = Alignment.Center
                     ) {
-                        ProgressChip(
-                            label = stringResource(R.string.workout_label_sets),
-                            value = "${state.session?.totalCompletedSets ?: 0}/${state.session?.totalSets ?: 0}"
-                        )
-                        ProgressChip(
-                            label = stringResource(R.string.label_volume),
-                            value = "${String.format("%.0f", state.session?.totalVolume ?: 0f)} kg",
-                            isPrimary = true
+                        Icon(
+                            imageVector = Icons.Default.Timer,
+                            contentDescription = stringResource(R.string.active_workout_rest_timer),
+                            tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                            modifier = Modifier.size(24.dp)
                         )
                     }
-                    IMFITButton(
-                        text = stringResource(R.string.action_finish_workout),
-                        onClick = { viewModel.finishWorkout() },
-                        enabled = (state.session?.totalCompletedSets ?: 0) > 0,
-                        icon = Icons.Default.Check
-                    )
+
+                    // Finish Button
+                    Box(modifier = Modifier.weight(1f)) {
+                        IMFITButton(
+                            text = stringResource(R.string.action_finish_workout),
+                            onClick = { viewModel.finishWorkout() },
+                            enabled = (state.session?.totalCompletedSets ?: 0) > 0,
+                            icon = Icons.Default.Check
+                        )
+                    }
                 }
             }
         }
@@ -204,7 +266,7 @@ fun ActiveWorkoutScreen(
                 verticalArrangement = Arrangement.spacedBy(IMFITSpacing.lg)
             ) {
                 state.session?.exerciseLogs?.forEachIndexed { exerciseIndex, exerciseLog ->
-                    item(key = "exercise_$exerciseIndex") {
+                    item(key = "exercise_${exerciseIndex}_${exerciseLog.exercise.id}") {
                         ExerciseSection(
                             exerciseLog = exerciseLog,
                             exerciseIndex = exerciseIndex,
@@ -225,9 +287,227 @@ fun ActiveWorkoutScreen(
                     }
                 }
 
-                item { Spacer(modifier = Modifier.height(120.dp)) }
+                item(key = "spacer_bottom") { Spacer(modifier = Modifier.height(120.dp)) }
             }
         }
+    }
+}
+
+@Composable
+private fun RestTimerConfigSheet(
+    currentRestSeconds: Int,
+    onDismiss: () -> Unit,
+    onConfirm: (Int) -> Unit
+) {
+    // Convert seconds to hours, minutes, seconds
+    val initialHours = currentRestSeconds / 3600
+    val initialMinutes = (currentRestSeconds % 3600) / 60
+    val initialSeconds = currentRestSeconds % 60
+
+    var hours by remember { mutableIntStateOf(initialHours) }
+    var minutes by remember { mutableIntStateOf(initialMinutes) }
+    var seconds by remember { mutableIntStateOf(initialSeconds) }
+
+    Dialog(onDismissRequest = onDismiss) {
+        Card(
+            shape = IMFITShapes.Dialog,
+            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
+        ) {
+            Column(
+                modifier = Modifier
+                    .padding(IMFITSpacing.xl)
+                    .fillMaxWidth(),
+                horizontalAlignment = Alignment.CenterHorizontally
+            ) {
+                Text(
+                    text = stringResource(R.string.active_workout_rest_timer),
+                    style = MaterialTheme.typography.titleLarge,
+                    fontWeight = FontWeight.Bold
+                )
+                Spacer(modifier = Modifier.height(IMFITSpacing.xl))
+
+                // Scrollable Time Picker
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.Center,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    // Hours
+                    TimePickerColumn(
+                        value = hours,
+                        onValueChange = { hours = it },
+                        range = 0..23,
+                        label = "hours"
+                    )
+                    
+                    Text(
+                        text = ":",
+                        style = MaterialTheme.typography.headlineLarge,
+                        fontWeight = FontWeight.SemiBold,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.padding(horizontal = IMFITSpacing.sm)
+                    )
+                    
+                    // Minutes
+                    TimePickerColumn(
+                        value = minutes,
+                        onValueChange = { minutes = it },
+                        range = 0..59,
+                        label = "min"
+                    )
+                    
+                    Text(
+                        text = ":",
+                        style = MaterialTheme.typography.headlineLarge,
+                        fontWeight = FontWeight.SemiBold,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.padding(horizontal = IMFITSpacing.sm)
+                    )
+                    
+                    // Seconds
+                    TimePickerColumn(
+                        value = seconds,
+                        onValueChange = { seconds = it },
+                        range = 0..59,
+                        label = "sec"
+                    )
+                }
+
+                Spacer(modifier = Modifier.height(IMFITSpacing.xl))
+
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(IMFITSpacing.md)
+                ) {
+                    Box(modifier = Modifier.weight(1f)) {
+                        IMFITSecondaryButton(
+                            text = stringResource(R.string.action_cancel),
+                            onClick = onDismiss
+                        )
+                    }
+                    Box(modifier = Modifier.weight(1f)) {
+                        IMFITButton(
+                            text = stringResource(R.string.action_save),
+                            onClick = {
+                                val totalSeconds = hours * 3600 + minutes * 60 + seconds
+                                onConfirm(if (totalSeconds > 0) totalSeconds else 60)
+                            }
+                        )
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun TimePickerColumn(
+    value: Int,
+    onValueChange: (Int) -> Unit,
+    range: IntRange,
+    label: String
+) {
+    val itemHeight = 40.dp
+    val visibleItems = 3
+    val listHeight = itemHeight * visibleItems
+    val coroutineScope = rememberCoroutineScope()
+    
+    // Initialize at the correct position (item at center)
+    val listState = rememberLazyListState(initialFirstVisibleItemIndex = value)
+    val flingBehavior = rememberSnapFlingBehavior(lazyListState = listState)
+    
+    // Sync scroll position when value changes externally (e.g., clicking an item)
+    LaunchedEffect(value) {
+        if (listState.firstVisibleItemIndex != value) {
+            listState.animateScrollToItem(value)
+        }
+    }
+    
+    // Update value when scroll stops
+    LaunchedEffect(listState.isScrollInProgress) {
+        if (!listState.isScrollInProgress) {
+            val centerIndex = listState.firstVisibleItemIndex
+            if (centerIndex != value && centerIndex in range) {
+                onValueChange(centerIndex)
+            }
+        }
+    }
+
+    Column(
+        horizontalAlignment = Alignment.CenterHorizontally
+    ) {
+        Box(
+            modifier = Modifier
+                .width(64.dp)
+                .height(listHeight)
+                .clip(IMFITShapes.Chip)
+                .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f))
+        ) {
+            LazyColumn(
+                state = listState,
+                modifier = Modifier.fillMaxSize(),
+                horizontalAlignment = Alignment.CenterHorizontally,
+                flingBehavior = flingBehavior,
+                contentPadding = PaddingValues(vertical = itemHeight) // One item padding top/bottom for center alignment
+            ) {
+                items(range.toList(), key = { it }) { num ->
+                    val isSelected = num == value
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(itemHeight)
+                            .clickable {
+                                coroutineScope.launch {
+                                    listState.animateScrollToItem(num)
+                                }
+                                onValueChange(num)
+                            },
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Text(
+                            text = String.format("%02d", num),
+                            style = MaterialTheme.typography.headlineMedium,
+                            fontWeight = if (isSelected) FontWeight.SemiBold else FontWeight.Normal,
+                            color = if (isSelected) Primary else MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f),
+                            textAlign = TextAlign.Center
+                        )
+                    }
+                }
+            }
+            
+            // Selection indicator overlay - centered
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(itemHeight)
+                    .align(Alignment.Center)
+                    .background(Primary.copy(alpha = 0.1f))
+            )
+        }
+        
+        Spacer(modifier = Modifier.height(IMFITSpacing.xs))
+        
+        Text(
+            text = label,
+            style = MaterialTheme.typography.labelSmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant
+        )
+    }
+}
+
+private fun formatElapsedTime(seconds: Long): String {
+    val hh = seconds / 3600
+    val mm = (seconds % 3600) / 60
+    val ss = seconds % 60
+    return if (hh > 0) {
+        String.format("%02d:%02d:%02d", hh, mm, ss)
+    } else {
+        String.format(
+            "%02d:%02d:%02d",
+            0,
+            mm,
+            ss
+        ) // Requirement: 00:00:00 even if no hours? "00:00:00" format implies 3 parts.
     }
 }
 
@@ -480,7 +760,17 @@ private fun SetInputRow(
                     disabledContainerColor = Color.Transparent,
                     disabledBorderColor = Color.Transparent,
                     disabledTextColor = MaterialTheme.colorScheme.onSurface
-                )
+                ),
+                placeholder = {
+                    Text(
+                        text = "0",
+                        style = MaterialTheme.typography.bodyMedium.copy(
+                            textAlign = TextAlign.Center,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.4f)
+                        ),
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                }
             )
         }
 

@@ -29,4 +29,13 @@ interface ExerciseLogDao {
 
     @Query("DELETE FROM exercise_logs")
     suspend fun deleteAllExerciseLogs()
+
+    @Query("""
+        SELECT e.* FROM exercise_logs e
+        INNER JOIN workout_logs w ON e.workout_log_id = w.id
+        WHERE e.exercise_id = :exerciseId
+        ORDER BY w.date DESC
+        LIMIT 1
+    """)
+    suspend fun getLastExerciseLog(exerciseId: String): ExerciseLogEntity?
 }

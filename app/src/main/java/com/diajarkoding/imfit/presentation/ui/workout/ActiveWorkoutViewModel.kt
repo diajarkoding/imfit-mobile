@@ -17,7 +17,7 @@ import javax.inject.Inject
 
 data class ActiveWorkoutState(
     val session: WorkoutSession? = null,
-    val elapsedMinutes: Int = 0,
+    val elapsedSeconds: Long = 0,
     val isRestTimerActive: Boolean = false,
     val restTimerSeconds: Int = 60,
     val showCancelDialog: Boolean = false,
@@ -40,9 +40,44 @@ class ActiveWorkoutViewModel @Inject constructor(
             val template = workoutRepository.getTemplateById(templateId) ?: return@launch
 
             val session = workoutRepository.startWorkout(template)
-            _state.update { it.copy(session = session) }
+            
+            // Prefill volumes BEFORE updating state to prevent race condition
+            // where UI renders empty values before prefill completes
+            val prefilledSession = prefillVolumes(session)
+            
+            _state.update { it.copy(session = prefilledSession) }
 
             startElapsedTimeCounter()
+        }
+    }
+
+    private suspend fun prefillVolumes(session: WorkoutSession): WorkoutSession {
+        return try {
+            val updatedLogs = session.exerciseLogs.map { log ->
+                val lastLog = workoutRepository.getLastExerciseLog(log.exercise.id)
+                android.util.Log.d("ActiveWorkoutVM", "Prefill ${log.exercise.name}: hasLastLog=${lastLog != null}, lastSets=${lastLog?.sets?.size ?: 0}")
+                if (lastLog != null) {
+                    val newSets = log.sets.mapIndexed { index, set ->
+                        val lastSet = lastLog.sets.getOrNull(index)
+                        if (lastSet != null && set.weight == 0f) {
+                            android.util.Log.d("ActiveWorkoutVM", "  Set ${index + 1}: prefilling weight=${lastSet.weight}")
+                            set.copy(weight = lastSet.weight)
+                        } else {
+                            set
+                        }
+                    }
+                    log.copy(sets = newSets)
+                } else {
+                    log
+                }
+            }
+            
+            val updatedSession = session.copy(exerciseLogs = updatedLogs)
+            workoutRepository.updateActiveSession(updatedSession)
+            updatedSession
+        } catch (e: Exception) {
+            android.util.Log.e("ActiveWorkoutVM", "Error prefilling volumes: ${e.message}", e)
+            session // Return original session on error
         }
     }
 
@@ -50,17 +85,26 @@ class ActiveWorkoutViewModel @Inject constructor(
         elapsedTimeJob?.cancel()
         elapsedTimeJob = viewModelScope.launch {
             while (true) {
-                delay(60000) // Update every minute
-                _state.update { it.copy(elapsedMinutes = it.session?.durationMinutes ?: 0) }
+                val startTime = _state.value.session?.startTime ?: System.currentTimeMillis()
+                val elapsed = (System.currentTimeMillis() - startTime) / 1000
+                _state.update { it.copy(elapsedSeconds = elapsed) }
+                delay(1000)
             }
         }
+    }
 
-        // Also update immediately and then every 10 seconds for more responsive UI
+    fun updateRestTimer(exerciseIndex: Int, seconds: Int) {
         viewModelScope.launch {
-            while (true) {
-                delay(10000)
-                _state.update { it.copy(elapsedMinutes = it.session?.durationMinutes ?: 0) }
-            }
+            val currentSession = _state.value.session ?: return@launch
+            
+            val updatedExerciseLogs = currentSession.exerciseLogs.toMutableList()
+            val exerciseLog = updatedExerciseLogs.getOrNull(exerciseIndex) ?: return@launch
+            
+            updatedExerciseLogs[exerciseIndex] = exerciseLog.copy(restSeconds = seconds)
+            
+            val updatedSession = currentSession.copy(exerciseLogs = updatedExerciseLogs)
+            workoutRepository.updateActiveSession(updatedSession)
+            _state.update { it.copy(session = updatedSession) }
         }
     }
 

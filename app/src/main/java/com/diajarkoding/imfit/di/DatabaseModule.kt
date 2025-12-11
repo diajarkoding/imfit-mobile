@@ -24,8 +24,8 @@ object DatabaseModule {
             IMFITDatabase::class.java,
             "imfit_database"
         )
-        .fallbackToDestructiveMigration()
-        .build()
+            .fallbackToDestructiveMigrationOnDowngrade(dropAllTables = false)
+            .build()
     }
 
     @Provides

@@ -95,7 +95,7 @@ fun WorkoutSummaryScreen(
                         modifier = Modifier.padding(top = IMFITSpacing.sm)
                     )
                 }
-                items(3) { ShimmerExerciseSummaryCard() }
+                items(3, key = { it }) { ShimmerExerciseSummaryCard() }
             } else {
                 item {
                     Column(
@@ -175,8 +175,10 @@ fun WorkoutSummaryScreen(
                 }
 
                 state.workoutLog?.exerciseLogs?.let { exerciseLogs ->
-                    items(exerciseLogs) { exerciseLog ->
-                        ExerciseSummaryCard(exerciseLog = exerciseLog)
+                    exerciseLogs.forEachIndexed { index, exerciseLog ->
+                        item(key = "summary_${index}_${exerciseLog.exercise.id}") {
+                            ExerciseSummaryCard(exerciseLog = exerciseLog)
+                        }
                     }
                 }
 

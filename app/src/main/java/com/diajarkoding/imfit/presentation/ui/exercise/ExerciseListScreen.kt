@@ -58,7 +58,7 @@ fun ExerciseListScreen(
 ) {
     val state by viewModel.state.collectAsState()
     val category = MuscleCategory.entries.find { it.name == categoryName } ?: MuscleCategory.CHEST
-    val exercises = state.exercisesByCategory[category] ?: emptyList()
+    val exercises = (state.exercisesByCategory[category] ?: emptyList()).distinctBy { it.id }
 
     Scaffold(
         contentWindowInsets = WindowInsets(0),
@@ -96,7 +96,7 @@ fun ExerciseListScreen(
         ) {
             if (state.isLoading) {
                 // Show shimmer loading cards
-                items(6) {
+                items(6, key = { it }) {
                     ShimmerExerciseCard()
                 }
             } else if (exercises.isEmpty()) {
@@ -115,7 +115,9 @@ fun ExerciseListScreen(
                     }
                 }
             } else {
-                items(exercises) { exercise ->
+                items(exercises.distinctBy { it.id }.mapIndexed { index, exercise ->
+        exercise to "ex_${exercise.id}_${index}"
+    }, key = { it.second }) { (exercise, _) ->
                     ExerciseCard(exercise = exercise)
                 }
             }

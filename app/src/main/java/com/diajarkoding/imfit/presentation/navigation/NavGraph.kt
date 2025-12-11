@@ -90,6 +90,9 @@ fun NavGraph(
                 onNavigateToWorkoutDetail = { workoutId ->
                     navController.navigate(Routes.workoutDetail(workoutId))
                 },
+                onNavigateToActiveWorkout = { templateId ->
+                    navController.navigate(Routes.activeWorkout(templateId))
+                },
                 onNavigateToExerciseList = { categoryName ->
                     navController.navigate(Routes.exerciseList(categoryName))
                 },

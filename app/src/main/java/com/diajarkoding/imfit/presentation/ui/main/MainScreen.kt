@@ -48,6 +48,7 @@ sealed class BottomNavItem(
 @Composable
 fun MainScreen(
     onNavigateToWorkoutDetail: (String) -> Unit,
+    onNavigateToActiveWorkout: (String) -> Unit = {},
     onNavigateToExerciseList: (String) -> Unit,
     onNavigateToWorkoutHistory: (LocalDate) -> Unit = {},
     onNavigateToYearlyCalendar: () -> Unit = {},
@@ -116,7 +117,8 @@ fun MainScreen(
         ) {
             composable(BottomNavItem.Home.route) {
                 HomeScreen(
-                    onNavigateToWorkoutDetail = onNavigateToWorkoutDetail
+                    onNavigateToWorkoutDetail = onNavigateToWorkoutDetail,
+                    onNavigateToActiveWorkout = onNavigateToActiveWorkout
                 )
             }
             composable(BottomNavItem.Exercise.route) {

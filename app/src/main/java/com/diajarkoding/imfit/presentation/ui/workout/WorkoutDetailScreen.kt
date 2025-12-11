@@ -232,7 +232,7 @@ fun WorkoutDetailScreen(
                                 )
                             }
                         }
-                        items(3) { ShimmerExerciseCard() }
+                        items(3, key = { it }) { ShimmerExerciseCard() }
                     } else {
                         item {
                             WorkoutInfoCard(

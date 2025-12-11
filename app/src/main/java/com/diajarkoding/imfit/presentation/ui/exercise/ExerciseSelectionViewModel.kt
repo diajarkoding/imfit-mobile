@@ -37,10 +37,11 @@ class ExerciseSelectionViewModel @Inject constructor(
         viewModelScope.launch {
             _state.update { it.copy(isLoading = true) }
             val exercises = exerciseRepository.getAllExercises()
+            val uniqueExercises = exercises.distinctBy { it.id }
             _state.update {
                 it.copy(
-                    allExercises = exercises,
-                    filteredExercises = exercises,
+                    allExercises = uniqueExercises,
+                    filteredExercises = uniqueExercises,
                     isLoading = false
                 )
             }
@@ -70,7 +71,7 @@ class ExerciseSelectionViewModel @Inject constructor(
             matchesCategory && matchesSearch
         }
 
-        _state.update { it.copy(filteredExercises = filtered) }
+        _state.update { it.copy(filteredExercises = filtered.distinctBy { it.id }) }
     }
 
     fun toggleExercise(exercise: Exercise) {
@@ -82,6 +83,6 @@ class ExerciseSelectionViewModel @Inject constructor(
             currentSelected.add(exercise)
         }
 
-        _state.update { it.copy(selectedExercises = currentSelected) }
+        _state.update { it.copy(selectedExercises = currentSelected.distinctBy { it.id }) }
     }
 }

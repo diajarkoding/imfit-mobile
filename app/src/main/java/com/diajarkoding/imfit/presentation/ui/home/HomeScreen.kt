@@ -80,6 +80,7 @@ import com.diajarkoding.imfit.theme.SetComplete
 @Composable
 fun HomeScreen(
     onNavigateToWorkoutDetail: (String) -> Unit,
+    onNavigateToActiveWorkout: (String) -> Unit = {},
     viewModel: HomeViewModel = hiltViewModel()
 ) {
     val state by viewModel.state.collectAsState()
@@ -196,7 +197,7 @@ fun HomeScreen(
                         fontWeight = FontWeight.Bold
                     )
                 }
-                items(3) { ShimmerWorkoutCard() }
+                items(3, key = { it }) { ShimmerWorkoutCard() }
                 item { Spacer(modifier = Modifier.height(100.dp)) }
             } else {
                 item {
@@ -225,11 +226,18 @@ fun HomeScreen(
                         EmptyWorkoutCard(onClick = { showAddDayDialog = true })
                     }
                 } else {
-                    items(state.templates) { template ->
+                    items(state.templates, key = { it.id }) { template ->
+                        val isActive = state.activeWorkoutTemplateId == template.id
                         WorkoutCard(
                             template = template,
-                            isActive = state.activeWorkoutTemplateId == template.id,
-                            onClick = { onNavigateToWorkoutDetail(template.id) }
+                            isActive = isActive,
+                            onClick = {
+                                if (isActive) {
+                                    onNavigateToActiveWorkout(template.id)
+                                } else {
+                                    onNavigateToWorkoutDetail(template.id)
+                                }
+                            }
                         )
                     }
                 }

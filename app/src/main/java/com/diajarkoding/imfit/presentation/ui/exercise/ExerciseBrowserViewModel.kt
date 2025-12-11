@@ -32,7 +32,7 @@ class ExerciseBrowserViewModel @Inject constructor(
         viewModelScope.launch {
             _state.value = _state.value.copy(isLoading = true)
             val exercisesByCategory = MuscleCategory.entries.associateWith { category ->
-                exerciseRepository.getExercisesByCategory(category)
+                exerciseRepository.getExercisesByCategory(category).distinctBy { it.id }
             }
             _state.value = ExerciseBrowserState(exercisesByCategory = exercisesByCategory, isLoading = false)
         }

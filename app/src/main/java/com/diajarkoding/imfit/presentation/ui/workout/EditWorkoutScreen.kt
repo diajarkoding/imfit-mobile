@@ -186,7 +186,7 @@ fun EditWorkoutScreen(
                 } else {
                     itemsIndexed(
                         items = state.exercises,
-                        key = { _, exercise -> exercise.id }
+                        key = { index, exercise -> "edit_${index}_${exercise.id}" }
                     ) { index, exercise ->
                         EditableExerciseCard(
                             exercise = exercise,

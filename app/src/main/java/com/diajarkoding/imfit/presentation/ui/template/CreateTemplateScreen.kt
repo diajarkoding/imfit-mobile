@@ -153,7 +153,7 @@ fun CreateTemplateScreen(
                 if (state.selectedExercises.isEmpty()) {
                     item { EmptyExercisePrompt() }
                 } else {
-                    items(state.selectedExercises) { templateExercise ->
+                    items(state.selectedExercises, key = { it.id }) { templateExercise ->
                         ExerciseItem(
                             templateExercise = templateExercise,
                             onRemove = { viewModel.removeExercise(templateExercise) }

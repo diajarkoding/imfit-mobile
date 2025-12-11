@@ -191,7 +191,7 @@ fun ExerciseSelectionScreen(
                     )
                 }
 
-                items(MuscleCategory.entries.toList()) { category ->
+                items(MuscleCategory.entries, key = { it.name }) { category ->
                     FilterChip(
                         selected = state.selectedCategory == category,
                         onClick = { viewModel.selectCategory(category) },
@@ -220,9 +220,11 @@ fun ExerciseSelectionScreen(
             ) {
                 if (state.isLoading) {
                     // Shimmer loading state
-                    items(8) { ShimmerExerciseCard() }
+                    items(8, key = { it }) { ShimmerExerciseCard() }
                 } else {
-                    items(state.filteredExercises) { exercise ->
+                    items(state.filteredExercises.distinctBy { it.id }.mapIndexed { index, exercise ->
+        exercise to "ex_${exercise.id}_${index}"
+    }, key = { it.second }) { (exercise, _) ->
                         SelectableExerciseCard(
                             exercise = exercise,
                             isSelected = state.selectedExercises.contains(exercise),

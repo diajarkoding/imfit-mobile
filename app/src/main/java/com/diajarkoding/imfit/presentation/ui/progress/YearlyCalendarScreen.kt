@@ -137,7 +137,7 @@ fun YearlyCalendarScreen(
         ) {
             item { Spacer(modifier = Modifier.height(IMFITSpacing.sm)) }
 
-            items(months) { month ->
+            items(months, key = { it.toString() }) { month ->
                 MonthCard(
                     yearMonth = month,
                     workoutDates = state.workoutDates,

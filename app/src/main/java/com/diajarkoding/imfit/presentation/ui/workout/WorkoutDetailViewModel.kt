@@ -73,7 +73,16 @@ class WorkoutDetailViewModel @Inject constructor(
     fun addExercises(exercises: List<Exercise>) {
         viewModelScope.launch {
             val currentWorkout = _state.value.workout ?: return@launch
-            val templateExercises = exercises.map { exercise ->
+            
+            // Get IDs of exercises already in the template
+            val existingExerciseIds = currentWorkout.exercises.map { it.exercise.id }.toSet()
+            
+            // Filter out exercises that are already in the template
+            val newExercises = exercises.filter { it.id !in existingExerciseIds }
+            
+            if (newExercises.isEmpty()) return@launch
+            
+            val templateExercises = newExercises.map { exercise ->
                 TemplateExercise(exercise = exercise)
             }
             val updatedExercises = currentWorkout.exercises + templateExercises

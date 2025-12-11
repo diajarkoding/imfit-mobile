@@ -20,6 +20,7 @@
 | Dokumen | Deskripsi |
 |---------|-----------|
 | **[README.md](./README.md)** | Dokumentasi utama aplikasi mobile (dokumen ini) |
+| **[FEATURE_ANALYSIS.md](./FEATURE_ANALYSIS.md)** | Analisis lengkap fitur, integrasi database, dan status development |
 | **[planning_db.md](./planning_db.md)** | Perencanaan Backend API & Development Roadmap |
 | **[schema_db.md](./schema_db.md)** | Database Schema & SQL Migration Scripts |
 
@@ -1124,8 +1125,9 @@ release {
 
 ## Lihat Juga
 
-Untuk pengembangan backend dan database, lihat dokumentasi berikut:
+Untuk informasi lebih detail tentang implementasi, lihat dokumentasi berikut:
 
+- **[Feature Analysis](./FEATURE_ANALYSIS.md)** - Analisis lengkap semua fitur, status development, dan integrasi database
 - **[Backend API Planning](./planning_db.md)** - Arsitektur backend, API endpoints, authentication, dan roadmap implementasi
 - **[Database Schema](./schema_db.md)** - ERD, definisi tabel, migrations, dan stored procedures
 

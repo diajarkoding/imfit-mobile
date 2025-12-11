@@ -80,7 +80,13 @@ import com.diajarkoding.imfit.theme.Primary
 import com.diajarkoding.imfit.theme.PrimaryLight
 import com.diajarkoding.imfit.theme.SetComplete
 import com.diajarkoding.imfit.R
+import com.diajarkoding.imfit.presentation.components.common.ShimmerExerciseCard
+import com.diajarkoding.imfit.presentation.components.common.ShimmerStatCard
+import androidx.compose.material3.SnackbarHost
+import androidx.compose.material3.SnackbarHostState
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.res.stringResource
+import kotlinx.coroutines.launch
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -95,6 +101,9 @@ fun WorkoutDetailScreen(
 ) {
     val state by viewModel.state.collectAsState()
     var showDeleteDialog by remember { mutableStateOf(false) }
+    val snackbarHostState = remember { SnackbarHostState() }
+    val scope = rememberCoroutineScope()
+    val activeWorkoutWarning = stringResource(R.string.warning_workout_active)
 
     LaunchedEffect(selectedExercises) {
         selectedExercises?.let { exercises ->
@@ -157,18 +166,30 @@ fun WorkoutDetailScreen(
                     }
                 },
                 actions = {
-                    IconButton(onClick = { onNavigateToEdit(workoutId) }) {
+                    IconButton(onClick = {
+                        if (state.isWorkoutActive) {
+                            scope.launch { snackbarHostState.showSnackbar(activeWorkoutWarning) }
+                        } else {
+                            onNavigateToEdit(workoutId)
+                        }
+                    }) {
                         Icon(
                             imageVector = Icons.Default.Edit,
                             contentDescription = stringResource(R.string.action_edit),
-                            tint = Primary
+                            tint = if (state.isWorkoutActive) Primary.copy(alpha = 0.4f) else Primary
                         )
                     }
-                    IconButton(onClick = { showDeleteDialog = true }) {
+                    IconButton(onClick = {
+                        if (state.isWorkoutActive) {
+                            scope.launch { snackbarHostState.showSnackbar(activeWorkoutWarning) }
+                        } else {
+                            showDeleteDialog = true
+                        }
+                    }) {
                         Icon(
                             imageVector = Icons.Default.Delete,
                             contentDescription = stringResource(R.string.action_delete),
-                            tint = DeletePink
+                            tint = if (state.isWorkoutActive) DeletePink.copy(alpha = 0.4f) else DeletePink
                         )
                     }
                 },
@@ -179,70 +200,94 @@ fun WorkoutDetailScreen(
             )
         }
     ) { padding ->
-        Column(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(padding)
-        ) {
-            LazyColumn(
+        Box(modifier = Modifier.fillMaxSize()) {
+            Column(
                 modifier = Modifier
-                    .weight(1f)
-                    .fillMaxWidth(),
-                contentPadding = PaddingValues(IMFITSpacing.screenHorizontal),
-                verticalArrangement = Arrangement.spacedBy(IMFITSpacing.lg)
+                    .fillMaxSize()
+                    .padding(padding)
             ) {
-                item {
-                    Spacer(modifier = Modifier.height(IMFITSpacing.sm))
-                    WorkoutInfoCard(
-                        exerciseCount = state.workout?.exerciseCount ?: 0,
-                        estimatedMinutes = viewModel.estimatedDuration
-                    )
-                }
-
-                item {
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Text(
-                            text = stringResource(R.string.workout_exercises_label),
-                            style = MaterialTheme.typography.titleMedium,
-                            fontWeight = FontWeight.Bold
-                        )
-                        Text(
-                            text = stringResource(R.string.workout_exercises_total, state.workout?.exerciseCount ?: 0),
-                            style = MaterialTheme.typography.bodyMedium,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                    }
-                }
-
-                val exercises = state.workout?.exercises ?: emptyList()
-                if (exercises.isEmpty()) {
-                    item { EmptyExercisesCard() }
-                } else {
-                    items(exercises, key = { it.id }) { templateExercise ->
-                        SwipeToDeleteExerciseItem(
-                            templateExercise = templateExercise,
-                            onRemove = { viewModel.removeExercise(templateExercise) },
-                            onUpdateConfig = { sets, reps, rest ->
-                                viewModel.updateExerciseConfig(templateExercise.id, sets, reps, rest)
+                LazyColumn(
+                    modifier = Modifier
+                        .weight(1f)
+                        .fillMaxWidth(),
+                    contentPadding = PaddingValues(IMFITSpacing.screenHorizontal),
+                    verticalArrangement = Arrangement.spacedBy(IMFITSpacing.lg)
+                ) {
+                    if (state.isLoading) {
+                        item {
+                            Spacer(modifier = Modifier.height(IMFITSpacing.sm))
+                            ShimmerStatCard()
+                        }
+                        item {
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.SpaceBetween
+                            ) {
+                                com.diajarkoding.imfit.presentation.components.common.ShimmerBox(
+                                    width = 100.dp,
+                                    height = 18.dp
+                                )
+                                com.diajarkoding.imfit.presentation.components.common.ShimmerBox(
+                                    width = 80.dp,
+                                    height = 14.dp
+                                )
                             }
-                        )
+                        }
+                        items(3) { ShimmerExerciseCard() }
+                    } else {
+                        item {
+                            Spacer(modifier = Modifier.height(IMFITSpacing.sm))
+                            WorkoutInfoCard(
+                                exerciseCount = state.workout?.exerciseCount ?: 0,
+                                estimatedMinutes = viewModel.estimatedDuration
+                            )
+                        }
+
+                        item {
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Text(
+                                    text = stringResource(R.string.workout_exercises_label),
+                                    style = MaterialTheme.typography.titleMedium,
+                                    fontWeight = FontWeight.Bold
+                                )
+                                Text(
+                                    text = stringResource(R.string.workout_exercises_total, state.workout?.exerciseCount ?: 0),
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                            }
+                        }
+
+                        val exercises = state.workout?.exercises ?: emptyList()
+                        if (exercises.isEmpty()) {
+                            item { EmptyExercisesCard() }
+                        } else {
+                            items(exercises, key = { it.id }) { templateExercise ->
+                                SwipeToDeleteExerciseItem(
+                                    templateExercise = templateExercise,
+                                    onRemove = { viewModel.removeExercise(templateExercise) },
+                                    onUpdateConfig = { sets, reps, rest ->
+                                        viewModel.updateExerciseConfig(templateExercise.id, sets, reps, rest)
+                                    }
+                                )
+                            }
+                        }
+
+                        item {
+                            IMFITOutlinedButton(
+                                text = stringResource(R.string.action_add_exercise),
+                                onClick = { onNavigateToExerciseSelection(workoutId) },
+                                icon = Icons.Default.Add
+                            )
+                        }
                     }
-                }
 
-                item {
-                    IMFITOutlinedButton(
-                        text = stringResource(R.string.action_add_exercise),
-                        onClick = { onNavigateToExerciseSelection(workoutId) },
-                        icon = Icons.Default.Add
-                    )
+                    item { Spacer(modifier = Modifier.height(100.dp)) }
                 }
-
-                item { Spacer(modifier = Modifier.height(100.dp)) }
-            }
 
             // Bottom Action Button
             Box(
@@ -268,6 +313,14 @@ fun WorkoutDetailScreen(
                     )
                 }
             }
+            }
+
+            SnackbarHost(
+                hostState = snackbarHostState,
+                modifier = Modifier
+                    .align(Alignment.BottomCenter)
+                    .padding(bottom = 100.dp)
+            )
         }
     }
 }

@@ -20,17 +20,14 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.shape.CircleShape
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.ExitToApp
-import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
 import androidx.compose.material.icons.filled.Cake
 import androidx.compose.material.icons.filled.DarkMode
 import androidx.compose.material.icons.filled.Email
 import androidx.compose.material.icons.filled.Language
 import androidx.compose.material.icons.filled.Person
-import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -38,8 +35,6 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
-import androidx.compose.material3.Switch
-import androidx.compose.material3.SwitchDefaults
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
@@ -54,15 +49,16 @@ import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
-import androidx.compose.ui.res.stringResource
 import coil.compose.AsyncImage
 import com.diajarkoding.imfit.R
-import com.diajarkoding.imfit.presentation.components.common.IMFITButton
 import com.diajarkoding.imfit.presentation.components.common.IMFITLanguageSwitch
 import com.diajarkoding.imfit.presentation.components.common.IMFITThemeSwitch
+import com.diajarkoding.imfit.presentation.components.common.ShimmerInfoCard
+import com.diajarkoding.imfit.presentation.components.common.ShimmerProfileHeader
 import com.diajarkoding.imfit.presentation.ui.progress.ProgressViewModel
 import com.diajarkoding.imfit.theme.DeletePink
 import com.diajarkoding.imfit.theme.IMFITShapes
@@ -117,44 +113,48 @@ fun ProfileScreen(
         ) {
             item { Spacer(modifier = Modifier.height(IMFITSpacing.sm)) }
 
-            // Profile Header Card
-            item {
-                ProfileHeaderCard(
-                    name = state.userName,
-                    email = state.userEmail,
-                    profilePhotoUri = null
-                )
-            }
+            if (state.isLoading) {
+                item { ShimmerProfileHeader() }
+                item { SectionTitle(title = stringResource(R.string.profile_section_info)) }
+                item { ShimmerInfoCard(itemCount = 3) }
+            } else {
+                item {
+                    ProfileHeaderCard(
+                        name = state.userName,
+                        email = state.userEmail,
+                        profilePhotoUri = state.userProfilePhotoUri
+                    )
+                }
 
-            // Profile Information Section
-            item {
-                SectionTitle(title = stringResource(R.string.profile_section_info))
-            }
+                item {
+                    SectionTitle(title = stringResource(R.string.profile_section_info))
+                }
 
-            item {
-                Card(
-                    modifier = Modifier.fillMaxWidth(),
-                    shape = IMFITShapes.Card,
-                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
-                    elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
-                ) {
-                    Column {
-                        ProfileInfoItem(
-                            icon = Icons.Default.Person,
-                            label = stringResource(R.string.label_fullname),
-                            value = state.userName
-                        )
-                        ProfileInfoItem(
-                            icon = Icons.Default.Email,
-                            label = stringResource(R.string.label_email),
-                            value = state.userEmail
-                        )
-                        ProfileInfoItem(
-                            icon = Icons.Default.Cake,
-                            label = stringResource(R.string.label_date_of_birth),
-                            value = stringResource(R.string.placeholder_dash),
-                            showDivider = false
-                        )
+                item {
+                    Card(
+                        modifier = Modifier.fillMaxWidth(),
+                        shape = IMFITShapes.Card,
+                        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+                        elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
+                    ) {
+                        Column {
+                            ProfileInfoItem(
+                                icon = Icons.Default.Person,
+                                label = stringResource(R.string.label_fullname),
+                                value = state.userName
+                            )
+                            ProfileInfoItem(
+                                icon = Icons.Default.Email,
+                                label = stringResource(R.string.label_email),
+                                value = state.userEmail
+                            )
+                            ProfileInfoItem(
+                                icon = Icons.Default.Cake,
+                                label = stringResource(R.string.label_date_of_birth),
+                                value = state.userBirthDate ?: stringResource(R.string.placeholder_dash),
+                                showDivider = false
+                            )
+                        }
                     }
                 }
             }

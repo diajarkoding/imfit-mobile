@@ -21,11 +21,13 @@ import javax.inject.Inject
 data class ProgressState(
     val userName: String = "",
     val userEmail: String = "",
+    val userBirthDate: String? = null,
+    val userProfilePhotoUri: String? = null,
     val totalVolume: Double = 0.0,
     val weeklyWorkoutTimeMinutes: Int = 0,
     val workoutDates: Set<LocalDate> = emptySet(),
     val workoutLogsByDate: Map<LocalDate, List<WorkoutLog>> = emptyMap(),
-    val isLoading: Boolean = false
+    val isLoading: Boolean = true
 )
 
 @HiltViewModel
@@ -44,41 +46,77 @@ class ProgressViewModel @Inject constructor(
     fun loadData() {
         viewModelScope.launch {
             _state.update { it.copy(isLoading = true) }
+
             val user = authRepository.getCurrentUser()
-            val userId = user?.id ?: "user_1"
-            val logs = workoutRepository.getWorkoutLogs(userId)
 
-            val now = LocalDate.now()
-            val startOfWeek = now.with(TemporalAdjusters.previousOrSame(DayOfWeek.MONDAY))
-            
-            val weeklyLogs = logs.filter { log ->
-                val logDate = Instant.ofEpochMilli(log.startTime)
-                    .atZone(ZoneId.systemDefault())
-                    .toLocalDate()
-                !logDate.isBefore(startOfWeek) && !logDate.isAfter(now)
+            if (user == null) {
+                _state.update {
+                    it.copy(
+                        userName = "Guest",
+                        userEmail = "",
+                        userBirthDate = null,
+                        userProfilePhotoUri = null,
+                        totalVolume = 0.0,
+                        weeklyWorkoutTimeMinutes = 0,
+                        workoutDates = emptySet(),
+                        workoutLogsByDate = emptyMap(),
+                        isLoading = false
+                    )
+                }
+                return@launch
             }
 
-            val weeklyTime = weeklyLogs.sumOf { it.durationMinutes }
-            val totalVolume = logs.sumOf { it.totalVolume.toDouble() }
+            try {
+                val logs = workoutRepository.getWorkoutLogs(user.id)
 
-            val workoutLogsByDate = logs.groupBy { log ->
-                Instant.ofEpochMilli(log.startTime)
-                    .atZone(ZoneId.systemDefault())
-                    .toLocalDate()
-            }
-            
-            val workoutDates = workoutLogsByDate.keys
+                val now = LocalDate.now()
+                val startOfWeek = now.with(TemporalAdjusters.previousOrSame(DayOfWeek.MONDAY))
 
-            _state.update { 
-                it.copy(
-                    userName = user?.name ?: "User",
-                    userEmail = user?.email ?: "",
-                    totalVolume = totalVolume,
-                    weeklyWorkoutTimeMinutes = weeklyTime,
-                    workoutDates = workoutDates,
-                    workoutLogsByDate = workoutLogsByDate,
-                    isLoading = false
-                )
+                val weeklyLogs = logs.filter { log ->
+                    val logDate = Instant.ofEpochMilli(log.startTime)
+                        .atZone(ZoneId.systemDefault())
+                        .toLocalDate()
+                    !logDate.isBefore(startOfWeek) && !logDate.isAfter(now)
+                }
+
+                val weeklyTime = weeklyLogs.sumOf { it.durationMinutes }
+                val totalVolume = logs.sumOf { it.totalVolume.toDouble() }
+
+                val workoutLogsByDate = logs.groupBy { log ->
+                    Instant.ofEpochMilli(log.startTime)
+                        .atZone(ZoneId.systemDefault())
+                        .toLocalDate()
+                }
+
+                val workoutDates = workoutLogsByDate.keys
+
+                _state.update {
+                    it.copy(
+                        userName = user.name,
+                        userEmail = user.email,
+                        userBirthDate = user.birthDate,
+                        userProfilePhotoUri = user.profilePhotoUri,
+                        totalVolume = totalVolume,
+                        weeklyWorkoutTimeMinutes = weeklyTime,
+                        workoutDates = workoutDates,
+                        workoutLogsByDate = workoutLogsByDate,
+                        isLoading = false
+                    )
+                }
+            } catch (e: Exception) {
+                _state.update {
+                    it.copy(
+                        userName = user.name,
+                        userEmail = user.email,
+                        userBirthDate = user.birthDate,
+                        userProfilePhotoUri = user.profilePhotoUri,
+                        totalVolume = 0.0,
+                        weeklyWorkoutTimeMinutes = 0,
+                        workoutDates = emptySet(),
+                        workoutLogsByDate = emptyMap(),
+                        isLoading = false
+                    )
+                }
             }
         }
     }

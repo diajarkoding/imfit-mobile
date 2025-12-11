@@ -16,7 +16,7 @@ import javax.inject.Inject
 
 data class WorkoutDetailState(
     val workout: WorkoutTemplate? = null,
-    val isLoading: Boolean = false,
+    val isLoading: Boolean = true,
     val error: String? = null,
     val isWorkoutActive: Boolean = false,
     val workoutFinished: Boolean = false,

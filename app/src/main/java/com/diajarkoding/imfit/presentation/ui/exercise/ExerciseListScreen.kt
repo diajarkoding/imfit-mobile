@@ -42,6 +42,7 @@ import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import com.diajarkoding.imfit.domain.model.Exercise
 import com.diajarkoding.imfit.domain.model.MuscleCategory
+import com.diajarkoding.imfit.presentation.components.common.ShimmerExerciseCard
 import com.diajarkoding.imfit.theme.IMFITShapes
 import com.diajarkoding.imfit.theme.IMFITSizes
 import com.diajarkoding.imfit.theme.IMFITSpacing
@@ -93,7 +94,12 @@ fun ExerciseListScreen(
         ) {
             item { Spacer(modifier = Modifier.height(IMFITSpacing.sm)) }
 
-            if (exercises.isEmpty()) {
+            if (state.isLoading) {
+                // Show shimmer loading cards
+                items(6) {
+                    ShimmerExerciseCard()
+                }
+            } else if (exercises.isEmpty()) {
                 item {
                     Box(
                         modifier = Modifier

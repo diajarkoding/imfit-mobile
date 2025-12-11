@@ -41,6 +41,7 @@ import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
+import com.diajarkoding.imfit.BuildConfig
 import com.diajarkoding.imfit.R
 import androidx.hilt.navigation.compose.hiltViewModel
 import com.diajarkoding.imfit.presentation.components.common.IMFITButton
@@ -161,7 +162,7 @@ fun LoginScreen(
 
             IMFITButton(
                 text = stringResource(R.string.login_button),
-                onClick = { onLoginSuccess() },
+                onClick = { viewModel.login() },
                 isLoading = state.isLoading
             )
 
@@ -228,11 +229,20 @@ fun LoginScreen(
             )
         }
 
-        SnackbarHost(
-            hostState = snackbarHostState,
+        // Version Info (Bottom Center)
+        Column(
             modifier = Modifier
                 .align(Alignment.BottomCenter)
                 .windowInsetsPadding(WindowInsets.navigationBars)
-        )
+                .padding(bottom = IMFITSpacing.lg),
+            horizontalAlignment = Alignment.CenterHorizontally
+        ) {
+            SnackbarHost(hostState = snackbarHostState)
+            Text(
+                text = "v${BuildConfig.VERSION_NAME}",
+                style = MaterialTheme.typography.labelMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f)
+            )
+        }
     }
 }

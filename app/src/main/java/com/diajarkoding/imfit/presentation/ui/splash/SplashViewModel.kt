@@ -10,7 +10,15 @@ class SplashViewModel @Inject constructor(
     private val authRepository: AuthRepository
 ) : ViewModel() {
 
-    suspend fun isLoggedIn(): Boolean {
-        return authRepository.isLoggedIn()
+    fun isLoggedIn(): Boolean {
+        return try {
+            // Since this is called from a LaunchedEffect, we can use runBlocking
+            // or better yet, make the repository call non-suspending if possible
+            kotlinx.coroutines.runBlocking {
+                authRepository.isLoggedIn()
+            }
+        } catch (e: Exception) {
+            false
+        }
     }
 }

@@ -257,6 +257,9 @@
     <string name="action_end_workout">End Workout</string>
     <string name="action_cancel_workout">Cancel Workout</string>
 
+    <!-- Warnings -->
+    <string name="warning_workout_active">Cannot modify while workout is in progress</string>
+
     <!-- Dialog Messages -->
     <string name="dialog_delete_workout">Delete Workout</string>
     <string name="dialog_delete_workout_message">Are you sure you want to delete \"%1$s\"? This action cannot be undone.</string>

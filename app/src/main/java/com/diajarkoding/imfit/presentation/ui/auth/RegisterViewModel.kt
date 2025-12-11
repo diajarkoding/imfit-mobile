@@ -1,8 +1,10 @@
 package com.diajarkoding.imfit.presentation.ui.auth
 
 import android.net.Uri
+import android.util.Log
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.diajarkoding.imfit.data.exception.AuthException
 import com.diajarkoding.imfit.domain.repository.AuthRepository
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -129,12 +131,25 @@ class RegisterViewModel @Inject constructor(
             )
 
             result.fold(
-                onSuccess = {
+                onSuccess = { user ->
+                    Log.d("RegisterViewModel", "Registration successful for user: ${user.email}")
                     _state.update { it.copy(isLoading = false, registerSuccess = true) }
                 },
-                onFailure = { error ->
+                onFailure = { exception ->
+                    Log.e("RegisterViewModel", "Registration failed", exception)
+
+                    val errorMessage = when (exception) {
+                        is AuthException.EmailAlreadyExists -> "Email is already registered. Please try logging in."
+                        is AuthException.WeakPassword -> "Password is too weak. Please use at least 6 characters."
+                        is AuthException.InvalidEmail -> "Invalid email format. Please enter a valid email."
+                        is AuthException.NetworkError -> "Network connection error. Please check your internet connection."
+                        is AuthException.RateLimited -> "Too many registration attempts. Please try again later."
+                        is AuthException.AccountNotVerified -> "Please verify your email address."
+                        else -> exception.message ?: "Registration failed. Please try again."
+                    }
+
                     _state.update {
-                        it.copy(isLoading = false, errorMessage = error.message ?: "Registration failed")
+                        it.copy(isLoading = false, errorMessage = errorMessage)
                     }
                 }
             )

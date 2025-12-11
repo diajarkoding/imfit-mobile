@@ -44,6 +44,9 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
+import com.diajarkoding.imfit.presentation.components.common.ShimmerCalendarCard
+import com.diajarkoding.imfit.presentation.components.common.ShimmerProfileHeader
+import com.diajarkoding.imfit.presentation.components.common.ShimmerBox
 import com.diajarkoding.imfit.theme.IMFITShapes
 import com.diajarkoding.imfit.theme.IMFITSizes
 import com.diajarkoding.imfit.theme.IMFITSpacing
@@ -51,6 +54,8 @@ import com.diajarkoding.imfit.theme.Primary
 import com.diajarkoding.imfit.theme.PrimaryLight
 import com.diajarkoding.imfit.R
 import androidx.compose.ui.res.stringResource
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.ui.unit.dp
 import java.time.LocalDate
 import java.time.YearMonth
 import java.time.format.TextStyle
@@ -75,41 +80,88 @@ fun ProgressScreen(
         contentPadding = PaddingValues(IMFITSpacing.screenHorizontal),
         verticalArrangement = Arrangement.spacedBy(IMFITSpacing.lg)
     ) {
-        item {
-            Spacer(modifier = Modifier.height(IMFITSpacing.sm))
-            ProfileHeader(
-                name = state.userName,
-                email = state.userEmail,
-                onProfileClick = onNavigateToProfile
-            )
-        }
-
-        item {
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(IMFITSpacing.md)
-            ) {
-                StatCard(
-                    icon = Icons.Default.FitnessCenter,
-                    title = stringResource(R.string.progress_total_volume),
-                    value = "${state.totalVolume.toInt()} kg",
-                    modifier = Modifier.weight(1f)
-                )
-                StatCard(
-                    icon = Icons.Default.Schedule,
-                    title = stringResource(R.string.progress_weekly_time),
-                    value = "${state.weeklyWorkoutTimeMinutes} min",
-                    modifier = Modifier.weight(1f)
+        if (state.isLoading) {
+            item {
+                Spacer(modifier = Modifier.height(IMFITSpacing.sm))
+                ShimmerProfileHeader()
+            }
+            item {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(IMFITSpacing.md)
+                ) {
+                    Card(
+                        modifier = Modifier.weight(1f),
+                        shape = IMFITShapes.Card,
+                        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
+                    ) {
+                        Column(
+                            modifier = Modifier.padding(IMFITSpacing.cardPadding),
+                            horizontalAlignment = Alignment.CenterHorizontally
+                        ) {
+                            ShimmerBox(width = 40.dp, height = 40.dp, shape = RoundedCornerShape(12.dp))
+                            Spacer(modifier = Modifier.height(IMFITSpacing.sm))
+                            ShimmerBox(width = 60.dp, height = 18.dp)
+                            Spacer(modifier = Modifier.height(IMFITSpacing.xxs))
+                            ShimmerBox(width = 80.dp, height = 12.dp)
+                        }
+                    }
+                    Card(
+                        modifier = Modifier.weight(1f),
+                        shape = IMFITShapes.Card,
+                        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
+                    ) {
+                        Column(
+                            modifier = Modifier.padding(IMFITSpacing.cardPadding),
+                            horizontalAlignment = Alignment.CenterHorizontally
+                        ) {
+                            ShimmerBox(width = 40.dp, height = 40.dp, shape = RoundedCornerShape(12.dp))
+                            Spacer(modifier = Modifier.height(IMFITSpacing.sm))
+                            ShimmerBox(width = 60.dp, height = 18.dp)
+                            Spacer(modifier = Modifier.height(IMFITSpacing.xxs))
+                            ShimmerBox(width = 80.dp, height = 12.dp)
+                        }
+                    }
+                }
+            }
+            item { ShimmerCalendarCard() }
+        } else {
+            item {
+                Spacer(modifier = Modifier.height(IMFITSpacing.sm))
+                ProfileHeader(
+                    name = state.userName,
+                    email = state.userEmail,
+                    onProfileClick = onNavigateToProfile
                 )
             }
-        }
 
-        item {
-            WorkoutCalendar(
-                workoutDates = state.workoutDates,
-                onDateSelected = onNavigateToWorkoutHistory,
-                onNavigateToYearlyCalendar = onNavigateToYearlyCalendar
-            )
+            item {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(IMFITSpacing.md)
+                ) {
+                    StatCard(
+                        icon = Icons.Default.FitnessCenter,
+                        title = stringResource(R.string.progress_total_volume),
+                        value = "${state.totalVolume.toInt()} kg",
+                        modifier = Modifier.weight(1f)
+                    )
+                    StatCard(
+                        icon = Icons.Default.Schedule,
+                        title = stringResource(R.string.progress_weekly_time),
+                        value = "${state.weeklyWorkoutTimeMinutes} min",
+                        modifier = Modifier.weight(1f)
+                    )
+                }
+            }
+
+            item {
+                WorkoutCalendar(
+                    workoutDates = state.workoutDates,
+                    onDateSelected = onNavigateToWorkoutHistory,
+                    onNavigateToYearlyCalendar = onNavigateToYearlyCalendar
+                )
+            }
         }
 
         item {

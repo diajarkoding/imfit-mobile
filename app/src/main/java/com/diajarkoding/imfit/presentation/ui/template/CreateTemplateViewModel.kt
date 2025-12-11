@@ -79,15 +79,22 @@ class CreateTemplateViewModel @Inject constructor(
         viewModelScope.launch {
             _state.update { it.copy(isLoading = true) }
 
-            val userId = authRepository.getCurrentUser()?.id ?: "user_1"
+            val user = authRepository.getCurrentUser()
+            if (user == null) {
+                _state.update { it.copy(isLoading = false) }
+                return@launch
+            }
 
-            workoutRepository.createTemplate(
-                userId = userId,
-                name = currentState.templateName,
-                exercises = currentState.selectedExercises
-            )
-
-            _state.update { it.copy(isLoading = false, isSaved = true) }
+            try {
+                workoutRepository.createTemplate(
+                    userId = user.id,
+                    name = currentState.templateName,
+                    exercises = currentState.selectedExercises
+                )
+                _state.update { it.copy(isLoading = false, isSaved = true) }
+            } catch (e: Exception) {
+                _state.update { it.copy(isLoading = false) }
+            }
         }
     }
 }

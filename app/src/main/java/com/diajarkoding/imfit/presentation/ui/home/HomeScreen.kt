@@ -67,6 +67,9 @@ import com.diajarkoding.imfit.domain.model.WorkoutLog
 import com.diajarkoding.imfit.domain.model.WorkoutTemplate
 import com.diajarkoding.imfit.presentation.components.common.IMFITButton
 import com.diajarkoding.imfit.presentation.components.common.IMFITInputDialog
+import com.diajarkoding.imfit.presentation.components.common.ShimmerStatCard
+import com.diajarkoding.imfit.presentation.components.common.ShimmerWelcomeSection
+import com.diajarkoding.imfit.presentation.components.common.ShimmerWorkoutCard
 import com.diajarkoding.imfit.theme.IMFITShapes
 import com.diajarkoding.imfit.theme.IMFITSizes
 import com.diajarkoding.imfit.theme.IMFITSpacing
@@ -179,48 +182,66 @@ fun HomeScreen(
             contentPadding = PaddingValues(IMFITSpacing.screenHorizontal),
             verticalArrangement = Arrangement.spacedBy(IMFITSpacing.lg)
         ) {
-            item {
-                Spacer(modifier = Modifier.height(IMFITSpacing.sm))
-                WelcomeSection(userName = state.userName)
-            }
-
-            state.lastWorkout?.let { workout ->
+            if (state.isLoading) {
                 item {
-                    LastWorkoutCard(workout = workout)
+                    Spacer(modifier = Modifier.height(IMFITSpacing.sm))
+                    ShimmerWelcomeSection()
                 }
-            }
-
-            item {
-                Spacer(modifier = Modifier.height(IMFITSpacing.sm))
-                Text(
-                    text = stringResource(R.string.home_title_my_workouts),
-                    style = MaterialTheme.typography.titleMedium,
-                    fontWeight = FontWeight.Bold
-                )
-            }
-
-            if (state.templates.isEmpty()) {
+                item { ShimmerStatCard() }
                 item {
-                    EmptyWorkoutCard(onClick = { showAddDayDialog = true })
-                }
-            } else {
-                items(state.templates) { template ->
-                    WorkoutCard(
-                        template = template,
-                        isActive = state.activeWorkoutTemplateId == template.id,
-                        onClick = { onNavigateToWorkoutDetail(template.id) }
+                    Spacer(modifier = Modifier.height(IMFITSpacing.sm))
+                    Text(
+                        text = stringResource(R.string.home_title_my_workouts),
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.Bold
                     )
                 }
-            }
+                items(3) { ShimmerWorkoutCard() }
+                item { Spacer(modifier = Modifier.height(100.dp)) }
+            } else {
+                item {
+                    Spacer(modifier = Modifier.height(IMFITSpacing.sm))
+                    WelcomeSection(userName = state.userName)
+                }
 
-            item {
-                Spacer(modifier = Modifier.height(IMFITSpacing.sm))
-                IMFITButton(
-                    text = stringResource(R.string.action_add_workout),
-                    onClick = { showAddDayDialog = true },
-                    icon = Icons.Default.Add
-                )
-                Spacer(modifier = Modifier.height(100.dp))
+                state.lastWorkout?.let { workout ->
+                    item {
+                        LastWorkoutCard(workout = workout)
+                    }
+                }
+
+                item {
+                    Spacer(modifier = Modifier.height(IMFITSpacing.sm))
+                    Text(
+                        text = stringResource(R.string.home_title_my_workouts),
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.Bold
+                    )
+                }
+
+                if (state.templates.isEmpty()) {
+                    item {
+                        EmptyWorkoutCard(onClick = { showAddDayDialog = true })
+                    }
+                } else {
+                    items(state.templates) { template ->
+                        WorkoutCard(
+                            template = template,
+                            isActive = state.activeWorkoutTemplateId == template.id,
+                            onClick = { onNavigateToWorkoutDetail(template.id) }
+                        )
+                    }
+                }
+
+                item {
+                    Spacer(modifier = Modifier.height(IMFITSpacing.sm))
+                    IMFITButton(
+                        text = stringResource(R.string.action_add_workout),
+                        onClick = { showAddDayDialog = true },
+                        icon = Icons.Default.Add
+                    )
+                    Spacer(modifier = Modifier.height(100.dp))
+                }
             }
         }
     }

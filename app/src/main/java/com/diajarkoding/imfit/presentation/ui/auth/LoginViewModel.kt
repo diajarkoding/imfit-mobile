@@ -1,9 +1,11 @@
 package com.diajarkoding.imfit.presentation.ui.auth
 
+import android.util.Log
 import androidx.annotation.StringRes
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.diajarkoding.imfit.R
+import com.diajarkoding.imfit.data.exception.AuthException
 import com.diajarkoding.imfit.domain.repository.AuthRepository
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -72,12 +74,27 @@ class LoginViewModel @Inject constructor(
             val result = authRepository.login(currentState.email, currentState.password)
 
             result.fold(
-                onSuccess = {
+                onSuccess = { user ->
+                    Log.d("LoginViewModel", "Login successful for user: ${user.email}")
                     _state.update { it.copy(isLoading = false, loginSuccess = true) }
                 },
-                onFailure = {
+                onFailure = { exception ->
+                    Log.e("LoginViewModel", "Login failed", exception)
+
+                    val errorMessageRes = when (exception) {
+                        is AuthException.InvalidCredentials -> R.string.error_invalid_email_password
+                        is AuthException.UserNotFound -> R.string.error_invalid_email_password
+                        is AuthException.AccountNotVerified -> R.string.error_login_failed
+                        is AuthException.AccountDisabled -> R.string.error_login_failed
+                        is AuthException.TooManyAttempts -> R.string.error_login_failed
+                        is AuthException.NetworkError -> R.string.error_login_failed
+                        is AuthException.RateLimited -> R.string.error_login_failed
+                        is AuthException.SessionExpired -> R.string.error_login_failed
+                        else -> R.string.error_login_failed
+                    }
+
                     _state.update {
-                        it.copy(isLoading = false, errorMessage = R.string.error_login_failed)
+                        it.copy(isLoading = false, errorMessage = errorMessageRes)
                     }
                 }
             )

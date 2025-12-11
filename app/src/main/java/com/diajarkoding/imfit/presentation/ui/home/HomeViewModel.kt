@@ -1,5 +1,6 @@
 package com.diajarkoding.imfit.presentation.ui.home
 
+import android.util.Log
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.diajarkoding.imfit.domain.model.WorkoutLog
@@ -15,9 +16,10 @@ import javax.inject.Inject
 
 data class HomeState(
     val userName: String = "User",
+    val userProfilePhotoUri: String? = null,
     val templates: List<WorkoutTemplate> = emptyList(),
     val lastWorkout: WorkoutLog? = null,
-    val isLoading: Boolean = false,
+    val isLoading: Boolean = true,
     val newlyCreatedWorkoutId: String? = null,
     val activeWorkoutTemplateId: String? = null
 )
@@ -40,21 +42,51 @@ class HomeViewModel @Inject constructor(
             _state.update { it.copy(isLoading = true) }
 
             val user = authRepository.getCurrentUser()
-            val userId = user?.id ?: "user_1"
-            val userName = user?.name ?: "User"
 
-            val templates = workoutRepository.getTemplates(userId)
-            val lastWorkout = workoutRepository.getLastWorkoutLog(userId)
-            val activeSession = workoutRepository.getActiveSession()
+            if (user == null) {
+                _state.update {
+                    it.copy(
+                        userName = "Guest",
+                        userProfilePhotoUri = null,
+                        templates = emptyList(),
+                        lastWorkout = null,
+                        isLoading = false,
+                        activeWorkoutTemplateId = null
+                    )
+                }
+                return@launch
+            }
 
-            _state.update {
-                it.copy(
-                    userName = userName,
-                    templates = templates,
-                    lastWorkout = lastWorkout,
-                    isLoading = false,
-                    activeWorkoutTemplateId = activeSession?.templateId
-                )
+            val userId = user.id
+            val userName = user.name
+            val userProfilePhotoUri = user.profilePhotoUri
+
+            try {
+                val templates = workoutRepository.getTemplates(userId)
+                val lastWorkout = workoutRepository.getLastWorkoutLog(userId)
+                val activeSession = workoutRepository.getActiveSession()
+
+                _state.update {
+                    it.copy(
+                        userName = userName,
+                        userProfilePhotoUri = userProfilePhotoUri,
+                        templates = templates,
+                        lastWorkout = lastWorkout,
+                        isLoading = false,
+                        activeWorkoutTemplateId = activeSession?.templateId
+                    )
+                }
+            } catch (e: Exception) {
+                _state.update {
+                    it.copy(
+                        userName = userName,
+                        userProfilePhotoUri = userProfilePhotoUri,
+                        templates = emptyList(),
+                        lastWorkout = null,
+                        isLoading = false,
+                        activeWorkoutTemplateId = null
+                    )
+                }
             }
         }
     }
@@ -71,14 +103,24 @@ class HomeViewModel @Inject constructor(
 
     fun createWorkout(name: String) {
         viewModelScope.launch {
-            val userId = authRepository.getCurrentUser()?.id ?: "user_1"
-            val newWorkout = workoutRepository.createTemplate(
-                userId = userId,
-                name = name,
-                exercises = emptyList()
-            )
-            _state.update { it.copy(newlyCreatedWorkoutId = newWorkout.id) }
-            refresh()
+            val user = authRepository.getCurrentUser()
+            if (user == null) {
+                // User is not authenticated, cannot create workout
+                return@launch
+            }
+
+            try {
+                val newWorkout = workoutRepository.createTemplate(
+                    userId = user.id,
+                    name = name,
+                    exercises = emptyList()
+                )
+                _state.update { it.copy(newlyCreatedWorkoutId = newWorkout.id) }
+                refresh()
+            } catch (e: Exception) {
+                // Handle error silently or show error state
+                Log.e("HomeViewModel", "Failed to create workout: ${e.message}", e)
+            }
         }
     }
 

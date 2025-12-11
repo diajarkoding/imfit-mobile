@@ -37,6 +37,12 @@ class WorkoutRepositoryImpl @Inject constructor(
     private var activeSession: WorkoutSession? = null
 
     override suspend fun getTemplates(userId: String): List<WorkoutTemplate> {
+        // Validate user ID format - if it's not a valid UUID, use fake data
+        if (!isValidUUID(userId)) {
+            Log.w("WorkoutRepository", "Invalid user ID format: $userId, using fake data")
+            return FakeWorkoutDataSource.getTemplates(userId)
+        }
+
         return try {
             supabaseClient.postgrest.from("workout_templates")
                 .select(Columns.raw("*, template_exercises(*, exercises(*))")) {
@@ -71,18 +77,24 @@ class WorkoutRepositoryImpl @Inject constructor(
     }
 
     override suspend fun createTemplate(userId: String, name: String, exercises: List<TemplateExercise>): WorkoutTemplate {
+        // Validate user ID format - if it's not a valid UUID, use fake data
+        if (!isValidUUID(userId)) {
+            Log.w("WorkoutRepository", "Invalid user ID format: $userId, using fake data")
+            return FakeWorkoutDataSource.createTemplate(userId, name, exercises)
+        }
+
         return try {
             val templateId = UUID.randomUUID().toString()
-            
+
             val templateDto = CreateTemplateDto(
                 id = templateId,
                 userId = userId,
                 name = name
             )
-            
+
             supabaseClient.postgrest.from("workout_templates")
                 .insert(templateDto)
-            
+
             exercises.forEachIndexed { index, exercise ->
                 val exerciseDto = TemplateExerciseDto(
                     templateId = templateId,
@@ -95,7 +107,7 @@ class WorkoutRepositoryImpl @Inject constructor(
                 supabaseClient.postgrest.from("template_exercises")
                     .insert(exerciseDto)
             }
-            
+
             getTemplateById(templateId) ?: WorkoutTemplate(
                 id = templateId,
                 userId = userId,
@@ -224,6 +236,12 @@ class WorkoutRepositoryImpl @Inject constructor(
         return try {
             val userId = supabaseClient.auth.currentUserOrNull()?.id
                 ?: return FakeWorkoutDataSource.finishWorkout()
+
+            // Validate user ID format - if it's not a valid UUID, use fake data
+            if (!isValidUUID(userId)) {
+                Log.w("WorkoutRepository", "Invalid user ID format: $userId, using fake data")
+                return FakeWorkoutDataSource.finishWorkout()
+            }
             
             val workoutLogId = UUID.randomUUID().toString()
             val startDateTime = OffsetDateTime.ofInstant(
@@ -302,6 +320,12 @@ class WorkoutRepositoryImpl @Inject constructor(
     }
 
     override suspend fun getWorkoutLogs(userId: String): List<WorkoutLog> {
+        // Validate user ID format - if it's not a valid UUID, use fake data
+        if (!isValidUUID(userId)) {
+            Log.w("WorkoutRepository", "Invalid user ID format: $userId, using fake data")
+            return FakeWorkoutDataSource.getWorkoutLogs(userId)
+        }
+
         return try {
             supabaseClient.postgrest.from("workout_logs")
                 .select(Columns.raw("*, exercise_logs(*, exercises(*), workout_sets(*))")) {
@@ -331,6 +355,12 @@ class WorkoutRepositoryImpl @Inject constructor(
     }
 
     override suspend fun getLastWorkoutLog(userId: String): WorkoutLog? {
+        // Validate user ID format - if it's not a valid UUID, use fake data
+        if (!isValidUUID(userId)) {
+            Log.w("WorkoutRepository", "Invalid user ID format: $userId, using fake data")
+            return FakeWorkoutDataSource.getLastWorkoutLog(userId)
+        }
+
         return try {
             supabaseClient.postgrest.from("workout_logs")
                 .select(Columns.raw("*, exercise_logs(*, exercises(*), workout_sets(*))")) {
@@ -343,6 +373,21 @@ class WorkoutRepositoryImpl @Inject constructor(
         } catch (e: Exception) {
             Log.e("WorkoutRepository", "Error fetching last workout log: ${e.message}", e)
             FakeWorkoutDataSource.getLastWorkoutLog(userId)
+        }
+    }
+
+    companion object {
+        /**
+         * Validates if a string is a valid UUID format
+         */
+        private fun isValidUUID(uuid: String): Boolean {
+            return try {
+                // UUID regex pattern for validation
+                val uuidRegex = Regex("^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$")
+                uuidRegex.matches(uuid)
+            } catch (e: Exception) {
+                false
+            }
         }
     }
 }

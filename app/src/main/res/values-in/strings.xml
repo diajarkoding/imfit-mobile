@@ -258,6 +258,9 @@
     <string name="action_end_workout">Akhiri Latihan</string>
     <string name="action_cancel_workout">Batalkan Latihan</string>
 
+    <!-- Warnings -->
+    <string name="warning_workout_active">Tidak dapat mengubah saat latihan sedang berlangsung</string>
+
     <!-- Dialog Messages -->
     <string name="dialog_delete_workout">Hapus Latihan</string>
     <string name="dialog_delete_workout_message">Apakah kamu yakin ingin menghapus \"%1$s\"? Tindakan ini tidak dapat dibatalkan.</string>

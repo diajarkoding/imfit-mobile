@@ -12,7 +12,8 @@ import kotlinx.coroutines.launch
 import javax.inject.Inject
 
 data class WorkoutSummaryState(
-    val workoutLog: WorkoutLog? = null
+    val workoutLog: WorkoutLog? = null,
+    val isLoading: Boolean = true
 )
 
 @HiltViewModel
@@ -25,8 +26,9 @@ class WorkoutSummaryViewModel @Inject constructor(
 
     fun loadWorkoutLog(workoutLogId: String) {
         viewModelScope.launch {
+            _state.update { it.copy(isLoading = true) }
             val log = workoutRepository.getWorkoutLogById(workoutLogId)
-            _state.update { it.copy(workoutLog = log) }
+            _state.update { it.copy(workoutLog = log, isLoading = false) }
         }
     }
 }

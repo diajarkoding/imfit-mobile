@@ -37,7 +37,6 @@ import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.OutlinedTextFieldDefaults
@@ -58,9 +57,9 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.res.stringResource
 import androidx.hilt.navigation.compose.hiltViewModel
 import com.diajarkoding.imfit.R
 import com.diajarkoding.imfit.domain.model.WorkoutLog
@@ -184,8 +183,9 @@ fun HomeScreen(
         ) {
             if (state.isLoading) {
                 item {
-                    Spacer(modifier = Modifier.height(IMFITSpacing.sm))
+                    Spacer(modifier = Modifier.height(IMFITSpacing.xs))
                     ShimmerWelcomeSection()
+                    Spacer(modifier = Modifier.height(IMFITSpacing.xs))
                 }
                 item { ShimmerStatCard() }
                 item {
@@ -200,8 +200,9 @@ fun HomeScreen(
                 item { Spacer(modifier = Modifier.height(100.dp)) }
             } else {
                 item {
-                    Spacer(modifier = Modifier.height(IMFITSpacing.sm))
+                    Spacer(modifier = Modifier.height(IMFITSpacing.xs))
                     WelcomeSection(userName = state.userName)
+                    Spacer(modifier = Modifier.height(IMFITSpacing.xs))
                 }
 
                 state.lastWorkout?.let { workout ->
@@ -475,7 +476,10 @@ private fun WorkoutCard(
                         )
                         Spacer(modifier = Modifier.width(IMFITSpacing.xs))
                         Text(
-                            text = stringResource(R.string.home_exercises_count, template.exerciseCount),
+                            text = stringResource(
+                                R.string.home_exercises_count,
+                                template.exerciseCount
+                            ),
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )

@@ -353,3 +353,102 @@ fun ShimmerCategoryGrid(
         }
     }
 }
+
+/**
+ * Shimmer component for workout summary stat cards
+ */
+@Composable
+fun ShimmerSummaryStatCard(
+    modifier: Modifier = Modifier
+) {
+    Card(
+        modifier = modifier,
+        shape = IMFITShapes.Card,
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+        elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(IMFITSpacing.cardPadding),
+            horizontalAlignment = Alignment.CenterHorizontally
+        ) {
+            ShimmerBox(
+                width = 44.dp,
+                height = 44.dp,
+                shape = RoundedCornerShape(12.dp)
+            )
+            Spacer(modifier = Modifier.height(IMFITSpacing.md))
+            ShimmerBox(width = 60.dp, height = 24.dp)
+            Spacer(modifier = Modifier.height(IMFITSpacing.xs))
+            ShimmerBox(width = 50.dp, height = 14.dp)
+        }
+    }
+}
+
+/**
+ * Shimmer component for exercise summary cards
+ */
+@Composable
+fun ShimmerExerciseSummaryCard(
+    modifier: Modifier = Modifier
+) {
+    Card(
+        modifier = modifier.fillMaxWidth(),
+        shape = IMFITShapes.Card,
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+        elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(IMFITSpacing.cardPadding)
+        ) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    ShimmerBox(
+                        width = 40.dp,
+                        height = 40.dp,
+                        shape = RoundedCornerShape(12.dp)
+                    )
+                    Spacer(modifier = Modifier.width(IMFITSpacing.md))
+                    Column {
+                        ShimmerBox(width = 100.dp, height = 16.dp)
+                        Spacer(modifier = Modifier.height(IMFITSpacing.xs))
+                        ShimmerBox(width = 60.dp, height = 12.dp)
+                    }
+                }
+                Column(horizontalAlignment = Alignment.End) {
+                    ShimmerBox(width = 40.dp, height = 14.dp)
+                    Spacer(modifier = Modifier.height(IMFITSpacing.xs))
+                    ShimmerBox(width = 50.dp, height = 12.dp)
+                }
+            }
+        }
+    }
+}
+
+/**
+ * Shimmer component for workout summary success header
+ */
+@Composable
+fun ShimmerSummaryHeader(
+    modifier: Modifier = Modifier
+) {
+    Column(
+        modifier = modifier
+            .fillMaxWidth()
+            .padding(vertical = IMFITSpacing.xxl),
+        horizontalAlignment = Alignment.CenterHorizontally
+    ) {
+        ShimmerCircle(size = 88.dp)
+        Spacer(modifier = Modifier.height(IMFITSpacing.xxl))
+        ShimmerBox(width = 180.dp, height = 28.dp)
+        Spacer(modifier = Modifier.height(IMFITSpacing.sm))
+        ShimmerBox(width = 120.dp, height = 18.dp)
+    }
+}

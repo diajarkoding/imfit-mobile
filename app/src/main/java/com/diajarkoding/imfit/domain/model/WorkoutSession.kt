@@ -6,8 +6,7 @@ data class WorkoutSession(
     val templateName: String,
     val startTime: Long,
     val exerciseLogs: List<ExerciseLog>,
-    val currentExerciseIndex: Int = 0,
-    val restTimerSeconds: Int = 90
+    val currentExerciseIndex: Int = 0
 ) {
     val totalVolume: Float
         get() = exerciseLogs.sumOf { it.totalVolume.toDouble() }.toFloat()
@@ -26,4 +25,11 @@ data class WorkoutSession(
 
     val durationMinutes: Int
         get() = ((System.currentTimeMillis() - startTime) / 60000).toInt()
+
+    /**
+     * Gets the rest time in seconds for a specific exercise.
+     */
+    fun getRestSecondsForExercise(exerciseIndex: Int): Int =
+        exerciseLogs.getOrNull(exerciseIndex)?.restSeconds ?: 60
 }
+

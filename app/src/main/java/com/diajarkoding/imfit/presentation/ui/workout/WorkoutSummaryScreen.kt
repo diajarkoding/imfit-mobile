@@ -51,6 +51,10 @@ import com.diajarkoding.imfit.theme.SetComplete
 import com.diajarkoding.imfit.R
 import androidx.compose.ui.res.stringResource
 
+import com.diajarkoding.imfit.presentation.components.common.ShimmerSummaryHeader
+import com.diajarkoding.imfit.presentation.components.common.ShimmerSummaryStatCard
+import com.diajarkoding.imfit.presentation.components.common.ShimmerExerciseSummaryCard
+
 @Composable
 fun WorkoutSummaryScreen(
     workoutLogId: String,
@@ -71,97 +75,120 @@ fun WorkoutSummaryScreen(
             contentPadding = PaddingValues(IMFITSpacing.screenHorizontal),
             verticalArrangement = Arrangement.spacedBy(IMFITSpacing.lg)
         ) {
-            item {
-                Column(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(vertical = IMFITSpacing.xxl),
-                    horizontalAlignment = Alignment.CenterHorizontally
-                ) {
-                    Box(
-                        modifier = Modifier
-                            .size(88.dp)
-                            .shadow(12.dp, CircleShape, spotColor = SetComplete.copy(alpha = 0.4f))
-                            .clip(CircleShape)
-                            .background(
-                                Brush.linearGradient(
-                                    listOf(SetComplete, SetComplete.copy(alpha = 0.8f))
-                                )
-                            ),
-                        contentAlignment = Alignment.Center
+            if (state.isLoading) {
+                // Shimmer loading state
+                item { ShimmerSummaryHeader() }
+                item {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(IMFITSpacing.md)
                     ) {
-                        Icon(
-                            imageVector = Icons.Default.CheckCircle,
-                            contentDescription = null,
-                            tint = Color.White,
-                            modifier = Modifier.size(IMFITSizes.iconXxl)
-                        )
+                        ShimmerSummaryStatCard(modifier = Modifier.weight(1f))
+                        ShimmerSummaryStatCard(modifier = Modifier.weight(1f))
                     }
-
-                    Spacer(modifier = Modifier.height(IMFITSpacing.xxl))
-
+                }
+                item {
                     Text(
-                        text = stringResource(R.string.summary_great_work),
-                        style = MaterialTheme.typography.headlineMedium,
+                        text = stringResource(R.string.summary_title),
+                        style = MaterialTheme.typography.titleMedium,
                         fontWeight = FontWeight.Bold,
-                        color = MaterialTheme.colorScheme.onBackground
+                        modifier = Modifier.padding(top = IMFITSpacing.sm)
                     )
+                }
+                items(3) { ShimmerExerciseSummaryCard() }
+            } else {
+                item {
+                    Column(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(vertical = IMFITSpacing.xxl),
+                        horizontalAlignment = Alignment.CenterHorizontally
+                    ) {
+                        Box(
+                            modifier = Modifier
+                                .size(88.dp)
+                                .shadow(12.dp, CircleShape, spotColor = SetComplete.copy(alpha = 0.4f))
+                                .clip(CircleShape)
+                                .background(
+                                    Brush.linearGradient(
+                                        listOf(SetComplete, SetComplete.copy(alpha = 0.8f))
+                                    )
+                                ),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.CheckCircle,
+                                contentDescription = null,
+                                tint = Color.White,
+                                modifier = Modifier.size(IMFITSizes.iconXxl)
+                            )
+                        }
 
-                    Spacer(modifier = Modifier.height(IMFITSpacing.sm))
+                        Spacer(modifier = Modifier.height(IMFITSpacing.xxl))
 
-                    state.workoutLog?.let { log ->
                         Text(
-                            text = log.templateName,
-                            style = MaterialTheme.typography.titleMedium,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                            text = stringResource(R.string.summary_great_work),
+                            style = MaterialTheme.typography.headlineMedium,
+                            fontWeight = FontWeight.Bold,
+                            color = MaterialTheme.colorScheme.onBackground
+                        )
+
+                        Spacer(modifier = Modifier.height(IMFITSpacing.sm))
+
+                        state.workoutLog?.let { log ->
+                            Text(
+                                text = log.templateName,
+                                style = MaterialTheme.typography.titleMedium,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
+                    }
+                }
+
+                item {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(IMFITSpacing.md)
+                    ) {
+                        SummaryStatCard(
+                            modifier = Modifier.weight(1f),
+                            icon = Icons.Default.Timer,
+                            value = state.workoutLog?.formattedDuration ?: stringResource(R.string.workout_duration_zero),
+                            label = stringResource(R.string.label_duration)
+                        )
+                        SummaryStatCard(
+                            modifier = Modifier.weight(1f),
+                            icon = Icons.Default.FitnessCenter,
+                            value = state.workoutLog?.formattedVolume ?: stringResource(R.string.workout_volume_zero),
+                            label = stringResource(R.string.label_volume)
                         )
                     }
                 }
-            }
 
-            item {
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(IMFITSpacing.md)
-                ) {
-                    SummaryStatCard(
-                        modifier = Modifier.weight(1f),
-                        icon = Icons.Default.Timer,
-                        value = state.workoutLog?.formattedDuration ?: stringResource(R.string.workout_duration_zero),
-                        label = stringResource(R.string.label_duration)
-                    )
-                    SummaryStatCard(
-                        modifier = Modifier.weight(1f),
-                        icon = Icons.Default.FitnessCenter,
-                        value = state.workoutLog?.formattedVolume ?: stringResource(R.string.workout_volume_zero),
-                        label = stringResource(R.string.label_volume)
+                item {
+                    Text(
+                        text = stringResource(R.string.summary_title),
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.Bold,
+                        modifier = Modifier.padding(top = IMFITSpacing.sm)
                     )
                 }
-            }
 
-            item {
-                Text(
-                    text = stringResource(R.string.summary_title),
-                    style = MaterialTheme.typography.titleMedium,
-                    fontWeight = FontWeight.Bold,
-                    modifier = Modifier.padding(top = IMFITSpacing.sm)
-                )
-            }
-
-            state.workoutLog?.exerciseLogs?.let { exerciseLogs ->
-                items(exerciseLogs) { exerciseLog ->
-                    ExerciseSummaryCard(exerciseLog = exerciseLog)
+                state.workoutLog?.exerciseLogs?.let { exerciseLogs ->
+                    items(exerciseLogs) { exerciseLog ->
+                        ExerciseSummaryCard(exerciseLog = exerciseLog)
+                    }
                 }
-            }
 
-            item {
-                Spacer(modifier = Modifier.height(IMFITSpacing.lg))
-                IMFITButton(
-                    text = stringResource(R.string.action_done),
-                    onClick = onNavigateToHome,
-                    icon = Icons.Default.CheckCircle
-                )
-                Spacer(modifier = Modifier.height(IMFITSpacing.xxl))
+                item {
+                    Spacer(modifier = Modifier.height(IMFITSpacing.lg))
+                    IMFITButton(
+                        text = stringResource(R.string.action_done),
+                        onClick = onNavigateToHome,
+                        icon = Icons.Default.CheckCircle
+                    )
+                    Spacer(modifier = Modifier.height(IMFITSpacing.xxl))
+                }
             }
         }
     }

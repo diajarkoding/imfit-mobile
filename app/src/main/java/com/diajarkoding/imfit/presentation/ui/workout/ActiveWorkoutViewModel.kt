@@ -19,7 +19,7 @@ data class ActiveWorkoutState(
     val session: WorkoutSession? = null,
     val elapsedMinutes: Int = 0,
     val isRestTimerActive: Boolean = false,
-    val restTimerSeconds: Int = 90,
+    val restTimerSeconds: Int = 60,
     val showCancelDialog: Boolean = false,
     val workoutLogId: String? = null
 )
@@ -102,8 +102,8 @@ class ActiveWorkoutViewModel @Inject constructor(
             workoutRepository.updateActiveSession(updatedSession)
             _state.update { it.copy(session = updatedSession) }
 
-            // Start rest timer
-            startRestTimer()
+            // Start rest timer with exercise-specific rest time
+            startRestTimer(exerciseIndex)
         }
     }
 
@@ -147,17 +147,25 @@ class ActiveWorkoutViewModel @Inject constructor(
         }
     }
 
-    private fun startRestTimer() {
+    /**
+     * Starts the rest timer using the rest time from the specified exercise.
+     * @param exerciseIndex The index of the exercise to get rest time from.
+     */
+    private fun startRestTimer(exerciseIndex: Int) {
         restTimerJob?.cancel()
+        
+        // Get rest time from the specific exercise in the session
+        val restSeconds = _state.value.session?.getRestSecondsForExercise(exerciseIndex) ?: 60
+        
         _state.update {
             it.copy(
                 isRestTimerActive = true,
-                restTimerSeconds = it.session?.restTimerSeconds ?: 90
+                restTimerSeconds = restSeconds
             )
         }
 
         restTimerJob = viewModelScope.launch {
-            var remaining = _state.value.restTimerSeconds
+            var remaining = restSeconds
             while (remaining > 0) {
                 delay(1000)
                 remaining--

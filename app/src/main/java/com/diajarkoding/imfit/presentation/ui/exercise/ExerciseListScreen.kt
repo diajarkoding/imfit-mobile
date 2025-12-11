@@ -37,18 +37,17 @@ import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
+import com.diajarkoding.imfit.R
 import com.diajarkoding.imfit.domain.model.Exercise
 import com.diajarkoding.imfit.domain.model.MuscleCategory
 import com.diajarkoding.imfit.presentation.components.common.ShimmerExerciseCard
 import com.diajarkoding.imfit.theme.IMFITShapes
 import com.diajarkoding.imfit.theme.IMFITSizes
 import com.diajarkoding.imfit.theme.IMFITSpacing
-import com.diajarkoding.imfit.theme.Primary
-import com.diajarkoding.imfit.R
-import androidx.compose.ui.res.stringResource
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -75,7 +74,10 @@ fun ExerciseListScreen(
                 },
                 navigationIcon = {
                     IconButton(onClick = onNavigateBack) {
-                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = stringResource(R.string.action_back))
+                        Icon(
+                            Icons.AutoMirrored.Filled.ArrowBack,
+                            contentDescription = stringResource(R.string.action_back)
+                        )
                     }
                 },
                 colors = TopAppBarDefaults.topAppBarColors(
@@ -92,8 +94,6 @@ fun ExerciseListScreen(
             contentPadding = PaddingValues(IMFITSpacing.screenHorizontal),
             verticalArrangement = Arrangement.spacedBy(IMFITSpacing.md)
         ) {
-            item { Spacer(modifier = Modifier.height(IMFITSpacing.sm)) }
-
             if (state.isLoading) {
                 // Show shimmer loading cards
                 items(6) {

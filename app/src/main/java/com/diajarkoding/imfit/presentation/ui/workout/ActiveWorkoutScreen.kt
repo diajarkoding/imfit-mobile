@@ -1,8 +1,5 @@
 package com.diajarkoding.imfit.presentation.ui.workout
 
-import androidx.compose.animation.AnimatedVisibility
-import androidx.compose.animation.fadeIn
-import androidx.compose.animation.fadeOut
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -17,7 +14,6 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.layout.wrapContentSize
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.text.KeyboardOptions
@@ -52,12 +48,14 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Dialog
 import androidx.hilt.navigation.compose.hiltViewModel
+import com.diajarkoding.imfit.R
 import com.diajarkoding.imfit.domain.model.ExerciseLog
 import com.diajarkoding.imfit.domain.model.WorkoutSet
 import com.diajarkoding.imfit.presentation.components.common.IMFITButton
@@ -70,10 +68,7 @@ import com.diajarkoding.imfit.theme.IMFITSizes
 import com.diajarkoding.imfit.theme.IMFITSpacing
 import com.diajarkoding.imfit.theme.Primary
 import com.diajarkoding.imfit.theme.PrimaryLight
-import com.diajarkoding.imfit.theme.RestTimer
 import com.diajarkoding.imfit.theme.SetComplete
-import com.diajarkoding.imfit.R
-import androidx.compose.ui.res.stringResource
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -130,7 +125,10 @@ fun ActiveWorkoutScreen(
                             fontWeight = FontWeight.Bold
                         )
                         Text(
-                            text = stringResource(R.string.active_workout_elapsed, state.elapsedMinutes),
+                            text = stringResource(
+                                R.string.active_workout_elapsed,
+                                state.elapsedMinutes
+                            ),
                             style = MaterialTheme.typography.bodySmall,
                             color = SetComplete
                         )
@@ -138,7 +136,10 @@ fun ActiveWorkoutScreen(
                 },
                 navigationIcon = {
                     IconButton(onClick = { viewModel.showCancelDialog() }) {
-                        Icon(Icons.Default.Close, contentDescription = stringResource(R.string.action_cancel))
+                        Icon(
+                            Icons.Default.Close,
+                            contentDescription = stringResource(R.string.action_cancel)
+                        )
                     }
                 },
                 colors = TopAppBarDefaults.topAppBarColors(
@@ -189,7 +190,10 @@ fun ActiveWorkoutScreen(
                     .padding(padding),
                 contentAlignment = Alignment.Center
             ) {
-                Text(stringResource(R.string.loading_workout), color = MaterialTheme.colorScheme.onSurfaceVariant)
+                Text(
+                    stringResource(R.string.loading_workout),
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
             }
         } else {
             LazyColumn(
@@ -199,8 +203,6 @@ fun ActiveWorkoutScreen(
                 contentPadding = PaddingValues(IMFITSpacing.screenHorizontal),
                 verticalArrangement = Arrangement.spacedBy(IMFITSpacing.lg)
             ) {
-                item { Spacer(modifier = Modifier.height(IMFITSpacing.sm)) }
-                
                 state.session?.exerciseLogs?.forEachIndexed { exerciseIndex, exerciseLog ->
                     item(key = "exercise_$exerciseIndex") {
                         ExerciseSection(
@@ -213,7 +215,12 @@ fun ActiveWorkoutScreen(
                                 viewModel.completeSet(exerciseIndex, setIndex)
                             },
                             onAddSet = { viewModel.addSet(exerciseIndex) },
-                            onRemoveSet = { setIndex -> viewModel.removeSet(exerciseIndex, setIndex) }
+                            onRemoveSet = { setIndex ->
+                                viewModel.removeSet(
+                                    exerciseIndex,
+                                    setIndex
+                                )
+                            }
                         )
                     }
                 }
@@ -317,11 +324,32 @@ private fun ExerciseSection(
                     .padding(horizontal = IMFITSpacing.xs),
                 horizontalArrangement = Arrangement.SpaceBetween
             ) {
-                Text(stringResource(R.string.label_set_header), style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.width(36.dp), textAlign = TextAlign.Center)
-                Text(stringResource(R.string.label_kg_header), style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.weight(1f), textAlign = TextAlign.Center)
-                Text(stringResource(R.string.label_reps_header), style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.weight(1f), textAlign = TextAlign.Center)
+                Text(
+                    stringResource(R.string.label_set_header),
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.width(36.dp),
+                    textAlign = TextAlign.Center
+                )
+                Text(
+                    stringResource(R.string.label_kg_header),
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.weight(1f),
+                    textAlign = TextAlign.Center
+                )
+                Text(
+                    stringResource(R.string.label_reps_header),
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.weight(1f),
+                    textAlign = TextAlign.Center
+                )
                 Spacer(modifier = Modifier.width(32.dp))
-                Text(stringResource(R.string.exercise_placeholder), modifier = Modifier.width(44.dp))
+                Text(
+                    stringResource(R.string.exercise_placeholder),
+                    modifier = Modifier.width(44.dp)
+                )
             }
 
             Spacer(modifier = Modifier.height(IMFITSpacing.sm))
@@ -381,7 +409,7 @@ private fun SetInputRow(
     onDelete: () -> Unit
 ) {
     val rowBackground = if (set.isCompleted) SetComplete.copy(alpha = 0.08f)
-                        else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.3f)
+    else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.3f)
     val inputBackground = MaterialTheme.colorScheme.background
 
     Row(
@@ -506,8 +534,8 @@ private fun SetInputRow(
             Icon(
                 imageVector = Icons.Default.Delete,
                 contentDescription = stringResource(R.string.action_delete),
-                tint = if (canDelete && !set.isCompleted) DeletePink.copy(alpha = 0.8f) 
-                      else MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.2f),
+                tint = if (canDelete && !set.isCompleted) DeletePink.copy(alpha = 0.8f)
+                else MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.2f),
                 modifier = Modifier.size(20.dp)
             )
         }

@@ -20,7 +20,6 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
-import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -55,10 +54,12 @@ import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
+import com.diajarkoding.imfit.R
 import com.diajarkoding.imfit.domain.model.ExerciseLog
 import com.diajarkoding.imfit.domain.model.WorkoutLog
 import com.diajarkoding.imfit.theme.IMFITShapes
@@ -67,8 +68,6 @@ import com.diajarkoding.imfit.theme.IMFITSpacing
 import com.diajarkoding.imfit.theme.Primary
 import com.diajarkoding.imfit.theme.PrimaryLight
 import com.diajarkoding.imfit.theme.SetComplete
-import com.diajarkoding.imfit.R
-import androidx.compose.ui.res.stringResource
 import java.time.LocalDate
 import java.time.format.DateTimeFormatter
 
@@ -85,7 +84,7 @@ fun WorkoutHistoryDetailScreen(
     } catch (e: Exception) {
         LocalDate.now()
     }
-    
+
     val workoutsForDate = state.workoutLogsByDate[localDate] ?: emptyList()
     val dayName = localDate.format(DateTimeFormatter.ofPattern("EEEE"))
     val formattedDate = localDate.format(DateTimeFormatter.ofPattern("MMMM d, yyyy"))
@@ -115,7 +114,10 @@ fun WorkoutHistoryDetailScreen(
                 },
                 navigationIcon = {
                     IconButton(onClick = onNavigateBack) {
-                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = stringResource(R.string.action_back))
+                        Icon(
+                            Icons.AutoMirrored.Filled.ArrowBack,
+                            contentDescription = stringResource(R.string.action_back)
+                        )
                     }
                 },
                 colors = TopAppBarDefaults.topAppBarColors(
@@ -132,8 +134,6 @@ fun WorkoutHistoryDetailScreen(
             contentPadding = PaddingValues(IMFITSpacing.screenHorizontal),
             verticalArrangement = Arrangement.spacedBy(IMFITSpacing.md)
         ) {
-            item { Spacer(modifier = Modifier.height(IMFITSpacing.xs)) }
-
             if (workoutsForDate.isEmpty()) {
                 item { EmptyWorkoutCard() }
             } else {
@@ -206,7 +206,13 @@ private fun DaySummaryCard(workouts: List<WorkoutLog>) {
                             fontWeight = FontWeight.Bold
                         )
                         Text(
-                            text = if (workouts.size > 1) stringResource(R.string.summary_workouts_completed_plural, workouts.size) else stringResource(R.string.summary_workouts_completed, workouts.size),
+                            text = if (workouts.size > 1) stringResource(
+                                R.string.summary_workouts_completed_plural,
+                                workouts.size
+                            ) else stringResource(
+                                R.string.summary_workouts_completed,
+                                workouts.size
+                            ),
                             style = MaterialTheme.typography.bodySmall,
                             color = SetComplete
                         )
@@ -345,7 +351,11 @@ private fun WorkoutLogCard(
                         )
                         if (totalWorkouts > 1) {
                             Text(
-                                text = stringResource(R.string.workout_number_of_total, workoutNumber, totalWorkouts),
+                                text = stringResource(
+                                    R.string.workout_number_of_total,
+                                    workoutNumber,
+                                    totalWorkouts
+                                ),
                                 style = MaterialTheme.typography.labelSmall,
                                 color = Primary
                             )
@@ -397,14 +407,14 @@ private fun WorkoutLogCard(
 
             if (workoutLog.exerciseLogs.isNotEmpty()) {
                 Spacer(modifier = Modifier.height(IMFITSpacing.lg))
-                
+
                 Text(
                     text = stringResource(R.string.summary_exercise_breakdown),
                     style = MaterialTheme.typography.labelLarge,
                     fontWeight = FontWeight.SemiBold,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
-                
+
                 Spacer(modifier = Modifier.height(IMFITSpacing.sm))
 
                 Column(
@@ -491,9 +501,9 @@ private fun ExerciseProgressRow(exerciseLog: ExerciseLog) {
                     fontWeight = FontWeight.Bold
                 )
             }
-            
+
             Spacer(modifier = Modifier.height(IMFITSpacing.xs))
-            
+
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.SpaceBetween,

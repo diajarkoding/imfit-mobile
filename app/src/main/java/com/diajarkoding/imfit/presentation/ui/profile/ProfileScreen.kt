@@ -57,6 +57,7 @@ import coil.compose.AsyncImage
 import com.diajarkoding.imfit.R
 import com.diajarkoding.imfit.presentation.components.common.IMFITLanguageSwitch
 import com.diajarkoding.imfit.presentation.components.common.IMFITThemeSwitch
+import com.diajarkoding.imfit.presentation.components.common.IMFITProfilePhoto
 import com.diajarkoding.imfit.presentation.components.common.ShimmerInfoCard
 import com.diajarkoding.imfit.presentation.components.common.ShimmerProfileHeader
 import com.diajarkoding.imfit.presentation.ui.progress.ProgressViewModel
@@ -94,7 +95,10 @@ fun ProfileScreen(
                 },
                 navigationIcon = {
                     IconButton(onClick = onNavigateBack) {
-                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = stringResource(R.string.action_back))
+                        Icon(
+                            Icons.AutoMirrored.Filled.ArrowBack,
+                            contentDescription = stringResource(R.string.action_back)
+                        )
                     }
                 },
                 colors = TopAppBarDefaults.topAppBarColors(
@@ -111,7 +115,6 @@ fun ProfileScreen(
             contentPadding = PaddingValues(IMFITSpacing.screenHorizontal),
             verticalArrangement = Arrangement.spacedBy(IMFITSpacing.lg)
         ) {
-            item { Spacer(modifier = Modifier.height(IMFITSpacing.sm)) }
 
             if (state.isLoading) {
                 item { ShimmerProfileHeader() }
@@ -151,7 +154,8 @@ fun ProfileScreen(
                             ProfileInfoItem(
                                 icon = Icons.Default.Cake,
                                 label = stringResource(R.string.label_date_of_birth),
-                                value = state.userBirthDate ?: stringResource(R.string.placeholder_dash),
+                                value = state.userBirthDate
+                                    ?: stringResource(R.string.placeholder_dash),
                                 showDivider = false
                             )
                         }
@@ -176,7 +180,9 @@ fun ProfileScreen(
                         SettingsToggleItem(
                             icon = Icons.Default.DarkMode,
                             title = stringResource(R.string.settings_dark_mode),
-                            subtitle = if (isDarkMode) stringResource(R.string.settings_dark_mode_on) else stringResource(R.string.settings_dark_mode_off),
+                            subtitle = if (isDarkMode) stringResource(R.string.settings_dark_mode_on) else stringResource(
+                                R.string.settings_dark_mode_off
+                            ),
                             content = {
                                 IMFITThemeSwitch(
                                     isDarkMode = isDarkMode,
@@ -189,7 +195,9 @@ fun ProfileScreen(
                         SettingsToggleItem(
                             icon = Icons.Default.Language,
                             title = stringResource(R.string.settings_language),
-                            subtitle = if (isIndonesian) stringResource(R.string.settings_language_id) else stringResource(R.string.settings_language_en),
+                            subtitle = if (isIndonesian) stringResource(R.string.settings_language_id) else stringResource(
+                                R.string.settings_language_en
+                            ),
                             showDivider = false,
                             content = {
                                 IMFITLanguageSwitch(
@@ -277,42 +285,18 @@ private fun ProfileHeaderCard(
                     .padding(IMFITSpacing.xl),
                 horizontalAlignment = Alignment.CenterHorizontally
             ) {
-                // Profile Photo
+                // Profile Photo with border
                 Box(
                     modifier = Modifier
                         .size(100.dp)
                         .shadow(6.dp, CircleShape)
-                        .clip(CircleShape)
-                        .background(MaterialTheme.colorScheme.surface)
                         .border(3.dp, Primary, CircleShape),
                     contentAlignment = Alignment.Center
                 ) {
-                    if (profilePhotoUri != null) {
-                        AsyncImage(
-                            model = profilePhotoUri,
-                            contentDescription = stringResource(R.string.desc_profile_photo),
-                            modifier = Modifier
-                                .size(100.dp)
-                                .clip(CircleShape),
-                            contentScale = ContentScale.Crop
-                        )
-                    } else {
-                        Box(
-                            modifier = Modifier
-                                .size(100.dp)
-                                .background(
-                                    Brush.linearGradient(listOf(Primary, PrimaryLight))
-                                ),
-                            contentAlignment = Alignment.Center
-                        ) {
-                            Icon(
-                                imageVector = Icons.Default.Person,
-                                contentDescription = null,
-                                tint = Color.White,
-                                modifier = Modifier.size(48.dp)
-                            )
-                        }
-                    }
+                    IMFITProfilePhoto(
+                        profilePhotoUri = profilePhotoUri,
+                        size = 100.dp
+                    )
                 }
 
                 Spacer(modifier = Modifier.height(IMFITSpacing.lg))

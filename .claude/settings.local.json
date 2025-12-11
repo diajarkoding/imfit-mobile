@@ -2,7 +2,13 @@
   "permissions": {
     "allow": [
       "Bash(./gradlew:*)",
-      "Bash(find:*)"
+      "Bash(find:*)",
+      "Bash(tasklist:*)",
+      "Bash(findstr:*)",
+      "Bash(.\\gradlew:*)",
+      "Bash(wmic:*)",
+      "Bash(taskkill:*)",
+      "Bash(powershell:*)"
     ],
     "deny": [],
     "ask": []

@@ -9,6 +9,9 @@ interface TemplateExerciseDao {
     @Query("SELECT * FROM template_exercises WHERE template_id = :templateId ORDER BY order_index")
     fun getExercisesByTemplate(templateId: String): Flow<List<TemplateExerciseEntity>>
 
+    @Query("SELECT * FROM template_exercises WHERE template_id = :templateId ORDER BY order_index")
+    suspend fun getExercisesForTemplateList(templateId: String): List<TemplateExerciseEntity>
+
     @Query("SELECT * FROM template_exercises WHERE template_id = :templateId AND exercise_id = :exerciseId")
     suspend fun getTemplateExercise(templateId: String, exerciseId: String): TemplateExerciseEntity?
 

@@ -206,7 +206,8 @@ class WorkoutRepositoryImpl @Inject constructor(
                         reps = templateExercise.reps,
                         isCompleted = false
                     )
-                }
+                },
+                restSeconds = templateExercise.restSeconds
             )
         }
         

@@ -53,6 +53,7 @@ import com.diajarkoding.imfit.theme.IMFITSpacing
 import com.diajarkoding.imfit.theme.Primary
 import com.diajarkoding.imfit.theme.PrimaryLight
 import com.diajarkoding.imfit.R
+import com.diajarkoding.imfit.presentation.components.common.IMFITProfilePhoto
 import androidx.compose.ui.res.stringResource
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.ui.unit.dp
@@ -131,6 +132,7 @@ fun ProgressScreen(
                 ProfileHeader(
                     name = state.userName,
                     email = state.userEmail,
+                    profilePhotoUri = state.userProfilePhotoUri,
                     onProfileClick = onNavigateToProfile
                 )
             }
@@ -174,6 +176,7 @@ fun ProgressScreen(
 private fun ProfileHeader(
     name: String,
     email: String,
+    profilePhotoUri: String?,
     onProfileClick: () -> Unit
 ) {
     Card(
@@ -199,22 +202,10 @@ private fun ProfileHeader(
                     .fillMaxWidth()
                     .padding(IMFITSpacing.cardPaddingLarge)
             ) {
-                Box(
-                    modifier = Modifier
-                        .size(64.dp)
-                        .clip(CircleShape)
-                        .background(
-                            Brush.linearGradient(listOf(Primary, PrimaryLight))
-                        ),
-                    contentAlignment = Alignment.Center
-                ) {
-                    Icon(
-                        imageVector = Icons.Default.Person,
-                        contentDescription = null,
-                        tint = Color.White,
-                        modifier = Modifier.size(IMFITSizes.iconLg)
-                    )
-                }
+                IMFITProfilePhoto(
+                    profilePhotoUri = profilePhotoUri,
+                    size = 64.dp
+                )
                 Spacer(modifier = Modifier.width(IMFITSpacing.lg))
                 Column(modifier = Modifier.weight(1f)) {
                     Text(

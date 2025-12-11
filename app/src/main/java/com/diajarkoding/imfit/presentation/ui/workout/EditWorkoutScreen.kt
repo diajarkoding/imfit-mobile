@@ -20,7 +20,6 @@ import androidx.compose.foundation.layout.statusBars
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
@@ -59,10 +58,12 @@ import androidx.compose.ui.draw.scale
 import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
+import com.diajarkoding.imfit.R
 import com.diajarkoding.imfit.domain.model.TemplateExercise
 import com.diajarkoding.imfit.presentation.components.common.IMFITButton
 import com.diajarkoding.imfit.presentation.components.common.IMFITDialog
@@ -74,8 +75,6 @@ import com.diajarkoding.imfit.theme.IMFITSpacing
 import com.diajarkoding.imfit.theme.Primary
 import com.diajarkoding.imfit.theme.PrimaryLight
 import com.diajarkoding.imfit.theme.SetComplete
-import com.diajarkoding.imfit.R
-import androidx.compose.ui.res.stringResource
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -136,7 +135,6 @@ fun EditWorkoutScreen(
                 verticalArrangement = Arrangement.spacedBy(IMFITSpacing.lg)
             ) {
                 item {
-                    Spacer(modifier = Modifier.height(IMFITSpacing.sm))
                     Text(
                         text = stringResource(R.string.workout_name_label),
                         style = MaterialTheme.typography.titleSmall,
@@ -171,7 +169,10 @@ fun EditWorkoutScreen(
                             fontWeight = FontWeight.Bold
                         )
                         Text(
-                            text = stringResource(R.string.workout_exercises_total, state.exercises.size),
+                            text = stringResource(
+                                R.string.workout_exercises_total,
+                                state.exercises.size
+                            ),
                             style = MaterialTheme.typography.bodyMedium,
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
@@ -226,7 +227,11 @@ private fun EmptyExercisesPlaceholder() {
     Card(
         modifier = Modifier.fillMaxWidth(),
         shape = IMFITShapes.Card,
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f))
+        colors = CardDefaults.cardColors(
+            containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(
+                alpha = 0.5f
+            )
+        )
     ) {
         Column(
             modifier = Modifier

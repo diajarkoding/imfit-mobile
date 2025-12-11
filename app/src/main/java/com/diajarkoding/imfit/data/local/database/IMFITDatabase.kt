@@ -16,9 +16,10 @@ import com.diajarkoding.imfit.data.local.entity.*
         TemplateExerciseEntity::class,
         WorkoutLogEntity::class,
         ExerciseLogEntity::class,
-        WorkoutSetEntity::class
+        WorkoutSetEntity::class,
+        ActiveSessionEntity::class
     ],
-    version = 1,
+    version = 2,
     exportSchema = false
 )
 @TypeConverters(Converters::class)
@@ -30,6 +31,7 @@ abstract class IMFITDatabase : RoomDatabase() {
     abstract fun workoutLogDao(): WorkoutLogDao
     abstract fun exerciseLogDao(): ExerciseLogDao
     abstract fun workoutSetDao(): WorkoutSetDao
+    abstract fun activeSessionDao(): ActiveSessionDao
 
     companion object {
         @Volatile

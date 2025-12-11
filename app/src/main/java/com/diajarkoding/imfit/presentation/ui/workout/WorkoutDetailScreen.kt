@@ -2,7 +2,6 @@ package com.diajarkoding.imfit.presentation.ui.workout
 
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.animateFloatAsState
-import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -21,7 +20,6 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
@@ -41,6 +39,8 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.SnackbarHost
+import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.SwipeToDismissBox
 import androidx.compose.material3.SwipeToDismissBoxValue
 import androidx.compose.material3.Text
@@ -53,6 +53,7 @@ import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -61,10 +62,12 @@ import androidx.compose.ui.draw.scale
 import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
+import com.diajarkoding.imfit.R
 import com.diajarkoding.imfit.domain.model.Exercise
 import com.diajarkoding.imfit.domain.model.TemplateExercise
 import com.diajarkoding.imfit.presentation.components.common.IMFITButton
@@ -72,20 +75,14 @@ import com.diajarkoding.imfit.presentation.components.common.IMFITDialog
 import com.diajarkoding.imfit.presentation.components.common.IMFITDialogType
 import com.diajarkoding.imfit.presentation.components.common.IMFITInputDialog
 import com.diajarkoding.imfit.presentation.components.common.IMFITOutlinedButton
+import com.diajarkoding.imfit.presentation.components.common.ShimmerExerciseCard
+import com.diajarkoding.imfit.presentation.components.common.ShimmerStatCard
 import com.diajarkoding.imfit.theme.DeletePink
 import com.diajarkoding.imfit.theme.IMFITShapes
 import com.diajarkoding.imfit.theme.IMFITSizes
 import com.diajarkoding.imfit.theme.IMFITSpacing
 import com.diajarkoding.imfit.theme.Primary
 import com.diajarkoding.imfit.theme.PrimaryLight
-import com.diajarkoding.imfit.theme.SetComplete
-import com.diajarkoding.imfit.R
-import com.diajarkoding.imfit.presentation.components.common.ShimmerExerciseCard
-import com.diajarkoding.imfit.presentation.components.common.ShimmerStatCard
-import androidx.compose.material3.SnackbarHost
-import androidx.compose.material3.SnackbarHostState
-import androidx.compose.runtime.rememberCoroutineScope
-import androidx.compose.ui.res.stringResource
 import kotlinx.coroutines.launch
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -134,7 +131,10 @@ fun WorkoutDetailScreen(
         IMFITDialog(
             onDismissRequest = { showDeleteDialog = false },
             title = stringResource(R.string.dialog_delete_workout),
-            message = stringResource(R.string.dialog_delete_workout_message, state.workout?.name ?: ""),
+            message = stringResource(
+                R.string.dialog_delete_workout_message,
+                state.workout?.name ?: ""
+            ),
             confirmText = stringResource(R.string.action_delete),
             dismissText = stringResource(R.string.action_cancel),
             onConfirm = {
@@ -215,7 +215,6 @@ fun WorkoutDetailScreen(
                 ) {
                     if (state.isLoading) {
                         item {
-                            Spacer(modifier = Modifier.height(IMFITSpacing.sm))
                             ShimmerStatCard()
                         }
                         item {
@@ -236,7 +235,6 @@ fun WorkoutDetailScreen(
                         items(3) { ShimmerExerciseCard() }
                     } else {
                         item {
-                            Spacer(modifier = Modifier.height(IMFITSpacing.sm))
                             WorkoutInfoCard(
                                 exerciseCount = state.workout?.exerciseCount ?: 0,
                                 estimatedMinutes = viewModel.estimatedDuration
@@ -255,7 +253,10 @@ fun WorkoutDetailScreen(
                                     fontWeight = FontWeight.Bold
                                 )
                                 Text(
-                                    text = stringResource(R.string.workout_exercises_total, state.workout?.exerciseCount ?: 0),
+                                    text = stringResource(
+                                        R.string.workout_exercises_total,
+                                        state.workout?.exerciseCount ?: 0
+                                    ),
                                     style = MaterialTheme.typography.bodyMedium,
                                     color = MaterialTheme.colorScheme.onSurfaceVariant
                                 )
@@ -271,7 +272,12 @@ fun WorkoutDetailScreen(
                                     templateExercise = templateExercise,
                                     onRemove = { viewModel.removeExercise(templateExercise) },
                                     onUpdateConfig = { sets, reps, rest ->
-                                        viewModel.updateExerciseConfig(templateExercise.id, sets, reps, rest)
+                                        viewModel.updateExerciseConfig(
+                                            templateExercise.id,
+                                            sets,
+                                            reps,
+                                            rest
+                                        )
                                     }
                                 )
                             }
@@ -289,30 +295,30 @@ fun WorkoutDetailScreen(
                     item { Spacer(modifier = Modifier.height(100.dp)) }
                 }
 
-            // Bottom Action Button
-            Box(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .shadow(8.dp, spotColor = Color.Black.copy(alpha = 0.1f))
-                    .background(MaterialTheme.colorScheme.surface)
-                    .padding(IMFITSpacing.screenHorizontal)
-                    .padding(vertical = IMFITSpacing.lg)
-            ) {
-                if (state.isWorkoutActive) {
-                    IMFITButton(
-                        text = stringResource(R.string.action_end_workout),
-                        onClick = { viewModel.endWorkout() },
-                        icon = Icons.Default.Stop
-                    )
-                } else {
-                    IMFITButton(
-                        text = stringResource(R.string.action_start_workout),
-                        onClick = { onStartWorkout(workoutId) },
-                        enabled = (state.workout?.exerciseCount ?: 0) > 0,
-                        icon = Icons.Default.PlayArrow
-                    )
+                // Bottom Action Button
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .shadow(8.dp, spotColor = Color.Black.copy(alpha = 0.1f))
+                        .background(MaterialTheme.colorScheme.surface)
+                        .padding(IMFITSpacing.screenHorizontal)
+                        .padding(vertical = IMFITSpacing.lg)
+                ) {
+                    if (state.isWorkoutActive) {
+                        IMFITButton(
+                            text = stringResource(R.string.action_end_workout),
+                            onClick = { viewModel.endWorkout() },
+                            icon = Icons.Default.Stop
+                        )
+                    } else {
+                        IMFITButton(
+                            text = stringResource(R.string.action_start_workout),
+                            onClick = { onStartWorkout(workoutId) },
+                            enabled = (state.workout?.exerciseCount ?: 0) > 0,
+                            icon = Icons.Default.PlayArrow
+                        )
+                    }
                 }
-            }
             }
 
             SnackbarHost(
@@ -342,7 +348,10 @@ private fun SwipeToDeleteExerciseItem(
         IMFITDialog(
             onDismissRequest = { showDeleteConfirmation = false },
             title = stringResource(R.string.dialog_remove_exercise),
-            message = stringResource(R.string.dialog_remove_exercise_message, templateExercise.name),
+            message = stringResource(
+                R.string.dialog_remove_exercise_message,
+                templateExercise.name
+            ),
             icon = Icons.Default.Delete,
             type = IMFITDialogType.DESTRUCTIVE,
             confirmText = stringResource(R.string.action_remove),
@@ -426,9 +435,18 @@ private fun ExerciseItemCard(
             }
         ) {
             Column(verticalArrangement = Arrangement.spacedBy(IMFITSpacing.lg)) {
-                EditField(label = stringResource(R.string.workout_label_sets), value = editSets, onValueChange = { editSets = it.filter { c -> c.isDigit() } })
-                EditField(label = stringResource(R.string.workout_label_reps), value = editReps, onValueChange = { editReps = it.filter { c -> c.isDigit() } })
-                EditField(label = stringResource(R.string.workout_label_rest), value = editRest, onValueChange = { editRest = it.filter { c -> c.isDigit() } })
+                EditField(
+                    label = stringResource(R.string.workout_label_sets),
+                    value = editSets,
+                    onValueChange = { editSets = it.filter { c -> c.isDigit() } })
+                EditField(
+                    label = stringResource(R.string.workout_label_reps),
+                    value = editReps,
+                    onValueChange = { editReps = it.filter { c -> c.isDigit() } })
+                EditField(
+                    label = stringResource(R.string.workout_label_rest),
+                    value = editRest,
+                    onValueChange = { editRest = it.filter { c -> c.isDigit() } })
             }
         }
     }
@@ -438,11 +456,11 @@ private fun ExerciseItemCard(
         shape = IMFITShapes.Card,
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
         elevation = CardDefaults.cardElevation(defaultElevation = 2.dp),
-        onClick = { 
+        onClick = {
             editSets = templateExercise.sets.toString()
             editReps = templateExercise.reps.toString()
             editRest = templateExercise.restSeconds.toString()
-            showEditDialog = true 
+            showEditDialog = true
         }
     ) {
         Row(

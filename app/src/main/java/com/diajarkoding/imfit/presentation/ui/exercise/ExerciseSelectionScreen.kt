@@ -50,18 +50,19 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
+import com.diajarkoding.imfit.R
 import com.diajarkoding.imfit.domain.model.Exercise
 import com.diajarkoding.imfit.domain.model.MuscleCategory
 import com.diajarkoding.imfit.presentation.components.common.IMFITButton
+import com.diajarkoding.imfit.presentation.components.common.ShimmerExerciseCard
 import com.diajarkoding.imfit.theme.IMFITShapes
 import com.diajarkoding.imfit.theme.IMFITSizes
 import com.diajarkoding.imfit.theme.IMFITSpacing
 import com.diajarkoding.imfit.theme.Primary
-import com.diajarkoding.imfit.R
-import androidx.compose.ui.res.stringResource
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -87,7 +88,10 @@ fun ExerciseSelectionScreen(
                 },
                 navigationIcon = {
                     IconButton(onClick = onNavigateBack) {
-                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = stringResource(R.string.action_back))
+                        Icon(
+                            Icons.AutoMirrored.Filled.ArrowBack,
+                            contentDescription = stringResource(R.string.action_back)
+                        )
                     }
                 },
                 colors = TopAppBarDefaults.topAppBarColors(
@@ -107,7 +111,10 @@ fun ExerciseSelectionScreen(
                         .padding(vertical = IMFITSpacing.lg)
                 ) {
                     IMFITButton(
-                        text = stringResource(R.string.exercise_add_count, state.selectedExercises.size),
+                        text = stringResource(
+                            R.string.exercise_add_count,
+                            state.selectedExercises.size
+                        ),
                         onClick = { onExercisesSelected(state.selectedExercises) },
                         icon = Icons.Default.Check
                     )
@@ -211,14 +218,17 @@ fun ExerciseSelectionScreen(
                 contentPadding = PaddingValues(IMFITSpacing.screenHorizontal),
                 verticalArrangement = Arrangement.spacedBy(IMFITSpacing.md)
             ) {
-                item { Spacer(modifier = Modifier.height(IMFITSpacing.xs)) }
-
-                items(state.filteredExercises) { exercise ->
-                    SelectableExerciseCard(
-                        exercise = exercise,
-                        isSelected = state.selectedExercises.contains(exercise),
-                        onToggle = { viewModel.toggleExercise(exercise) }
-                    )
+                if (state.isLoading) {
+                    // Shimmer loading state
+                    items(8) { ShimmerExerciseCard() }
+                } else {
+                    items(state.filteredExercises) { exercise ->
+                        SelectableExerciseCard(
+                            exercise = exercise,
+                            isSelected = state.selectedExercises.contains(exercise),
+                            onToggle = { viewModel.toggleExercise(exercise) }
+                        )
+                    }
                 }
 
                 item { Spacer(modifier = Modifier.height(100.dp)) }

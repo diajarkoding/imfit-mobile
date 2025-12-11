@@ -32,4 +32,14 @@ interface WorkoutLogDao {
 
     @Query("DELETE FROM workout_logs")
     suspend fun deleteAllWorkoutLogs()
+
+    // Sync-aware queries
+    @Query("SELECT * FROM workout_logs WHERE sync_status = :syncStatus")
+    suspend fun getWorkoutLogsBySyncStatus(syncStatus: String): List<WorkoutLogEntity>
+
+    @Query("UPDATE workout_logs SET sync_status = :syncStatus WHERE id = :id")
+    suspend fun updateSyncStatus(id: String, syncStatus: String)
+
+    @Query("SELECT * FROM workout_logs WHERE user_id = :userId ORDER BY date DESC")
+    suspend fun getWorkoutLogsByUserList(userId: String): List<WorkoutLogEntity>
 }

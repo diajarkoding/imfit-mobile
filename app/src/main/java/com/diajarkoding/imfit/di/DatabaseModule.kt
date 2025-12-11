@@ -48,4 +48,7 @@ object DatabaseModule {
 
     @Provides
     fun provideWorkoutSetDao(database: IMFITDatabase) = database.workoutSetDao()
+
+    @Provides
+    fun provideActiveSessionDao(database: IMFITDatabase) = database.activeSessionDao()
 }

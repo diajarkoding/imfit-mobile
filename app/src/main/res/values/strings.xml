@@ -107,6 +107,7 @@
     <string name="home_last_workout">Last Workout</string>
     <string name="home_my_workouts">My Workouts</string>
     <string name="home_no_workouts">No workouts yet</string>
+    <string name="home_no_workouts_yet">No workouts yet</string>
     <string name="home_create_first">Create your first workout to get started</string>
     <string name="home_create_workout">Create New Workout</string>
 

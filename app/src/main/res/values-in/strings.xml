@@ -108,6 +108,7 @@
     <string name="home_last_workout">Latihan Terakhir</string>
     <string name="home_my_workouts">Latihan Saya</string>
     <string name="home_no_workouts">Belum ada latihan</string>
+    <string name="home_no_workouts_yet">Belum ada latihan</string>
     <string name="home_create_first">Buat latihan pertamamu untuk memulai</string>
     <string name="home_create_workout">Buat Latihan Baru</string>
 

@@ -206,10 +206,8 @@ fun HomeScreen(
                     Spacer(modifier = Modifier.height(IMFITSpacing.xs))
                 }
 
-                state.lastWorkout?.let { workout ->
-                    item {
-                        LastWorkoutCard(workout = workout)
-                    }
+                item {
+                    LastWorkoutCard(workout = state.lastWorkout)
                 }
 
                 item {
@@ -275,7 +273,7 @@ private fun WelcomeSection(userName: String) {
 }
 
 @Composable
-private fun LastWorkoutCard(workout: WorkoutLog) {
+private fun LastWorkoutCard(workout: WorkoutLog?) {
     Card(
         modifier = Modifier
             .fillMaxWidth()
@@ -305,10 +303,11 @@ private fun LastWorkoutCard(workout: WorkoutLog) {
                         color = Primary
                     )
                     Text(
-                        text = workout.templateName,
+                        text = workout?.templateName ?: stringResource(R.string.home_no_workouts_yet),
                         style = MaterialTheme.typography.titleMedium,
                         fontWeight = FontWeight.Bold,
-                        color = MaterialTheme.colorScheme.onSurface
+                        color = if (workout != null) MaterialTheme.colorScheme.onSurface 
+                               else MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f)
                     )
                 }
                 Spacer(modifier = Modifier.height(IMFITSpacing.lg))
@@ -318,12 +317,12 @@ private fun LastWorkoutCard(workout: WorkoutLog) {
                 ) {
                     StatChip(
                         icon = Icons.Default.Timer,
-                        value = workout.formattedDuration,
+                        value = workout?.formattedDuration ?: "--:--",
                         label = "Duration"
                     )
                     StatChip(
                         icon = Icons.Default.FitnessCenter,
-                        value = workout.formattedVolume,
+                        value = workout?.formattedVolume ?: "0 kg",
                         label = "Volume"
                     )
                 }

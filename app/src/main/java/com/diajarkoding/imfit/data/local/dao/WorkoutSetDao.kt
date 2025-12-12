@@ -38,4 +38,43 @@ interface WorkoutSetDao {
 
     @Query("DELETE FROM workout_sets")
     suspend fun deleteAllSets()
+
+    /**
+     * Gets all sets from the last completed workout for a specific exercise.
+     * Returns sets ordered by set_number for per-set weight mapping.
+     * Filters out soft-deleted workout logs and sets with weight <= 0.
+     */
+    @Query("""
+        SELECT ws.* FROM workout_sets ws
+        INNER JOIN workout_logs wl ON ws.workout_log_id = wl.id
+        WHERE ws.exercise_id = :exerciseId
+            AND wl.user_id = :userId
+            AND wl.deleted_at IS NULL
+            AND ws.weight > 0
+            AND ws.is_completed = 1
+        ORDER BY wl.date DESC, ws.set_number ASC
+    """)
+    suspend fun getLastSetsForExercise(exerciseId: String, userId: String): List<WorkoutSetEntity>
+
+    /**
+     * Gets a map of set_number to weight for the last workout of a specific exercise.
+     * Uses a subquery to get only sets from the most recent workout log.
+     */
+    @Query("""
+        SELECT ws.* FROM workout_sets ws
+        WHERE ws.workout_log_id = (
+            SELECT ws2.workout_log_id FROM workout_sets ws2
+            INNER JOIN workout_logs wl ON ws2.workout_log_id = wl.id
+            WHERE ws2.exercise_id = :exerciseId
+                AND wl.user_id = :userId
+                AND wl.deleted_at IS NULL
+                AND ws2.weight > 0
+                AND ws2.is_completed = 1
+            ORDER BY wl.date DESC
+            LIMIT 1
+        )
+        AND ws.exercise_id = :exerciseId
+        ORDER BY ws.set_number ASC
+    """)
+    suspend fun getLastWorkoutSetsForExercise(exerciseId: String, userId: String): List<WorkoutSetEntity>
 }

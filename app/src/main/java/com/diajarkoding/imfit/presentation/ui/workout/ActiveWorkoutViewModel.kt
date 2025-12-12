@@ -5,6 +5,7 @@ import androidx.lifecycle.viewModelScope
 import com.diajarkoding.imfit.domain.model.ExerciseLog
 import com.diajarkoding.imfit.domain.model.WorkoutSession
 import com.diajarkoding.imfit.domain.model.WorkoutSet
+import com.diajarkoding.imfit.domain.repository.AuthRepository
 import com.diajarkoding.imfit.domain.repository.WorkoutRepository
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.Job
@@ -26,7 +27,8 @@ data class ActiveWorkoutState(
 
 @HiltViewModel
 class ActiveWorkoutViewModel @Inject constructor(
-    private val workoutRepository: WorkoutRepository
+    private val workoutRepository: WorkoutRepository,
+    private val authRepository: AuthRepository
 ) : ViewModel() {
 
     private val _state = MutableStateFlow(ActiveWorkoutState())
@@ -37,8 +39,20 @@ class ActiveWorkoutViewModel @Inject constructor(
 
     fun startWorkout(templateId: String) {
         viewModelScope.launch {
+            // First check for an existing active session
+            val existingSession = workoutRepository.getActiveSession()
+            
+            if (existingSession != null) {
+                // Restore existing session - preserve all data including completed sets
+                android.util.Log.d("ActiveWorkoutVM", "Restoring existing session: ${existingSession.id}")
+                _state.update { it.copy(session = existingSession) }
+                startElapsedTimeCounter()
+                return@launch
+            }
+            
+            // No existing session - create a new one
             val template = workoutRepository.getTemplateById(templateId) ?: return@launch
-
+            
             val session = workoutRepository.startWorkout(template)
             
             // Prefill volumes BEFORE updating state to prevent race condition
@@ -51,17 +65,25 @@ class ActiveWorkoutViewModel @Inject constructor(
         }
     }
 
+    /**
+     * Pre-fills workout sets with weights from the last completed workout.
+     * Uses local Room database for efficient per-set weight lookup.
+     */
     private suspend fun prefillVolumes(session: WorkoutSession): WorkoutSession {
         return try {
+            val userId = authRepository.getCurrentUser()?.id ?: return session
+            
             val updatedLogs = session.exerciseLogs.map { log ->
-                val lastLog = workoutRepository.getLastExerciseLog(log.exercise.id)
-                android.util.Log.d("ActiveWorkoutVM", "Prefill ${log.exercise.name}: hasLastLog=${lastLog != null}, lastSets=${lastLog?.sets?.size ?: 0}")
-                if (lastLog != null) {
-                    val newSets = log.sets.mapIndexed { index, set ->
-                        val lastSet = lastLog.sets.getOrNull(index)
-                        if (lastSet != null && set.weight == 0f) {
-                            android.util.Log.d("ActiveWorkoutVM", "  Set ${index + 1}: prefilling weight=${lastSet.weight}")
-                            set.copy(weight = lastSet.weight)
+                // Get per-set weights from local Room database
+                val lastWeights = workoutRepository.getLastWeightsForExercise(log.exercise.id, userId)
+                android.util.Log.d("ActiveWorkoutVM", "Prefill ${log.exercise.name}: lastWeights=$lastWeights")
+                
+                if (lastWeights.isNotEmpty()) {
+                    val newSets = log.sets.map { set ->
+                        val lastWeight = lastWeights[set.setNumber]
+                        if (lastWeight != null && set.weight == 0f) {
+                            android.util.Log.d("ActiveWorkoutVM", "  Set ${set.setNumber}: prefilling weight=$lastWeight")
+                            set.copy(weight = lastWeight)
                         } else {
                             set
                         }

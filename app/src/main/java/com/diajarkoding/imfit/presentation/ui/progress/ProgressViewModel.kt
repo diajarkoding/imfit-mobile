@@ -90,12 +90,15 @@ class ProgressViewModel @Inject constructor(
 
                 val workoutDates = workoutLogsByDate.keys
 
+                // Get signed URL for profile photo (private bucket)
+                val signedAvatarUrl = authRepository.getSignedAvatarUrl(user.profilePhotoUri)
+                
                 _state.update {
                     it.copy(
                         userName = user.name,
                         userEmail = user.email,
                         userBirthDate = user.birthDate,
-                        userProfilePhotoUri = user.profilePhotoUri,
+                        userProfilePhotoUri = signedAvatarUrl,
                         totalVolume = totalVolume,
                         weeklyWorkoutTimeMinutes = weeklyTime,
                         workoutDates = workoutDates,
@@ -104,12 +107,15 @@ class ProgressViewModel @Inject constructor(
                     )
                 }
             } catch (e: Exception) {
+                // Get signed URL for profile photo even on error
+                val signedAvatarUrl = authRepository.getSignedAvatarUrl(user.profilePhotoUri)
+                
                 _state.update {
                     it.copy(
                         userName = user.name,
                         userEmail = user.email,
                         userBirthDate = user.birthDate,
-                        userProfilePhotoUri = user.profilePhotoUri,
+                        userProfilePhotoUri = signedAvatarUrl,
                         totalVolume = 0.0,
                         weeklyWorkoutTimeMinutes = 0,
                         workoutDates = emptySet(),

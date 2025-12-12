@@ -60,6 +60,8 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
+import androidx.compose.ui.text.input.TextFieldValue
+import androidx.compose.ui.text.TextRange
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Dialog
@@ -737,10 +739,25 @@ private fun SetInputRow(
                 .padding(horizontal = 2.dp),
             contentAlignment = Alignment.Center
         ) {
+            // Use TextFieldValue to maintain cursor position at end
+            var weightTextFieldValue by remember(set.weight) {
+                val text = if (set.weight > 0) set.weight.toInt().toString() else ""
+                mutableStateOf(TextFieldValue(text, TextRange(text.length)))
+            }
+            
             OutlinedTextField(
-                value = if (set.weight > 0) set.weight.toInt().toString() else "",
-                onValueChange = { value ->
-                    val weight = value.toFloatOrNull() ?: 0f
+                value = weightTextFieldValue,
+                onValueChange = { newValue ->
+                    // Only allow numeric input
+                    val filtered = newValue.text.filter { it.isDigit() }
+                    val weight = filtered.toFloatOrNull() ?: 0f
+                    
+                    // Update the text field value with cursor at end
+                    weightTextFieldValue = TextFieldValue(
+                        text = if (weight > 0) weight.toInt().toString() else filtered,
+                        selection = TextRange((if (weight > 0) weight.toInt().toString() else filtered).length)
+                    )
+                    
                     onUpdate(weight, set.reps)
                 },
                 modifier = Modifier.fillMaxSize(),
@@ -786,10 +803,25 @@ private fun SetInputRow(
                 .padding(horizontal = 2.dp),
             contentAlignment = Alignment.Center
         ) {
+            // Use TextFieldValue to maintain cursor position at end
+            var repsTextFieldValue by remember(set.reps) {
+                val text = if (set.reps > 0) set.reps.toString() else ""
+                mutableStateOf(TextFieldValue(text, TextRange(text.length)))
+            }
+            
             OutlinedTextField(
-                value = if (set.reps > 0) set.reps.toString() else "",
-                onValueChange = { value ->
-                    val reps = value.toIntOrNull() ?: 0
+                value = repsTextFieldValue,
+                onValueChange = { newValue ->
+                    // Only allow numeric input
+                    val filtered = newValue.text.filter { it.isDigit() }
+                    val reps = filtered.toIntOrNull() ?: 0
+                    
+                    // Update the text field value with cursor at end
+                    repsTextFieldValue = TextFieldValue(
+                        text = if (reps > 0) reps.toString() else filtered,
+                        selection = TextRange((if (reps > 0) reps.toString() else filtered).length)
+                    )
+                    
                     onUpdate(set.weight, reps)
                 },
                 modifier = Modifier.fillMaxSize(),

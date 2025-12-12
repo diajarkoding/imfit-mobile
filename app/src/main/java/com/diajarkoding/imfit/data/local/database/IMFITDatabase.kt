@@ -33,7 +33,7 @@ import com.diajarkoding.imfit.data.local.entity.WorkoutTemplateEntity
         WorkoutSetEntity::class,
         ActiveSessionEntity::class
     ],
-    version = 2,
+    version = 3,
     exportSchema = false
 )
 @TypeConverters(Converters::class)

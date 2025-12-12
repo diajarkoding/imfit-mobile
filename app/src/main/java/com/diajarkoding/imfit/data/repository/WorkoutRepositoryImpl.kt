@@ -2,6 +2,8 @@ package com.diajarkoding.imfit.data.repository
 
 import android.util.Log
 import com.diajarkoding.imfit.data.local.FakeWorkoutDataSource
+import com.diajarkoding.imfit.data.local.dao.ActiveSessionDao
+import com.diajarkoding.imfit.data.local.entity.ActiveSessionEntity
 import com.diajarkoding.imfit.data.remote.dto.ExerciseDto
 import com.diajarkoding.imfit.data.remote.dto.ExerciseLogDto
 import com.diajarkoding.imfit.data.remote.dto.TemplateExerciseDto
@@ -9,7 +11,9 @@ import com.diajarkoding.imfit.data.remote.dto.WorkoutLogDto
 import com.diajarkoding.imfit.data.remote.dto.WorkoutSetDto
 import com.diajarkoding.imfit.data.remote.dto.WorkoutTemplateDto
 import com.diajarkoding.imfit.data.remote.dto.toDomain
+import com.diajarkoding.imfit.domain.model.Exercise
 import com.diajarkoding.imfit.domain.model.ExerciseLog
+import com.diajarkoding.imfit.domain.model.MuscleCategory
 import com.diajarkoding.imfit.domain.model.TemplateExercise
 import com.diajarkoding.imfit.domain.model.WorkoutLog
 import com.diajarkoding.imfit.domain.model.WorkoutSession
@@ -22,6 +26,8 @@ import io.github.jan.supabase.postgrest.postgrest
 import io.github.jan.supabase.postgrest.query.Columns
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
+import kotlinx.serialization.encodeToString
+import kotlinx.serialization.json.Json
 import java.time.OffsetDateTime
 import java.time.ZoneOffset
 import java.time.format.DateTimeFormatter
@@ -34,10 +40,17 @@ class WorkoutRepositoryImpl @Inject constructor(
     private val supabaseClient: SupabaseClient,
     private val exerciseLogDao: com.diajarkoding.imfit.data.local.dao.ExerciseLogDao,
     private val workoutSetDao: com.diajarkoding.imfit.data.local.dao.WorkoutSetDao,
-    private val exerciseDao: com.diajarkoding.imfit.data.local.dao.ExerciseDao
+    private val exerciseDao: com.diajarkoding.imfit.data.local.dao.ExerciseDao,
+    private val workoutLogDao: com.diajarkoding.imfit.data.local.dao.WorkoutLogDao,
+    private val activeSessionDao: ActiveSessionDao
 ) : WorkoutRepository {
 
     private var activeSession: WorkoutSession? = null
+    
+    private val json = Json { 
+        ignoreUnknownKeys = true 
+        encodeDefaults = true
+    }
 
     override suspend fun getTemplates(userId: String): List<WorkoutTemplate> {
         // Validate user ID format - if it's not a valid UUID, use fake data
@@ -214,7 +227,7 @@ class WorkoutRepositoryImpl @Inject constructor(
             )
         }
         
-        activeSession = WorkoutSession(
+        val session = WorkoutSession(
             id = UUID.randomUUID().toString(),
             templateId = template.id,
             templateName = template.name,
@@ -222,20 +235,85 @@ class WorkoutRepositoryImpl @Inject constructor(
             exerciseLogs = exerciseLogs
         )
         
-        return activeSession!!
+        activeSession = session
+        
+        // Persist session to Room database
+        try {
+            val userId = supabaseClient.auth.currentUserOrNull()?.id ?: "local_user"
+            val sessionDataJson = json.encodeToString(session.toSerializable())
+            
+            val entity = ActiveSessionEntity(
+                id = session.id,
+                userId = userId,
+                templateId = session.templateId,
+                templateName = session.templateName,
+                startTime = session.startTime,
+                currentExerciseIndex = session.currentExerciseIndex,
+                sessionDataJson = sessionDataJson
+            )
+            activeSessionDao.insertSession(entity)
+            Log.d("WorkoutRepository", "Saved active session to Room: ${session.id}")
+        } catch (e: Exception) {
+            Log.e("WorkoutRepository", "Failed to save session to Room: ${e.message}", e)
+        }
+        
+        return session
     }
 
     override suspend fun getActiveSession(): WorkoutSession? {
-        return activeSession
+        // First check in-memory cache
+        if (activeSession != null) {
+            return activeSession
+        }
+        
+        // Try to restore from Room database
+        return try {
+            val userId = supabaseClient.auth.currentUserOrNull()?.id ?: "local_user"
+            val entity = activeSessionDao.getActiveSession(userId)
+            
+            if (entity != null) {
+                val sessionData = json.decodeFromString<SerializableSession>(entity.sessionDataJson)
+                activeSession = sessionData.toDomain()
+                Log.d("WorkoutRepository", "Restored active session from Room: ${activeSession?.id}")
+                activeSession
+            } else {
+                null
+            }
+        } catch (e: Exception) {
+            Log.e("WorkoutRepository", "Failed to restore session from Room: ${e.message}", e)
+            null
+        }
     }
 
     override suspend fun updateActiveSession(session: WorkoutSession) {
         activeSession = session
+        
+        // Update in Room database
+        try {
+            val userId = supabaseClient.auth.currentUserOrNull()?.id ?: "local_user"
+            val sessionDataJson = json.encodeToString(session.toSerializable())
+            
+            val entity = ActiveSessionEntity(
+                id = session.id,
+                userId = userId,
+                templateId = session.templateId,
+                templateName = session.templateName,
+                startTime = session.startTime,
+                currentExerciseIndex = session.currentExerciseIndex,
+                sessionDataJson = sessionDataJson
+            )
+            activeSessionDao.updateSession(entity)
+        } catch (e: Exception) {
+            Log.e("WorkoutRepository", "Failed to update session in Room: ${e.message}", e)
+        }
     }
 
     override suspend fun finishWorkout(): WorkoutLog? {
         val session = activeSession ?: return null
         val endTime = System.currentTimeMillis()
+        
+        // Store session ID before clearing
+        val sessionId = session.id
         
         return try {
             val userId = supabaseClient.auth.currentUserOrNull()?.id
@@ -301,7 +379,56 @@ class WorkoutRepositoryImpl @Inject constructor(
                 }
             }
             
-            activeSession = null
+            // ======= SAVE TO LOCAL ROOM DATABASE =======
+            // This enables offline-first and Last Known Weight feature
+            
+            // Insert workout log to local Room
+            val workoutLogEntity = com.diajarkoding.imfit.data.local.entity.WorkoutLogEntity(
+                id = workoutLogId,
+                userId = userId,
+                templateId = session.templateId,
+                templateName = session.templateName,
+                date = session.startTime,
+                startTime = session.startTime,
+                endTime = endTime,
+                totalVolume = session.totalVolume,
+                totalSets = session.totalCompletedSets,
+                totalReps = session.exerciseLogs.sumOf { log -> log.sets.filter { it.isCompleted }.sumOf { it.reps } },
+                syncStatus = com.diajarkoding.imfit.data.local.sync.SyncStatus.SYNCED.name
+            )
+            workoutLogDao.insertWorkoutLog(workoutLogEntity)
+            Log.d("WorkoutRepository", "Saved workout log to local Room: $workoutLogId")
+            
+            // Insert exercise logs and sets to local Room
+            session.exerciseLogs.forEachIndexed { index, exerciseLog ->
+                val exerciseLogEntity = com.diajarkoding.imfit.data.local.entity.ExerciseLogEntity(
+                    workoutLogId = workoutLogId,
+                    exerciseId = exerciseLog.exercise.id,
+                    exerciseName = exerciseLog.exercise.name,
+                    muscleCategory = exerciseLog.exercise.muscleCategory.name,
+                    orderIndex = index,
+                    totalVolume = exerciseLog.totalVolume,
+                    totalSets = exerciseLog.sets.count { it.isCompleted },
+                    totalReps = exerciseLog.sets.filter { it.isCompleted }.sumOf { it.reps }
+                )
+                exerciseLogDao.insertExerciseLog(exerciseLogEntity)
+                
+                // Insert each set to local Room
+                exerciseLog.sets.forEach { set ->
+                    val setEntity = com.diajarkoding.imfit.data.local.entity.WorkoutSetEntity(
+                        id = java.util.UUID.randomUUID().toString(),
+                        exerciseLogId = "${workoutLogId}_${exerciseLog.exercise.id}",
+                        workoutLogId = workoutLogId,
+                        exerciseId = exerciseLog.exercise.id,
+                        setNumber = set.setNumber,
+                        weight = set.weight,
+                        reps = set.reps,
+                        isCompleted = set.isCompleted
+                    )
+                    workoutSetDao.insertWorkoutSet(setEntity)
+                }
+            }
+            Log.d("WorkoutRepository", "Saved all exercise logs and sets to local Room")
             
             WorkoutLog(
                 id = workoutLogId,
@@ -316,10 +443,27 @@ class WorkoutRepositoryImpl @Inject constructor(
         } catch (e: Exception) {
             Log.e("WorkoutRepository", "Error finishing workout: ${e.message}", e)
             FakeWorkoutDataSource.finishWorkout()
+        } finally {
+            // ALWAYS delete active session from Room, regardless of success/failure
+            try {
+                activeSessionDao.deleteSessionById(sessionId)
+                Log.d("WorkoutRepository", "Deleted active session from Room: $sessionId")
+            } catch (e: Exception) {
+                Log.e("WorkoutRepository", "Failed to delete session: ${e.message}", e)
+            }
+            activeSession = null
         }
     }
 
     override suspend fun cancelWorkout() {
+        // Delete session from Room
+        try {
+            val userId = supabaseClient.auth.currentUserOrNull()?.id ?: "local_user"
+            activeSessionDao.deleteSession(userId)
+            Log.d("WorkoutRepository", "Cancelled and deleted active session from Room")
+        } catch (e: Exception) {
+            Log.e("WorkoutRepository", "Failed to delete session from Room: ${e.message}", e)
+        }
         activeSession = null
     }
 
@@ -433,6 +577,20 @@ class WorkoutRepositoryImpl @Inject constructor(
         }
     }
 
+    /**
+     * Gets a map of set_number to weight from the last completed workout for an exercise.
+     * Uses local Room database for efficient per-set weight lookup.
+     */
+    override suspend fun getLastWeightsForExercise(exerciseId: String, userId: String): Map<Int, Float> {
+        return try {
+            val lastSets = workoutSetDao.getLastWorkoutSetsForExercise(exerciseId, userId)
+            lastSets.associate { it.setNumber to it.weight }
+        } catch (e: Exception) {
+            Log.e("WorkoutRepository", "Error getting last weights for exercise: ${e.message}", e)
+            emptyMap()
+        }
+    }
+
     companion object {
         /**
          * Validates if a string is a valid UUID format
@@ -494,4 +652,104 @@ private data class CreateExerciseLogDto(
     val orderIndex: Int,
     @SerialName("total_volume")
     val totalVolume: Double
+)
+
+// ======= SERIALIZABLE SESSION DTOs FOR PERSISTENCE =======
+
+@Serializable
+private data class SerializableSession(
+    val id: String,
+    val templateId: String,
+    val templateName: String,
+    val startTime: Long,
+    val exerciseLogs: List<SerializableExerciseLog>,
+    val currentExerciseIndex: Int = 0
+) {
+    fun toDomain(): WorkoutSession = WorkoutSession(
+        id = id,
+        templateId = templateId,
+        templateName = templateName,
+        startTime = startTime,
+        exerciseLogs = exerciseLogs.map { it.toDomain() },
+        currentExerciseIndex = currentExerciseIndex
+    )
+}
+
+@Serializable
+private data class SerializableExerciseLog(
+    val exercise: SerializableExercise,
+    val sets: List<SerializableWorkoutSet>,
+    val restSeconds: Int = 60
+) {
+    fun toDomain(): ExerciseLog = ExerciseLog(
+        exercise = exercise.toDomain(),
+        sets = sets.map { it.toDomain() },
+        restSeconds = restSeconds
+    )
+}
+
+@Serializable
+private data class SerializableExercise(
+    val id: String,
+    val name: String,
+    val muscleCategory: String,
+    val description: String,
+    val imageUrl: String? = null
+) {
+    fun toDomain(): Exercise = Exercise(
+        id = id,
+        name = name,
+        muscleCategory = try { 
+            MuscleCategory.valueOf(muscleCategory) 
+        } catch (e: Exception) { 
+            MuscleCategory.CHEST 
+        },
+        description = description,
+        imageUrl = imageUrl
+    )
+}
+
+@Serializable
+private data class SerializableWorkoutSet(
+    val setNumber: Int,
+    val weight: Float = 0f,
+    val reps: Int = 0,
+    val isCompleted: Boolean = false
+) {
+    fun toDomain(): WorkoutSet = WorkoutSet(
+        setNumber = setNumber,
+        weight = weight,
+        reps = reps,
+        isCompleted = isCompleted
+    )
+}
+
+private fun WorkoutSession.toSerializable() = SerializableSession(
+    id = id,
+    templateId = templateId,
+    templateName = templateName,
+    startTime = startTime,
+    exerciseLogs = exerciseLogs.map { it.toSerializable() },
+    currentExerciseIndex = currentExerciseIndex
+)
+
+private fun ExerciseLog.toSerializable() = SerializableExerciseLog(
+    exercise = exercise.toSerializable(),
+    sets = sets.map { it.toSerializable() },
+    restSeconds = restSeconds
+)
+
+private fun Exercise.toSerializable() = SerializableExercise(
+    id = id,
+    name = name,
+    muscleCategory = muscleCategory.name,
+    description = description,
+    imageUrl = imageUrl
+)
+
+private fun WorkoutSet.toSerializable() = SerializableWorkoutSet(
+    setNumber = setNumber,
+    weight = weight,
+    reps = reps,
+    isCompleted = isCompleted
 )

@@ -59,7 +59,9 @@ class HomeViewModel @Inject constructor(
 
             val userId = user.id
             val userName = user.name
-            val userProfilePhotoUri = user.profilePhotoUri
+            
+            // Get signed URL for profile photo (private bucket)
+            val signedAvatarUrl = authRepository.getSignedAvatarUrl(user.profilePhotoUri)
 
             try {
                 val templates = workoutRepository.getTemplates(userId)
@@ -69,7 +71,7 @@ class HomeViewModel @Inject constructor(
                 _state.update {
                     it.copy(
                         userName = userName,
-                        userProfilePhotoUri = userProfilePhotoUri,
+                        userProfilePhotoUri = signedAvatarUrl,
                         templates = templates,
                         lastWorkout = lastWorkout,
                         isLoading = false,
@@ -80,7 +82,7 @@ class HomeViewModel @Inject constructor(
                 _state.update {
                     it.copy(
                         userName = userName,
-                        userProfilePhotoUri = userProfilePhotoUri,
+                        userProfilePhotoUri = signedAvatarUrl,
                         templates = emptyList(),
                         lastWorkout = null,
                         isLoading = false,

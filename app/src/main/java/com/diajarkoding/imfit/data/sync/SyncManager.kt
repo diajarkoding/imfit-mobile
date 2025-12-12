@@ -103,16 +103,17 @@ class SyncManager @Inject constructor(
 
     /**
      * Syncs pending workout logs with the remote server.
+     * Handles both new logs and soft-deleted logs using upsert.
      */
     suspend fun syncPendingWorkoutLogs() {
-        val pendingLogs = workoutLogDao.getWorkoutLogsBySyncStatus(SyncStatus.PENDING_SYNC.name)
+        val pendingLogs = workoutLogDao.getPendingLogs()
         Log.d(TAG, "Found ${pendingLogs.size} pending workout logs to sync")
 
         for (log in pendingLogs) {
             try {
-                createWorkoutLogRemote(log)
-                workoutLogDao.updateSyncStatus(log.id, SyncStatus.SYNCED.name)
-                Log.d(TAG, "Synced workout log: ${log.id}")
+                upsertWorkoutLogRemote(log)
+                workoutLogDao.markAsSynced(log.id)
+                Log.d(TAG, "Synced workout log: ${log.id} (operation: ${log.pendingOperation})")
             } catch (e: Exception) {
                 Log.e(TAG, "Failed to sync workout log ${log.id}: ${e.message}", e)
                 workoutLogDao.updateSyncStatus(log.id, SyncStatus.SYNC_FAILED.name)
@@ -161,7 +162,11 @@ class SyncManager @Inject constructor(
         }
     }
 
-    private suspend fun createWorkoutLogRemote(
+    /**
+     * Upserts a workout log to the remote server.
+     * Handles both creation and updates (including soft deletes).
+     */
+    private suspend fun upsertWorkoutLogRemote(
         log: com.diajarkoding.imfit.data.local.entity.WorkoutLogEntity
     ) {
         val startDateTime = OffsetDateTime.ofInstant(
@@ -172,8 +177,16 @@ class SyncManager @Inject constructor(
             java.time.Instant.ofEpochMilli(log.endTime),
             ZoneOffset.UTC
         )
+        
+        // Convert deletedAt timestamp to ISO8601 string if present
+        val deletedAtString = log.deletedAt?.let { timestamp ->
+            OffsetDateTime.ofInstant(
+                java.time.Instant.ofEpochMilli(timestamp),
+                ZoneOffset.UTC
+            ).format(DateTimeFormatter.ISO_OFFSET_DATE_TIME)
+        }
 
-        val dto = CreateWorkoutLogDto(
+        val dto = UpsertWorkoutLogDto(
             id = log.id,
             userId = log.userId,
             templateId = log.templateId,
@@ -183,9 +196,14 @@ class SyncManager @Inject constructor(
             endTime = endDateTime.format(DateTimeFormatter.ISO_OFFSET_DATE_TIME),
             totalVolume = log.totalVolume.toDouble(),
             totalSets = log.totalSets,
-            totalReps = log.totalReps
+            totalReps = log.totalReps,
+            deletedAt = deletedAtString
         )
-        supabaseClient.postgrest.from("workout_logs").insert(dto)
+        
+        // Use upsert to handle both inserts and updates
+        supabaseClient.postgrest.from("workout_logs").upsert(dto) {
+            onConflict = "id"
+        }
     }
 
     companion object {
@@ -202,7 +220,7 @@ private data class CreateTemplateDto(
 )
 
 @Serializable
-private data class CreateWorkoutLogDto(
+private data class UpsertWorkoutLogDto(
     val id: String,
     @SerialName("user_id")
     val userId: String,
@@ -220,5 +238,7 @@ private data class CreateWorkoutLogDto(
     @SerialName("total_sets")
     val totalSets: Int,
     @SerialName("total_reps")
-    val totalReps: Int
+    val totalReps: Int,
+    @SerialName("deleted_at")
+    val deletedAt: String? = null
 )

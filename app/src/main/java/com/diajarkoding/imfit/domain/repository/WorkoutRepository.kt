@@ -28,4 +28,7 @@ interface WorkoutRepository {
     suspend fun getWorkoutLogById(logId: String): WorkoutLog?
     suspend fun getLastWorkoutLog(userId: String): WorkoutLog?
     suspend fun getLastExerciseLog(exerciseId: String): ExerciseLog?
+    
+    // Last Known Weight operations
+    suspend fun getLastWeightsForExercise(exerciseId: String, userId: String): Map<Int, Float>
 }

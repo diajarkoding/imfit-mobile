@@ -75,6 +75,7 @@ import com.diajarkoding.imfit.theme.IMFITSpacing
 import com.diajarkoding.imfit.theme.Primary
 import com.diajarkoding.imfit.theme.PrimaryLight
 import com.diajarkoding.imfit.theme.SetComplete
+import com.diajarkoding.imfit.presentation.components.common.SyncIndicator
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -84,6 +85,7 @@ fun HomeScreen(
     viewModel: HomeViewModel = hiltViewModel()
 ) {
     val state by viewModel.state.collectAsState()
+    val syncState by viewModel.syncState.collectAsState()
     var showAddDayDialog by remember { mutableStateOf(false) }
     var newDayName by remember { mutableStateOf("") }
 
@@ -167,6 +169,12 @@ fun HomeScreen(
                             fontWeight = FontWeight.Bold
                         )
                     }
+                },
+                actions = {
+                    SyncIndicator(
+                        syncState = syncState,
+                        showText = false
+                    )
                 },
                 colors = TopAppBarDefaults.topAppBarColors(
                     containerColor = MaterialTheme.colorScheme.surface

@@ -33,7 +33,7 @@ import com.diajarkoding.imfit.data.local.entity.WorkoutTemplateEntity
         WorkoutSetEntity::class,
         ActiveSessionEntity::class
     ],
-    version = 3,
+    version = 4,
     exportSchema = false
 )
 @TypeConverters(Converters::class)
@@ -58,7 +58,7 @@ abstract class IMFITDatabase : RoomDatabase() {
                     IMFITDatabase::class.java,
                     "imfit_database"
                 )
-                    .fallbackToDestructiveMigrationOnDowngrade(dropAllTables = false)
+                    .fallbackToDestructiveMigration(dropAllTables = true)
                     .build()
                 INSTANCE = instance
                 instance

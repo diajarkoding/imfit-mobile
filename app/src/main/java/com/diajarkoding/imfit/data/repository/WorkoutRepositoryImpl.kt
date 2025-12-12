@@ -401,7 +401,9 @@ class WorkoutRepositoryImpl @Inject constructor(
             
             // Insert exercise logs and sets to local Room
             session.exerciseLogs.forEachIndexed { index, exerciseLog ->
+                val exerciseLogId = java.util.UUID.randomUUID().toString()
                 val exerciseLogEntity = com.diajarkoding.imfit.data.local.entity.ExerciseLogEntity(
+                    id = exerciseLogId,
                     workoutLogId = workoutLogId,
                     exerciseId = exerciseLog.exercise.id,
                     exerciseName = exerciseLog.exercise.name,
@@ -417,7 +419,7 @@ class WorkoutRepositoryImpl @Inject constructor(
                 exerciseLog.sets.forEach { set ->
                     val setEntity = com.diajarkoding.imfit.data.local.entity.WorkoutSetEntity(
                         id = java.util.UUID.randomUUID().toString(),
-                        exerciseLogId = "${workoutLogId}_${exerciseLog.exercise.id}",
+                        exerciseLogId = exerciseLogId,
                         workoutLogId = workoutLogId,
                         exerciseId = exerciseLog.exercise.id,
                         setNumber = set.setNumber,

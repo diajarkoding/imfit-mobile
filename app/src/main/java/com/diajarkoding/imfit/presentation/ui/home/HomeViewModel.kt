@@ -27,11 +27,15 @@ data class HomeState(
 @HiltViewModel
 class HomeViewModel @Inject constructor(
     private val authRepository: AuthRepository,
-    private val workoutRepository: WorkoutRepository
+    private val workoutRepository: WorkoutRepository,
+    private val syncManager: com.diajarkoding.imfit.data.sync.SyncManager
 ) : ViewModel() {
 
     private val _state = MutableStateFlow(HomeState())
     val state = _state.asStateFlow()
+    
+    // Expose sync state for UI
+    val syncState = syncManager.syncState
 
     init {
         loadData()

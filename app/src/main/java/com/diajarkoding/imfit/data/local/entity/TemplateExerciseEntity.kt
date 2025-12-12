@@ -21,6 +21,8 @@ data class TemplateExerciseEntity(
     val restSeconds: Int,
     @ColumnInfo(name = "sync_status")
     val syncStatus: String = SyncStatus.PENDING_SYNC.name,
+    @ColumnInfo(name = "pending_operation")
+    val pendingOperation: String? = null,
     @ColumnInfo(name = "created_at")
     val createdAt: Long = System.currentTimeMillis(),
     @ColumnInfo(name = "updated_at")

@@ -18,6 +18,16 @@ interface ExerciseDao {
     @Query("SELECT * FROM exercises WHERE name LIKE '%' || :query || '%' AND is_active = 1")
     fun searchExercises(query: String): Flow<List<ExerciseEntity>>
 
+    // Suspend versions for local-first synchronous access
+    @Query("SELECT * FROM exercises WHERE is_active = 1")
+    suspend fun getAllActiveExercisesList(): List<ExerciseEntity>
+
+    @Query("SELECT * FROM exercises WHERE muscle_category_id = :categoryId AND is_active = 1")
+    suspend fun getExercisesByCategoryList(categoryId: Int): List<ExerciseEntity>
+
+    @Query("SELECT * FROM exercises WHERE name LIKE '%' || :query || '%' AND is_active = 1")
+    suspend fun searchExercisesList(query: String): List<ExerciseEntity>
+
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insertExercise(exercise: ExerciseEntity)
 

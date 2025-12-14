@@ -179,6 +179,7 @@ class SyncManager @Inject constructor(
     /**
      * Performs initial sync for cold start (reinstall, new device, first login).
      * Downloads ALL user data from Supabase and inserts into Room.
+     * Reports progress for UI display.
      */
     suspend fun performInitialSync() {
         val userId = supabaseClient.auth.currentUserOrNull()?.id ?: run {
@@ -189,37 +190,118 @@ class SyncManager @Inject constructor(
         Log.d(TAG, "Starting initial sync for user: $userId")
         _syncState.value = _syncState.value.copy(
             status = SyncState.SyncStatus.SYNCING,
+            isInitialSync = true,
+            progress = 0f,
+            progressMessage = "Preparing sync...",
             errorMessage = null
         )
 
         try {
-            // 1. Pull exercises (server-authoritative)
+            // Step 1: Pull exercises (15%)
+            updateProgress(0.05f, "Downloading exercises...")
             pullExercises()
             
-            // 2. Pull all user templates
+            // Step 2: Pull all user templates (30%)
+            updateProgress(0.15f, "Downloading workout templates...")
             pullTemplates()
             
-            // 3. Pull all workout logs (includes exercise logs and sets)
+            // Step 3: Pull template exercises (45%)
+            updateProgress(0.30f, "Downloading template exercises...")
+            pullTemplateExercises(userId)
+            
+            // Step 4: Pull all workout logs (60%)
+            updateProgress(0.45f, "Downloading workout history...")
             pullWorkoutLogs()
+            
+            // Step 5: Pull exercise logs (75%)
+            updateProgress(0.60f, "Downloading exercise logs...")
             pullExerciseLogs()
+            
+            // Step 6: Pull workout sets (90%)
+            updateProgress(0.75f, "Downloading workout sets...")
             pullWorkoutSets()
             
             // Mark initial sync as completed
             syncPreferences.isInitialSyncCompleted = true
             syncPreferences.lastSyncTimestamp = System.currentTimeMillis()
             
+            updateProgress(1.0f, "Sync complete!")
+            
             _syncState.value = _syncState.value.copy(
                 status = SyncState.SyncStatus.SYNCED,
-                lastSyncTime = System.currentTimeMillis()
+                lastSyncTime = System.currentTimeMillis(),
+                isInitialSync = false,
+                progress = 1f,
+                progressMessage = null
             )
             Log.d(TAG, "Initial sync completed successfully")
         } catch (e: Exception) {
             Log.e(TAG, "Initial sync failed: ${e.message}", e)
             _syncState.value = _syncState.value.copy(
                 status = SyncState.SyncStatus.FAILED,
-                errorMessage = "Initial sync failed: ${e.message}"
+                errorMessage = "Initial sync failed: ${e.message}",
+                isInitialSync = false
             )
             throw e
+        }
+    }
+    
+    /**
+     * Updates sync progress for UI.
+     */
+    private fun updateProgress(progress: Float, message: String) {
+        _syncState.value = _syncState.value.copy(
+            progress = progress,
+            progressMessage = message
+        )
+        Log.d(TAG, "Sync progress: ${(progress * 100).toInt()}% - $message")
+    }
+    
+    /**
+     * Pulls template exercises from Supabase for all user templates.
+     */
+    private suspend fun pullTemplateExercises(userId: String) {
+        try {
+            // Get all template IDs for this user
+            val templates = workoutTemplateDao.getTemplatesByUserList(userId)
+            if (templates.isEmpty()) {
+                Log.d(TAG, "No templates found, skipping template exercises pull")
+                return
+            }
+            
+            for (template in templates) {
+                try {
+                    val remoteExercises = supabaseClient.postgrest
+                        .from("template_exercises")
+                        .select() {
+                            filter {
+                                eq("template_id", template.id)
+                            }
+                        }
+                        .decodeList<RemoteTemplateExerciseDto>()
+                    
+                    Log.d(TAG, "Pulled ${remoteExercises.size} exercises for template: ${template.id}")
+                    
+                    for (remote in remoteExercises) {
+                        val entity = com.diajarkoding.imfit.data.local.entity.TemplateExerciseEntity(
+                            templateId = template.id,
+                            exerciseId = remote.exerciseId,
+                            orderIndex = remote.orderIndex ?: 0,
+                            sets = remote.sets ?: 3,
+                            reps = remote.reps ?: 10,
+                            restSeconds = remote.restSeconds ?: 60,
+                            syncStatus = SyncStatus.SYNCED.name,
+                            pendingOperation = null
+                        )
+                        templateExerciseDao.insertTemplateExercise(entity)
+                    }
+                } catch (e: Exception) {
+                    Log.e(TAG, "Failed to pull exercises for template ${template.id}: ${e.message}")
+                }
+            }
+        } catch (e: Exception) {
+            Log.e(TAG, "Failed to pull template exercises: ${e.message}", e)
+            // Don't throw - continue with sync
         }
     }
 
@@ -876,3 +958,18 @@ private data class RemoteWorkoutSetDto(
     @SerialName("is_completed")
     val isCompleted: Boolean? = false
 )
+
+@Serializable
+private data class RemoteTemplateExerciseDto(
+    @SerialName("template_id")
+    val templateId: String,
+    @SerialName("exercise_id")
+    val exerciseId: String,
+    @SerialName("order_index")
+    val orderIndex: Int? = 0,
+    val sets: Int? = 3,
+    val reps: Int? = 10,
+    @SerialName("rest_seconds")
+    val restSeconds: Int? = 60
+)
+

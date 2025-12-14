@@ -14,6 +14,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -27,7 +28,7 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import coil.compose.AsyncImage
 import coil.compose.AsyncImagePainter
-import coil.imageLoader
+import coil.request.CachePolicy
 import coil.request.ImageRequest
 import com.diajarkoding.imfit.R
 import com.diajarkoding.imfit.theme.Primary
@@ -38,7 +39,7 @@ private const val TAG = "IMFITProfilePhoto"
 /**
  * A reusable profile photo component that displays the user's profile image
  * with a fallback placeholder when the image is null or fails to load.
- * Uses Coil with disk caching for efficient loading.
+ * Uses Coil with aggressive disk/memory caching to avoid reloading on navigation.
  *
  * @param profilePhotoUri The URI of the profile photo, or null to show placeholder
  * @param size The size of the profile photo
@@ -52,18 +53,26 @@ fun IMFITProfilePhoto(
 ) {
     val context = LocalContext.current
     
-    // Log URL info for debugging
-    LaunchedEffect(profilePhotoUri) {
-        logUrlInfo(profilePhotoUri, context)
+    // Extract stable cache key from URL (removes query parameters like token/expiry)
+    val stableCacheKey = remember(profilePhotoUri) {
+        extractStableCacheKey(profilePhotoUri)
     }
     
-    // State to track loading status
-    var isLoading by remember(profilePhotoUri) { mutableStateOf(profilePhotoUri != null) }
-    var showPlaceholder by remember(profilePhotoUri) { mutableStateOf(profilePhotoUri == null) }
+    // Use saveable to persist loading state across navigation
+    var hasLoadedSuccessfully by rememberSaveable(stableCacheKey) { mutableStateOf(false) }
+    var isLoading by remember(stableCacheKey) { mutableStateOf(!hasLoadedSuccessfully && profilePhotoUri != null) }
+    var showPlaceholder by remember(stableCacheKey) { mutableStateOf(profilePhotoUri == null) }
     
     // Check if URL is valid and loadable
     val isValidUrl = remember(profilePhotoUri) {
         isValidImageUrl(profilePhotoUri)
+    }
+    
+    // Only log once when URL actually changes to a new value
+    LaunchedEffect(stableCacheKey) {
+        if (stableCacheKey != null && !hasLoadedSuccessfully) {
+            Log.d(TAG, "Loading profile photo: $stableCacheKey")
+        }
     }
 
     Box(
@@ -85,6 +94,12 @@ fun IMFITProfilePhoto(
                 model = ImageRequest.Builder(context)
                     .data(profilePhotoUri)
                     .crossfade(true)
+                    // Aggressive caching - use memory and disk cache
+                    .memoryCachePolicy(CachePolicy.ENABLED)
+                    .diskCachePolicy(CachePolicy.ENABLED)
+                    // Use stable cache key (without query params like token/expiry)
+                    .diskCacheKey(stableCacheKey)
+                    .memoryCacheKey(stableCacheKey)
                     .build(),
                 contentDescription = stringResource(R.string.desc_profile_photo),
                 modifier = Modifier
@@ -94,20 +109,21 @@ fun IMFITProfilePhoto(
                 onState = { state ->
                     when (state) {
                         is AsyncImagePainter.State.Loading -> {
-                            isLoading = true
-                            showPlaceholder = false
+                            // Only show loading if not already loaded
+                            if (!hasLoadedSuccessfully) {
+                                isLoading = true
+                                showPlaceholder = false
+                            }
                         }
                         is AsyncImagePainter.State.Success -> {
                             isLoading = false
                             showPlaceholder = false
-                            Log.d(TAG, "✅ Image loaded successfully from: ${getUrlType(profilePhotoUri)}")
+                            hasLoadedSuccessfully = true
                         }
                         is AsyncImagePainter.State.Error -> {
                             isLoading = false
                             showPlaceholder = true
-                            Log.e(TAG, "❌ Failed to load image: ${state.result.throwable.message}")
-                            Log.e(TAG, "   URL: $profilePhotoUri")
-                            Log.e(TAG, "   URL Type: ${getUrlType(profilePhotoUri)}")
+                            Log.e(TAG, "Failed to load image: ${state.result.throwable.message}")
                         }
                         is AsyncImagePainter.State.Empty -> {
                             isLoading = false
@@ -123,7 +139,7 @@ fun IMFITProfilePhoto(
         }
 
         // Show loading indicator
-        if (isLoading && !profilePhotoUri.isNullOrBlank()) {
+        if (isLoading && !hasLoadedSuccessfully && !profilePhotoUri.isNullOrBlank()) {
             CircularProgressIndicator(
                 modifier = Modifier.size(size * 0.3f),
                 color = Color.White,
@@ -144,50 +160,19 @@ fun IMFITProfilePhoto(
 }
 
 /**
- * Logs detailed information about the profile photo URL
+ * Extracts a stable cache key from the URL by removing query parameters.
+ * This ensures the same image file uses the same cache regardless of token expiry.
  */
-private fun logUrlInfo(url: String?, context: android.content.Context) {
-    Log.d(TAG, "========== Profile Photo URL Info ==========")
+private fun extractStableCacheKey(url: String?): String? {
+    if (url.isNullOrBlank()) return null
     
-    if (url.isNullOrBlank()) {
-        Log.d(TAG, "URL: null or blank - showing placeholder")
-        return
-    }
-    
-    Log.d(TAG, "URL: $url")
-    Log.d(TAG, "URL Type: ${getUrlType(url)}")
-    Log.d(TAG, "Is Valid: ${isValidImageUrl(url)}")
-    
-    // Log cache info
-    val imageLoader = context.imageLoader
-    val diskCache = imageLoader.diskCache
-    val memoryCache = imageLoader.memoryCache
-    
-    Log.d(TAG, "Cache Info:")
-    Log.d(TAG, "  - Disk cache size: ${diskCache?.size ?: 0} / ${diskCache?.maxSize ?: 0} bytes")
-    Log.d(TAG, "  - Memory cache size: ${memoryCache?.size ?: 0} / ${memoryCache?.maxSize ?: 0} bytes")
-    
-    // Warn about local URIs
-    if (url.startsWith("content://") || url.startsWith("file://")) {
-        Log.w(TAG, "⚠️ WARNING: Using local URI! This file may not persist across app reinstalls.")
-        Log.w(TAG, "   Consider uploading to remote storage (Supabase Storage) and use https:// URL.")
-    }
-    
-    Log.d(TAG, "=============================================")
-}
-
-/**
- * Determines the type of URL for logging purposes
- */
-private fun getUrlType(url: String?): String {
-    return when {
-        url == null -> "null"
-        url.startsWith("content://") -> "LOCAL_CONTENT_PROVIDER"
-        url.startsWith("file://") -> "LOCAL_FILE"
-        url.startsWith("https://") -> "REMOTE_HTTPS"
-        url.startsWith("http://") -> "REMOTE_HTTP"
-        url.startsWith("data:") -> "DATA_URI"
-        else -> "UNKNOWN"
+    // For Supabase signed URLs, extract the path without query parameters
+    return try {
+        val uri = android.net.Uri.parse(url)
+        // Use host + path as stable key (ignores query parameters like token/expiry)
+        "${uri.host}${uri.path}"
+    } catch (e: Exception) {
+        url
     }
 }
 

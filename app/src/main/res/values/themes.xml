@@ -5,6 +5,8 @@
         <item name="android:windowNoTitle">true</item>
         <item name="android:windowActionBar">false</item>
         <item name="android:windowFullscreen">false</item>
+        <!-- Prevent black flash on Activity transitions -->
+        <item name="android:windowBackground">@color/white</item>
     </style>
 
     <style name="Theme.App.Starting" parent="Theme.SplashScreen">

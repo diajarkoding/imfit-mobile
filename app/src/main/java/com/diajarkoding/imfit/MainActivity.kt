@@ -42,12 +42,19 @@ class MainActivity : ComponentActivity() {
 
         setContent {
             val isDarkMode by themeManager.isDarkMode.collectAsState(initial = false)
+            // Observe language state - this triggers recomposition when language changes
             val isIndonesian = LocaleManager.isIndonesian
+            // Also observe configVersion to ensure recomposition happens
+            // This is read but not used as key - just reading it creates a dependency
+            @Suppress("UNUSED_VARIABLE")
+            val configVersion = LocaleManager.configurationVersion
             val scope = rememberCoroutineScope()
 
             CompositionLocalProvider(LocalIsDarkTheme provides isDarkMode) {
                 IMFITTheme(darkTheme = isDarkMode) {
                     Surface(modifier = Modifier.fillMaxSize()) {
+                        // Don't use key() here as it resets navigation to splash screen
+                        // Instead rely on state observation for recomposition
                         NavGraph(
                             isDarkMode = isDarkMode,
                             onToggleTheme = {
@@ -66,3 +73,4 @@ class MainActivity : ComponentActivity() {
         }
     }
 }
+

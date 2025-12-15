@@ -4,6 +4,7 @@ import androidx.compose.animation.core.animateDpAsState
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.height
@@ -54,6 +55,7 @@ fun IMFITLanguageSwitch(
             modifier = Modifier
                 .matchParentSize()
                 .padding(horizontal = 8.dp),
+            horizontalArrangement = Arrangement.SpaceBetween,
             verticalAlignment = Alignment.CenterVertically
         ) {
             Text(
@@ -62,8 +64,7 @@ fun IMFITLanguageSwitch(
                     fontSize = 10.sp,
                     fontWeight = FontWeight.Bold
                 ),
-                color = if (isIndonesian) Color.White else MaterialTheme.colorScheme.onSurfaceVariant,
-                modifier = Modifier.weight(1f)
+                color = if (isIndonesian) Color.White else MaterialTheme.colorScheme.onSurfaceVariant
             )
             Text(
                 text = "EN",
@@ -71,8 +72,7 @@ fun IMFITLanguageSwitch(
                     fontSize = 10.sp,
                     fontWeight = FontWeight.Bold
                 ),
-                color = if (!isIndonesian) Color.White else MaterialTheme.colorScheme.onSurfaceVariant,
-                modifier = Modifier.weight(1f)
+                color = if (!isIndonesian) Color.White else MaterialTheme.colorScheme.onSurfaceVariant
             )
         }
 

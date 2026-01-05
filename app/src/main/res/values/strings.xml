@@ -150,6 +150,7 @@
     <string name="login_welcome_subtitle">Sign in to continue your fitness journey</string>
     <string name="login_demo_hint">Demo: demo@imfit.com / password123</string>
     <string name="placeholder_email">Enter your email</string>
+    <string name="placeholder_password">Enter your password</string>
 
     <!-- Profile Screen -->
     <string name="profile_section_info">Profile Information</string>

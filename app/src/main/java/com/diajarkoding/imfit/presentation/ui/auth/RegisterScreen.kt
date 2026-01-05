@@ -63,6 +63,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.core.content.FileProvider
 import androidx.hilt.navigation.compose.hiltViewModel
@@ -74,8 +75,10 @@ import com.diajarkoding.imfit.presentation.components.common.IMFITPasswordField
 import com.diajarkoding.imfit.presentation.components.common.IMFITTextField
 import com.diajarkoding.imfit.theme.IMFITShapes
 import com.diajarkoding.imfit.theme.IMFITSpacing
+import com.diajarkoding.imfit.theme.IMFITSizes
 import com.diajarkoding.imfit.theme.Primary
 import com.diajarkoding.imfit.theme.PrimaryLight
+import com.diajarkoding.imfit.theme.IMFITTheme
 import java.io.File
 import java.text.SimpleDateFormat
 import java.util.Date
@@ -349,10 +352,10 @@ fun RegisterScreen(
             Column(modifier = Modifier.fillMaxWidth()) {
                 Text(
                     text = stringResource(R.string.label_date_of_birth),
-                    style = MaterialTheme.typography.bodyMedium,
+                    style = MaterialTheme.typography.labelLarge,
                     fontWeight = FontWeight.Medium,
-                    color = MaterialTheme.colorScheme.onSurface,
-                    modifier = Modifier.padding(bottom = IMFITSpacing.xs)
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.padding(bottom = IMFITSpacing.sm)
                 )
                 Box(
                     modifier = Modifier
@@ -362,12 +365,15 @@ fun RegisterScreen(
                     OutlinedTextField(
                         value = state.birthDate,
                         onValueChange = {},
-                        modifier = Modifier.fillMaxWidth(),
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(IMFITSizes.textFieldHeight),
                         enabled = false,
                         placeholder = {
                             Text(
                                 stringResource(R.string.register_select_birth_date),
-                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                                style = MaterialTheme.typography.bodyLarge,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f)
                             )
                         },
                         trailingIcon = {
@@ -379,13 +385,16 @@ fun RegisterScreen(
                         },
                         isError = state.birthDateError != null,
                         shape = IMFITShapes.TextField,
+                        textStyle = MaterialTheme.typography.bodyLarge.copy(
+                            color = MaterialTheme.colorScheme.onSurface
+                        ),
                         colors = OutlinedTextFieldDefaults.colors(
                             disabledTextColor = MaterialTheme.colorScheme.onSurface,
                             disabledBorderColor = if (state.birthDateError != null)
                                 MaterialTheme.colorScheme.error
                             else MaterialTheme.colorScheme.outline.copy(alpha = 0.5f),
-                            disabledContainerColor = MaterialTheme.colorScheme.surface,
-                            disabledPlaceholderColor = MaterialTheme.colorScheme.onSurfaceVariant,
+                            disabledContainerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.3f),
+                            disabledPlaceholderColor = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f),
                             disabledTrailingIconColor = Primary
                         )
                     )
@@ -395,7 +404,7 @@ fun RegisterScreen(
                         text = state.birthDateError!!,
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.error,
-                        modifier = Modifier.padding(start = IMFITSpacing.sm, top = IMFITSpacing.xs)
+                        modifier = Modifier.padding(start = IMFITSpacing.xs, top = IMFITSpacing.xs)
                     )
                 }
             }
@@ -493,6 +502,345 @@ private fun PhotoOptionButton(
             text = label,
             style = MaterialTheme.typography.bodyMedium,
             fontWeight = FontWeight.Medium
+        )
+    }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun RegisterScreenContent(
+    name: String = "",
+    email: String = "",
+    birthDate: String = "",
+    password: String = "",
+    confirmPassword: String = "",
+    profilePhotoUri: Uri? = null,
+    nameError: String? = null,
+    emailError: String? = null,
+    birthDateError: String? = null,
+    passwordError: String? = null,
+    confirmPasswordError: String? = null,
+    isLoading: Boolean = false,
+    onNameChange: (String) -> Unit = {},
+    onEmailChange: (String) -> Unit = {},
+    onBirthDateChange: (String) -> Unit = {},
+    onPasswordChange: (String) -> Unit = {},
+    onConfirmPasswordChange: (String) -> Unit = {},
+    onProfilePhotoClick: () -> Unit = {},
+    onDatePickerClick: () -> Unit = {},
+    onRegister: () -> Unit = {},
+    onNavigateToLogin: () -> Unit = {}
+) {
+    val snackbarHostState = remember { SnackbarHostState() }
+
+    Box(
+        modifier = Modifier
+            .fillMaxSize()
+            .background(MaterialTheme.colorScheme.background)
+            .windowInsetsPadding(WindowInsets.statusBars)
+            .imePadding()
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .verticalScroll(rememberScrollState())
+                .padding(horizontal = IMFITSpacing.screenHorizontal),
+            horizontalAlignment = Alignment.CenterHorizontally
+        ) {
+            Spacer(modifier = Modifier.height(IMFITSpacing.xl))
+
+            Text(
+                text = stringResource(R.string.register_title),
+                style = MaterialTheme.typography.headlineMedium,
+                fontWeight = FontWeight.Bold,
+                color = MaterialTheme.colorScheme.onBackground
+            )
+
+            Spacer(modifier = Modifier.height(IMFITSpacing.xs))
+
+            Text(
+                text = stringResource(R.string.register_subtitle),
+                style = MaterialTheme.typography.bodyLarge,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                textAlign = TextAlign.Center
+            )
+
+            Spacer(modifier = Modifier.height(IMFITSpacing.xl))
+
+            Box(
+                modifier = Modifier
+                    .size(140.dp)
+                    .clickable { onProfilePhotoClick() },
+                contentAlignment = Alignment.Center
+            ) {
+                Box(
+                    modifier = Modifier
+                        .size(120.dp)
+                        .shadow(8.dp, CircleShape)
+                        .clip(CircleShape)
+                        .background(MaterialTheme.colorScheme.surface)
+                        .border(3.dp, Primary, CircleShape),
+                    contentAlignment = Alignment.Center
+                ) {
+                    if (profilePhotoUri != null) {
+                        AsyncImage(
+                            model = profilePhotoUri,
+                            contentDescription = "Profile Photo",
+                            modifier = Modifier
+                                .size(120.dp)
+                                .clip(CircleShape),
+                            contentScale = ContentScale.Crop
+                        )
+                    } else {
+                        Box(
+                            modifier = Modifier
+                                .size(120.dp)
+                                .background(
+                                    brush = androidx.compose.ui.graphics.Brush.linearGradient(
+                                        listOf(
+                                            Primary.copy(alpha = 0.1f),
+                                            PrimaryLight.copy(alpha = 0.1f)
+                                        )
+                                    )
+                                ),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.Person,
+                                contentDescription = stringResource(R.string.desc_add_photo),
+                                modifier = Modifier.size(56.dp),
+                                tint = Primary.copy(alpha = 0.5f)
+                            )
+                        }
+                    }
+                }
+
+                Box(
+                    modifier = Modifier
+                        .align(Alignment.BottomEnd)
+                        .offset(x = (-5).dp, y = (-5).dp)
+                        .zIndex(1f)
+                        .size(40.dp)
+                        .shadow(6.dp, CircleShape)
+                        .clip(CircleShape)
+                        .background(Primary),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.CameraAlt,
+                        contentDescription = null,
+                        modifier = Modifier.size(20.dp),
+                        tint = MaterialTheme.colorScheme.onPrimary
+                    )
+                }
+            }
+
+            Spacer(modifier = Modifier.height(IMFITSpacing.xl))
+
+            IMFITTextField(
+                value = name,
+                onValueChange = onNameChange,
+                label = stringResource(R.string.label_fullname),
+                placeholder = stringResource(R.string.placeholder_name),
+                error = nameError,
+                imeAction = ImeAction.Next
+            )
+
+            Spacer(modifier = Modifier.height(IMFITSpacing.md))
+
+            IMFITTextField(
+                value = email,
+                onValueChange = onEmailChange,
+                label = stringResource(R.string.label_email),
+                placeholder = stringResource(R.string.placeholder_email),
+                error = emailError,
+                keyboardType = KeyboardType.Email,
+                imeAction = ImeAction.Next
+            )
+
+            Spacer(modifier = Modifier.height(IMFITSpacing.md))
+
+            Column(modifier = Modifier.fillMaxWidth()) {
+                Text(
+                    text = stringResource(R.string.label_date_of_birth),
+                    style = MaterialTheme.typography.labelLarge,
+                    fontWeight = FontWeight.Medium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.padding(bottom = IMFITSpacing.sm)
+                )
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clickable { onDatePickerClick() }
+                ) {
+                    OutlinedTextField(
+                        value = birthDate,
+                        onValueChange = {},
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(IMFITSizes.textFieldHeight),
+                        enabled = false,
+                        placeholder = {
+                            Text(
+                                stringResource(R.string.register_select_birth_date),
+                                style = MaterialTheme.typography.bodyLarge,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f)
+                            )
+                        },
+                        trailingIcon = {
+                            Icon(
+                                imageVector = Icons.Default.CalendarMonth,
+                                contentDescription = stringResource(R.string.desc_select_date),
+                                tint = Primary
+                            )
+                        },
+                        isError = birthDateError != null,
+                        shape = IMFITShapes.TextField,
+                        textStyle = MaterialTheme.typography.bodyLarge.copy(
+                            color = MaterialTheme.colorScheme.onSurface
+                        ),
+                        colors = OutlinedTextFieldDefaults.colors(
+                            disabledTextColor = MaterialTheme.colorScheme.onSurface,
+                            disabledBorderColor = if (birthDateError != null)
+                                MaterialTheme.colorScheme.error
+                            else MaterialTheme.colorScheme.outline.copy(alpha = 0.5f),
+                            disabledContainerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.3f),
+                            disabledPlaceholderColor = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f),
+                            disabledTrailingIconColor = Primary
+                        )
+                    )
+                }
+                if (birthDateError != null) {
+                    Text(
+                        text = birthDateError,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.error,
+                        modifier = Modifier.padding(start = IMFITSpacing.xs, top = IMFITSpacing.xs)
+                    )
+                }
+            }
+
+            Spacer(modifier = Modifier.height(IMFITSpacing.md))
+
+            IMFITPasswordField(
+                value = password,
+                onValueChange = onPasswordChange,
+                label = stringResource(R.string.label_password),
+                error = passwordError,
+                imeAction = ImeAction.Next
+            )
+
+            Spacer(modifier = Modifier.height(IMFITSpacing.md))
+
+            IMFITPasswordField(
+                value = confirmPassword,
+                onValueChange = onConfirmPasswordChange,
+                label = stringResource(R.string.label_confirm_password),
+                error = confirmPasswordError,
+                imeAction = ImeAction.Done,
+                onImeAction = onRegister
+            )
+
+            Spacer(modifier = Modifier.height(IMFITSpacing.xl))
+
+            IMFITButton(
+                text = stringResource(R.string.register_button),
+                onClick = onRegister,
+                isLoading = isLoading
+            )
+
+            Spacer(modifier = Modifier.height(IMFITSpacing.xl))
+
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.Center
+            ) {
+                Text(
+                    text = stringResource(R.string.register_redirect_prompt),
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+                Text(
+                    text = stringResource(R.string.register_redirect_action),
+                    style = MaterialTheme.typography.bodyMedium,
+                    fontWeight = FontWeight.Bold,
+                    color = Primary,
+                    modifier = Modifier.clickable { onNavigateToLogin() }
+                )
+            }
+
+            Spacer(modifier = Modifier.height(IMFITSpacing.huge))
+        }
+
+        SnackbarHost(
+            hostState = snackbarHostState,
+            modifier = Modifier
+                .align(Alignment.BottomCenter)
+                .windowInsetsPadding(WindowInsets.navigationBars)
+        )
+    }
+}
+
+@Preview(showBackground = true, showSystemUi = true)
+@Composable
+private fun RegisterScreenPreviewLight() {
+    IMFITTheme(darkTheme = false) {
+        RegisterScreenContent()
+    }
+}
+
+@Preview(showBackground = true, showSystemUi = true)
+@Composable
+private fun RegisterScreenPreviewDark() {
+    IMFITTheme(darkTheme = true) {
+        RegisterScreenContent()
+    }
+}
+
+@Preview(showBackground = true, showSystemUi = true)
+@Composable
+private fun RegisterScreenPreviewWithData() {
+    IMFITTheme(darkTheme = false) {
+        RegisterScreenContent(
+            name = "John Doe",
+            email = "john@example.com",
+            birthDate = "1990-01-15",
+            password = "password123",
+            confirmPassword = "password123"
+        )
+    }
+}
+
+@Preview(showBackground = true, showSystemUi = true)
+@Composable
+private fun RegisterScreenPreviewWithErrors() {
+    IMFITTheme(darkTheme = false) {
+        RegisterScreenContent(
+            name = "",
+            email = "invalid-email",
+            birthDate = "",
+            password = "123",
+            confirmPassword = "456",
+            nameError = "Name is required",
+            emailError = "Invalid email format",
+            birthDateError = "Birth date is required",
+            passwordError = "Password must be at least 6 characters",
+            confirmPasswordError = "Passwords do not match"
+        )
+    }
+}
+
+@Preview(showBackground = true, showSystemUi = true)
+@Composable
+private fun RegisterScreenPreviewLoading() {
+    IMFITTheme(darkTheme = false) {
+        RegisterScreenContent(
+            name = "John Doe",
+            email = "john@example.com",
+            birthDate = "1990-01-15",
+            password = "password123",
+            confirmPassword = "password123",
+            isLoading = true
         )
     }
 }

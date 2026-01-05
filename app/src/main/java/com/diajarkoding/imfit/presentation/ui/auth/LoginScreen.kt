@@ -39,13 +39,17 @@ import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.graphics.Brush
-import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.LocalFocusManager
+import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import com.diajarkoding.imfit.BuildConfig
@@ -60,6 +64,7 @@ import com.diajarkoding.imfit.theme.IMFITSizes
 import com.diajarkoding.imfit.theme.IMFITSpacing
 import com.diajarkoding.imfit.theme.Primary
 import com.diajarkoding.imfit.theme.PrimaryLight
+import com.diajarkoding.imfit.theme.IMFITTheme
 
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
@@ -74,6 +79,9 @@ fun LoginScreen(
 ) {
     val state by viewModel.state.collectAsState()
     val snackbarHostState = remember { SnackbarHostState() }
+    val passwordFocusRequester = remember { FocusRequester() }
+    val keyboardController = LocalSoftwareKeyboardController.current
+    val focusManager = LocalFocusManager.current
 
     LaunchedEffect(state.loginSuccess) {
         if (state.loginSuccess) {
@@ -151,18 +159,25 @@ fun LoginScreen(
                 placeholder = stringResource(R.string.placeholder_email),
                 error = state.emailError?.let { stringResource(it) },
                 keyboardType = KeyboardType.Email,
-                imeAction = ImeAction.Next
+                imeAction = ImeAction.Next,
+                onImeAction = { passwordFocusRequester.requestFocus() }
             )
 
             Spacer(modifier = Modifier.height(IMFITSpacing.lg))
 
             IMFITPasswordField(
+                modifier = Modifier.focusRequester(passwordFocusRequester),
                 value = state.password,
                 onValueChange = { viewModel.onPasswordChange(it) },
                 label = stringResource(R.string.label_password),
+                placeholder = stringResource(R.string.placeholder_password),
                 error = state.passwordError?.let { stringResource(it) },
                 imeAction = ImeAction.Done,
-                onImeAction = { viewModel.login() }
+                onImeAction = { 
+                    keyboardController?.hide()
+                    focusManager.clearFocus()
+                    viewModel.login() 
+                }
             )
 
             Spacer(modifier = Modifier.height(IMFITSpacing.xxxl))
@@ -243,5 +258,235 @@ fun LoginScreen(
                 )
             }
         }
+    }
+}
+
+@OptIn(ExperimentalLayoutApi::class)
+@Composable
+private fun LoginScreenContent(
+    email: String = "",
+    password: String = "",
+    emailError: String? = null,
+    passwordError: String? = null,
+    isLoading: Boolean = false,
+    isDarkMode: Boolean = false,
+    isIndonesian: Boolean = true,
+    onEmailChange: (String) -> Unit = {},
+    onPasswordChange: (String) -> Unit = {},
+    onLogin: () -> Unit = {},
+    onNavigateToRegister: () -> Unit = {},
+    onToggleTheme: () -> Unit = {},
+    onToggleLanguage: () -> Unit = {}
+) {
+    val snackbarHostState = remember { SnackbarHostState() }
+    val passwordFocusRequester = remember { FocusRequester() }
+    val keyboardController = LocalSoftwareKeyboardController.current
+    val focusManager = LocalFocusManager.current
+
+    Box(
+        modifier = Modifier
+            .fillMaxSize()
+            .background(MaterialTheme.colorScheme.background)
+            .windowInsetsPadding(WindowInsets.statusBars)
+            .imePadding()
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .verticalScroll(rememberScrollState())
+                .padding(horizontal = IMFITSpacing.screenHorizontal),
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.Center
+        ) {
+            Spacer(modifier = Modifier.height(IMFITSpacing.huge))
+
+            Box(
+                modifier = Modifier
+                    .size(80.dp)
+                    .clip(IMFITShapes.Card)
+                    .background(
+                        Brush.linearGradient(listOf(Primary, PrimaryLight))
+                    ),
+                contentAlignment = Alignment.Center
+            ) {
+                Icon(
+                    imageVector = Icons.Default.FitnessCenter,
+                    contentDescription = "IMFIT Logo",
+                    modifier = Modifier.size(IMFITSizes.iconXxl),
+                    tint = MaterialTheme.colorScheme.onPrimary
+                )
+            }
+
+            Spacer(modifier = Modifier.height(IMFITSpacing.xxl))
+
+            Text(
+                text = stringResource(R.string.login_welcome_title),
+                style = MaterialTheme.typography.headlineMedium,
+                fontWeight = FontWeight.Bold,
+                color = MaterialTheme.colorScheme.onBackground
+            )
+
+            Spacer(modifier = Modifier.height(IMFITSpacing.sm))
+
+            Text(
+                text = stringResource(R.string.login_welcome_subtitle),
+                style = MaterialTheme.typography.bodyLarge,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                textAlign = TextAlign.Center
+            )
+
+            Spacer(modifier = Modifier.height(IMFITSpacing.xxxl))
+
+            IMFITTextField(
+                value = email,
+                onValueChange = onEmailChange,
+                label = stringResource(R.string.label_email),
+                placeholder = stringResource(R.string.placeholder_email),
+                error = emailError,
+                keyboardType = KeyboardType.Email,
+                imeAction = ImeAction.Next,
+                onImeAction = { passwordFocusRequester.requestFocus() }
+            )
+
+            Spacer(modifier = Modifier.height(IMFITSpacing.lg))
+
+            IMFITPasswordField(
+                modifier = Modifier.focusRequester(passwordFocusRequester),
+                value = password,
+                onValueChange = onPasswordChange,
+                label = stringResource(R.string.label_password),
+                placeholder = stringResource(R.string.placeholder_password),
+                error = passwordError,
+                imeAction = ImeAction.Done,
+                onImeAction = { 
+                    keyboardController?.hide()
+                    focusManager.clearFocus()
+                    onLogin() 
+                }
+            )
+
+            Spacer(modifier = Modifier.height(IMFITSpacing.xxxl))
+
+            IMFITButton(
+                text = stringResource(R.string.login_button),
+                onClick = onLogin,
+                isLoading = isLoading
+            )
+
+            Spacer(modifier = Modifier.height(IMFITSpacing.xxl))
+
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.Center
+            ) {
+                Text(
+                    text = stringResource(R.string.login_redirect_prompt),
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+                Text(
+                    text = stringResource(R.string.login_redirect_action),
+                    style = MaterialTheme.typography.bodyMedium,
+                    fontWeight = FontWeight.Bold,
+                    color = Primary,
+                    modifier = Modifier.clickable { onNavigateToRegister() }
+                )
+            }
+
+            Spacer(modifier = Modifier.height(IMFITSpacing.xxxl))
+        }
+
+        Box(
+            modifier = Modifier
+                .align(Alignment.TopStart)
+                .padding(IMFITSpacing.lg)
+        ) {
+            IMFITLanguageSwitch(
+                isIndonesian = isIndonesian,
+                onToggle = onToggleLanguage
+            )
+        }
+
+        Box(
+            modifier = Modifier
+                .align(Alignment.TopEnd)
+                .padding(IMFITSpacing.lg)
+        ) {
+            IMFITThemeSwitch(
+                isDarkMode = isDarkMode,
+                onToggle = onToggleTheme
+            )
+        }
+
+        val isKeyboardVisible = WindowInsets.isImeVisible
+        AnimatedVisibility(
+            visible = !isKeyboardVisible,
+            enter = fadeIn(),
+            exit = fadeOut(),
+            modifier = Modifier.align(Alignment.BottomCenter)
+        ) {
+            Column(
+                modifier = Modifier
+                    .windowInsetsPadding(WindowInsets.navigationBars)
+                    .padding(bottom = IMFITSpacing.lg),
+                horizontalAlignment = Alignment.CenterHorizontally
+            ) {
+                SnackbarHost(hostState = snackbarHostState)
+                Text(
+                    text = "v${BuildConfig.VERSION_NAME}",
+                    style = MaterialTheme.typography.labelMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f)
+                )
+            }
+        }
+    }
+}
+
+@Preview(showBackground = true, showSystemUi = true)
+@Composable
+private fun LoginScreenPreviewLight() {
+    IMFITTheme(darkTheme = false) {
+        LoginScreenContent(
+            isDarkMode = false,
+            isIndonesian = true
+        )
+    }
+}
+
+@Preview(showBackground = true, showSystemUi = true)
+@Composable
+private fun LoginScreenPreviewDark() {
+    IMFITTheme(darkTheme = true) {
+        LoginScreenContent(
+            isDarkMode = true,
+            isIndonesian = true
+        )
+    }
+}
+
+@Preview(showBackground = true, showSystemUi = true)
+@Composable
+private fun LoginScreenPreviewWithError() {
+    IMFITTheme(darkTheme = false) {
+        LoginScreenContent(
+            email = "invalid-email",
+            password = "123",
+            emailError = "Invalid email format",
+            passwordError = "Password must be at least 6 characters",
+            isDarkMode = false
+        )
+    }
+}
+
+@Preview(showBackground = true, showSystemUi = true)
+@Composable
+private fun LoginScreenPreviewLoading() {
+    IMFITTheme(darkTheme = false) {
+        LoginScreenContent(
+            email = "demo@imfit.com",
+            password = "password123",
+            isLoading = true,
+            isDarkMode = false
+        )
     }
 }

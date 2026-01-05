@@ -65,10 +65,12 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
+import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import com.diajarkoding.imfit.R
 import com.diajarkoding.imfit.domain.model.Exercise
+import com.diajarkoding.imfit.domain.model.MuscleCategory
 import com.diajarkoding.imfit.domain.model.TemplateExercise
 import com.diajarkoding.imfit.presentation.components.common.IMFITButton
 import com.diajarkoding.imfit.presentation.components.common.IMFITDialog
@@ -81,6 +83,7 @@ import com.diajarkoding.imfit.theme.DeletePink
 import com.diajarkoding.imfit.theme.IMFITShapes
 import com.diajarkoding.imfit.theme.IMFITSizes
 import com.diajarkoding.imfit.theme.IMFITSpacing
+import com.diajarkoding.imfit.theme.IMFITTheme
 import com.diajarkoding.imfit.theme.Primary
 import com.diajarkoding.imfit.theme.PrimaryLight
 import kotlinx.coroutines.launch
@@ -283,42 +286,60 @@ fun WorkoutDetailScreen(
                             }
                         }
 
-                        item {
-                            IMFITOutlinedButton(
-                                text = stringResource(R.string.action_add_exercise),
-                                onClick = { onNavigateToExerciseSelection(workoutId) },
-                                icon = Icons.Default.Add
+                    }
+
+                    item {
+                        IMFITOutlinedButton(
+                            text = stringResource(R.string.action_add_exercise),
+                            onClick = { onNavigateToExerciseSelection(workoutId) },
+                            icon = Icons.Default.Add
+                        )
+                    }
+
+                    item {
+                        if (state.isWorkoutActive) {
+                            IMFITButton(
+                                text = stringResource(R.string.action_end_workout),
+                                onClick = { viewModel.endWorkout() },
+                                icon = Icons.Default.Stop
+                            )
+                        } else {
+                            IMFITButton(
+                                text = stringResource(R.string.action_start_workout),
+                                onClick = { onStartWorkout(workoutId) },
+                                enabled = (state.workout?.exerciseCount ?: 0) > 0,
+                                icon = Icons.Default.PlayArrow
                             )
                         }
                     }
 
-                    item { Spacer(modifier = Modifier.height(100.dp)) }
+                    item { Spacer(modifier = Modifier.height(48.dp)) }
                 }
 
                 // Bottom Action Button
-                Box(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .shadow(8.dp, spotColor = Color.Black.copy(alpha = 0.1f))
-                        .background(MaterialTheme.colorScheme.surface)
-                        .padding(IMFITSpacing.screenHorizontal)
-                        .padding(vertical = IMFITSpacing.lg)
-                ) {
-                    if (state.isWorkoutActive) {
-                        IMFITButton(
-                            text = stringResource(R.string.action_end_workout),
-                            onClick = { viewModel.endWorkout() },
-                            icon = Icons.Default.Stop
-                        )
-                    } else {
-                        IMFITButton(
-                            text = stringResource(R.string.action_start_workout),
-                            onClick = { onStartWorkout(workoutId) },
-                            enabled = (state.workout?.exerciseCount ?: 0) > 0,
-                            icon = Icons.Default.PlayArrow
-                        )
-                    }
-                }
+//                Box(
+//                    modifier = Modifier
+//                        .fillMaxWidth()
+//                        .shadow(8.dp, spotColor = Color.Black.copy(alpha = 0.1f))
+//                        .background(MaterialTheme.colorScheme.surface)
+//                        .padding(IMFITSpacing.screenHorizontal)
+//                        .padding(vertical = IMFITSpacing.lg)
+//                ) {
+//                    if (state.isWorkoutActive) {
+//                        IMFITButton(
+//                            text = stringResource(R.string.action_end_workout),
+//                            onClick = { viewModel.endWorkout() },
+//                            icon = Icons.Default.Stop
+//                        )
+//                    } else {
+//                        IMFITButton(
+//                            text = stringResource(R.string.action_start_workout),
+//                            onClick = { onStartWorkout(workoutId) },
+//                            enabled = (state.workout?.exerciseCount ?: 0) > 0,
+//                            icon = Icons.Default.PlayArrow
+//                        )
+//                    }
+//                }
             }
 
             SnackbarHost(
@@ -659,5 +680,294 @@ private fun EmptyExercisesCard() {
                 color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f)
             )
         }
+    }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun WorkoutDetailScreenContent(
+    workoutName: String = "Push Day",
+    exerciseCount: Int = 0,
+    estimatedMinutes: Int = 0,
+    exercises: List<TemplateExercise> = emptyList(),
+    isLoading: Boolean = false,
+    isWorkoutActive: Boolean = false,
+    onNavigateBack: () -> Unit = {},
+    onNavigateToEdit: () -> Unit = {},
+    onDelete: () -> Unit = {},
+    onAddExercise: () -> Unit = {},
+    onStartWorkout: () -> Unit = {},
+    onEndWorkout: () -> Unit = {}
+) {
+    val snackbarHostState = remember { SnackbarHostState() }
+
+    Scaffold(
+        contentWindowInsets = WindowInsets(0),
+        topBar = {
+            TopAppBar(
+                modifier = Modifier.windowInsetsPadding(WindowInsets.statusBars),
+                title = {
+                    Text(
+                        text = workoutName,
+                        style = MaterialTheme.typography.titleLarge,
+                        fontWeight = FontWeight.Bold
+                    )
+                },
+                navigationIcon = {
+                    IconButton(onClick = onNavigateBack) {
+                        Icon(
+                            imageVector = Icons.AutoMirrored.Filled.ArrowBack,
+                            contentDescription = stringResource(R.string.action_back)
+                        )
+                    }
+                },
+                actions = {
+                    IconButton(onClick = onNavigateToEdit) {
+                        Icon(
+                            imageVector = Icons.Default.Edit,
+                            contentDescription = stringResource(R.string.action_edit),
+                            tint = if (isWorkoutActive) Primary.copy(alpha = 0.4f) else Primary
+                        )
+                    }
+                    IconButton(onClick = onDelete) {
+                        Icon(
+                            imageVector = Icons.Default.Delete,
+                            contentDescription = stringResource(R.string.action_delete),
+                            tint = if (isWorkoutActive) DeletePink.copy(alpha = 0.4f) else DeletePink
+                        )
+                    }
+                },
+                colors = TopAppBarDefaults.topAppBarColors(
+                    containerColor = MaterialTheme.colorScheme.surface
+                ),
+                windowInsets = WindowInsets(0)
+            )
+        }
+    ) { padding ->
+        Box(modifier = Modifier.fillMaxSize()) {
+            Column(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(padding)
+            ) {
+                LazyColumn(
+                    modifier = Modifier
+                        .weight(1f)
+                        .fillMaxWidth(),
+                    contentPadding = PaddingValues(IMFITSpacing.screenHorizontal),
+                    verticalArrangement = Arrangement.spacedBy(IMFITSpacing.lg)
+                ) {
+                    if (isLoading) {
+                        item { ShimmerStatCard() }
+                        item {
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.SpaceBetween
+                            ) {
+                                com.diajarkoding.imfit.presentation.components.common.ShimmerBox(
+                                    width = 100.dp,
+                                    height = 18.dp
+                                )
+                                com.diajarkoding.imfit.presentation.components.common.ShimmerBox(
+                                    width = 80.dp,
+                                    height = 14.dp
+                                )
+                            }
+                        }
+                        items(3, key = { it }) { ShimmerExerciseCard() }
+                    } else {
+                        item {
+                            WorkoutInfoCard(
+                                exerciseCount = exerciseCount,
+                                estimatedMinutes = estimatedMinutes
+                            )
+                        }
+
+                        item {
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Text(
+                                    text = stringResource(R.string.workout_exercises_label),
+                                    style = MaterialTheme.typography.titleMedium,
+                                    fontWeight = FontWeight.Bold
+                                )
+                                Text(
+                                    text = stringResource(
+                                        R.string.workout_exercises_total,
+                                        exerciseCount
+                                    ),
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                            }
+                        }
+
+                        if (exercises.isEmpty()) {
+                            item { EmptyExercisesCard() }
+                        } else {
+                            items(exercises, key = { it.id }) { templateExercise ->
+                                ExerciseItemCard(
+                                    templateExercise = templateExercise,
+                                    onUpdateConfig = { _, _, _ -> }
+                                )
+                            }
+                        }
+                    }
+
+                    item {
+                        IMFITOutlinedButton(
+                            text = stringResource(R.string.action_add_exercise),
+                            onClick = onAddExercise,
+                            icon = Icons.Default.Add
+                        )
+                    }
+
+                    item {
+                        if (isWorkoutActive) {
+                            IMFITButton(
+                                text = stringResource(R.string.action_end_workout),
+                                onClick = onEndWorkout,
+                                icon = Icons.Default.Stop
+                            )
+                        } else {
+                            IMFITButton(
+                                text = stringResource(R.string.action_start_workout),
+                                onClick = onStartWorkout,
+                                enabled = exerciseCount > 0,
+                                icon = Icons.Default.PlayArrow
+                            )
+                        }
+                    }
+
+                    item { Spacer(modifier = Modifier.height(100.dp)) }
+                }
+            }
+
+            SnackbarHost(
+                hostState = snackbarHostState,
+                modifier = Modifier
+                    .align(Alignment.BottomCenter)
+                    .padding(bottom = 100.dp)
+            )
+        }
+    }
+}
+
+private fun createSampleExercises(): List<TemplateExercise> {
+    return listOf(
+        TemplateExercise(
+            exercise = Exercise(
+                id = "1",
+                name = "Barbell Bench Press",
+                muscleCategory = MuscleCategory.CHEST,
+                description = "Classic chest exercise"
+            ),
+            sets = 4,
+            reps = 8,
+            restSeconds = 90
+        ),
+        TemplateExercise(
+            exercise = Exercise(
+                id = "2",
+                name = "Incline Dumbbell Press",
+                muscleCategory = MuscleCategory.CHEST,
+                description = "Upper chest focus"
+            ),
+            sets = 3,
+            reps = 10,
+            restSeconds = 60
+        ),
+        TemplateExercise(
+            exercise = Exercise(
+                id = "3",
+                name = "Overhead Press",
+                muscleCategory = MuscleCategory.SHOULDERS,
+                description = "Shoulder compound movement"
+            ),
+            sets = 3,
+            reps = 8,
+            restSeconds = 90
+        ),
+        TemplateExercise(
+            exercise = Exercise(
+                id = "4",
+                name = "Tricep Pushdown",
+                muscleCategory = MuscleCategory.TRICEPS,
+                description = "Triceps isolation"
+            ),
+            sets = 3,
+            reps = 12,
+            restSeconds = 45
+        )
+    )
+}
+
+@Preview(showBackground = true, showSystemUi = true)
+@Composable
+private fun WorkoutDetailScreenPreviewEmpty() {
+    IMFITTheme(darkTheme = false) {
+        WorkoutDetailScreenContent(
+            workoutName = "Push Day",
+            exerciseCount = 0,
+            estimatedMinutes = 0,
+            exercises = emptyList()
+        )
+    }
+}
+
+@Preview(showBackground = true, showSystemUi = true)
+@Composable
+private fun WorkoutDetailScreenPreviewWithExercises() {
+    IMFITTheme(darkTheme = false) {
+        val exercises = createSampleExercises()
+        WorkoutDetailScreenContent(
+            workoutName = "Push Day",
+            exerciseCount = exercises.size,
+            estimatedMinutes = 45,
+            exercises = exercises
+        )
+    }
+}
+
+@Preview(showBackground = true, showSystemUi = true)
+@Composable
+private fun WorkoutDetailScreenPreviewDark() {
+    IMFITTheme(darkTheme = true) {
+        val exercises = createSampleExercises()
+        WorkoutDetailScreenContent(
+            workoutName = "Push Day",
+            exerciseCount = exercises.size,
+            estimatedMinutes = 45,
+            exercises = exercises
+        )
+    }
+}
+
+@Preview(showBackground = true, showSystemUi = true)
+@Composable
+private fun WorkoutDetailScreenPreviewLoading() {
+    IMFITTheme(darkTheme = false) {
+        WorkoutDetailScreenContent(
+            workoutName = "Push Day",
+            isLoading = true
+        )
+    }
+}
+
+@Preview(showBackground = true, showSystemUi = true)
+@Composable
+private fun WorkoutDetailScreenPreviewActive() {
+    IMFITTheme(darkTheme = false) {
+        val exercises = createSampleExercises()
+        WorkoutDetailScreenContent(
+            workoutName = "Push Day",
+            exerciseCount = exercises.size,
+            estimatedMinutes = 45,
+            exercises = exercises,
+            isWorkoutActive = true
+        )
     }
 }

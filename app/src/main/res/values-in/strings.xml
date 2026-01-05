@@ -151,6 +151,7 @@
     <string name="login_welcome_subtitle">Masuk untuk melanjutkan perjalanan kebugaran Anda</string>
     <string name="login_demo_hint">Demo: demo@imfit.com / password123</string>
     <string name="placeholder_email">Masukkan email Anda</string>
+    <string name="placeholder_password">Masukkan kata sandi Anda</string>
 
     <!-- Profile Screen -->
     <string name="profile_section_info">Informasi Profil</string>

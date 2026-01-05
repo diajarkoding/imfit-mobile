@@ -169,6 +169,7 @@ fun IMFITPasswordField(
     onValueChange: (String) -> Unit,
     label: String,
     modifier: Modifier = Modifier,
+    placeholder: String = "",
     error: String? = null,
     imeAction: ImeAction = ImeAction.Done,
     onImeAction: () -> Unit = {},
@@ -200,6 +201,15 @@ fun IMFITPasswordField(
         OutlinedTextField(
             value = value,
             onValueChange = onValueChange,
+            placeholder = if (placeholder.isNotEmpty()) {
+                { 
+                    Text(
+                        text = placeholder,
+                        style = MaterialTheme.typography.bodyLarge,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f)
+                    ) 
+                }
+            } else null,
             modifier = Modifier
                 .fillMaxWidth()
                 .height(IMFITSizes.textFieldHeight),

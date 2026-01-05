@@ -3,6 +3,7 @@ package com.diajarkoding.imfit.theme
 import android.content.Context
 import android.content.SharedPreferences
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import java.util.Locale
@@ -15,6 +16,11 @@ object LocaleManager {
     var currentLanguage by mutableStateOf(DEFAULT_LANGUAGE)
         private set
     
+    // Configuration version to trigger Compose recomposition when language changes
+    // Instead of Activity.recreate() which causes black screen flicker
+    var configurationVersion by mutableIntStateOf(0)
+        private set
+    
     val isIndonesian: Boolean
         get() = currentLanguage == "in"
 
@@ -24,12 +30,12 @@ object LocaleManager {
         updateLocale(context, currentLanguage)
     }
 
-    fun toggleLanguage(context: Context, recreateActivity: Boolean = true) {
+    fun toggleLanguage(context: Context) {
         val newLanguage = if (currentLanguage == "in") "en" else "in"
-        setLanguage(context, newLanguage, recreateActivity)
+        setLanguage(context, newLanguage)
     }
 
-    fun setLanguage(context: Context, languageCode: String, recreateActivity: Boolean = true) {
+    fun setLanguage(context: Context, languageCode: String) {
         currentLanguage = languageCode
         
         val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
@@ -37,9 +43,9 @@ object LocaleManager {
         
         updateLocale(context, languageCode)
         
-        if (recreateActivity && context is android.app.Activity) {
-            context.recreate()
-        }
+        // Increment version to trigger Compose recomposition instead of recreating Activity
+        // This avoids the black screen flicker on language change
+        configurationVersion++
     }
 
     private fun createLocale(languageCode: String): Locale {

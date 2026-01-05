@@ -22,7 +22,9 @@ data class ActiveWorkoutState(
     val isRestTimerActive: Boolean = false,
     val restTimerSeconds: Int = 60,
     val showCancelDialog: Boolean = false,
-    val workoutLogId: String? = null
+    val workoutLogId: String? = null,
+    // Session-level rest override - when set, this overrides per-exercise rest times
+    val sessionRestOverride: Int? = null
 )
 
 @HiltViewModel
@@ -115,6 +117,27 @@ class ActiveWorkoutViewModel @Inject constructor(
         }
     }
 
+    /**
+     * Sets session-level rest time override.
+     * This value will be used for ALL exercises during this session.
+     */
+    fun setSessionRestOverride(seconds: Int) {
+        _state.update { it.copy(sessionRestOverride = seconds) }
+        android.util.Log.d("ActiveWorkoutVM", "Set session rest override: $seconds seconds")
+    }
+    
+    /**
+     * Gets the current rest time configuration.
+     * Returns session override if set, otherwise returns the default from first exercise.
+     */
+    fun getCurrentRestTime(): Int {
+        val override = _state.value.sessionRestOverride
+        if (override != null) return override
+        
+        // Return first exercise's rest time as default display value
+        return _state.value.session?.exerciseLogs?.firstOrNull()?.restSeconds ?: 60
+    }
+
     fun updateRestTimer(exerciseIndex: Int, seconds: Int) {
         viewModelScope.launch {
             val currentSession = _state.value.session ?: return@launch
@@ -168,7 +191,7 @@ class ActiveWorkoutViewModel @Inject constructor(
             workoutRepository.updateActiveSession(updatedSession)
             _state.update { it.copy(session = updatedSession) }
 
-            // Start rest timer with exercise-specific rest time
+            // Start rest timer
             startRestTimer(exerciseIndex)
         }
     }
@@ -214,14 +237,16 @@ class ActiveWorkoutViewModel @Inject constructor(
     }
 
     /**
-     * Starts the rest timer using the rest time from the specified exercise.
-     * @param exerciseIndex The index of the exercise to get rest time from.
+     * Starts the rest timer.
+     * Uses session-level override if set, otherwise uses the exercise's configured rest time.
      */
     private fun startRestTimer(exerciseIndex: Int) {
         restTimerJob?.cancel()
         
-        // Get rest time from the specific exercise in the session
-        val restSeconds = _state.value.session?.getRestSecondsForExercise(exerciseIndex) ?: 60
+        // Use session override if set, otherwise use exercise's rest time
+        val restSeconds = _state.value.sessionRestOverride 
+            ?: _state.value.session?.getRestSecondsForExercise(exerciseIndex) 
+            ?: 60
         
         _state.update {
             it.copy(

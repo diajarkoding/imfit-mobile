@@ -149,8 +149,9 @@ fun RegisterScreen(
                 TextButton(
                     onClick = {
                         datePickerState.selectedDateMillis?.let { millis ->
-                            val formatter = SimpleDateFormat("dd/MM/yyyy", Locale.getDefault())
-                            val date = formatter.format(Date(millis))
+                            // Use ISO format for database (yyyy-MM-dd)
+                            val isoFormatter = SimpleDateFormat("yyyy-MM-dd", Locale.US)
+                            val date = isoFormatter.format(Date(millis))
                             viewModel.onBirthDateChange(date)
                         }
                         showDatePicker = false

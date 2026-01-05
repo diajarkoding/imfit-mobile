@@ -1,10 +1,14 @@
 package com.diajarkoding.imfit.presentation.ui.auth
 
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.WindowInsets
@@ -12,6 +16,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.imePadding
+import androidx.compose.foundation.layout.isImeVisible
 import androidx.compose.foundation.layout.navigationBars
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
@@ -35,15 +40,16 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
-import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
+import androidx.hilt.navigation.compose.hiltViewModel
 import com.diajarkoding.imfit.BuildConfig
 import com.diajarkoding.imfit.R
-import androidx.hilt.navigation.compose.hiltViewModel
 import com.diajarkoding.imfit.presentation.components.common.IMFITButton
 import com.diajarkoding.imfit.presentation.components.common.IMFITLanguageSwitch
 import com.diajarkoding.imfit.presentation.components.common.IMFITPasswordField
@@ -55,6 +61,7 @@ import com.diajarkoding.imfit.theme.IMFITSpacing
 import com.diajarkoding.imfit.theme.Primary
 import com.diajarkoding.imfit.theme.PrimaryLight
 
+@OptIn(ExperimentalLayoutApi::class)
 @Composable
 fun LoginScreen(
     onNavigateToRegister: () -> Unit,
@@ -98,7 +105,7 @@ fun LoginScreen(
             verticalArrangement = Arrangement.Center
         ) {
             Spacer(modifier = Modifier.height(IMFITSpacing.huge))
-            
+
             // Logo
             Box(
                 modifier = Modifier
@@ -188,21 +195,6 @@ fun LoginScreen(
 
             Spacer(modifier = Modifier.height(IMFITSpacing.xxxl))
 
-            Box(
-                modifier = Modifier
-                    .clip(IMFITShapes.Chip)
-                    .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f))
-                    .padding(horizontal = IMFITSpacing.lg, vertical = IMFITSpacing.md)
-            ) {
-                Text(
-                    text = stringResource(R.string.login_demo_hint),
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    textAlign = TextAlign.Center
-                )
-            }
-            
-            Spacer(modifier = Modifier.height(IMFITSpacing.huge))
         }
 
         // Language Toggle (Top Left)
@@ -229,20 +221,27 @@ fun LoginScreen(
             )
         }
 
-        // Version Info (Bottom Center)
-        Column(
-            modifier = Modifier
-                .align(Alignment.BottomCenter)
-                .windowInsetsPadding(WindowInsets.navigationBars)
-                .padding(bottom = IMFITSpacing.lg),
-            horizontalAlignment = Alignment.CenterHorizontally
+        // Version Info (Bottom Center) - Hide when keyboard is visible
+        val isKeyboardVisible = WindowInsets.isImeVisible
+        AnimatedVisibility(
+            visible = !isKeyboardVisible,
+            enter = fadeIn(),
+            exit = fadeOut(),
+            modifier = Modifier.align(Alignment.BottomCenter)
         ) {
-            SnackbarHost(hostState = snackbarHostState)
-            Text(
-                text = "v${BuildConfig.VERSION_NAME}",
-                style = MaterialTheme.typography.labelMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f)
-            )
+            Column(
+                modifier = Modifier
+                    .windowInsetsPadding(WindowInsets.navigationBars)
+                    .padding(bottom = IMFITSpacing.lg),
+                horizontalAlignment = Alignment.CenterHorizontally
+            ) {
+                SnackbarHost(hostState = snackbarHostState)
+                Text(
+                    text = "v${BuildConfig.VERSION_NAME}",
+                    style = MaterialTheme.typography.labelMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f)
+                )
+            }
         }
     }
 }

@@ -2,13 +2,20 @@ package com.diajarkoding.imfit.data.local.entity
 
 import androidx.room.ColumnInfo
 import androidx.room.Entity
+import androidx.room.Index
 import androidx.room.PrimaryKey
+import com.diajarkoding.imfit.data.local.sync.SyncStatus
 
 @Entity(
     tableName = "exercise_logs",
-    primaryKeys = ["workout_log_id", "exercise_id"]
+    indices = [
+        Index(value = ["workout_log_id"]),
+        Index(value = ["exercise_id"])
+    ]
 )
 data class ExerciseLogEntity(
+    @PrimaryKey
+    val id: String,
     @ColumnInfo(name = "workout_log_id")
     val workoutLogId: String,
     @ColumnInfo(name = "exercise_id")
@@ -25,6 +32,10 @@ data class ExerciseLogEntity(
     val totalSets: Int,
     @ColumnInfo(name = "total_reps")
     val totalReps: Int,
+    @ColumnInfo(name = "sync_status")
+    val syncStatus: String = SyncStatus.PENDING_SYNC.name,
+    @ColumnInfo(name = "pending_operation")
+    val pendingOperation: String? = null,
     @ColumnInfo(name = "created_at")
     val createdAt: Long = System.currentTimeMillis(),
     @ColumnInfo(name = "updated_at")

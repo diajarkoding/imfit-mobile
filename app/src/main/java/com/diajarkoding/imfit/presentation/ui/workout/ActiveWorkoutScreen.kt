@@ -110,21 +110,15 @@ fun ActiveWorkoutScreen(
     }
 
     if (showRestConfigSheet) {
+        // Get current rest time (session override or default from first exercise)
+        val currentRestTime = viewModel.getCurrentRestTime()
+        
         RestTimerConfigSheet(
-            currentRestSeconds = state.restTimerSeconds,
+            currentRestSeconds = currentRestTime,
             onDismiss = { showRestConfigSheet = false },
             onConfirm = { seconds ->
-                // Update for all exercises or current? Requirement: "manually edit the rest time... saved only for current session"
-                // Usually this setting applies to the exercises being performed.
-                // Assuming we update the 'current' exercise or just a global setting if not specific.
-                // But the requirement says "edit timer feature... default 60s".
-                // And "User can manually edit rest time data... in ActiveWorkoutScreen".
-                // If I set it here, does it apply to the *next* rest?
-                // I'll assume it updates the rest time for the *current exercise* or generalized if no current index.
-                // But `ActiveWorkoutState` references `currentExerciseIndex` (via session).
-                // `session.currentExerciseIndex` is valid.
-                val currentIndex = state.session?.currentExerciseIndex ?: 0
-                viewModel.updateRestTimer(currentIndex, seconds)
+                // Set session-level override - applies to ALL rest timers for this session
+                viewModel.setSessionRestOverride(seconds)
                 showRestConfigSheet = false
             }
         )

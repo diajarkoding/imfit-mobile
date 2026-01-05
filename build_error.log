@@ -1,0 +1,24 @@
+> Task :app:preBuild UP-TO-DATE
+> Task :app:preDebugBuild UP-TO-DATE
+> Task :app:generateDebugResValues
+> Task :app:generateDebugResources
+
+> Task :app:mergeDebugResources FAILED
+ERROR: C:\Users\SMMA-Softeng\Iskandar\IMFIT\imfit-mobile\app\src\main\res\values\strings.xml: Resource and asset merger: Found item String/action_back more than one time
+ERROR: C:\Users\SMMA-Softeng\Iskandar\IMFIT\imfit-mobile\app\src\main\res\values-in\strings.xml: Resource and asset merger: Found item String/action_back more than one time
+
+FAILURE: Build failed with an exception.
+
+* What went wrong:
+Execution failed for task ':app:mergeDebugResources'.
+> C:\Users\SMMA-Softeng\Iskandar\IMFIT\imfit-mobile\app\src\main\res\values\strings.xml: Error: Found item String/action_back more than one time
+  C:\Users\SMMA-Softeng\Iskandar\IMFIT\imfit-mobile\app\src\main\res\values-in\strings.xml: Error: Found item String/action_back more than one time
+
+* Try:
+> Run with --stacktrace option to get the stack trace.
+> Run with --info or --debug option to get more log output.
+> Run with --scan to get full insights.
+> Get more help at https://help.gradle.org.
+
+BUILD FAILED in 4s
+3 actionable tasks: 3 executed

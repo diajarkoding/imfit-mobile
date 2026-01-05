@@ -4,82 +4,97 @@ import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.ReadOnlyComposable
+import androidx.compose.runtime.compositionLocalOf
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
 
-// Extension untuk mendapatkan warna custom berdasarkan tema
+val LocalIsDarkTheme = compositionLocalOf { false }
+
 object IMFITColors {
+    val primary: Color get() = Primary
+
     val gradientBrush: Brush
-        @Composable
-        @ReadOnlyComposable
         get() = Brush.horizontalGradient(
-            colors = listOf(GradientStart, GradientEnd)
+            colors = listOf(Primary, PrimaryLight)
         )
 
-    val successColor: Color get() = SuccessGreen
-    val warningColor: Color get() = WarningOrange
-    val errorColor: Color get() = ErrorRed
+    val success: Color get() = Success
+    val warning: Color get() = Warning
+    val error: Color get() = Error
+    val info: Color get() = Info
 
-    // Dynamic colors based on theme
-    val textPrimary: Color
-        @Composable
-        @ReadOnlyComposable
-        get() = if (isSystemInDarkTheme()) TextPrimaryDark else TextPrimaryLight
+    @Composable
+    @ReadOnlyComposable
+    fun textPrimary(isDark: Boolean = LocalIsDarkTheme.current): Color =
+        if (isDark) TextPrimaryDark else TextPrimaryLight
 
-    val textSecondary: Color
-        @Composable
-        @ReadOnlyComposable
-        get() = if (isSystemInDarkTheme()) TextSecondaryDark else TextSecondaryLight
+    @Composable
+    @ReadOnlyComposable
+    fun textSecondary(isDark: Boolean = LocalIsDarkTheme.current): Color =
+        if (isDark) TextSecondaryDark else TextSecondaryLight
 
-    val textTertiary: Color
-        @Composable
-        @ReadOnlyComposable
-        get() = if (isSystemInDarkTheme()) TextTertiaryDark else TextTertiaryLight
+    @Composable
+    @ReadOnlyComposable
+    fun textTertiary(isDark: Boolean = LocalIsDarkTheme.current): Color =
+        if (isDark) TextTertiaryDark else TextTertiaryLight
 
-    val backgroundPrimary: Color
-        @Composable
-        @ReadOnlyComposable
-        get() = if (isSystemInDarkTheme()) BackgroundPrimaryDark else BackgroundPrimaryLight
+    @Composable
+    @ReadOnlyComposable
+    fun backgroundPrimary(isDark: Boolean = LocalIsDarkTheme.current): Color =
+        if (isDark) BackgroundDark else BackgroundLight
 
-    val backgroundSecondary: Color
-        @Composable
-        @ReadOnlyComposable
-        get() = if (isSystemInDarkTheme()) BackgroundSecondaryDark else BackgroundSecondaryLight
+    @Composable
+    @ReadOnlyComposable
+    fun backgroundSecondary(isDark: Boolean = LocalIsDarkTheme.current): Color =
+        if (isDark) BackgroundSecondaryDark else BackgroundSecondaryLight
 
-    val bottomNavActive: Color get() = BottomNavActive
-    val bottomNavInactive: Color
-        @Composable
-        @ReadOnlyComposable
-        get() = if (isSystemInDarkTheme()) BottomNavInactiveDark else BottomNavInactiveLight
+    @Composable
+    @ReadOnlyComposable
+    fun navActive(isDark: Boolean = LocalIsDarkTheme.current): Color =
+        if (isDark) NavActiveDark else NavActiveLight
 
-    val bottomNavBackground: Color
-        @Composable
-        @ReadOnlyComposable
-        get() = if (isSystemInDarkTheme()) BottomNavBackgroundDark else BottomNavBackgroundLight
+    @Composable
+    @ReadOnlyComposable
+    fun navInactive(isDark: Boolean = LocalIsDarkTheme.current): Color =
+        if (isDark) NavInactiveDark else NavInactiveLight
 
-    val bottomNavShadow: Color
-        @Composable
-        @ReadOnlyComposable
-        get() = if (isSystemInDarkTheme()) BottomNavShadowDark else BottomNavShadowLight
+    @Composable
+    @ReadOnlyComposable
+    fun navBackground(isDark: Boolean = LocalIsDarkTheme.current): Color =
+        if (isDark) NavBackgroundDark else NavBackgroundLight
 
-    val cardShadow: Color
-        @Composable
-        @ReadOnlyComposable
-        get() = if (isSystemInDarkTheme()) CardShadowDark else CardShadowLight
+    @Composable
+    @ReadOnlyComposable
+    fun cardBackground(isDark: Boolean = LocalIsDarkTheme.current): Color =
+        if (isDark) CardBackgroundDark else CardBackgroundLight
 
-    val surfaceElevated: Color
-        @Composable
-        @ReadOnlyComposable
-        get() = if (isSystemInDarkTheme()) SurfaceElevatedDark else SurfaceElevatedLight
+    @Composable
+    @ReadOnlyComposable
+    fun cardBorder(isDark: Boolean = LocalIsDarkTheme.current): Color =
+        if (isDark) CardBorderDark else CardBorderLight
 
-    val divider: Color
-        @Composable
-        @ReadOnlyComposable
-        get() = if (isSystemInDarkTheme()) DividerDark else DividerLight
+    @Composable
+    @ReadOnlyComposable
+    fun divider(isDark: Boolean = LocalIsDarkTheme.current): Color =
+        if (isDark) DividerDark else DividerLight
+
+    @Composable
+    @ReadOnlyComposable
+    fun disabled(isDark: Boolean = LocalIsDarkTheme.current): Color =
+        if (isDark) DisabledDark else DisabledLight
+
+    @Composable
+    @ReadOnlyComposable
+    fun surface(isDark: Boolean = LocalIsDarkTheme.current): Color =
+        if (isDark) SurfaceDark else SurfaceLight
+
+    @Composable
+    @ReadOnlyComposable
+    fun surfaceVariant(isDark: Boolean = LocalIsDarkTheme.current): Color =
+        if (isDark) SurfaceVariantDark else SurfaceVariantLight
 }
 
-// Extension untuk MaterialTheme colors
 val MaterialTheme.customColors: IMFITCustomColors
     @Composable
     @ReadOnlyComposable
@@ -87,101 +102,147 @@ val MaterialTheme.customColors: IMFITCustomColors
 
 object IMFITCustomColors {
     val gradient: Brush
-        @Composable
-        @ReadOnlyComposable
         get() = IMFITColors.gradientBrush
 
-    val success: Color get() = IMFITColors.successColor
-    val warning: Color get() = IMFITColors.warningColor
+    val success: Color get() = IMFITColors.success
+    val warning: Color get() = IMFITColors.warning
+    val error: Color get() = IMFITColors.error
+    val info: Color get() = IMFITColors.info
 
     val textPrimary: Color
         @Composable
         @ReadOnlyComposable
-        get() = IMFITColors.textPrimary
+        get() = IMFITColors.textPrimary()
 
     val textSecondary: Color
         @Composable
         @ReadOnlyComposable
-        get() = IMFITColors.textSecondary
+        get() = IMFITColors.textSecondary()
 
     val textTertiary: Color
         @Composable
         @ReadOnlyComposable
-        get() = IMFITColors.textTertiary
+        get() = IMFITColors.textTertiary()
 
     val backgroundPrimary: Color
         @Composable
         @ReadOnlyComposable
-        get() = IMFITColors.backgroundPrimary
+        get() = IMFITColors.backgroundPrimary()
 
     val backgroundSecondary: Color
         @Composable
         @ReadOnlyComposable
-        get() = IMFITColors.backgroundSecondary
+        get() = IMFITColors.backgroundSecondary()
 
-    val bottomNavActive: Color get() = IMFITColors.bottomNavActive
-    val bottomNavInactive: Color
+    val navActive: Color
         @Composable
         @ReadOnlyComposable
-        get() = IMFITColors.bottomNavInactive
+        get() = IMFITColors.navActive()
 
-    val bottomNavBackground: Color
+    val navInactive: Color
         @Composable
         @ReadOnlyComposable
-        get() = IMFITColors.bottomNavBackground
+        get() = IMFITColors.navInactive()
 
-    val bottomNavShadow: Color
+    val navBackground: Color
         @Composable
         @ReadOnlyComposable
-        get() = IMFITColors.bottomNavShadow
+        get() = IMFITColors.navBackground()
 
     val surfaceElevated: Color
         @Composable
         @ReadOnlyComposable
-        get() = IMFITColors.surfaceElevated
+        get() = IMFITColors.surface()
 
     val cardShadow: Color
         @Composable
         @ReadOnlyComposable
-        get() = IMFITColors.cardShadow
+        get() = if (LocalIsDarkTheme.current) Color(0x33000000) else Color(0x1A000000)
 
     val divider: Color
         @Composable
         @ReadOnlyComposable
-        get() = IMFITColors.divider
+        get() = IMFITColors.divider()
 }
 
-// Utility untuk shadows dan elevations
 object IMFITElevation {
     val card = 4.dp
     val fab = 6.dp
-    val navigation = 3.dp        // Bottom nav elevation
-    val bottomNav = 8.dp         // Specific for bottom navigation
+    val navigation = 3.dp
+    val bottomNav = 8.dp
 }
 
-// Utility untuk spacing
 object IMFITSpacing {
+    val xxs = 2.dp
     val xs = 4.dp
     val sm = 8.dp
-    val md = 16.dp
-    val lg = 24.dp
-    val xl = 32.dp
-    val xxl = 48.dp
+    val md = 12.dp
+    val lg = 16.dp
+    val xl = 20.dp
+    val xxl = 24.dp
+    val xxxl = 32.dp
+    val huge = 48.dp
+    
+    // Screen padding
+    val screenHorizontal = 20.dp
+    val screenVertical = 16.dp
+    
+    // Card internal padding
+    val cardPadding = 16.dp
+    val cardPaddingLarge = 20.dp
+    
+    // Section spacing
+    val sectionSpacing = 24.dp
+    val itemSpacing = 12.dp
 }
 
-// Utility untuk corner radius
 object IMFITCornerRadius {
-    val small = 8.dp
-    val medium = 12.dp
-    val large = 16.dp
+    val xs = 6.dp
+    val small = 10.dp
+    val medium = 14.dp
+    val large = 18.dp
     val xlarge = 24.dp
+    val round = 50.dp
 }
 
-// Bottom Navigation Dimensions - Based on image analysis
+object IMFITSizes {
+    // Button heights
+    val buttonHeight = 54.dp
+    val buttonHeightSmall = 44.dp
+    val buttonHeightLarge = 60.dp
+    
+    // Icon sizes
+    val iconXs = 16.dp
+    val iconSm = 20.dp
+    val iconMd = 24.dp
+    val iconLg = 28.dp
+    val iconXl = 32.dp
+    val iconXxl = 48.dp
+    val iconHuge = 64.dp
+    
+    // Avatar sizes
+    val avatarSm = 40.dp
+    val avatarMd = 56.dp
+    val avatarLg = 72.dp
+    
+    // Card min heights
+    val cardMinHeight = 80.dp
+    val listItemHeight = 72.dp
+    
+    // Input heights
+    val textFieldHeight = 56.dp
+}
+
 object IMFITBottomNavDimensions {
-    val height = 80.dp           // Total height
-    val iconSize = 24.dp         // Icon size
-    val iconTextSpacing = 4.dp   // Space between icon and text
+    val height = 80.dp
+    val iconSize = 24.dp
+    val iconTextSpacing = 4.dp
     val horizontalPadding = 12.dp
     val verticalPadding = 8.dp
+}
+
+object IMFITAnimations {
+    const val durationFast = 150
+    const val durationMedium = 300
+    const val durationSlow = 500
 }

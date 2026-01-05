@@ -1,0 +1,31 @@
+package com.diajarkoding.imfit.presentation.navigation
+
+object Routes {
+    const val SPLASH = "splash"
+    const val LOGIN = "login"
+    const val REGISTER = "register"
+    const val MAIN = "main"
+    const val HOME = "home"
+    const val TEMPLATE_LIST = "templates"
+    const val CREATE_TEMPLATE = "create_template"
+    const val EDIT_TEMPLATE = "edit_template/{templateId}"
+    const val WORKOUT_DETAIL = "workout_detail/{workoutId}"
+    const val EXERCISE_BROWSER = "exercise_browser"
+    const val EXERCISE_SELECTION = "exercise_selection/{templateId}"
+    const val EXERCISE_LIST = "exercise_list/{categoryName}"
+    const val ACTIVE_WORKOUT = "active_workout/{templateId}"
+    const val WORKOUT_SUMMARY = "workout_summary/{workoutLogId}"
+    const val WORKOUT_HISTORY = "workout_history/{date}"
+    const val YEARLY_CALENDAR = "yearly_calendar"
+    const val EDIT_WORKOUT = "edit_workout/{workoutId}"
+    const val PROFILE = "profile"
+
+    fun editTemplate(templateId: String) = "edit_template/$templateId"
+    fun editWorkout(workoutId: String) = "edit_workout/$workoutId"
+    fun workoutDetail(workoutId: String) = "workout_detail/$workoutId"
+    fun exerciseSelection(templateId: String) = "exercise_selection/$templateId"
+    fun exerciseList(categoryName: String) = "exercise_list/$categoryName"
+    fun activeWorkout(templateId: String) = "active_workout/$templateId"
+    fun workoutSummary(workoutLogId: String) = "workout_summary/$workoutLogId"
+    fun workoutHistory(date: String) = "workout_history/$date"
+}

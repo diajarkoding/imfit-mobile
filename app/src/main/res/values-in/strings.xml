@@ -1,0 +1,392 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">IMFIT</string>
+
+    <!-- Common Labels -->
+    <string name="label_email">Email</string>
+    <string name="label_username">Nama Pengguna</string>
+    <string name="label_password">Kata Sandi</string>
+    <string name="label_fullname">Nama Lengkap</string>
+    <string name="label_date_of_birth">Tanggal Lahir</string>
+    <string name="label_confirm_password">Konfirmasi Kata Sandi</string>
+    <string name="show_password_description">Tampilkan kata sandi</string>
+    <string name="hide_password_description">Sembunyikan kata sandi</string>
+
+    <!-- Login Screen -->
+    <string name="login_title">Masuk</string>
+    <string name="login_subtitle">Selamat datang kembali! Silakan masuk untuk melanjutkan</string>
+    <string name="login_email_or_username_label">Nama Pengguna atau Email</string>
+    <string name="login_remember_me">Ingat saya</string>
+    <string name="login_button">Masuk</string>
+    <string name="login_redirect_prompt">Belum punya akun?</string>
+    <string name="login_redirect_action">Daftar</string>
+
+    <!-- Register Screen -->
+    <string name="register_title">Buat Akun</string>
+    <string name="register_subtitle">Mulai perjalanan kebugaran Anda hari ini</string>
+    <string name="register_profile_picture_placeholder">Unggah Foto Profil</string>
+    <string name="register_button">Buat Akun</string>
+    <string name="register_redirect_prompt">Sudah punya akun?</string>
+    <string name="register_redirect_action">Masuk</string>
+    <string name="register_select_birth_date">Pilih tanggal lahir Anda</string>
+    <string name="register_choose_photo">Pilih Foto</string>
+    <string name="register_camera">Kamera</string>
+    <string name="register_gallery">Galeri</string>
+
+    <!-- Validation Messages -->
+    <string name="validator_fullName">Nama lengkap tidak boleh kosong.</string>
+    <string name="validator_username">Nama pengguna tidak boleh kosong.</string>
+    <string name="validator_email">Email tidak boleh kosong.</string>
+    <string name="validator_email_format">Format email tidak valid.</string>
+    <string name="validator_password">Kata sandi tidak boleh kosong.</string>
+    <string name="validator_password_format">Kata sandi minimal 6 karakter.</string>
+    <string name="validator_password_match">Kata sandi tidak cocok.</string>
+    <string name="validator_dateOfBirth">Tanggal lahir harus diisi.</string>
+    <string name="validator_emailOrUsername">Email atau nama pengguna tidak boleh kosong.</string>
+
+    <!-- Navigation -->
+    <string name="nav_home">Beranda</string>
+    <string name="nav_workout">Latihan</string>
+    <string name="nav_exercises">Otot</string>
+    <string name="nav_progress">Progres</string>
+
+    <!-- Profile -->
+    <string name="title_profile">Profil</string>
+    <string name="action_logout">Keluar</string>
+    <string name="action_go_to_profile">Buka Profil</string>
+
+    <!-- Screen Descriptions -->
+    <string name="desc_home_screen">Ini adalah Halaman Beranda (Dashboard).</string>
+    <string name="desc_workout_screen">Ini adalah Halaman Latihan (Workout).</string>
+    <string name="desc_exercises_screen">Ini adalah Halaman Latihan Otot (Exercises).</string>
+    <string name="desc_progress_screen">Ini adalah Halaman Progres.</string>
+    <string name="desc_profile_screen">Ini adalah Halaman Profil Pengguna.</string>
+
+    <!-- Workout -->
+    <string name="workout_tab_find">Cari</string>
+    <string name="workout_tab_planned">Terencana</string>
+    <string name="workout_tab_instant">Instan</string>
+    <string name="workout_empty_title">Ayo buat rencana latihan pertamamu!</string>
+    <string name="workout_empty_find_plan">Cari Rencana</string>
+    <string name="workout_empty_create_from_scratch">Buat dari Awal</string>
+    <string name="workout_hero_all_plans">Semua\nRencana</string>
+    <string name="workout_hero_share">Bagikan</string>
+    <string name="workout_hero_more">Lainnya</string>
+    <string name="workout_add_day_title">Tambah Hari Latihan</string>
+    <string name="workout_add_day_desc">Bangun latihanmu, lacak progres, dan capai tujuan fitness-mu hari ini.</string>
+    <string name="workout_add_day_button">Tambah Hari</string>
+    <string name="workout_content_tab_overview">Ringkasan</string>
+    <string name="workout_content_tab_day_details">Detail Hari</string>
+    <string name="workout_day_card_more_options">Pilihan lain</string>
+    <string name="workout_day_card_view_details">Lihat detail</string>
+    <string name="workout_day_limit">Batas Hari • %d hari</string>
+    <string name="workout_estimated_time">Estimasi %s</string>
+    <string name="workout_exercise_count">%d latihan</string>
+    <string name="workout_add_exercise">Tambah Latihan</string>
+    <string name="workout_add_exercise_desc">set x repetisi • interval</string>
+    <string name="workout_more_options">Pilihan lain</string>
+    <string name="workout_edit_exercises">Ubah Latihan</string>
+    <string name="workout_copy_day">Salin Hari Ini</string>
+    <string name="workout_delete_day">Hapus Hari Ini</string>
+    <string name="workout_edit_day_title">Ubah Hari</string>
+    <string name="workout_edit_day_help">Bantuan</string>
+    <string name="workout_edit_day_save">Simpan</string>
+    <string name="workout_edit_day_close">Tutup</string>
+    <string name="workout_start">Mulai Latihan</string>
+    <string name="workout_end">Akhiri Latihan</string>
+
+    <!-- Exercises -->
+    <string name="add_exercises_title">Tambah Latihan</string>
+    <string name="search_exercise_hint">Cari nama latihan</string>
+    <string name="all_exercises">Semua Latihan</string>
+    <string name="sort_popular">Populer</string>
+    <string name="add_n_exercises">Tambah %d Latihan</string>
+
+    <!-- Home Screen -->
+    <string name="home_greeting">Halo, %s!</string>
+    <string name="home_subtitle">Siap untuk latihan hari ini?</string>
+    <string name="home_last_workout">Latihan Terakhir</string>
+    <string name="home_my_workouts">Latihan Saya</string>
+    <string name="home_no_workouts">Belum ada latihan</string>
+    <string name="home_no_workouts_yet">Belum ada latihan</string>
+    <string name="home_create_first">Buat latihan pertamamu untuk memulai</string>
+    <string name="home_create_workout">Buat Latihan Baru</string>
+
+    <!-- Progress Screen -->
+    <string name="progress_title">Progres</string>
+    <string name="progress_total_volume">Total Volume</string>
+    <string name="progress_weekly_time">Waktu Mingguan</string>
+    <string name="progress_this_month">Bulan Ini</string>
+    <string name="progress_workout_calendar">Kalender Latihan</string>
+
+    <!-- Workout History -->
+    <string name="history_title">Riwayat Latihan</string>
+    <string name="history_day_summary">Ringkasan Hari</string>
+    <string name="history_workouts_completed">%d latihan selesai</string>
+    <string name="history_duration">Durasi</string>
+    <string name="history_volume">Volume</string>
+    <string name="history_exercises">Latihan</string>
+    <string name="history_sets">Set</string>
+    <string name="history_exercise_breakdown">Rincian Latihan</string>
+    <string name="history_rest_day">Hari Istirahat</string>
+    <string name="history_no_workouts">Tidak ada latihan tercatat pada hari ini</string>
+
+    <!-- Workout Summary -->
+    <string name="summary_title">Latihan Selesai!</string>
+    <string name="summary_great_job">Kerja bagus! Kamu luar biasa!</string>
+    <string name="summary_exercise_summary">Ringkasan Latihan</string>
+
+    <!-- Calendar -->
+    <string name="calendar_yearly">Kalender Tahunan</string>
+    <string name="calendar_view_yearly">Lihat kalender tahunan</string>
+
+    <!-- Units -->
+    <string name="unit_kg">kg</string>
+    <string name="unit_min">menit</string>
+    <string name="unit_sets">set</string>
+    <string name="unit_reps">repetisi</string>
+
+    <!-- Login Screen Additional -->
+    <string name="login_welcome_title">Selamat Datang Kembali!</string>
+    <string name="login_welcome_subtitle">Masuk untuk melanjutkan perjalanan kebugaran Anda</string>
+    <string name="login_demo_hint">Demo: demo@imfit.com / password123</string>
+    <string name="placeholder_email">Masukkan email Anda</string>
+
+    <!-- Profile Screen -->
+    <string name="profile_section_info">Informasi Profil</string>
+    <string name="profile_section_settings">Pengaturan</string>
+    <string name="settings_dark_mode">Mode Gelap</string>
+    <string name="settings_dark_mode_on">Aktif</string>
+    <string name="settings_dark_mode_off">Nonaktif</string>
+    <string name="settings_language">Bahasa</string>
+    <string name="settings_language_id">Indonesia</string>
+    <string name="settings_language_en">Inggris</string>
+
+    <!-- Splash Screen -->
+    <string name="splash_tagline">Asisten Gym Pribadimu</string>
+
+    <!-- Common Actions -->
+    <string name="action_create">Buat</string>
+    <string name="action_add">Tambah</string>
+    <string name="action_remove">Hapus</string>
+    <string name="action_search">Cari</string>
+    <string name="action_clear">Hapus</string>
+    <string name="action_skip">Lewati</string>
+    <string name="action_add_set">Tambah Set</string>
+    <string name="action_remove_set">Hapus set</string>
+    <string name="action_finish_workout">Selesaikan Latihan</string>
+    <string name="action_save_changes">Simpan Perubahan</string>
+    <string name="action_save_template">Simpan Template</string>
+    <string name="action_add_workout">Tambah Latihan</string>
+
+    <!-- Home Screen -->
+    <string name="home_hello">Halo, %1$s!</string>
+    <string name="home_title_my_workouts">Latihan Saya</string>
+    <string name="home_active">AKTIF</string>
+    <string name="home_create_workout_title">Buat Latihan</string>
+    <string name="home_create_workout_message">Beri nama latihanmu</string>
+    <string name="home_workout_placeholder">contoh: Hari Push, Hari Kaki</string>
+    <string name="home_exercises_count">%1$d latihan</string>
+    <string name="home_minutes_estimate">~%1$d menit</string>
+    <string name="desc_view_details">Lihat detail</string>
+
+    <!-- Workout Detail Screen -->
+    <string name="workout_exercises_label">Latihan</string>
+    <string name="workout_exercises_total">%1$d total</string>
+    <string name="workout_no_exercises">Belum ada latihan</string>
+    <string name="workout_add_exercises_hint">Tambahkan latihan untuk memulai</string>
+    <string name="workout_sets_reps_format">%1$d x %2$d repetisi</string>
+    <string name="workout_est_minutes">Est. menit</string>
+    <string name="workout_edit_title">Edit Latihan</string>
+    <string name="workout_name_label">Nama Latihan</string>
+    <string name="workout_sets_configured">%1$d set dikonfigurasi</string>
+    <string name="workout_label_sets">Set</string>
+    <string name="workout_label_reps">Repetisi</string>
+    <string name="workout_label_rest">Istirahat (detik)</string>
+    <string name="workout_label_rest_short">Istirahat (d)</string>
+
+    <!-- Active Workout -->
+    <string name="active_workout_elapsed">%1$d menit berlalu</string>
+    <string name="active_workout_rest_timer">Timer Istirahat</string>
+    <string name="active_workout_set_number">Set %1$d</string>
+    <string name="active_workout_cancel_title">Batalkan Latihan?</string>
+    <string name="active_workout_cancel_message">Progres latihanmu akan hilang. Yakin ingin membatalkan?</string>
+
+    <!-- Workout Summary -->
+    <string name="summary_great_work">Kerja Bagus!</string>
+    <string name="summary_sets_count">%1$d set</string>
+    <string name="summary_volume_kg">%1$s kg</string>
+    <string name="summary_set_details">%1$d kg x %2$d repetisi</string>
+
+    <!-- Create Template -->
+    <string name="template_create_title">Buat Template</string>
+    <string name="template_name_label">Nama Template</string>
+    <string name="template_name_placeholder">contoh: Hari Push, Hari Kaki</string>
+    <string name="template_exercises_count">Latihan (%1$d)</string>
+    <string name="template_no_exercises">Belum ada latihan ditambahkan</string>
+    <string name="template_add_exercises_hint">Tambahkan latihan ke template-mu</string>
+    <string name="template_exercise_sets">• %1$d x %2$d repetisi</string>
+
+    <!-- Yearly Calendar -->
+    <string name="calendar_previous_year">Tahun sebelumnya</string>
+    <string name="calendar_next_year">Tahun berikutnya</string>
+
+    <!-- Exercise Selection -->
+    <string name="exercise_search_hint">Cari latihan</string>
+
+    <!-- Workout Summary -->
+    <string name="workout_number_of_total">Latihan %1$d dari %2$d</string>
+    <string name="label_total_sets">Total Set</string>
+
+    <!-- Common Descriptions -->
+    <string name="desc_logo">Logo IMFIT</string>
+    <string name="desc_profile_photo">Foto Profil</string>
+    <string name="desc_add_photo">Tambah Foto</string>
+    <string name="desc_select_date">Pilih Tanggal</string>
+    <string name="desc_go_to_profile">Buka profil</string>
+
+    <!-- Additional Actions -->
+    <string name="action_back">Kembali</string>
+    <string name="action_edit">Edit</string>
+    <string name="action_delete">Hapus</string>
+    <string name="action_save">Simpan</string>
+    <string name="action_cancel">Batal</string>
+    <string name="action_ok">OK</string>
+    <string name="action_done">Selesai</string>
+    <string name="action_continue">Lanjutkan</string>
+    <string name="action_add_exercise">Tambah Latihan</string>
+    <string name="action_start_workout">Mulai Latihan</string>
+    <string name="action_end_workout">Akhiri Latihan</string>
+    <string name="action_cancel_workout">Batalkan Latihan</string>
+
+    <!-- Warnings -->
+    <string name="warning_workout_active">Tidak dapat mengubah saat latihan sedang berlangsung</string>
+
+    <!-- Dialog Messages -->
+    <string name="dialog_delete_workout">Hapus Latihan</string>
+    <string name="dialog_delete_workout_message">Apakah kamu yakin ingin menghapus \"%1$s\"? Tindakan ini tidak dapat dibatalkan.</string>
+    <string name="dialog_remove_exercise">Hapus Latihan</string>
+    <string name="dialog_remove_exercise_message">Hapus %1$s dari latihan ini?</string>
+
+    <!-- Labels -->
+    <string name="label_volume">Volume</string>
+    <string name="label_duration">Durasi</string>
+    <string name="label_exercises">Latihan</string>
+    <string name="label_sets">Set</string>
+    <string name="loading_workout">Memuat latihan…</string>
+
+    <!-- Workout History Additional -->
+    <string name="summary_day">Ringkasan Hari</string>
+    <string name="summary_workouts_completed">%1$d latihan selesai</string>
+    <string name="summary_workouts_completed_plural">%1$d latihan selesai</string>
+    <string name="summary_exercise_breakdown">Rincian Latihan</string>
+    <string name="summary_rest_day">Hari Istirahat</string>
+    <string name="summary_no_workouts">Tidak ada latihan yang tercatat pada hari ini</string>
+
+    <!-- Input Placeholders -->
+    <string name="placeholder_name">Masukkan namamu</string>
+
+    <!-- Exercise Selection Screen -->
+    <string name="exercise_select_title">Pilih Latihan</string>
+    <string name="exercise_add_count">Tambah %1$d Latihan</string>
+    <string name="exercise_filter_all">Semua</string>
+    <string name="exercise_no_results">Tidak ada latihan untuk kategori ini.</string>
+    <string name="nav_exercises_title">Latihan</string>
+
+    <!-- Workout Headers -->
+    <string name="label_set_header">SET</string>
+    <string name="label_kg_header">KG</string>
+    <string name="label_reps_header">REP</string>
+
+    <!-- Theme Switch -->
+    <string name="desc_dark_mode">Mode gelap</string>
+    <string name="desc_light_mode">Mode terang</string>
+
+    <!-- ViewModel Validation -->
+    <string name="error_name_required">Nama harus diisi</string>
+    <string name="error_email_required">Email harus diisi</string>
+    <string name="error_email_invalid">Format email tidak valid</string>
+    <string name="error_password_required">Kata sandi harus diisi</string>
+    <string name="error_password_length">Kata sandi minimal 6 karakter</string>
+    <string name="error_confirm_password_required">Konfirmasi kata sandi Anda</string>
+    <string name="error_password_mismatch">Kata sandi tidak cocok</string>
+    <string name="error_birthdate_required">Tanggal lahir harus diisi</string>
+    <string name="error_login_failed">Login gagal</string>
+    <string name="error_registration_failed">Pendaftaran gagal</string>
+    <string name="error_template_name_required">Nama template harus diisi</string>
+
+    <!-- Demo User Data -->
+    <string name="label_demo_user_name">Pengguna Demo</string>
+    <string name="label_demo_password">password123</string>
+    <string name="default_user_name">Pengguna</string>
+    <string name="user_unknown">tidak diketahui</string>
+
+    <!-- Error Messages -->
+    <string name="error_email_already_registered">Email sudah terdaftar</string>
+    <string name="error_invalid_email_password">Email atau kata sandi tidak valid</string>
+
+    <!-- Muscle Categories -->
+    <string name="muscle_category_chest">Dada</string>
+    <string name="muscle_category_back">Punggung</string>
+    <string name="muscle_category_shoulders">Bahu</string>
+    <string name="muscle_category_biceps">Biceps</string>
+    <string name="muscle_category_triceps">Triceps</string>
+    <string name="muscle_category_legs">Kaki</string>
+    <string name="muscle_category_core">Inti</string>
+    <string name="muscle_category_cardio">Kardio</string>
+
+    <!-- Workout Templates -->
+    <string name="workout_push_day">Hari Push</string>
+    <string name="workout_pull_day">Hari Pull</string>
+    <string name="workout_leg_day">Hari Kaki</string>
+
+    <!-- Exercise Names -->
+    <string name="exercise_barbell_bench_press">Barbell Bench Press</string>
+    <string name="exercise_incline_dumbbell_press">Incline Dumbbell Press</string>
+    <string name="exercise_cable_flyes">Cable Flyes</string>
+    <string name="exercise_push_ups">Push-Up</string>
+    <string name="exercise_dumbbell_flyes">Dumbbell Flyes</string>
+    <string name="exercise_deadlift">Deadlift</string>
+    <string name="exercise_pull_ups">Pull-Up</string>
+    <string name="exercise_barbell_row">Barbell Row</string>
+    <string name="exercise_lat_pulldown">Lat Pulldown</string>
+    <string name="exercise_seated_cable_row">Seated Cable Row</string>
+    <string name="exercise_overhead_press">Overhead Press</string>
+    <string name="exercise_lateral_raises">Lateral Raises</string>
+    <string name="exercise_front_raises">Front Raises</string>
+    <string name="exercise_face_pulls">Face Pulls</string>
+    <string name="exercise_arnold_press">Arnold Press</string>
+    <string name="exercise_barbell_curl">Barbell Curl</string>
+    <string name="exercise_dumbbell_curl">Dumbbell Curl</string>
+    <string name="exercise_hammer_curl">Hammer Curl</string>
+    <string name="exercise_preacher_curl">Preacher Curl</string>
+    <string name="exercise_cable_curl">Cable Curl</string>
+    <string name="exercise_tricep_pushdown">Tricep Pushdown</string>
+    <string name="exercise_skull_crushers">Skull Crushers</string>
+    <string name="exercise_overhead_tricep_extension">Overhead Tricep Extension</string>
+    <string name="exercise_close_grip_bench_press">Close-Grip Bench Press</string>
+    <string name="exercise_tricep_dips">Tricep Dips</string>
+    <string name="exercise_barbell_squat">Barbell Squat</string>
+    <string name="exercise_leg_press">Leg Press</string>
+    <string name="exercise_romanian_deadlift">Romanian Deadlift</string>
+    <string name="exercise_leg_curl">Leg Curl</string>
+    <string name="exercise_leg_extension">Leg Extension</string>
+    <string name="exercise_calf_raises">Calf Raises</string>
+    <string name="exercise_lunges">Lunges</string>
+    <string name="exercise_plank">Plank</string>
+    <string name="exercise_crunches">Crunches</string>
+    <string name="exercise_russian_twist">Russian Twist</string>
+    <string name="exercise_leg_raises">Leg Raises</string>
+    <string name="exercise_cable_woodchop">Cable Woodchop</string>
+    <string name="exercise_treadmill_running">Treadmill Running</string>
+    <string name="exercise_stationary_bike">Stationary Bike</string>
+    <string name="exercise_rowing_machine">Rowing Machine</string>
+    <string name="exercise_jump_rope">Jump Rope</string>
+    <string name="exercise_burpees">Burpees</string>
+
+    <!-- Placeholders and Defaults -->
+    <string name="placeholder_dash">-</string>
+    <string name="exercise_placeholder"></string>
+    <string name="workout_duration_zero">0m</string>
+    <string name="workout_volume_zero">0 kg</string>
+</resources>

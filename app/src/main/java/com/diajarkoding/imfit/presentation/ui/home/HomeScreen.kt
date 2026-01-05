@@ -1,287 +1,552 @@
 package com.diajarkoding.imfit.presentation.ui.home
 
-import androidx.compose.foundation.Image
+import androidx.compose.animation.core.LinearEasing
+import androidx.compose.animation.core.RepeatMode
+import androidx.compose.animation.core.animateFloat
+import androidx.compose.animation.core.infiniteRepeatable
+import androidx.compose.animation.core.rememberInfiniteTransition
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.ArrowForward
-import androidx.compose.material3.Button
-import androidx.compose.material3.ButtonDefaults
+import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
+import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.FitnessCenter
+import androidx.compose.material.icons.filled.PlayArrow
+import androidx.compose.material.icons.filled.Schedule
+import androidx.compose.material.icons.filled.Timer
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
-import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.OutlinedTextFieldDefaults
+import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
+import androidx.compose.material3.TopAppBar
+import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.draw.shadow
+import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import com.diajarkoding.imfit.R
-import com.diajarkoding.imfit.theme.IMFITCornerRadius
+import com.diajarkoding.imfit.domain.model.WorkoutLog
+import com.diajarkoding.imfit.domain.model.WorkoutTemplate
+import com.diajarkoding.imfit.presentation.components.common.IMFITButton
+import com.diajarkoding.imfit.presentation.components.common.IMFITInputDialog
+import com.diajarkoding.imfit.presentation.components.common.ShimmerStatCard
+import com.diajarkoding.imfit.presentation.components.common.ShimmerWelcomeSection
+import com.diajarkoding.imfit.presentation.components.common.ShimmerWorkoutCard
+import com.diajarkoding.imfit.theme.IMFITShapes
+import com.diajarkoding.imfit.theme.IMFITSizes
 import com.diajarkoding.imfit.theme.IMFITSpacing
-import com.diajarkoding.imfit.theme.PrimaryBlue
-import com.diajarkoding.imfit.theme.customColors
-
-@Composable
-fun HomeScreen(
-    modifier: Modifier = Modifier,
-    viewModel: HomeViewModel = hiltViewModel()
-) {
-    val state by viewModel.state.collectAsState()
-
-    // Gunakan LazyColumn agar seluruh halaman bisa di-scroll
-    LazyColumn(
-        modifier = modifier.fillMaxSize(),
-        verticalArrangement = Arrangement.spacedBy(IMFITSpacing.lg)
-    ) {
-        // 1. Hero Banner
-        item {
-            HeroBanner()
-        }
-
-        // 2. Progress Section
-        item {
-            ProgressSection(progressItems = state.progressItems)
-        }
-
-        // 3. Categories Section
-        item {
-            CategoriesSection(categories = state.categories)
-        }
-
-        // 4. Exercise List
-        item {
-            SectionHeader(title = "Latihan Lainnya")
-        }
-        items(state.exercises) { exercise ->
-            ExerciseListItem(
-                exercise = exercise,
-                modifier = Modifier.padding(horizontal = IMFITSpacing.md)
-            )
-        }
-
-        item {
-            Spacer(modifier = Modifier.height(IMFITSpacing.md))
-        }
-    }
-}
-
-// --- Komponen-komponen untuk HomeScreen ---
-
-@Composable
-fun HeroBanner() {
-    Card(
-        modifier = Modifier
-            .fillMaxWidth()
-            .height(180.dp) // Beri ketinggian pada Card agar gambar bisa diatur di bawah
-            .padding(horizontal = IMFITSpacing.md),
-        shape = RoundedCornerShape(IMFITCornerRadius.large)
-    ) {
-        // Gunakan Box untuk menumpuk teks dan gambar
-        Box(
-            modifier = Modifier
-                .fillMaxSize()
-                .background(MaterialTheme.customColors.gradient)
-        ) {
-            // Kolom untuk teks dan tombol
-            Column(
-                modifier = Modifier
-                    .align(Alignment.CenterStart) // Posisi di kiri tengah
-                    .fillMaxWidth(0.70f) // Batasi lebar kolom agar tidak tertimpa gambar
-                    .padding(start = 20.dp),
-                verticalArrangement = Arrangement.spacedBy(IMFITSpacing.md)
-            ) {
-                Text(
-                    text = "Mulai dengan Kuat & Tetapkan Tujuan Fitness Anda",
-                    style = MaterialTheme.typography.titleLarge,
-                    color = MaterialTheme.colorScheme.onPrimary
-                )
-                Button(
-                    onClick = { /* TODO */ },
-                    colors = ButtonDefaults.buttonColors(containerColor = Color.White),
-                    shape = RoundedCornerShape(IMFITCornerRadius.medium)
-                ) {
-                    Text(
-                        "Mulai Latihan",
-                        color = PrimaryBlue,
-                        style = MaterialTheme.typography.labelLarge
-                    )
-                }
-            }
-
-            // Gambar Pelatih
-            Image(
-                painter = painterResource(id = R.drawable.trainer),
-                contentDescription = "Gambar Pelatih Fitness",
-                modifier = Modifier
-                    .size(130.dp)
-                    .align(Alignment.BottomEnd)
-                    .offset(x = (-20).dp)
-            )
-        }
-    }
-}
-
-@Composable
-fun SectionHeader(title: String) {
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(horizontal = IMFITSpacing.md),
-        horizontalArrangement = Arrangement.SpaceBetween,
-        verticalAlignment = Alignment.CenterVertically
-    ) {
-        Text(
-            text = title,
-            style = MaterialTheme.typography.titleLarge,
-            fontWeight = FontWeight.Bold
-        )
-        TextButton(onClick = { /* TODO */ }) {
-            Text(
-                "Lihat Semua",
-                style = MaterialTheme.typography.labelLarge,
-                color = MaterialTheme.colorScheme.primary
-            )
-        }
-    }
-}
-
-
-@Composable
-fun ProgressSection(progressItems: List<ProgressItem>) {
-    Column(verticalArrangement = Arrangement.spacedBy(IMFITSpacing.sm)) {
-        SectionHeader(title = "Progres")
-        LazyRow(
-            horizontalArrangement = Arrangement.spacedBy(IMFITSpacing.sm),
-            contentPadding = PaddingValues(horizontal = IMFITSpacing.md)
-        ) {
-            items(progressItems) { item ->
-                ProgressCard(item = item)
-            }
-        }
-    }
-}
+import com.diajarkoding.imfit.theme.Primary
+import com.diajarkoding.imfit.theme.PrimaryLight
+import com.diajarkoding.imfit.theme.SetComplete
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun CategoriesSection(categories: List<CategoryItem>) {
-    Column(verticalArrangement = Arrangement.spacedBy(IMFITSpacing.sm)) {
-        SectionHeader(title = "Kategori")
-        LazyRow(
-            horizontalArrangement = Arrangement.spacedBy(IMFITSpacing.sm),
-            contentPadding = PaddingValues(horizontal = IMFITSpacing.md)
+fun HomeScreen(
+    onNavigateToWorkoutDetail: (String) -> Unit,
+    onNavigateToActiveWorkout: (String) -> Unit = {},
+    viewModel: HomeViewModel = hiltViewModel()
+) {
+    val state by viewModel.state.collectAsState()
+    var showAddDayDialog by remember { mutableStateOf(false) }
+    var newDayName by remember { mutableStateOf("") }
+
+    LaunchedEffect(Unit) {
+        viewModel.refresh()
+    }
+
+    LaunchedEffect(state.newlyCreatedWorkoutId) {
+        state.newlyCreatedWorkoutId?.let { workoutId ->
+            viewModel.clearNewlyCreatedWorkoutId()
+            onNavigateToWorkoutDetail(workoutId)
+        }
+    }
+
+    if (showAddDayDialog) {
+        IMFITInputDialog(
+            onDismissRequest = {
+                showAddDayDialog = false
+                newDayName = ""
+            },
+            title = stringResource(R.string.home_create_workout_title),
+            message = stringResource(R.string.home_create_workout_message),
+            icon = Icons.Default.Add,
+            confirmText = stringResource(R.string.action_create),
+            dismissText = stringResource(R.string.action_cancel),
+            confirmEnabled = newDayName.isNotBlank(),
+            onConfirm = {
+                if (newDayName.isNotBlank()) {
+                    viewModel.createWorkout(newDayName)
+                    showAddDayDialog = false
+                    newDayName = ""
+                }
+            }
         ) {
-            items(categories) { category ->
-                FilterChip(
-                    onClick = { /* TODO */ },
-                    label = { Text(category.name) },
-                    selected = category.isSelected,
-                    shape = RoundedCornerShape(IMFITCornerRadius.large)
-                )
+            OutlinedTextField(
+                value = newDayName,
+                onValueChange = { newDayName = it },
+                placeholder = {
+                    Text(
+                        stringResource(R.string.home_workout_placeholder),
+                        color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f)
+                    )
+                },
+                singleLine = true,
+                shape = IMFITShapes.TextField,
+                colors = OutlinedTextFieldDefaults.colors(
+                    focusedBorderColor = Primary,
+                    unfocusedBorderColor = MaterialTheme.colorScheme.outline.copy(alpha = 0.5f)
+                ),
+                modifier = Modifier.fillMaxWidth()
+            )
+        }
+    }
+
+    Scaffold(
+        contentWindowInsets = WindowInsets(0),
+        topBar = {
+            TopAppBar(
+                title = {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Box(
+                            modifier = Modifier
+                                .size(40.dp)
+                                .clip(IMFITShapes.IconContainer)
+                                .background(
+                                    Brush.linearGradient(listOf(Primary, PrimaryLight))
+                                ),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.FitnessCenter,
+                                contentDescription = null,
+                                tint = MaterialTheme.colorScheme.onPrimary,
+                                modifier = Modifier.size(IMFITSizes.iconSm)
+                            )
+                        }
+                        Spacer(modifier = Modifier.width(IMFITSpacing.md))
+                        Text(
+                            text = stringResource(R.string.app_name),
+                            style = MaterialTheme.typography.titleLarge,
+                            fontWeight = FontWeight.Bold
+                        )
+                    }
+                },
+                colors = TopAppBarDefaults.topAppBarColors(
+                    containerColor = MaterialTheme.colorScheme.surface
+                ),
+                windowInsets = WindowInsets(0)
+            )
+        }
+    ) { padding ->
+        LazyColumn(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(padding),
+            contentPadding = PaddingValues(IMFITSpacing.screenHorizontal),
+            verticalArrangement = Arrangement.spacedBy(IMFITSpacing.lg)
+        ) {
+            if (state.isLoading) {
+                item {
+                    Spacer(modifier = Modifier.height(IMFITSpacing.xs))
+                    ShimmerWelcomeSection()
+                    Spacer(modifier = Modifier.height(IMFITSpacing.xs))
+                }
+                item { ShimmerStatCard() }
+                item {
+                    Spacer(modifier = Modifier.height(IMFITSpacing.sm))
+                    Text(
+                        text = stringResource(R.string.home_title_my_workouts),
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.Bold
+                    )
+                }
+                items(3, key = { it }) { ShimmerWorkoutCard() }
+                item { Spacer(modifier = Modifier.height(100.dp)) }
+            } else {
+                item {
+                    Spacer(modifier = Modifier.height(IMFITSpacing.xs))
+                    WelcomeSection(userName = state.userName)
+                    Spacer(modifier = Modifier.height(IMFITSpacing.xs))
+                }
+
+                item {
+                    LastWorkoutCard(workout = state.lastWorkout)
+                }
+
+                item {
+                    Spacer(modifier = Modifier.height(IMFITSpacing.sm))
+                    Text(
+                        text = stringResource(R.string.home_title_my_workouts),
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.Bold
+                    )
+                }
+
+                if (state.templates.isEmpty()) {
+                    item {
+                        EmptyWorkoutCard(onClick = { showAddDayDialog = true })
+                    }
+                } else {
+                    items(state.templates, key = { it.id }) { template ->
+                        val isActive = state.activeWorkoutTemplateId == template.id
+                        WorkoutCard(
+                            template = template,
+                            isActive = isActive,
+                            onClick = {
+                                if (isActive) {
+                                    onNavigateToActiveWorkout(template.id)
+                                } else {
+                                    onNavigateToWorkoutDetail(template.id)
+                                }
+                            }
+                        )
+                    }
+                }
+
+                item {
+                    Spacer(modifier = Modifier.height(IMFITSpacing.sm))
+                    IMFITButton(
+                        text = stringResource(R.string.action_add_workout),
+                        onClick = { showAddDayDialog = true },
+                        icon = Icons.Default.Add
+                    )
+                    Spacer(modifier = Modifier.height(100.dp))
+                }
             }
         }
     }
 }
 
 @Composable
-fun ExerciseListItem(exercise: ExerciseItem, modifier: Modifier = Modifier) {
+private fun WelcomeSection(userName: String) {
+    Column {
+        Text(
+            text = stringResource(R.string.home_hello, userName),
+            style = MaterialTheme.typography.headlineSmall,
+            fontWeight = FontWeight.Bold,
+            color = MaterialTheme.colorScheme.onBackground
+        )
+        Spacer(modifier = Modifier.height(IMFITSpacing.xs))
+        Text(
+            text = stringResource(R.string.home_subtitle),
+            style = MaterialTheme.typography.bodyLarge,
+            color = MaterialTheme.colorScheme.onSurfaceVariant
+        )
+    }
+}
+
+@Composable
+private fun LastWorkoutCard(workout: WorkoutLog?) {
     Card(
-        modifier = modifier.fillMaxWidth(),
-        shape = RoundedCornerShape(IMFITCornerRadius.medium),
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.customColors.surfaceElevated)
+        modifier = Modifier
+            .fillMaxWidth()
+            .shadow(8.dp, IMFITShapes.Card, spotColor = Primary.copy(alpha = 0.2f)),
+        shape = IMFITShapes.Card,
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
+    ) {
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .background(
+                    Brush.horizontalGradient(
+                        listOf(Primary.copy(alpha = 0.08f), PrimaryLight.copy(alpha = 0.04f))
+                    )
+                )
+        ) {
+            Column(modifier = Modifier.padding(IMFITSpacing.cardPaddingLarge)) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(
+                        text = stringResource(R.string.home_last_workout),
+                        style = MaterialTheme.typography.labelLarge,
+                        fontWeight = FontWeight.Medium,
+                        color = Primary
+                    )
+                    Text(
+                        text = workout?.templateName ?: stringResource(R.string.home_no_workouts_yet),
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.Bold,
+                        color = if (workout != null) MaterialTheme.colorScheme.onSurface 
+                               else MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f)
+                    )
+                }
+                Spacer(modifier = Modifier.height(IMFITSpacing.lg))
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceEvenly
+                ) {
+                    StatChip(
+                        icon = Icons.Default.Timer,
+                        value = workout?.formattedDuration ?: "--:--",
+                        label = "Duration"
+                    )
+                    StatChip(
+                        icon = Icons.Default.FitnessCenter,
+                        value = workout?.formattedVolume ?: "0 kg",
+                        label = "Volume"
+                    )
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun StatChip(
+    icon: ImageVector,
+    value: String,
+    label: String
+) {
+    Row(
+        verticalAlignment = Alignment.CenterVertically,
+        modifier = Modifier
+            .clip(IMFITShapes.Chip)
+            .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f))
+            .padding(horizontal = IMFITSpacing.md, vertical = IMFITSpacing.sm)
+    ) {
+        Icon(
+            imageVector = icon,
+            contentDescription = null,
+            tint = Primary,
+            modifier = Modifier.size(IMFITSizes.iconSm)
+        )
+        Spacer(modifier = Modifier.width(IMFITSpacing.sm))
+        Column {
+            Text(
+                text = value,
+                style = MaterialTheme.typography.titleSmall,
+                fontWeight = FontWeight.Bold,
+                color = MaterialTheme.colorScheme.onSurface
+            )
+            Text(
+                text = label,
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+        }
+    }
+}
+
+@Composable
+private fun WorkoutCard(
+    template: WorkoutTemplate,
+    isActive: Boolean = false,
+    onClick: () -> Unit
+) {
+    val estimatedMinutes = template.exerciseCount * 8
+
+    val infiniteTransition = rememberInfiniteTransition(label = "pulse")
+    val pulseAlpha by infiniteTransition.animateFloat(
+        initialValue = 0.6f,
+        targetValue = 1f,
+        animationSpec = infiniteRepeatable(
+            animation = tween(800, easing = LinearEasing),
+            repeatMode = RepeatMode.Reverse
+        ),
+        label = "pulseAlpha"
+    )
+
+    Card(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable { onClick() }
+            .then(
+                if (isActive) Modifier.border(2.dp, SetComplete, IMFITShapes.Card)
+                else Modifier
+            ),
+        shape = IMFITShapes.Card,
+        colors = CardDefaults.cardColors(
+            containerColor = MaterialTheme.colorScheme.surface
+        ),
+        elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
     ) {
         Row(
-            modifier = Modifier.padding(12.dp),
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(IMFITSpacing.cardPadding),
             verticalAlignment = Alignment.CenterVertically
         ) {
-            // TODO: Ganti dengan gambar dari Coil
-            Image(
-                painter = painterResource(exercise.imageRes),
-                contentDescription = null,
+            Box(
                 modifier = Modifier
-                    .size(56.dp)
-                    .clip(RoundedCornerShape(IMFITCornerRadius.small))
-            )
-            Column(
-                modifier = Modifier
-                    .weight(1f)
-                    .padding(start = 12.dp)
+                    .size(52.dp)
+                    .clip(IMFITShapes.IconContainer)
+                    .background(
+                        if (isActive) SetComplete
+                        else MaterialTheme.colorScheme.primaryContainer
+                    ),
+                contentAlignment = Alignment.Center
             ) {
-                Text(text = exercise.title, style = MaterialTheme.typography.titleMedium)
-                Text(
-                    text = "${exercise.exerciseCount} Latihan • ${exercise.duration}",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.customColors.textSecondary
+                Icon(
+                    imageVector = if (isActive) Icons.Default.PlayArrow
+                    else Icons.Default.FitnessCenter,
+                    contentDescription = null,
+                    tint = if (isActive) MaterialTheme.colorScheme.onPrimary
+                    else MaterialTheme.colorScheme.onPrimaryContainer,
+                    modifier = Modifier.size(IMFITSizes.iconMd)
                 )
             }
+
+            Spacer(modifier = Modifier.width(IMFITSpacing.lg))
+
+            Column(modifier = Modifier.weight(1f)) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text(
+                        text = template.name,
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.Bold,
+                        color = MaterialTheme.colorScheme.onSurface
+                    )
+                    if (isActive) {
+                        Spacer(modifier = Modifier.width(IMFITSpacing.sm))
+                        Box(
+                            modifier = Modifier
+                                .background(
+                                    SetComplete.copy(alpha = pulseAlpha),
+                                    RoundedCornerShape(4.dp)
+                                )
+                                .padding(horizontal = 8.dp, vertical = 3.dp)
+                        ) {
+                            Text(
+                                text = stringResource(R.string.home_active),
+                                style = MaterialTheme.typography.labelSmall,
+                                fontWeight = FontWeight.Bold,
+                                color = MaterialTheme.colorScheme.onPrimary
+                            )
+                        }
+                    }
+                }
+                Spacer(modifier = Modifier.height(IMFITSpacing.xs))
+                Row(
+                    horizontalArrangement = Arrangement.spacedBy(IMFITSpacing.lg),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Icon(
+                            imageVector = Icons.Default.Schedule,
+                            contentDescription = null,
+                            tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                            modifier = Modifier.size(IMFITSizes.iconXs)
+                        )
+                        Spacer(modifier = Modifier.width(IMFITSpacing.xs))
+                        Text(
+                            text = if (estimatedMinutes > 0) "~${estimatedMinutes} min" else "-",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Icon(
+                            imageVector = Icons.Default.FitnessCenter,
+                            contentDescription = null,
+                            tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                            modifier = Modifier.size(IMFITSizes.iconXs)
+                        )
+                        Spacer(modifier = Modifier.width(IMFITSpacing.xs))
+                        Text(
+                            text = stringResource(
+                                R.string.home_exercises_count,
+                                template.exerciseCount
+                            ),
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                }
+            }
+
             Icon(
-                Icons.AutoMirrored.Filled.ArrowForward,
-                contentDescription = null,
-                tint = MaterialTheme.customColors.textTertiary
+                imageVector = Icons.AutoMirrored.Filled.KeyboardArrowRight,
+                contentDescription = stringResource(R.string.desc_view_details),
+                tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.size(IMFITSizes.iconMd)
             )
         }
     }
 }
 
 @Composable
-fun ProgressCard(item: ProgressItem) {
+private fun EmptyWorkoutCard(onClick: () -> Unit) {
     Card(
-        modifier = Modifier.size(width = 140.dp, height = 160.dp),
-        shape = RoundedCornerShape(IMFITCornerRadius.medium),
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.customColors.surfaceElevated)
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable { onClick() },
+        shape = IMFITShapes.Card,
+        colors = CardDefaults.cardColors(
+            containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)
+        )
     ) {
         Column(
-            modifier = Modifier.padding(12.dp),
-            horizontalAlignment = Alignment.Start
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(IMFITSpacing.xxxl),
+            horizontalAlignment = Alignment.CenterHorizontally
         ) {
-            Box(modifier = Modifier.size(60.dp), contentAlignment = Alignment.Center) {
-                CircularProgressIndicator(
-                    progress = { item.progress },
-                    modifier = Modifier.fillMaxSize(),
-                    strokeWidth = 6.dp
-                )
-                Text(
-                    text = "${item.current}/${item.total}",
-                    style = MaterialTheme.typography.bodySmall,
-                    fontWeight = FontWeight.Bold
+            Box(
+                modifier = Modifier
+                    .size(64.dp)
+                    .clip(CircleShape)
+                    .background(MaterialTheme.colorScheme.primaryContainer),
+                contentAlignment = Alignment.Center
+            ) {
+                Icon(
+                    imageVector = Icons.Default.Add,
+                    contentDescription = null,
+                    tint = MaterialTheme.colorScheme.onPrimaryContainer,
+                    modifier = Modifier.size(IMFITSizes.iconLg)
                 )
             }
-            Spacer(modifier = Modifier.weight(1f))
+            Spacer(modifier = Modifier.height(IMFITSpacing.lg))
             Text(
-                text = item.title,
-                style = MaterialTheme.typography.labelLarge,
-                fontWeight = FontWeight.Bold
+                text = stringResource(R.string.home_no_workouts),
+                style = MaterialTheme.typography.titleMedium,
+                fontWeight = FontWeight.SemiBold,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
             )
+            Spacer(modifier = Modifier.height(IMFITSpacing.xs))
             Text(
-                text = item.timeRemaining,
-                style = MaterialTheme.typography.labelSmall,
-                color = MaterialTheme.customColors.textSecondary
+                text = stringResource(R.string.home_create_first),
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f)
             )
         }
     }

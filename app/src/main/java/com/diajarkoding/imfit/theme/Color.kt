@@ -2,64 +2,85 @@ package com.diajarkoding.imfit.theme
 
 import androidx.compose.ui.graphics.Color
 
-// Primary Colors - Updated Blue Theme
-val PrimaryBlue = Color(0xFF3179FF)
-val PrimaryBlueDark = Color(0xFF2A6AE6)
-val PrimaryBlueLight = Color(0xFF5A93FF)
-
-// Secondary Colors - Accent
-val AccentTeal = Color(0xFF00BCD4)
-val AccentTealDark = Color(0xFF0097A7)
-val AccentTealLight = Color(0xFF4DD0E1)
+// Primary/Accent Color - Blue (same for both themes)
+val Primary = Color(0xFF3179FF)
+val PrimaryDark = Color(0xFF2563EB)
+val PrimaryLight = Color(0xFF5C9AFF)
+val PrimaryContainer = Color(0xFFD6E4FF)
+val OnPrimary = Color(0xFFFFFFFF)
 
 // Light Theme Colors
-val BackgroundPrimaryLight = Color(0xFFFFFFFF)      // White
-val BackgroundSecondaryLight = Color(0xFFF3F4F8)    // Light Gray
+val BackgroundLight = Color(0xFFFFFFFF)
+val BackgroundSecondaryLight = Color(0xFFF3F4F8)
 val SurfaceLight = Color(0xFFFFFFFF)
-val SurfaceElevatedLight = Color(0xFFF3F4F8)
+val SurfaceVariantLight = Color(0xFFF3F4F8)
+val OnBackgroundLight = Color(0xFF1A1A1A)
+val OnSurfaceLight = Color(0xFF1A1A1A)
+val OnSurfaceVariantLight = Color(0xFF6B7280)
+val OutlineLight = Color(0xFFE5E7EB)
+val OutlineVariantLight = Color(0xFFD1D5DB)
 
 // Dark Theme Colors
-val BackgroundPrimaryDark = Color(0xFF121212)       // Very Dark Gray
-val BackgroundSecondaryDark = Color(0xFF1F1F1F)     // Dark Gray
-val SurfaceDark = Color(0xFF121212)
-val SurfaceElevatedDark = Color(0xFF1F1F1F)
-
-// Light Theme Text Colors
-val TextPrimaryLight = Color(0xFF1C1C1E)            // Almost Black
-val TextSecondaryLight = Color(0xFF6D6D80)          // Medium Gray
-val TextTertiaryLight = Color(0xFF8E8E93)           // Light Gray
-val TextOnPrimaryLight = Color(0xFFFFFFFF)          // White on primary blue
-
-// Dark Theme Text Colors
-val TextPrimaryDark = Color(0xFFFFFFFF)             // White
-val TextSecondaryDark = Color(0xFFAEAEB2)           // Light Gray
-val TextTertiaryDark = Color(0xFF8E8E93)            // Medium Gray
-val TextOnPrimaryDark = Color(0xFFFFFFFF)           // White on primary blue
+val BackgroundDark = Color(0xFF121212)
+val BackgroundSecondaryDark = Color(0xFF1F1F1F)
+val SurfaceDark = Color(0xFF1F1F1F)
+val SurfaceVariantDark = Color(0xFF2A2A2A)
+val OnBackgroundDark = Color(0xFFF5F5F5)
+val OnSurfaceDark = Color(0xFFF5F5F5)
+val OnSurfaceVariantDark = Color(0xFF9CA3AF)
+val OutlineDark = Color(0xFF374151)
+val OutlineVariantDark = Color(0xFF4B5563)
 
 // Status Colors
-val SuccessGreen = Color(0xFF4CAF50)
-val WarningOrange = Color(0xFFFF9800)
-val ErrorRed = Color(0xFFF44336)
+val Success = Color(0xFF22C55E)
+val SuccessContainer = Color(0xFFDCFCE7)
+val OnSuccess = Color(0xFFFFFFFF)
+val Warning = Color(0xFFF59E0B)
+val WarningContainer = Color(0xFFFEF3C7)
+val OnWarning = Color(0xFFFFFFFF)
+val Error = Color(0xFFEF4444)
+val ErrorContainer = Color(0xFFFEE2E2)
+val OnError = Color(0xFFFFFFFF)
+val Info = Color(0xFF3179FF)
+val InfoContainer = Color(0xFFD6E4FF)
 
-// Gradient Colors (for headers)
-val GradientStart = Color(0xFF3179FF) // Primary Blue
-val GradientEnd = Color(0xFF7B1FA2)   // Purple
+// Text Colors
+val TextPrimaryLight = Color(0xFF1A1A1A)
+val TextSecondaryLight = Color(0xFF6B7280)
+val TextTertiaryLight = Color(0xFF9CA3AF)
 
-// Light Theme Neutral Colors
-val DividerLight = Color(0xFFE5E5EA)
-val DisabledGrayLight = Color(0xFFAEAEB2)
-val CardShadowLight = Color(0x1A000000)
+val TextPrimaryDark = Color(0xFFF5F5F5)
+val TextSecondaryDark = Color(0xFF9CA3AF)
+val TextTertiaryDark = Color(0xFF6B7280)
 
-// Dark Theme Neutral Colors
-val DividerDark = Color(0xFF38383A)
-val DisabledGrayDark = Color(0xFF636366)
-val CardShadowDark = Color(0x33000000)
+// Card Colors
+val CardBackgroundLight = Color(0xFFFFFFFF)
+val CardBackgroundDark = Color(0xFF1F1F1F)
+val CardBorderLight = Color(0xFFE5E7EB)
+val CardBorderDark = Color(0xFF374151)
+
+// Divider Colors
+val DividerLight = Color(0xFFE5E7EB)
+val DividerDark = Color(0xFF374151)
+
+// Disabled Colors
+val DisabledLight = Color(0xFFD1D5DB)
+val DisabledDark = Color(0xFF4B5563)
 
 // Navigation Colors
-val BottomNavActive = Color(0xFF3179FF)
-val BottomNavInactiveLight = Color(0xFF9E9E9E)
-val BottomNavInactiveDark = Color(0xFF636366)
-val BottomNavBackgroundLight = Color(0xFFFFFFFF)
-val BottomNavBackgroundDark = Color(0xFF121212)
-val BottomNavShadowLight = Color(0x0A000000)
-val BottomNavShadowDark = Color(0x1A000000)
+val NavActiveLight = Color(0xFF3179FF)
+val NavActiveDark = Color(0xFF3179FF)
+val NavInactiveLight = Color(0xFF9CA3AF)
+val NavInactiveDark = Color(0xFF6B7280)
+val NavBackgroundLight = Color(0xFFFFFFFF)
+val NavBackgroundDark = Color(0xFF121212)
+
+// Workout Specific Colors
+val SetComplete = Color(0xFF22C55E)
+val SetPending = Color(0xFF6B7280)
+val RestTimer = Color(0xFF3179FF)
+val TimerActive = Color(0xFF3179FF)
+val TimerWarning = Color(0xFFF59E0B)
+
+// Delete Action Color
+val DeletePink = Color(0xFFE91E63)

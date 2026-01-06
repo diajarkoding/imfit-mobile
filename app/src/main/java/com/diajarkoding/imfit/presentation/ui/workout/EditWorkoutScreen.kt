@@ -14,10 +14,12 @@ import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.navigationBars
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBars
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
@@ -208,13 +210,15 @@ fun EditWorkoutScreen(
                     .fillMaxWidth()
                     .shadow(8.dp, spotColor = Color.Black.copy(alpha = 0.1f))
                     .background(MaterialTheme.colorScheme.surface)
+                    .windowInsetsPadding(WindowInsets.navigationBars)
                     .padding(IMFITSpacing.screenHorizontal)
                     .padding(vertical = IMFITSpacing.lg)
             ) {
                 IMFITButton(
                     text = stringResource(R.string.action_save_changes),
                     onClick = { viewModel.saveChanges() },
-                    enabled = state.workoutName.isNotBlank(),
+                    enabled = state.workoutName.isNotBlank() && !state.isLoading,
+                    isLoading = state.isLoading,
                     icon = Icons.Default.Check
                 )
             }

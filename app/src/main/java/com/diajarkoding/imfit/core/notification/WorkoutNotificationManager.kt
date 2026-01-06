@@ -115,9 +115,10 @@
              .setContentIntent(createContentIntent())
              .setOngoing(true)
              .setOnlyAlertOnce(true)
-             .setPriority(NotificationCompat.PRIORITY_LOW)
+            .setPriority(NotificationCompat.PRIORITY_DEFAULT)
              .setCategory(NotificationCompat.CATEGORY_SERVICE)
              .setVisibility(NotificationCompat.VISIBILITY_PUBLIC)
+            .setForegroundServiceBehavior(NotificationCompat.FOREGROUND_SERVICE_IMMEDIATE)
             .addAction(
                 R.drawable.ic_stop,
                 context.getString(R.string.notification_stop),
@@ -155,6 +156,7 @@
              .setPriority(NotificationCompat.PRIORITY_HIGH)
              .setCategory(NotificationCompat.CATEGORY_ALARM)
              .setVisibility(NotificationCompat.VISIBILITY_PUBLIC)
+            .setForegroundServiceBehavior(NotificationCompat.FOREGROUND_SERVICE_IMMEDIATE)
              .addAction(
                  R.drawable.ic_skip,
                  context.getString(R.string.notification_skip_rest),

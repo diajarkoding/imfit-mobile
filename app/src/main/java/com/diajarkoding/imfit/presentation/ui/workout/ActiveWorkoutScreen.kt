@@ -1,10 +1,17 @@
 package com.diajarkoding.imfit.presentation.ui.workout
 
+import android.Manifest
 import android.content.BroadcastReceiver
+import android.content.ComponentName
 import android.content.Intent
 import android.content.IntentFilter
 import android.content.Context
+import android.content.ServiceConnection
+import android.content.pm.PackageManager
 import android.os.Build
+import android.os.IBinder
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -19,6 +26,9 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.navigationBars
+import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.gestures.snapping.rememberSnapFlingBehavior
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -92,7 +102,9 @@ import com.diajarkoding.imfit.theme.Primary
 import com.diajarkoding.imfit.theme.PrimaryLight
 import com.diajarkoding.imfit.core.service.WorkoutService
 import com.diajarkoding.imfit.core.notification.WorkoutNotificationReceiver
+import com.diajarkoding.imfit.core.notification.NotificationChannels
 import com.diajarkoding.imfit.theme.SetComplete
+import androidx.core.content.ContextCompat
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -108,6 +120,93 @@ fun ActiveWorkoutScreen(
     val coroutineScope = rememberCoroutineScope()
     val context = LocalContext.current
     
+    // Notification permission launcher for Android 13+
+    val notificationPermissionLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.RequestPermission()
+    ) { isGranted ->
+        if (isGranted) {
+            android.util.Log.d("ActiveWorkout", "Notification permission granted")
+        } else {
+            android.util.Log.w("ActiveWorkout", "Notification permission denied")
+        }
+    }
+    
+    // Request notification permission on Android 13+
+    LaunchedEffect(Unit) {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            val hasPermission = ContextCompat.checkSelfPermission(
+                context,
+                Manifest.permission.POST_NOTIFICATIONS
+            ) == PackageManager.PERMISSION_GRANTED
+            
+            if (!hasPermission) {
+                notificationPermissionLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
+            }
+        }
+    }
+    
+    // Service binding
+    var workoutService by remember { mutableStateOf<WorkoutService?>(null) }
+    var isBound by remember { mutableStateOf(false) }
+    
+    val serviceConnection = remember {
+        object : ServiceConnection {
+            override fun onServiceConnected(name: ComponentName?, service: IBinder?) {
+                val binder = service as? WorkoutService.WorkoutBinder
+                workoutService = binder?.getService()
+                isBound = true
+                
+                // Restore rest timer state from service
+                workoutService?.getRestTimerState()?.let { restState ->
+                    if (restState.isActive) {
+                        viewModel.restoreRestTimerState(
+                            remainingSeconds = restState.remainingSeconds,
+                            exerciseName = restState.exerciseName
+                        )
+                    }
+                }
+            }
+            
+            override fun onServiceDisconnected(name: ComponentName?) {
+                workoutService = null
+                isBound = false
+            }
+        }
+    }
+    
+    // Bind to service
+    DisposableEffect(Unit) {
+        val intent = Intent(context, WorkoutService::class.java)
+        context.bindService(intent, serviceConnection, Context.BIND_AUTO_CREATE)
+        
+        onDispose {
+            if (isBound) {
+                context.unbindService(serviceConnection)
+                isBound = false
+            }
+        }
+    }
+    
+    // Listen for rest timer finished from service
+    LaunchedEffect(workoutService) {
+        workoutService?.restTimerFinished?.collect {
+            viewModel.onRestTimerFinished()
+        }
+    }
+    
+    // Poll rest timer state from service to update UI
+    LaunchedEffect(workoutService, state.isRestTimerActive) {
+        if (workoutService != null && state.isRestTimerActive) {
+            while (state.isRestTimerActive) {
+                val restState = workoutService?.getRestTimerState()
+                if (restState != null && restState.isActive) {
+                    viewModel.updateRestTimerSeconds(restState.remainingSeconds)
+                }
+                kotlinx.coroutines.delay(500)
+            }
+        }
+    }
+    
     // Listen for notification action broadcasts
     DisposableEffect(Unit) {
         val receiver = object : BroadcastReceiver() {
@@ -118,9 +217,17 @@ fun ActiveWorkoutScreen(
                     }
                     WorkoutNotificationReceiver.COMMAND_PAUSE -> {
                         viewModel.pauseWorkout()
+                        val pauseIntent = Intent(context, WorkoutService::class.java).apply {
+                            action = WorkoutService.ACTION_PAUSE_WORKOUT
+                        }
+                        context.startService(pauseIntent)
                     }
                     WorkoutNotificationReceiver.COMMAND_RESUME -> {
                         viewModel.resumeWorkout()
+                        val resumeIntent = Intent(context, WorkoutService::class.java).apply {
+                            action = WorkoutService.ACTION_RESUME_WORKOUT
+                        }
+                        context.startService(resumeIntent)
                     }
                     WorkoutNotificationReceiver.COMMAND_SKIP_REST -> {
                         viewModel.skipRestTimer()
@@ -157,12 +264,21 @@ fun ActiveWorkoutScreen(
     }
     
     // Start foreground service when workout session is available
-    LaunchedEffect(state.session?.id) {
+    // Only start if service is not already bound/running
+    LaunchedEffect(state.session?.id, isBound) {
         state.session?.let { session ->
+            // Skip if service is already running (bound means it's running)
+            if (isBound && workoutService?.isRunning?.value == true) {
+                android.util.Log.d("ActiveWorkout", "Service already running, skipping start")
+                return@let
+            }
+            
             val intent = Intent(context, WorkoutService::class.java).apply {
                 action = WorkoutService.ACTION_START_WORKOUT
                 putExtra(WorkoutService.EXTRA_WORKOUT_NAME, session.templateName)
                 putExtra(WorkoutService.EXTRA_TEMPLATE_ID, session.templateId)
+                putExtra(WorkoutService.EXTRA_START_TIME, session.startTime)
+                putExtra(WorkoutService.EXTRA_TOTAL_PAUSED_TIME, session.totalPausedTimeMs)
             }
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
                 context.startForegroundService(intent)
@@ -188,14 +304,23 @@ fun ActiveWorkoutScreen(
         }
     }
     
-    // Send rest timer updates to service
+    // Start rest timer in service
     LaunchedEffect(Unit) {
-        viewModel.restTimerUpdates.collect { update ->
+        viewModel.startRestTimer.collect { request ->
             val intent = Intent(context, WorkoutService::class.java).apply {
-                action = WorkoutService.ACTION_UPDATE_REST
-                putExtra(WorkoutService.EXTRA_REMAINING_SECONDS, update.remainingSeconds)
-                putExtra(WorkoutService.EXTRA_EXERCISE_NAME, update.currentExerciseName)
-                putExtra(WorkoutService.EXTRA_IS_REST_ACTIVE, update.isRestActive)
+                action = WorkoutService.ACTION_START_REST
+                putExtra(WorkoutService.EXTRA_REMAINING_SECONDS, request.seconds)
+                putExtra(WorkoutService.EXTRA_EXERCISE_NAME, request.exerciseName)
+            }
+            context.startService(intent)
+        }
+    }
+    
+    // Skip rest timer in service
+    LaunchedEffect(Unit) {
+        viewModel.skipRestTimerFlow.collect {
+            val intent = Intent(context, WorkoutService::class.java).apply {
+                action = WorkoutService.ACTION_SKIP_REST
             }
             context.startService(intent)
         }
@@ -291,8 +416,19 @@ fun ActiveWorkoutScreen(
                     actions = {
                         IconButton(
                             onClick = {
-                                if (state.isPaused) viewModel.resumeWorkout()
-                                else viewModel.pauseWorkout()
+                                if (state.isPaused) {
+                                    viewModel.resumeWorkout()
+                                    val resumeIntent = Intent(context, WorkoutService::class.java).apply {
+                                        action = WorkoutService.ACTION_RESUME_WORKOUT
+                                    }
+                                    context.startService(resumeIntent)
+                                } else {
+                                    viewModel.pauseWorkout()
+                                    val pauseIntent = Intent(context, WorkoutService::class.java).apply {
+                                        action = WorkoutService.ACTION_PAUSE_WORKOUT
+                                    }
+                                    context.startService(pauseIntent)
+                                }
                             }
                         ) {
                             Icon(
@@ -332,6 +468,7 @@ fun ActiveWorkoutScreen(
                     .fillMaxWidth()
                     .shadow(8.dp, spotColor = Color.Black.copy(alpha = 0.1f))
                     .background(MaterialTheme.colorScheme.surface)
+                    .windowInsetsPadding(WindowInsets.navigationBars)
                     .padding(IMFITSpacing.screenHorizontal)
                     .padding(vertical = IMFITSpacing.lg)
             ) {
@@ -362,7 +499,8 @@ fun ActiveWorkoutScreen(
                         IMFITButton(
                             text = stringResource(R.string.action_finish_workout),
                             onClick = { viewModel.finishWorkout() },
-                            enabled = (state.session?.totalCompletedSets ?: 0) > 0,
+                            enabled = (state.session?.totalCompletedSets ?: 0) > 0 && !state.isFinishing,
+                            isLoading = state.isFinishing,
                             icon = Icons.Default.Check
                         )
                     }

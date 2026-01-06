@@ -35,7 +35,7 @@ import com.diajarkoding.imfit.data.local.entity.WorkoutTemplateEntity
         WorkoutSetEntity::class,
         ActiveSessionEntity::class
     ],
-    version = 5,
+    version = 6,
     exportSchema = false
 )
 @TypeConverters(Converters::class)
@@ -60,6 +60,14 @@ abstract class IMFITDatabase : RoomDatabase() {
                 database.execSQL("ALTER TABLE active_sessions ADD COLUMN last_pause_time INTEGER")
             }
         }
+        
+        val MIGRATION_5_6 = object : Migration(5, 6) {
+            override fun migrate(database: SupportSQLiteDatabase) {
+                database.execSQL("ALTER TABLE active_sessions ADD COLUMN rest_timer_end_time INTEGER NOT NULL DEFAULT 0")
+                database.execSQL("ALTER TABLE active_sessions ADD COLUMN rest_timer_exercise_name TEXT")
+                database.execSQL("ALTER TABLE active_sessions ADD COLUMN session_rest_override INTEGER")
+            }
+        }
 
         fun getDatabase(context: Context): IMFITDatabase {
             return INSTANCE ?: synchronized(this) {
@@ -68,8 +76,8 @@ abstract class IMFITDatabase : RoomDatabase() {
                     IMFITDatabase::class.java,
                     "imfit_database"
                 )
-                    .addMigrations(MIGRATION_4_5)
-                    .fallbackToDestructiveMigrationFrom(1, 2, 3)
+                    .addMigrations(MIGRATION_4_5, MIGRATION_5_6)
+                    .fallbackToDestructiveMigration()
                     .build()
                 INSTANCE = instance
                 instance

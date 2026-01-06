@@ -16,14 +16,16 @@
          if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
              val notificationManager = context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
              
-             // Workout Active Channel
+            // Workout Active Channel - Use DEFAULT importance for foreground service visibility
              val workoutActiveChannel = NotificationChannel(
                  WORKOUT_ACTIVE_CHANNEL_ID,
                  context.getString(com.diajarkoding.imfit.R.string.channel_workout_active),
-                 NotificationManager.IMPORTANCE_LOW
+                NotificationManager.IMPORTANCE_DEFAULT
              ).apply {
                  description = context.getString(com.diajarkoding.imfit.R.string.channel_workout_desc)
                  setShowBadge(false)
+                setSound(null, null)
+                enableVibration(false)
              }
              
              // Rest Timer Channel - Higher importance for countdown
@@ -42,4 +44,8 @@
              notificationManager.createNotificationChannel(restTimerChannel)
          }
      }
+    
+    fun areNotificationsEnabled(context: Context): Boolean {
+        return NotificationManagerCompat.from(context).areNotificationsEnabled()
+    }
  }

@@ -190,6 +190,7 @@ fun IMFITOutlinedButton(
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
     enabled: Boolean = true,
+    isLoading: Boolean = false,
     icon: ImageVector? = null
 ) {
     val interactionSource = remember { MutableInteractionSource() }
@@ -221,30 +222,38 @@ fun IMFITOutlinedButton(
             .clickable(
                 interactionSource = interactionSource,
                 indication = null,
-                enabled = enabled,
+                enabled = enabled && !isLoading,
                 onClick = onClick
             ),
         contentAlignment = Alignment.Center
     ) {
-        Row(
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.Center
-        ) {
-            if (icon != null) {
-                Icon(
-                    imageVector = icon,
-                    contentDescription = null,
-                    tint = if (enabled) Primary else Primary.copy(alpha = 0.4f),
-                    modifier = Modifier.size(IMFITSizes.iconSm)
-                )
-                Spacer(modifier = Modifier.width(IMFITSpacing.sm))
-            }
-            Text(
-                text = text,
+        if (isLoading) {
+            CircularProgressIndicator(
+                color = Primary,
+                strokeWidth = 2.5.dp,
+                modifier = Modifier.size(22.dp)
+            )
+        } else {
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.Center
+            ) {
+                if (icon != null) {
+                    Icon(
+                        imageVector = icon,
+                        contentDescription = null,
+                        tint = if (enabled) Primary else Primary.copy(alpha = 0.4f),
+                        modifier = Modifier.size(IMFITSizes.iconSm)
+                    )
+                    Spacer(modifier = Modifier.width(IMFITSpacing.sm))
+                }
+                Text(
+                    text = text,
                 style = MaterialTheme.typography.titleSmall,
                 fontWeight = FontWeight.SemiBold,
                 color = if (enabled) Primary else Primary.copy(alpha = 0.4f)
-            )
+                )
+            }
         }
     }
 }
@@ -255,6 +264,7 @@ fun IMFITSecondaryButton(
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
     enabled: Boolean = true,
+    isLoading: Boolean = false,
     containerColor: Color = MaterialTheme.colorScheme.surfaceVariant,
     contentColor: Color = MaterialTheme.colorScheme.onSurfaceVariant,
     icon: ImageVector? = null
@@ -277,30 +287,38 @@ fun IMFITSecondaryButton(
             .clickable(
                 interactionSource = interactionSource,
                 indication = null,
-                enabled = enabled,
+                enabled = enabled && !isLoading,
                 onClick = onClick
             ),
         contentAlignment = Alignment.Center
     ) {
-        Row(
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.Center
-        ) {
-            if (icon != null) {
-                Icon(
-                    imageVector = icon,
-                    contentDescription = null,
-                    tint = contentColor,
-                    modifier = Modifier.size(IMFITSizes.iconSm)
-                )
-                Spacer(modifier = Modifier.width(IMFITSpacing.sm))
-            }
-            Text(
-                text = text,
-                style = MaterialTheme.typography.titleSmall,
-                fontWeight = FontWeight.SemiBold,
-                color = if (enabled) contentColor else contentColor.copy(alpha = 0.5f)
+        if (isLoading) {
+            CircularProgressIndicator(
+                color = contentColor,
+                strokeWidth = 2.5.dp,
+                modifier = Modifier.size(22.dp)
             )
+        } else {
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.Center
+            ) {
+                if (icon != null) {
+                    Icon(
+                        imageVector = icon,
+                        contentDescription = null,
+                        tint = contentColor,
+                        modifier = Modifier.size(IMFITSizes.iconSm)
+                    )
+                    Spacer(modifier = Modifier.width(IMFITSpacing.sm))
+                }
+                Text(
+                    text = text,
+                    style = MaterialTheme.typography.titleSmall,
+                    fontWeight = FontWeight.SemiBold,
+                    color = if (enabled) contentColor else contentColor.copy(alpha = 0.5f)
+                )
+            }
         }
     }
 }

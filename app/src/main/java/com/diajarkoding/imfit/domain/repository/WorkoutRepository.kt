@@ -22,6 +22,8 @@ interface WorkoutRepository {
     suspend fun updateActiveSession(session: WorkoutSession)
     suspend fun finishWorkout(): WorkoutLog?
     suspend fun cancelWorkout()
+    suspend fun updateSessionRestOverride(seconds: Int)
+    suspend fun getSessionRestOverride(): Int?
 
     // Workout log operations
     suspend fun getWorkoutLogs(userId: String): List<WorkoutLog>

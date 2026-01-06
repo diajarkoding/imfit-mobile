@@ -610,6 +610,31 @@ class WorkoutRepositoryImpl @Inject constructor(
         activeSession = null
     }
 
+    override suspend fun updateSessionRestOverride(seconds: Int) {
+        try {
+            val userId = supabaseClient.auth.currentUserOrNull()?.id ?: "local_user"
+            val entity = activeSessionDao.getActiveSession(userId) ?: return
+            val updatedEntity = entity.copy(
+                sessionRestOverride = seconds,
+                updatedAt = System.currentTimeMillis()
+            )
+            activeSessionDao.updateSession(updatedEntity)
+            Log.d("WorkoutRepository", "Updated session rest override: $seconds")
+        } catch (e: Exception) {
+            Log.e("WorkoutRepository", "Failed to update session rest override: ${e.message}", e)
+        }
+    }
+    
+    override suspend fun getSessionRestOverride(): Int? {
+        return try {
+            val userId = supabaseClient.auth.currentUserOrNull()?.id ?: "local_user"
+            activeSessionDao.getActiveSession(userId)?.sessionRestOverride
+        } catch (e: Exception) {
+            Log.e("WorkoutRepository", "Failed to get session rest override: ${e.message}", e)
+            null
+        }
+    }
+
     override suspend fun getWorkoutLogs(userId: String): List<WorkoutLog> {
         return try {
             val localLogs = workoutLogDao.getWorkoutLogsByUserList(userId)

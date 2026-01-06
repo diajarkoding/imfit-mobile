@@ -2,16 +2,19 @@ package com.diajarkoding.imfit.presentation.ui.workout
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
-import com.diajarkoding.imfit.domain.model.ExerciseLog
 import com.diajarkoding.imfit.domain.model.WorkoutSession
 import com.diajarkoding.imfit.domain.model.WorkoutSet
 import com.diajarkoding.imfit.domain.repository.AuthRepository
 import com.diajarkoding.imfit.domain.repository.WorkoutRepository
+import com.diajarkoding.imfit.core.model.WorkoutTimerUpdate
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.MutableSharedFlow
+import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import javax.inject.Inject
@@ -21,11 +24,13 @@ data class ActiveWorkoutState(
     val elapsedSeconds: Long = 0,
     val isRestTimerActive: Boolean = false,
     val restTimerSeconds: Int = 60,
+    val restTimerExerciseName: String? = null,
     val showCancelDialog: Boolean = false,
     val workoutLogId: String? = null,
     val sessionRestOverride: Int? = null,
     val isPaused: Boolean = false,
-    val pauseError: String? = null
+    val pauseError: String? = null,
+    val isFinishing: Boolean = false
 )
 
 @HiltViewModel
@@ -37,8 +42,16 @@ class ActiveWorkoutViewModel @Inject constructor(
     private val _state = MutableStateFlow(ActiveWorkoutState())
     val state = _state.asStateFlow()
 
+    private val _workoutTimerUpdates = MutableSharedFlow<WorkoutTimerUpdate>(replay = 1)
+    val workoutTimerUpdates: SharedFlow<WorkoutTimerUpdate> = _workoutTimerUpdates.asSharedFlow()
+    
+    private val _startRestTimer = MutableSharedFlow<RestTimerRequest>()
+    val startRestTimer: SharedFlow<RestTimerRequest> = _startRestTimer.asSharedFlow()
+    
+    private val _skipRestTimer = MutableSharedFlow<Unit>()
+    val skipRestTimerFlow: SharedFlow<Unit> = _skipRestTimer.asSharedFlow()
+
     private var elapsedTimeJob: Job? = null
-    private var restTimerJob: Job? = null
 
     fun startWorkout(templateId: String) {
         viewModelScope.launch {
@@ -48,16 +61,19 @@ class ActiveWorkoutViewModel @Inject constructor(
             if (existingSession != null) {
                 // Restore existing session - preserve all data including completed sets
                 android.util.Log.d("ActiveWorkoutVM", "Restoring existing session: ${existingSession.id}")
+                
+                // Restore session rest override if available
+                val sessionOverride = workoutRepository.getSessionRestOverride()
+                
                 _state.update { 
                     it.copy(
                         session = existingSession, 
-                        isPaused = existingSession.isPaused
+                        isPaused = existingSession.isPaused,
+                        sessionRestOverride = sessionOverride
                     ) 
                 }
-                // Only start timer if not paused
-                if (!existingSession.isPaused) {
-                    startElapsedTimeCounter()
-                }
+                
+                startElapsedTimeCounter()
                 return@launch
             }
             
@@ -126,6 +142,17 @@ class ActiveWorkoutViewModel @Inject constructor(
                 // Use actualElapsedMs which excludes paused time
                 val elapsed = session.actualElapsedMs / 1000
                 _state.update { it.copy(elapsedSeconds = elapsed) }
+                _workoutTimerUpdates.emit(
+                    WorkoutTimerUpdate(
+                        workoutName = session.templateName,
+                        elapsedSeconds = elapsed,
+                        completedSets = session.totalCompletedSets,
+                        totalSets = session.totalSets,
+                        totalVolume = session.totalVolume,
+                        isPaused = _state.value.isPaused
+                    )
+                )
+                
                 delay(1000)
             }
         }
@@ -136,7 +163,10 @@ class ActiveWorkoutViewModel @Inject constructor(
      * This value will be used for ALL exercises during this session.
      */
     fun setSessionRestOverride(seconds: Int) {
-        _state.update { it.copy(sessionRestOverride = seconds) }
+        viewModelScope.launch {
+            _state.update { it.copy(sessionRestOverride = seconds) }
+            workoutRepository.updateSessionRestOverride(seconds)
+        }
         android.util.Log.d("ActiveWorkoutVM", "Set session rest override: $seconds seconds")
     }
     
@@ -209,7 +239,21 @@ class ActiveWorkoutViewModel @Inject constructor(
             _state.update { it.copy(session = updatedSession) }
 
             // Start rest timer
-            startRestTimer(exerciseIndex)
+            val restSeconds = _state.value.sessionRestOverride 
+                ?: _state.value.session?.getRestSecondsForExercise(exerciseIndex) 
+                ?: 60
+            val exerciseName = _state.value.session?.exerciseLogs?.getOrNull(exerciseIndex)?.exercise?.name
+            
+            _state.update {
+                it.copy(
+                    isRestTimerActive = true,
+                    restTimerSeconds = restSeconds,
+                    restTimerExerciseName = exerciseName
+                )
+            }
+            
+            // Emit event to start rest timer in Service
+            _startRestTimer.emit(RestTimerRequest(restSeconds, exerciseName))
         }
     }
 
@@ -254,38 +298,38 @@ class ActiveWorkoutViewModel @Inject constructor(
     }
 
     /**
-     * Starts the rest timer.
-     * Uses session-level override if set, otherwise uses the exercise's configured rest time.
+     * Updates rest timer countdown from Service
      */
-    private fun startRestTimer(exerciseIndex: Int) {
-        restTimerJob?.cancel()
-        
-        // Use session override if set, otherwise use exercise's rest time
-        val restSeconds = _state.value.sessionRestOverride 
-            ?: _state.value.session?.getRestSecondsForExercise(exerciseIndex) 
-            ?: 60
-        
-        _state.update {
+    fun updateRestTimerSeconds(seconds: Int) {
+        _state.update { it.copy(restTimerSeconds = seconds) }
+    }
+    
+    /**
+     * Restores rest timer state from Service when app is reopened
+     */
+    fun restoreRestTimerState(remainingSeconds: Int, exerciseName: String?) {
+        _state.update { 
             it.copy(
                 isRestTimerActive = true,
-                restTimerSeconds = restSeconds
-            )
+                restTimerSeconds = remainingSeconds,
+                restTimerExerciseName = exerciseName
+            ) 
         }
-
-        restTimerJob = viewModelScope.launch {
-            var remaining = restSeconds
-            while (remaining > 0) {
-                delay(1000)
-                remaining--
-                _state.update { it.copy(restTimerSeconds = remaining) }
-            }
-            _state.update { it.copy(isRestTimerActive = false) }
-        }
+        android.util.Log.d("ActiveWorkoutVM", "Restored rest timer: ${remainingSeconds}s for $exerciseName")
+    }
+    
+    /**
+     * Called when rest timer finishes (from Service)
+     */
+    fun onRestTimerFinished() {
+        _state.update { it.copy(isRestTimerActive = false, restTimerExerciseName = null) }
     }
 
     fun skipRestTimer() {
-        restTimerJob?.cancel()
-        _state.update { it.copy(isRestTimerActive = false) }
+        _state.update { it.copy(isRestTimerActive = false, restTimerExerciseName = null) }
+        viewModelScope.launch {
+            _skipRestTimer.emit(Unit)
+        }
     }
 
     fun pauseWorkout() {
@@ -300,9 +344,6 @@ class ActiveWorkoutViewModel @Inject constructor(
             
             // Already paused
             if (_state.value.isPaused) return@launch
-            
-            // Cancel elapsed timer
-            elapsedTimeJob?.cancel()
             
             // Record pause start time
             val pauseStartTime = System.currentTimeMillis()
@@ -339,9 +380,6 @@ class ActiveWorkoutViewModel @Inject constructor(
             workoutRepository.updateActiveSession(updatedSession)
             _state.update { it.copy(session = updatedSession, isPaused = false) }
             
-            // Restart timer
-            startElapsedTimeCounter()
-            
             android.util.Log.d("ActiveWorkoutVM", "Workout resumed. Pause duration: ${pauseDuration}ms, Total paused: ${updatedSession.totalPausedTimeMs}ms")
         }
     }
@@ -361,15 +399,16 @@ class ActiveWorkoutViewModel @Inject constructor(
     fun cancelWorkout() {
         viewModelScope.launch {
             elapsedTimeJob?.cancel()
-            restTimerJob?.cancel()
             workoutRepository.cancelWorkout()
         }
     }
 
     fun finishWorkout() {
+        if (_state.value.isFinishing) return
+        
         viewModelScope.launch {
+            _state.update { it.copy(isFinishing = true) }
             elapsedTimeJob?.cancel()
-            restTimerJob?.cancel()
 
             val workoutLog = workoutRepository.finishWorkout()
             workoutLog?.let { log ->
@@ -381,6 +420,10 @@ class ActiveWorkoutViewModel @Inject constructor(
     override fun onCleared() {
         super.onCleared()
         elapsedTimeJob?.cancel()
-        restTimerJob?.cancel()
     }
 }
+
+data class RestTimerRequest(
+    val seconds: Int,
+    val exerciseName: String?
+)

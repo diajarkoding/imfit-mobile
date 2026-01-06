@@ -7,11 +7,17 @@ import coil.disk.DiskCache
 import coil.memory.MemoryCache
 import coil.request.CachePolicy
 import coil.util.DebugLogger
+import com.diajarkoding.imfit.core.notification.NotificationChannels
 import dagger.hilt.android.HiltAndroidApp
 
 @HiltAndroidApp
 class ImFitApplication : Application(), ImageLoaderFactory {
     
+    override fun onCreate() {
+        super.onCreate()
+        NotificationChannels.createNotificationChannels(this)
+    }
+
     override fun newImageLoader(): ImageLoader {
         return ImageLoader.Builder(this)
             // Memory cache - 25% of available memory

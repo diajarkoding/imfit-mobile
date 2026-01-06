@@ -33,8 +33,31 @@ fun NavGraph(
     isDarkMode: Boolean = false,
     onToggleTheme: () -> Unit = {},
     isIndonesian: Boolean = true,
-    onToggleLanguage: () -> Unit = {}
+    onToggleLanguage: () -> Unit = {},
+    openActiveWorkout: Boolean = false,
+    activeWorkoutTemplateId: String? = null,
+    onActiveWorkoutOpened: () -> Unit = {}
 ) {
+    // Handle navigation to active workout from notification
+    androidx.compose.runtime.LaunchedEffect(openActiveWorkout, activeWorkoutTemplateId) {
+        if (openActiveWorkout) {
+            // Check if we're already on ActiveWorkoutScreen
+            val currentRoute = navController.currentBackStackEntry?.destination?.route
+            val isAlreadyOnActiveWorkout = currentRoute?.startsWith("active_workout") == true
+            
+            if (!isAlreadyOnActiveWorkout) {
+                // Navigate to active workout - use templateId if available, otherwise use a placeholder
+                // The ActiveWorkoutScreen will check for existing session anyway
+                val templateId = activeWorkoutTemplateId ?: "active"
+                navController.navigate(Routes.activeWorkout(templateId)) {
+                    popUpTo(Routes.MAIN) { inclusive = false }
+                    launchSingleTop = true
+                }
+            }
+            onActiveWorkoutOpened()
+        }
+    }
+
     NavHost(
         navController = navController,
         startDestination = startDestination

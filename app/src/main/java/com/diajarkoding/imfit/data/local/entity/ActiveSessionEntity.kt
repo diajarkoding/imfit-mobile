@@ -33,5 +33,11 @@ data class ActiveSessionEntity(
     @ColumnInfo(name = "total_paused_time_ms", defaultValue = "0")
     val totalPausedTimeMs: Long = 0,
     @ColumnInfo(name = "last_pause_time")
-    val lastPauseTime: Long? = null
+    val lastPauseTime: Long? = null,
+    @ColumnInfo(name = "rest_timer_end_time", defaultValue = "0")
+    val restTimerEndTime: Long = 0,
+    @ColumnInfo(name = "rest_timer_exercise_name")
+    val restTimerExerciseName: String? = null,
+    @ColumnInfo(name = "session_rest_override")
+    val sessionRestOverride: Int? = null
 )

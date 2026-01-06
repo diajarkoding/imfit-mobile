@@ -392,4 +392,21 @@
     <string name="exercise_placeholder"></string>
     <string name="workout_duration_zero">0m</string>
     <string name="workout_volume_zero">0 kg</string>
+
+    <!-- Notification -->
+    <string name="notification_workout_active">Workout Active</string>
+    <string name="notification_workout_paused">Workout Paused</string>
+    <string name="notification_rest_timer">Rest Timer</string>
+    <string name="notification_rest_timer_title">Rest: %s</string>
+    <string name="notification_stop">Stop</string>
+    <string name="notification_pause">Pause</string>
+    <string name="notification_resume">Resume</string>
+    <string name="notification_skip_rest">Skip</string>
+    <string name="notification_workout_content">%1$s • Sets: %2$d/%3$d • Vol: %4$.0f kg</string>
+    <string name="notification_resting_after">Resting after: %s</string>
+
+    <!-- Notification Channels -->
+    <string name="channel_workout_active">Active Workout</string>
+    <string name="channel_workout_rest">Rest Timer</string>
+    <string name="channel_workout_desc">Shows your active workout progress</string>
 </resources>

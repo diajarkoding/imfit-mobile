@@ -28,6 +28,7 @@ import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -167,7 +168,7 @@ fun ProgressScreen(
         }
 
         item {
-            Spacer(modifier = Modifier.height(100.dp))
+            Spacer(modifier = Modifier.height(IMFITSpacing.huge))
         }
     }
 }
@@ -429,4 +430,30 @@ private fun buildCalendarWeeks(daysInMonth: Int, firstDayOfWeek: Int): List<List
     }
 
     return weeks
+}
+
+@Preview(showBackground = true)
+@Composable
+private fun ProgressScreenPreviewLight() {
+    com.diajarkoding.imfit.theme.IMFITTheme(darkTheme = false) {
+        ProfileHeader(
+            name = "John Doe",
+            email = "john@example.com",
+            profilePhotoUri = null,
+            onProfileClick = {}
+        )
+    }
+}
+
+@Preview(showBackground = true)
+@Composable
+private fun ProgressScreenPreviewDark() {
+    com.diajarkoding.imfit.theme.IMFITTheme(darkTheme = true) {
+        ProfileHeader(
+            name = "John Doe",
+            email = "john@example.com",
+            profilePhotoUri = null,
+            onProfileClick = {}
+        )
+    }
 }

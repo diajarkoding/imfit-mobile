@@ -47,6 +47,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
+import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.shadow
@@ -150,7 +151,7 @@ fun WorkoutHistoryDetailScreen(
                 }
             }
 
-            item { Spacer(modifier = Modifier.height(100.dp)) }
+            item { Spacer(modifier = Modifier.height(IMFITSpacing.huge)) }
         }
     }
 }
@@ -574,5 +575,24 @@ private fun EmptyWorkoutCard() {
                 textAlign = TextAlign.Center
             )
         }
+    }
+}
+
+@Preview(showBackground = true, showSystemUi = true)
+@Composable
+private fun WorkoutHistoryDetailScreenPreview() {
+    com.diajarkoding.imfit.theme.IMFITTheme(darkTheme = false) {
+        WorkoutHistoryDetailScreen(
+            date = "2024-01-15",
+            onNavigateBack = {}
+        )
+    }
+}
+
+@Preview(showBackground = true)
+@Composable
+private fun EmptyWorkoutCardPreview() {
+    com.diajarkoding.imfit.theme.IMFITTheme(darkTheme = false) {
+        EmptyWorkoutCard()
     }
 }

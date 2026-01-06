@@ -48,6 +48,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
@@ -220,7 +221,7 @@ fun HomeScreen(
                     )
                 }
                 items(3, key = { it }) { ShimmerWorkoutCard() }
-                item { Spacer(modifier = Modifier.height(100.dp)) }
+                item { Spacer(modifier = Modifier.height(IMFITSpacing.huge)) }
             } else {
                 item {
                     Spacer(modifier = Modifier.height(IMFITSpacing.xs))
@@ -269,7 +270,7 @@ fun HomeScreen(
                         onClick = { showAddDayDialog = true },
                         icon = Icons.Default.Add
                     )
-                    Spacer(modifier = Modifier.height(100.dp))
+                    Spacer(modifier = Modifier.height(IMFITSpacing.huge))
                 }
             }
         }
@@ -571,5 +572,37 @@ private fun EmptyWorkoutCard(onClick: () -> Unit) {
                 color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f)
             )
         }
+    }
+}
+
+@Preview(showBackground = true)
+@Composable
+private fun HomeScreenPreviewLight() {
+    com.diajarkoding.imfit.theme.IMFITTheme(darkTheme = false) {
+        EmptyWorkoutCard(onClick = {})
+    }
+}
+
+@Preview(showBackground = true)
+@Composable
+private fun HomeScreenPreviewDark() {
+    com.diajarkoding.imfit.theme.IMFITTheme(darkTheme = true) {
+        EmptyWorkoutCard(onClick = {})
+    }
+}
+
+@Preview(showBackground = true)
+@Composable
+private fun LastWorkoutCardPreview() {
+    com.diajarkoding.imfit.theme.IMFITTheme(darkTheme = false) {
+        LastWorkoutCard(workout = null)
+    }
+}
+
+@Preview(showBackground = true)
+@Composable
+private fun WelcomeSectionPreview() {
+    com.diajarkoding.imfit.theme.IMFITTheme(darkTheme = false) {
+        WelcomeSection(userName = "John")
     }
 }

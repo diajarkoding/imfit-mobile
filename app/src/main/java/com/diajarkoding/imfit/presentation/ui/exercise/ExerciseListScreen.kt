@@ -8,6 +8,7 @@ import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -122,7 +123,7 @@ fun ExerciseListScreen(
                 }
             }
 
-            item { Spacer(modifier = Modifier.height(100.dp)) }
+            item { Spacer(modifier = Modifier.height(IMFITSpacing.huge)) }
         }
     }
 }
@@ -173,5 +174,16 @@ private fun ExerciseCard(exercise: Exercise) {
                 )
             }
         }
+    }
+}
+
+@Preview(showBackground = true, showSystemUi = true)
+@Composable
+private fun ExerciseListScreenPreview() {
+    com.diajarkoding.imfit.theme.IMFITTheme(darkTheme = false) {
+        ExerciseListScreen(
+            categoryName = "CHEST",
+            onNavigateBack = {}
+        )
     }
 }

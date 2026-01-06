@@ -18,6 +18,7 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.CheckCircle
+import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.material.icons.filled.FitnessCenter
 import androidx.compose.material.icons.filled.Timer
 import androidx.compose.material3.Card
@@ -193,6 +194,17 @@ fun WorkoutSummaryScreen(
                 }
             }
         }
+    }
+}
+
+@Preview(showBackground = true, showSystemUi = true)
+@Composable
+private fun WorkoutSummaryScreenPreview() {
+    com.diajarkoding.imfit.theme.IMFITTheme(darkTheme = false) {
+        WorkoutSummaryScreen(
+            workoutLogId = "preview-log",
+            onNavigateToHome = {}
+        )
     }
 }
 

@@ -29,6 +29,7 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.navigationBars
 import androidx.compose.foundation.layout.windowInsetsPadding
+import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.foundation.gestures.snapping.rememberSnapFlingBehavior
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -470,7 +471,7 @@ fun ActiveWorkoutScreen(
                     .background(MaterialTheme.colorScheme.surface)
                     .windowInsetsPadding(WindowInsets.navigationBars)
                     .padding(IMFITSpacing.screenHorizontal)
-                    .padding(vertical = IMFITSpacing.lg)
+                    .padding(vertical = IMFITSpacing.xs)
             ) {
                 Row(
                     modifier = Modifier.fillMaxWidth(),
@@ -550,9 +551,43 @@ fun ActiveWorkoutScreen(
                     }
                 }
 
-                item(key = "spacer_bottom") { Spacer(modifier = Modifier.height(120.dp)) }
+                item(key = "spacer_bottom") { Spacer(modifier = Modifier.height(IMFITSpacing.huge)) }
             }
         }
+    }
+}
+
+@Preview(showBackground = true)
+@Composable
+private fun RestTimerDialogPreview() {
+    com.diajarkoding.imfit.theme.IMFITTheme(darkTheme = false) {
+        RestTimerDialog(
+            remainingSeconds = 90,
+            onDismiss = {}
+        )
+    }
+}
+
+@Preview(showBackground = true)
+@Composable
+private fun ProgressChipPreview() {
+    com.diajarkoding.imfit.theme.IMFITTheme(darkTheme = false) {
+        ProgressChip(
+            label = "Sets",
+            value = "5/12"
+        )
+    }
+}
+
+@Preview(showBackground = true)
+@Composable
+private fun ProgressChipPrimaryPreview() {
+    com.diajarkoding.imfit.theme.IMFITTheme(darkTheme = false) {
+        ProgressChip(
+            label = "Volume",
+            value = "1250 kg",
+            isPrimary = true
+        )
     }
 }
 

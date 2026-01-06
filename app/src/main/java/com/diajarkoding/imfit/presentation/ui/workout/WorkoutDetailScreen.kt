@@ -320,7 +320,7 @@ fun WorkoutDetailScreen(
                         }
                     }
 
-                    item { Spacer(modifier = Modifier.height(48.dp)) }
+                    item { Spacer(modifier = Modifier.height(IMFITSpacing.huge)) }
                 }
 
                 // Bottom Action Button
@@ -849,7 +849,7 @@ private fun WorkoutDetailScreenContent(
                         }
                     }
 
-                    item { Spacer(modifier = Modifier.height(100.dp)) }
+                    item { Spacer(modifier = Modifier.height(IMFITSpacing.huge)) }
                 }
             }
 
@@ -857,7 +857,7 @@ private fun WorkoutDetailScreenContent(
                 hostState = snackbarHostState,
                 modifier = Modifier
                     .align(Alignment.BottomCenter)
-                    .padding(bottom = 100.dp)
+                    .padding(bottom = IMFITSpacing.huge)
             )
         }
     }

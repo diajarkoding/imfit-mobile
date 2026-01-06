@@ -13,6 +13,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.navigationBars
+import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBars
@@ -110,7 +111,7 @@ fun ExerciseSelectionScreen(
                         .background(MaterialTheme.colorScheme.surface)
                         .windowInsetsPadding(WindowInsets.navigationBars)
                         .padding(IMFITSpacing.screenHorizontal)
-                        .padding(vertical = IMFITSpacing.lg)
+                        .padding(vertical = IMFITSpacing.xs)
                 ) {
                     IMFITButton(
                         text = stringResource(
@@ -235,7 +236,7 @@ fun ExerciseSelectionScreen(
                     }
                 }
 
-                item { Spacer(modifier = Modifier.height(100.dp)) }
+                item { Spacer(modifier = Modifier.height(IMFITSpacing.huge)) }
             }
         }
     }
@@ -307,5 +308,17 @@ private fun SelectableExerciseCard(
                 )
             )
         }
+    }
+}
+
+@Preview(showBackground = true, showSystemUi = true)
+@Composable
+private fun ExerciseSelectionScreenPreview() {
+    com.diajarkoding.imfit.theme.IMFITTheme(darkTheme = false) {
+        ExerciseSelectionScreen(
+            templateId = "preview-template",
+            onNavigateBack = {},
+            onExercisesSelected = {}
+        )
     }
 }

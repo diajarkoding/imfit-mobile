@@ -28,6 +28,7 @@ import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.FitnessCenter
 import androidx.compose.material3.Icon
+import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -221,6 +222,17 @@ fun SplashScreen(
                 .windowInsetsPadding(WindowInsets.navigationBars)
                 .padding(bottom = IMFITSpacing.xl)
                 .alpha(textAlpha)
+        )
+    }
+}
+
+@Preview(showBackground = true, showSystemUi = true)
+@Composable
+private fun SplashScreenPreview() {
+    com.diajarkoding.imfit.theme.IMFITTheme(darkTheme = false) {
+        SplashScreen(
+            onNavigateToLogin = {},
+            onNavigateToHome = {}
         )
     }
 }

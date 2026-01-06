@@ -18,6 +18,7 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
+import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.FitnessCenter
 import androidx.compose.material3.Card
@@ -166,5 +167,27 @@ private fun MuscleCategoryCard(
                 )
             }
         }
+    }
+}
+
+@Preview(showBackground = true, showSystemUi = true)
+@Composable
+private fun ExerciseBrowserScreenPreview() {
+    com.diajarkoding.imfit.theme.IMFITTheme(darkTheme = false) {
+        ExerciseBrowserScreen(
+            onNavigateBack = {},
+            onCategorySelected = {}
+        )
+    }
+}
+
+@Preview(showBackground = true, showSystemUi = true)
+@Composable
+private fun ExerciseBrowserScreenPreviewDark() {
+    com.diajarkoding.imfit.theme.IMFITTheme(darkTheme = true) {
+        ExerciseBrowserScreen(
+            onNavigateBack = {},
+            onCategorySelected = {}
+        )
     }
 }

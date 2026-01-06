@@ -28,6 +28,7 @@ import androidx.compose.material.icons.filled.DarkMode
 import androidx.compose.material.icons.filled.Email
 import androidx.compose.material.icons.filled.Language
 import androidx.compose.material.icons.filled.Person
+import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -252,7 +253,7 @@ fun ProfileScreen(
                 }
             }
 
-            item { Spacer(modifier = Modifier.height(100.dp)) }
+            item { Spacer(modifier = Modifier.height(IMFITSpacing.huge)) }
         }
     }
 }
@@ -384,6 +385,30 @@ private fun ProfileInfoItem(
                     .background(MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f))
             )
         }
+    }
+}
+
+@Preview(showBackground = true)
+@Composable
+private fun ProfileScreenPreviewLight() {
+    com.diajarkoding.imfit.theme.IMFITTheme(darkTheme = false) {
+        ProfileHeaderCard(
+            name = "John Doe",
+            email = "john@example.com",
+            profilePhotoUri = null
+        )
+    }
+}
+
+@Preview(showBackground = true)
+@Composable
+private fun ProfileScreenPreviewDark() {
+    com.diajarkoding.imfit.theme.IMFITTheme(darkTheme = true) {
+        ProfileHeaderCard(
+            name = "John Doe",
+            email = "john@example.com",
+            profilePhotoUri = null
+        )
     }
 }
 

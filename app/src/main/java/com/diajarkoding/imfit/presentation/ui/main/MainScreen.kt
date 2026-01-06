@@ -18,6 +18,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.NavigationBar
 import androidx.compose.material3.NavigationBarItem
 import androidx.compose.material3.NavigationBarItemDefaults
+import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -158,5 +159,21 @@ fun MainScreen(
         
         // Full-screen sync overlay - covers entire screen including bottom nav
         SyncProgressDialog(syncState = syncState)
+    }
+}
+
+@Preview(showBackground = true, showSystemUi = true)
+@Composable
+private fun MainScreenPreview() {
+    com.diajarkoding.imfit.theme.IMFITTheme(darkTheme = false) {
+        MainScreen(
+            onNavigateToWorkoutDetail = {},
+            onNavigateToActiveWorkout = {},
+            onNavigateToExerciseList = {},
+            onNavigateToWorkoutHistory = {},
+            onNavigateToYearlyCalendar = {},
+            onNavigateToProfile = {},
+            onLogout = {}
+        )
     }
 }

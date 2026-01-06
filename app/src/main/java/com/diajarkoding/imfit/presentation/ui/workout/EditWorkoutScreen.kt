@@ -20,6 +20,7 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBars
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.windowInsetsPadding
+import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
@@ -202,7 +203,7 @@ fun EditWorkoutScreen(
                     }
                 }
 
-                item { Spacer(modifier = Modifier.height(100.dp)) }
+                item { Spacer(modifier = Modifier.height(IMFITSpacing.huge)) }
             }
 
             Box(
@@ -212,7 +213,7 @@ fun EditWorkoutScreen(
                     .background(MaterialTheme.colorScheme.surface)
                     .windowInsetsPadding(WindowInsets.navigationBars)
                     .padding(IMFITSpacing.screenHorizontal)
-                    .padding(vertical = IMFITSpacing.lg)
+                    .padding(vertical = IMFITSpacing.xs)
             ) {
                 IMFITButton(
                     text = stringResource(R.string.action_save_changes),
@@ -490,6 +491,17 @@ private fun ConfigInput(
                 focusedBorderColor = Primary,
                 unfocusedBorderColor = MaterialTheme.colorScheme.outline.copy(alpha = 0.5f)
             )
+        )
+    }
+}
+
+@Preview(showBackground = true, showSystemUi = true)
+@Composable
+private fun EditWorkoutScreenPreview() {
+    com.diajarkoding.imfit.theme.IMFITTheme(darkTheme = false) {
+        EditWorkoutScreen(
+            workoutId = "preview-workout",
+            onNavigateBack = {}
         )
     }
 }

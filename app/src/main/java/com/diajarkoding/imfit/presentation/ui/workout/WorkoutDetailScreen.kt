@@ -104,6 +104,7 @@ fun WorkoutDetailScreen(
     val snackbarHostState = remember { SnackbarHostState() }
     val scope = rememberCoroutineScope()
     val activeWorkoutWarning = stringResource(R.string.warning_workout_active)
+    val cannotStartWorkoutWarning = stringResource(R.string.warning_cannot_start_workout)
 
     LaunchedEffect(selectedExercises) {
         selectedExercises?.let { exercises ->
@@ -297,7 +298,7 @@ fun WorkoutDetailScreen(
                     }
 
                     item {
-                        if (state.isWorkoutActive) {
+                        if (state.isCurrentWorkoutActive) {
                             IMFITButton(
                                 text = stringResource(R.string.action_end_workout),
                                 onClick = { viewModel.endWorkout() },
@@ -306,8 +307,14 @@ fun WorkoutDetailScreen(
                         } else {
                             IMFITButton(
                                 text = stringResource(R.string.action_start_workout),
-                                onClick = { onStartWorkout(workoutId) },
-                                enabled = (state.workout?.exerciseCount ?: 0) > 0,
+                                onClick = { 
+                                    if (state.isWorkoutActive) {
+                                        scope.launch { snackbarHostState.showSnackbar(cannotStartWorkoutWarning) }
+                                    } else {
+                                        onStartWorkout(workoutId)
+                                    }
+                                },
+                                enabled = (state.workout?.exerciseCount ?: 0) > 0 && !state.isWorkoutActive,
                                 icon = Icons.Default.PlayArrow
                             )
                         }

@@ -23,8 +23,9 @@ data class ActiveWorkoutState(
     val restTimerSeconds: Int = 60,
     val showCancelDialog: Boolean = false,
     val workoutLogId: String? = null,
-    // Session-level rest override - when set, this overrides per-exercise rest times
-    val sessionRestOverride: Int? = null
+    val sessionRestOverride: Int? = null,
+    val isPaused: Boolean = false,
+    val pauseError: String? = null
 )
 
 @HiltViewModel
@@ -47,8 +48,16 @@ class ActiveWorkoutViewModel @Inject constructor(
             if (existingSession != null) {
                 // Restore existing session - preserve all data including completed sets
                 android.util.Log.d("ActiveWorkoutVM", "Restoring existing session: ${existingSession.id}")
-                _state.update { it.copy(session = existingSession) }
-                startElapsedTimeCounter()
+                _state.update { 
+                    it.copy(
+                        session = existingSession, 
+                        isPaused = existingSession.isPaused
+                    ) 
+                }
+                // Only start timer if not paused
+                if (!existingSession.isPaused) {
+                    startElapsedTimeCounter()
+                }
                 return@launch
             }
             
@@ -109,8 +118,13 @@ class ActiveWorkoutViewModel @Inject constructor(
         elapsedTimeJob?.cancel()
         elapsedTimeJob = viewModelScope.launch {
             while (true) {
-                val startTime = _state.value.session?.startTime ?: System.currentTimeMillis()
-                val elapsed = (System.currentTimeMillis() - startTime) / 1000
+                val session = _state.value.session
+                if (session == null) {
+                    delay(1000)
+                    continue
+                }
+                // Use actualElapsedMs which excludes paused time
+                val elapsed = session.actualElapsedMs / 1000
                 _state.update { it.copy(elapsedSeconds = elapsed) }
                 delay(1000)
             }
@@ -175,6 +189,9 @@ class ActiveWorkoutViewModel @Inject constructor(
     fun completeSet(exerciseIndex: Int, setIndex: Int) {
         viewModelScope.launch {
             val currentSession = _state.value.session ?: return@launch
+            
+            // Cannot complete sets while paused
+            if (_state.value.isPaused) return@launch
 
             val updatedExerciseLogs = currentSession.exerciseLogs.toMutableList()
             val exerciseLog = updatedExerciseLogs.getOrNull(exerciseIndex) ?: return@launch
@@ -269,6 +286,68 @@ class ActiveWorkoutViewModel @Inject constructor(
     fun skipRestTimer() {
         restTimerJob?.cancel()
         _state.update { it.copy(isRestTimerActive = false) }
+    }
+
+    fun pauseWorkout() {
+        viewModelScope.launch {
+            val currentSession = _state.value.session ?: return@launch
+            
+            // Cannot pause during rest timer
+            if (_state.value.isRestTimerActive) {
+                _state.update { it.copy(pauseError = "Skip rest timer before pausing") }
+                return@launch
+            }
+            
+            // Already paused
+            if (_state.value.isPaused) return@launch
+            
+            // Cancel elapsed timer
+            elapsedTimeJob?.cancel()
+            
+            // Record pause start time
+            val pauseStartTime = System.currentTimeMillis()
+            val updatedSession = currentSession.copy(
+                isPaused = true,
+                lastPauseTime = pauseStartTime
+            )
+            
+            workoutRepository.updateActiveSession(updatedSession)
+            _state.update { it.copy(session = updatedSession, isPaused = true) }
+            
+            android.util.Log.d("ActiveWorkoutVM", "Workout paused at $pauseStartTime")
+        }
+    }
+    
+    fun resumeWorkout() {
+        viewModelScope.launch {
+            val currentSession = _state.value.session ?: return@launch
+            
+            // Not paused
+            if (!_state.value.isPaused) return@launch
+            
+            // Calculate pause duration
+            val pauseEnd = System.currentTimeMillis()
+            val pauseDuration = currentSession.lastPauseTime?.let { pauseEnd - it } ?: 0L
+            
+            // Accumulate pause time
+            val updatedSession = currentSession.copy(
+                isPaused = false,
+                lastPauseTime = null,
+                totalPausedTimeMs = currentSession.totalPausedTimeMs + pauseDuration
+            )
+            
+            workoutRepository.updateActiveSession(updatedSession)
+            _state.update { it.copy(session = updatedSession, isPaused = false) }
+            
+            // Restart timer
+            startElapsedTimeCounter()
+            
+            android.util.Log.d("ActiveWorkoutVM", "Workout resumed. Pause duration: ${pauseDuration}ms, Total paused: ${updatedSession.totalPausedTimeMs}ms")
+        }
+    }
+    
+    fun clearPauseError() {
+        _state.update { it.copy(pauseError = null) }
     }
 
     fun showCancelDialog() {

@@ -5,6 +5,8 @@ import androidx.room.Database
 import androidx.room.Room
 import androidx.room.RoomDatabase
 import androidx.room.TypeConverters
+import androidx.room.migration.Migration
+import androidx.sqlite.db.SupportSQLiteDatabase
 import com.diajarkoding.imfit.data.local.dao.ActiveSessionDao
 import com.diajarkoding.imfit.data.local.dao.ExerciseDao
 import com.diajarkoding.imfit.data.local.dao.ExerciseLogDao
@@ -33,7 +35,7 @@ import com.diajarkoding.imfit.data.local.entity.WorkoutTemplateEntity
         WorkoutSetEntity::class,
         ActiveSessionEntity::class
     ],
-    version = 4,
+    version = 5,
     exportSchema = false
 )
 @TypeConverters(Converters::class)
@@ -51,6 +53,14 @@ abstract class IMFITDatabase : RoomDatabase() {
         @Volatile
         private var INSTANCE: IMFITDatabase? = null
 
+        val MIGRATION_4_5 = object : Migration(4, 5) {
+            override fun migrate(database: SupportSQLiteDatabase) {
+                database.execSQL("ALTER TABLE active_sessions ADD COLUMN is_paused INTEGER NOT NULL DEFAULT 0")
+                database.execSQL("ALTER TABLE active_sessions ADD COLUMN total_paused_time_ms INTEGER NOT NULL DEFAULT 0")
+                database.execSQL("ALTER TABLE active_sessions ADD COLUMN last_pause_time INTEGER")
+            }
+        }
+
         fun getDatabase(context: Context): IMFITDatabase {
             return INSTANCE ?: synchronized(this) {
                 val instance = Room.databaseBuilder(
@@ -58,7 +68,8 @@ abstract class IMFITDatabase : RoomDatabase() {
                     IMFITDatabase::class.java,
                     "imfit_database"
                 )
-                    .fallbackToDestructiveMigration(dropAllTables = true)
+                    .addMigrations(MIGRATION_4_5)
+                    .fallbackToDestructiveMigrationFrom(1, 2, 3)
                     .build()
                 INSTANCE = instance
                 instance

@@ -27,5 +27,11 @@ data class ActiveSessionEntity(
     @ColumnInfo(name = "created_at")
     val createdAt: Long = System.currentTimeMillis(),
     @ColumnInfo(name = "updated_at")
-    val updatedAt: Long = System.currentTimeMillis()
+    val updatedAt: Long = System.currentTimeMillis(),
+    @ColumnInfo(name = "is_paused", defaultValue = "0")
+    val isPaused: Boolean = false,
+    @ColumnInfo(name = "total_paused_time_ms", defaultValue = "0")
+    val totalPausedTimeMs: Long = 0,
+    @ColumnInfo(name = "last_pause_time")
+    val lastPauseTime: Long? = null
 )

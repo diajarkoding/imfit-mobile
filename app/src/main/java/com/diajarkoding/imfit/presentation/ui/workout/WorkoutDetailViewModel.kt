@@ -18,7 +18,8 @@ data class WorkoutDetailState(
     val workout: WorkoutTemplate? = null,
     val isLoading: Boolean = true,
     val error: String? = null,
-    val isWorkoutActive: Boolean = false,
+    val isWorkoutActive: Boolean = false,       // True if ANY active session exists
+    val isCurrentWorkoutActive: Boolean = false, // True if this specific template has active session
     val workoutFinished: Boolean = false,
     val isDeleted: Boolean = false
 )
@@ -44,8 +45,14 @@ class WorkoutDetailViewModel @Inject constructor(
             try {
                 val workout = workoutRepository.getTemplateById(workoutId)
                 val activeSession = workoutRepository.getActiveSession()
-                val isActive = activeSession?.templateId == workoutId
-                _state.update { it.copy(workout = workout, isLoading = false, isWorkoutActive = isActive) }
+                val isCurrentActive = activeSession?.templateId == workoutId
+                val hasAnyActiveSession = activeSession != null
+                _state.update { it.copy(
+                    workout = workout, 
+                    isLoading = false, 
+                    isWorkoutActive = hasAnyActiveSession,
+                    isCurrentWorkoutActive = isCurrentActive
+                ) }
             } catch (e: Exception) {
                 _state.update { it.copy(error = e.message, isLoading = false) }
             }

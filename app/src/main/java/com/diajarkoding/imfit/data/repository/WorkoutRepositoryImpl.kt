@@ -387,7 +387,10 @@ class WorkoutRepositoryImpl @Inject constructor(
                 templateName = session.templateName,
                 startTime = session.startTime,
                 currentExerciseIndex = session.currentExerciseIndex,
-                sessionDataJson = sessionDataJson
+                sessionDataJson = sessionDataJson,
+                isPaused = session.isPaused,
+                totalPausedTimeMs = session.totalPausedTimeMs,
+                lastPauseTime = session.lastPauseTime
             )
             activeSessionDao.insertSession(entity)
             Log.d("WorkoutRepository", "Saved active session to Room: ${session.id}")
@@ -438,7 +441,10 @@ class WorkoutRepositoryImpl @Inject constructor(
                 templateName = session.templateName,
                 startTime = session.startTime,
                 currentExerciseIndex = session.currentExerciseIndex,
-                sessionDataJson = sessionDataJson
+                sessionDataJson = sessionDataJson,
+                isPaused = session.isPaused,
+                totalPausedTimeMs = session.totalPausedTimeMs,
+                lastPauseTime = session.lastPauseTime
             )
             activeSessionDao.updateSession(entity)
         } catch (e: Exception) {
@@ -827,7 +833,10 @@ private data class SerializableSession(
     val templateName: String,
     val startTime: Long,
     val exerciseLogs: List<SerializableExerciseLog>,
-    val currentExerciseIndex: Int = 0
+    val currentExerciseIndex: Int = 0,
+    val isPaused: Boolean = false,
+    val totalPausedTimeMs: Long = 0,
+    val lastPauseTime: Long? = null
 ) {
     fun toDomain(): WorkoutSession = WorkoutSession(
         id = id,
@@ -835,7 +844,10 @@ private data class SerializableSession(
         templateName = templateName,
         startTime = startTime,
         exerciseLogs = exerciseLogs.map { it.toDomain() },
-        currentExerciseIndex = currentExerciseIndex
+        currentExerciseIndex = currentExerciseIndex,
+        isPaused = isPaused,
+        totalPausedTimeMs = totalPausedTimeMs,
+        lastPauseTime = lastPauseTime
     )
 }
 
@@ -894,7 +906,10 @@ private fun WorkoutSession.toSerializable() = SerializableSession(
     templateName = templateName,
     startTime = startTime,
     exerciseLogs = exerciseLogs.map { it.toSerializable() },
-    currentExerciseIndex = currentExerciseIndex
+    currentExerciseIndex = currentExerciseIndex,
+    isPaused = isPaused,
+    totalPausedTimeMs = totalPausedTimeMs,
+    lastPauseTime = lastPauseTime
 )
 
 private fun ExerciseLog.toSerializable() = SerializableExerciseLog(

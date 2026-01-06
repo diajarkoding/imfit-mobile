@@ -27,6 +27,8 @@ import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.FitnessCenter
+import androidx.compose.material.icons.filled.Pause
+import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Timer
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
@@ -40,6 +42,8 @@ import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
+import androidx.compose.material3.SnackbarHost
+import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
@@ -91,6 +95,18 @@ fun ActiveWorkoutScreen(
 ) {
     val state by viewModel.state.collectAsState()
     var showRestConfigSheet by remember { mutableStateOf(false) }
+    val snackbarHostState = remember { SnackbarHostState() }
+    val coroutineScope = rememberCoroutineScope()
+    
+    // Show pause error via snackbar
+    LaunchedEffect(state.pauseError) {
+        state.pauseError?.let { error ->
+            coroutineScope.launch {
+                snackbarHostState.showSnackbar(error)
+                viewModel.clearPauseError()
+            }
+        }
+    }
 
     LaunchedEffect(templateId) {
         viewModel.startWorkout(templateId)
@@ -152,14 +168,15 @@ fun ActiveWorkoutScreen(
                     title = {
                         Column {
                             Text(
-                                text = state.session?.templateName ?: "Workout",
+                                text = if (state.isPaused) "PAUSED" else (state.session?.templateName ?: "Workout"),
                                 style = MaterialTheme.typography.titleMedium,
-                                fontWeight = FontWeight.Bold
+                                fontWeight = FontWeight.Bold,
+                                color = if (state.isPaused) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurface
                             )
                             Text(
                                 text = formatElapsedTime(state.elapsedSeconds),
                                 style = MaterialTheme.typography.bodyMedium,
-                                color = SetComplete,
+                                color = if (state.isPaused) MaterialTheme.colorScheme.error else SetComplete,
                                 fontWeight = FontWeight.SemiBold
                             )
                         }
@@ -169,6 +186,19 @@ fun ActiveWorkoutScreen(
                             Icon(
                                 Icons.Default.Close,
                                 contentDescription = stringResource(R.string.action_cancel)
+                            )
+                        }
+                    },
+                    actions = {
+                        IconButton(
+                            onClick = {
+                                if (state.isPaused) viewModel.resumeWorkout()
+                                else viewModel.pauseWorkout()
+                            }
+                        ) {
+                            Icon(
+                                if (state.isPaused) Icons.Default.PlayArrow else Icons.Default.Pause,
+                                contentDescription = if (state.isPaused) stringResource(R.string.action_resume) else stringResource(R.string.action_pause)
                             )
                         }
                     },

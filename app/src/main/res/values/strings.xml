@@ -258,9 +258,12 @@
     <string name="action_start_workout">Start Workout</string>
     <string name="action_end_workout">End Workout</string>
     <string name="action_cancel_workout">Cancel Workout</string>
+    <string name="action_pause">Pause</string>
+    <string name="action_resume">Resume</string>
 
     <!-- Warnings -->
     <string name="warning_workout_active">Cannot modify while workout is in progress</string>
+    <string name="warning_cannot_start_workout">Cannot start new workout while another workout is active</string>
 
     <!-- Dialog Messages -->
     <string name="dialog_delete_workout">Delete Workout</string>

@@ -23,7 +23,7 @@ data class ActiveSessionEntity(
     @ColumnInfo(name = "current_exercise_index")
     val currentExerciseIndex: Int = 0,
     @ColumnInfo(name = "session_data_json")
-    val sessionDataJson: String, // Serialized exercise logs with sets
+    val sessionDataJson: String,
     @ColumnInfo(name = "created_at")
     val createdAt: Long = System.currentTimeMillis(),
     @ColumnInfo(name = "updated_at")

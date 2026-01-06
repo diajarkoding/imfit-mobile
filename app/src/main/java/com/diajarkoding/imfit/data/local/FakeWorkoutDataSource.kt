@@ -68,7 +68,6 @@ object FakeWorkoutDataSource {
     private fun initializeSampleWorkoutLogs() {
         val dayInMs = 86400000L
 
-        // Push Day - 2 days ago
         val pushTemplate = templates.find { it.name == "Push Day" } ?: templates.first()
         val pushLogs = pushTemplate.exercises.map { templateExercise ->
             ExerciseLog(
@@ -93,7 +92,6 @@ object FakeWorkoutDataSource {
             )
         )
 
-        // Pull Day - 4 days ago
         val pullTemplate = templates.find { it.name == "Pull Day" } ?: templates[1]
         val pullLogs = pullTemplate.exercises.map { templateExercise ->
             ExerciseLog(
@@ -118,7 +116,6 @@ object FakeWorkoutDataSource {
             )
         )
 
-        // Leg Day - 6 days ago
         val legTemplate = templates.find { it.name == "Leg Day" } ?: templates[2]
         val legLogs = legTemplate.exercises.map { templateExercise ->
             ExerciseLog(
@@ -143,7 +140,6 @@ object FakeWorkoutDataSource {
             )
         )
 
-        // Push Day - 9 days ago
         workoutLogs.add(
             WorkoutLog(
                 id = "log_4",
@@ -157,7 +153,6 @@ object FakeWorkoutDataSource {
             )
         )
 
-        // Pull Day - 11 days ago
         workoutLogs.add(
             WorkoutLog(
                 id = "log_5",
@@ -171,7 +166,6 @@ object FakeWorkoutDataSource {
             )
         )
 
-        // Leg Day - 13 days ago
         workoutLogs.add(
             WorkoutLog(
                 id = "log_6",
@@ -186,7 +180,6 @@ object FakeWorkoutDataSource {
         )
     }
 
-    // Template Operations
     fun getTemplates(userId: String): List<WorkoutTemplate> {
         return templates.filter { it.userId == userId }
     }
@@ -236,7 +229,6 @@ object FakeWorkoutDataSource {
         return templates.removeIf { it.id == templateId }
     }
 
-    // Active Session Operations
     fun startWorkout(template: WorkoutTemplate): WorkoutSession {
         val exerciseLogs = template.exercises.map { templateExercise ->
             ExerciseLog(
@@ -288,7 +280,6 @@ object FakeWorkoutDataSource {
         activeSession = null
     }
 
-    // Workout Log Operations
     fun getWorkoutLogs(userId: String): List<WorkoutLog> {
         return workoutLogs.filter { it.userId == userId }.sortedByDescending { it.date }
     }

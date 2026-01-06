@@ -55,11 +55,9 @@ class WorkoutRepositoryImpl @Inject constructor(
     }
 
     override suspend fun getTemplates(userId: String): List<WorkoutTemplate> {
-        // LOCAL-FIRST: Read from Room database, SyncManager handles remote sync
         return try {
             val localTemplates = workoutTemplateDao.getTemplatesByUserList(userId)
-            
-            // Map local entities to domain models
+
             localTemplates.map { templateEntity ->
                 val templateExercises = templateExerciseDao.getExercisesForTemplateList(templateEntity.id)
                 val exercises = templateExercises.mapNotNull { te ->
@@ -96,7 +94,6 @@ class WorkoutRepositoryImpl @Inject constructor(
     }
 
     override suspend fun getTemplateById(templateId: String): WorkoutTemplate? {
-        // LOCAL-FIRST: Read from Room database
         return try {
             val templateEntity = workoutTemplateDao.getTemplateById(templateId) ?: return null
             
@@ -136,8 +133,8 @@ class WorkoutRepositoryImpl @Inject constructor(
     override suspend fun createTemplate(userId: String, name: String, exercises: List<TemplateExercise>): WorkoutTemplate {
         val templateId = UUID.randomUUID().toString()
         val now = System.currentTimeMillis()
-        
-        // LOCAL-FIRST: Save to Room database first
+
+        // Save to Room database first
         val templateEntity = com.diajarkoding.imfit.data.local.entity.WorkoutTemplateEntity(
             id = templateId,
             userId = userId,
@@ -149,8 +146,8 @@ class WorkoutRepositoryImpl @Inject constructor(
             pendingOperation = "CREATE"
         )
         workoutTemplateDao.insertTemplate(templateEntity)
-        
-        // Save template exercises to local Room
+
+        // Save template exercises to local database
         exercises.forEachIndexed { index, exercise ->
             val templateExerciseEntity = com.diajarkoding.imfit.data.local.entity.TemplateExerciseEntity(
                 templateId = templateId,
@@ -164,10 +161,10 @@ class WorkoutRepositoryImpl @Inject constructor(
             )
             templateExerciseDao.insertTemplateExercise(templateExerciseEntity)
         }
-        
+  
         Log.d("WorkoutRepository", "Created template locally: $templateId with ${exercises.size} exercises")
-        
-        // Try to sync to Supabase (non-blocking, failures are handled by SyncManager)
+
+        // Try to sync to Supabase (non-blocking)
         if (isValidUUID(userId)) {
             try {
                 val templateDto = CreateTemplateDto(
@@ -189,12 +186,10 @@ class WorkoutRepositoryImpl @Inject constructor(
                     supabaseClient.postgrest.from("template_exercises").insert(exerciseDto)
                 }
                 
-                // Mark as synced
                 workoutTemplateDao.markAsSynced(templateId, com.diajarkoding.imfit.data.local.sync.SyncStatus.SYNCED.name)
                 Log.d("WorkoutRepository", "Synced template to Supabase: $templateId")
             } catch (e: Exception) {
-                Log.w("WorkoutRepository", "Failed to sync template to Supabase, will retry later: ${e.message}")
-                // Keep as PENDING_SYNC, SyncManager will retry
+                Log.w("WorkoutRepository", "Failed to sync template to Supabase: ${e.message}")
             }
         }
         
@@ -209,8 +204,8 @@ class WorkoutRepositoryImpl @Inject constructor(
     override suspend fun updateTemplate(templateId: String, name: String, exercises: List<TemplateExercise>): WorkoutTemplate? {
         val existingTemplate = workoutTemplateDao.getTemplateById(templateId) ?: return null
         val now = System.currentTimeMillis()
-        
-        // LOCAL-FIRST: Update local Room database first
+
+        // Update local database first
         val updatedEntity = existingTemplate.copy(
             name = name,
             updatedAt = now,
@@ -218,8 +213,8 @@ class WorkoutRepositoryImpl @Inject constructor(
             pendingOperation = "UPDATE"
         )
         workoutTemplateDao.updateTemplate(updatedEntity)
-        
-        // Delete existing template exercises and insert new ones
+
+        // Delete existing template exercises and replace with new ones
         templateExerciseDao.deleteExercisesByTemplate(templateId)
         exercises.forEachIndexed { index, exercise ->
             val templateExerciseEntity = com.diajarkoding.imfit.data.local.entity.TemplateExerciseEntity(
@@ -236,12 +231,11 @@ class WorkoutRepositoryImpl @Inject constructor(
         }
         
         Log.d("WorkoutRepository", "Updated template locally: $templateId with ${exercises.size} exercises")
-        
-        // Try to sync to Supabase (non-blocking)
+
         try {
             Log.d("WorkoutRepository", "Starting Supabase sync for template: $templateId")
-            
-            // Step 1: Update template
+
+            // Update template
             supabaseClient.postgrest.from("workout_templates")
                 .update({
                     set("name", name)
@@ -249,16 +243,14 @@ class WorkoutRepositoryImpl @Inject constructor(
                 }) {
                     filter { eq("id", templateId) }
                 }
-            Log.d("WorkoutRepository", "Step 1: Template updated in Supabase")
-            
-            // Step 2: Delete existing template_exercises
+
+            // Delete existing template exercises
             supabaseClient.postgrest.from("template_exercises")
                 .delete {
                     filter { eq("template_id", templateId) }
                 }
-            Log.d("WorkoutRepository", "Step 2: Old exercises deleted from Supabase")
-            
-            // Step 3: Insert new template_exercises one by one
+
+            // Insert new template exercises one by one with error handling
             exercises.forEachIndexed { index, exercise ->
                 try {
                     val exerciseDto = TemplateExerciseDto(
@@ -270,21 +262,18 @@ class WorkoutRepositoryImpl @Inject constructor(
                         restSeconds = exercise.restSeconds
                     )
                     supabaseClient.postgrest.from("template_exercises").insert(exerciseDto)
-                    Log.d("WorkoutRepository", "Step 3: Inserted exercise $index: ${exercise.exercise.id}")
                 } catch (insertError: Exception) {
                     Log.e("WorkoutRepository", "Failed to insert exercise ${exercise.exercise.id}: ${insertError.message}", insertError)
                     throw insertError
                 }
             }
-            
-            // Mark as synced
+
             workoutTemplateDao.markAsSynced(templateId, com.diajarkoding.imfit.data.local.sync.SyncStatus.SYNCED.name)
             Log.d("WorkoutRepository", "Synced template update to Supabase: $templateId with ${exercises.size} exercises")
         } catch (e: Exception) {
             Log.e("WorkoutRepository", "Failed to sync template update to Supabase: ${e.message}", e)
-            // Keep as PENDING_SYNC, SyncManager will retry
         }
-        
+
         return getTemplateById(templateId)
     }
 
@@ -294,7 +283,7 @@ class WorkoutRepositoryImpl @Inject constructor(
     }
 
     override suspend fun updateTemplateExercise(templateId: String, exerciseId: String, sets: Int, reps: Int, restSeconds: Int): WorkoutTemplate? {
-        // LOCAL-FIRST: Update local Room database first
+        // Update local database first
         val existingExercise = templateExerciseDao.getTemplateExercise(templateId, exerciseId)
         if (existingExercise != null) {
             val updatedExercise = existingExercise.copy(
@@ -308,7 +297,7 @@ class WorkoutRepositoryImpl @Inject constructor(
             templateExerciseDao.updateTemplateExercise(updatedExercise)
             Log.d("WorkoutRepository", "Updated exercise locally: $exerciseId in template $templateId")
         }
-        
+
         // Try to sync to Supabase
         try {
             supabaseClient.postgrest.from("template_exercises")
@@ -325,14 +314,13 @@ class WorkoutRepositoryImpl @Inject constructor(
             Log.d("WorkoutRepository", "Synced exercise update to Supabase")
         } catch (e: Exception) {
             Log.e("WorkoutRepository", "Failed to sync exercise update: ${e.message}", e)
-            // Keep as PENDING_SYNC, SyncManager will retry
         }
-        
+
         return getTemplateById(templateId)
     }
 
     override suspend fun deleteTemplate(templateId: String): Boolean {
-        // LOCAL-FIRST: Mark as deleted in local Room first
+        // Mark as deleted in local first
         val existingTemplate = workoutTemplateDao.getTemplateById(templateId)
         if (existingTemplate != null) {
             val updatedTemplate = existingTemplate.copy(
@@ -344,7 +332,7 @@ class WorkoutRepositoryImpl @Inject constructor(
             workoutTemplateDao.updateTemplate(updatedTemplate)
             Log.d("WorkoutRepository", "Marked template as deleted locally: $templateId")
         }
-        
+
         // Try to sync to Supabase
         return try {
             supabaseClient.postgrest.from("workout_templates")
@@ -357,7 +345,6 @@ class WorkoutRepositoryImpl @Inject constructor(
             true
         } catch (e: Exception) {
             Log.e("WorkoutRepository", "Failed to sync template deletion: ${e.message}", e)
-            // Keep as PENDING_SYNC, SyncManager will retry
             true // Return true since local delete succeeded
         }
     }
@@ -387,8 +374,8 @@ class WorkoutRepositoryImpl @Inject constructor(
         )
         
         activeSession = session
-        
-        // Persist session to Room database
+
+        // Persist session to database
         try {
             val userId = supabaseClient.auth.currentUserOrNull()?.id ?: "local_user"
             val sessionDataJson = json.encodeToString(session.toSerializable())
@@ -416,8 +403,8 @@ class WorkoutRepositoryImpl @Inject constructor(
         if (activeSession != null) {
             return activeSession
         }
-        
-        // Try to restore from Room database
+
+        // Try to restore from database
         return try {
             val userId = supabaseClient.auth.currentUserOrNull()?.id ?: "local_user"
             val entity = activeSessionDao.getActiveSession(userId)
@@ -438,8 +425,8 @@ class WorkoutRepositoryImpl @Inject constructor(
 
     override suspend fun updateActiveSession(session: WorkoutSession) {
         activeSession = session
-        
-        // Update in Room database
+
+        // Update in database
         try {
             val userId = supabaseClient.auth.currentUserOrNull()?.id ?: "local_user"
             val sessionDataJson = json.encodeToString(session.toSerializable())
@@ -470,7 +457,7 @@ class WorkoutRepositoryImpl @Inject constructor(
             val userId = supabaseClient.auth.currentUserOrNull()?.id
                 ?: return FakeWorkoutDataSource.finishWorkout()
 
-            // Validate user ID format - if it's not a valid UUID, use fake data
+            // Use fake data if user ID is not valid UUID
             if (!isValidUUID(userId)) {
                 Log.w("WorkoutRepository", "Invalid user ID format: $userId, using fake data")
                 return FakeWorkoutDataSource.finishWorkout()
@@ -530,10 +517,7 @@ class WorkoutRepositoryImpl @Inject constructor(
                 }
             }
             
-            // ======= SAVE TO LOCAL ROOM DATABASE =======
-            // This enables offline-first and Last Known Weight feature
-            
-            // Insert workout log to local Room
+            // Save to local database for offline-first and Last Known Weight feature
             val workoutLogEntity = com.diajarkoding.imfit.data.local.entity.WorkoutLogEntity(
                 id = workoutLogId,
                 userId = userId,
@@ -548,9 +532,9 @@ class WorkoutRepositoryImpl @Inject constructor(
                 syncStatus = com.diajarkoding.imfit.data.local.sync.SyncStatus.SYNCED.name
             )
             workoutLogDao.insertWorkoutLog(workoutLogEntity)
-            Log.d("WorkoutRepository", "Saved workout log to local Room: $workoutLogId")
-            
-            // Insert exercise logs and sets to local Room
+            Log.d("WorkoutRepository", "Saved workout log to local database: $workoutLogId")
+
+            // Insert exercise logs and sets to local database
             session.exerciseLogs.forEachIndexed { index, exerciseLog ->
                 val exerciseLogId = java.util.UUID.randomUUID().toString()
                 val exerciseLogEntity = com.diajarkoding.imfit.data.local.entity.ExerciseLogEntity(
@@ -565,8 +549,8 @@ class WorkoutRepositoryImpl @Inject constructor(
                     totalReps = exerciseLog.sets.filter { it.isCompleted }.sumOf { it.reps }
                 )
                 exerciseLogDao.insertExerciseLog(exerciseLogEntity)
-                
-                // Insert each set to local Room
+
+                // Insert each set to local database
                 exerciseLog.sets.forEach { set ->
                     val setEntity = com.diajarkoding.imfit.data.local.entity.WorkoutSetEntity(
                         id = java.util.UUID.randomUUID().toString(),
@@ -581,7 +565,7 @@ class WorkoutRepositoryImpl @Inject constructor(
                     workoutSetDao.insertWorkoutSet(setEntity)
                 }
             }
-            Log.d("WorkoutRepository", "Saved all exercise logs and sets to local Room")
+            Log.d("WorkoutRepository", "Saved all exercise logs and sets to local database")
             
             WorkoutLog(
                 id = workoutLogId,
@@ -597,10 +581,10 @@ class WorkoutRepositoryImpl @Inject constructor(
             Log.e("WorkoutRepository", "Error finishing workout: ${e.message}", e)
             FakeWorkoutDataSource.finishWorkout()
         } finally {
-            // ALWAYS delete active session from Room, regardless of success/failure
+            // Always delete active session from database, regardless of success/failure
             try {
                 activeSessionDao.deleteSessionById(sessionId)
-                Log.d("WorkoutRepository", "Deleted active session from Room: $sessionId")
+                Log.d("WorkoutRepository", "Deleted active session from database: $sessionId")
             } catch (e: Exception) {
                 Log.e("WorkoutRepository", "Failed to delete session: ${e.message}", e)
             }
@@ -609,22 +593,21 @@ class WorkoutRepositoryImpl @Inject constructor(
     }
 
     override suspend fun cancelWorkout() {
-        // Delete session from Room
+        // Delete session from database
         try {
             val userId = supabaseClient.auth.currentUserOrNull()?.id ?: "local_user"
             activeSessionDao.deleteSession(userId)
-            Log.d("WorkoutRepository", "Cancelled and deleted active session from Room")
+            Log.d("WorkoutRepository", "Cancelled and deleted active session from database")
         } catch (e: Exception) {
-            Log.e("WorkoutRepository", "Failed to delete session from Room: ${e.message}", e)
+            Log.e("WorkoutRepository", "Failed to delete session from database: ${e.message}", e)
         }
         activeSession = null
     }
 
     override suspend fun getWorkoutLogs(userId: String): List<WorkoutLog> {
-        // LOCAL-FIRST: Read from Room database, SyncManager handles remote sync
         return try {
             val localLogs = workoutLogDao.getWorkoutLogsByUserList(userId)
-            
+
             localLogs.map { logEntity ->
                 mapWorkoutLogEntityToDomain(logEntity)
             }
@@ -635,7 +618,6 @@ class WorkoutRepositoryImpl @Inject constructor(
     }
 
     override suspend fun getWorkoutLogById(logId: String): WorkoutLog? {
-        // LOCAL-FIRST: Read from Room database
         return try {
             val logEntity = workoutLogDao.getWorkoutLogById(logId) ?: return null
             mapWorkoutLogEntityToDomain(logEntity)
@@ -646,7 +628,6 @@ class WorkoutRepositoryImpl @Inject constructor(
     }
 
     override suspend fun getLastWorkoutLog(userId: String): WorkoutLog? {
-        // LOCAL-FIRST: Read from Room database
         return try {
             val logEntity = workoutLogDao.getLastWorkoutLog(userId) ?: return null
             mapWorkoutLogEntityToDomain(logEntity)

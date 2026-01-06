@@ -23,8 +23,7 @@ class ExerciseRepositoryImpl @Inject constructor(
 
     override suspend fun getAllExercises(): List<Exercise> {
         cachedExercises?.let { return it.ensureDistinctById { exercise -> exercise.id } }
-        
-        // LOCAL-FIRST: Read from Room database, SyncManager handles remote sync
+
         return try {
             val localExercises = exerciseDao.getAllActiveExercisesList()
             
@@ -55,8 +54,7 @@ class ExerciseRepositoryImpl @Inject constructor(
 
     override suspend fun getExercisesByCategory(category: MuscleCategory): List<Exercise> {
         val categoryId = MuscleCategory.entries.indexOf(category) + 1
-        
-        // LOCAL-FIRST: Read from Room database
+
         return try {
             val localExercises = exerciseDao.getExercisesByCategoryList(categoryId)
             
@@ -80,7 +78,6 @@ class ExerciseRepositoryImpl @Inject constructor(
     }
 
     override suspend fun getExerciseById(id: String): Exercise? {
-        // LOCAL-FIRST: Read from Room database
         return try {
             val entity = exerciseDao.getExerciseById(id)
             entity?.let {
@@ -102,8 +99,7 @@ class ExerciseRepositoryImpl @Inject constructor(
 
     override suspend fun searchExercises(query: String): List<Exercise> {
         if (query.isBlank()) return getAllExercises()
-        
-        // LOCAL-FIRST: Read from Room database
+
         return try {
             val localExercises = exerciseDao.searchExercisesList(query)
             

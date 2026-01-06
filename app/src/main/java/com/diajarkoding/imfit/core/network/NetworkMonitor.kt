@@ -64,7 +64,6 @@ class NetworkMonitor @Inject constructor(
 
         connectivityManager.registerNetworkCallback(request, networkCallback)
 
-        // Emit initial state
         trySend(isOnline)
 
         awaitClose {

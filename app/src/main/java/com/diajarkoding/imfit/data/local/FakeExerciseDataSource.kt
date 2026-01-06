@@ -6,7 +6,6 @@ import com.diajarkoding.imfit.domain.model.MuscleCategory
 object FakeExerciseDataSource {
 
     val exercises: List<Exercise> = listOf(
-        // CHEST
         Exercise(
             id = "ex_chest_1",
             name = "Barbell Bench Press",
@@ -38,7 +37,6 @@ object FakeExerciseDataSource {
             description = "Lie on flat bench, extend arms above chest, lower dumbbells in arc motion to sides."
         ),
 
-        // BACK
         Exercise(
             id = "ex_back_1",
             name = "Deadlift",
@@ -70,7 +68,6 @@ object FakeExerciseDataSource {
             description = "Sit at cable machine, pull handle to lower chest, squeeze shoulder blades together."
         ),
 
-        // SHOULDERS
         Exercise(
             id = "ex_shoulders_1",
             name = "Overhead Press",
@@ -102,7 +99,6 @@ object FakeExerciseDataSource {
             description = "Start with dumbbells in front of shoulders, rotate and press overhead."
         ),
 
-        // BICEPS
         Exercise(
             id = "ex_biceps_1",
             name = "Barbell Curl",
@@ -134,7 +130,6 @@ object FakeExerciseDataSource {
             description = "Stand facing cable machine, curl bar up maintaining constant tension."
         ),
 
-        // TRICEPS
         Exercise(
             id = "ex_triceps_1",
             name = "Tricep Pushdown",
@@ -166,7 +161,6 @@ object FakeExerciseDataSource {
             description = "Support body on parallel bars, lower by bending elbows, push back up."
         ),
 
-        // LEGS
         Exercise(
             id = "ex_legs_1",
             name = "Barbell Squat",
@@ -210,7 +204,6 @@ object FakeExerciseDataSource {
             description = "Step forward, lower back knee toward floor, push back to starting position."
         ),
 
-        // CORE
         Exercise(
             id = "ex_core_1",
             name = "Plank",
@@ -242,7 +235,6 @@ object FakeExerciseDataSource {
             description = "Pull cable diagonally across body from high to low or low to high."
         ),
 
-        // CARDIO
         Exercise(
             id = "ex_cardio_1",
             name = "Treadmill Running",

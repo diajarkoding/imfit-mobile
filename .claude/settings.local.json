@@ -8,7 +8,10 @@
       "Bash(.\\gradlew:*)",
       "Bash(wmic:*)",
       "Bash(taskkill:*)",
-      "Bash(powershell:*)"
+      "Bash(powershell:*)",
+      "Bash(git commit:*)",
+      "Bash(dir:*)",
+      "Bash(git checkout:*)"
     ],
     "deny": [],
     "ask": []

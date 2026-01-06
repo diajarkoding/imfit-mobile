@@ -2,16 +2,20 @@ package com.diajarkoding.imfit.presentation.ui.workout
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
-import com.diajarkoding.imfit.domain.model.ExerciseLog
 import com.diajarkoding.imfit.domain.model.WorkoutSession
 import com.diajarkoding.imfit.domain.model.WorkoutSet
 import com.diajarkoding.imfit.domain.repository.AuthRepository
 import com.diajarkoding.imfit.domain.repository.WorkoutRepository
+import com.diajarkoding.imfit.core.model.RestTimerUpdate
+import com.diajarkoding.imfit.core.model.WorkoutTimerUpdate
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.MutableSharedFlow
+import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import javax.inject.Inject
@@ -36,6 +40,12 @@ class ActiveWorkoutViewModel @Inject constructor(
 
     private val _state = MutableStateFlow(ActiveWorkoutState())
     val state = _state.asStateFlow()
+
+    private val _workoutTimerUpdates = MutableSharedFlow<WorkoutTimerUpdate>(replay = 1)
+    val workoutTimerUpdates: SharedFlow<WorkoutTimerUpdate> = _workoutTimerUpdates.asSharedFlow()
+    
+    private val _restTimerUpdates = MutableSharedFlow<RestTimerUpdate>(replay = 1)
+    val restTimerUpdates: SharedFlow<RestTimerUpdate> = _restTimerUpdates.asSharedFlow()
 
     private var elapsedTimeJob: Job? = null
     private var restTimerJob: Job? = null
@@ -126,6 +136,22 @@ class ActiveWorkoutViewModel @Inject constructor(
                 // Use actualElapsedMs which excludes paused time
                 val elapsed = session.actualElapsedMs / 1000
                 _state.update { it.copy(elapsedSeconds = elapsed) }
+                
+                // Only emit workout timer update when rest timer is NOT active
+                // This prevents flickering between workout and rest timer notifications
+                if (!_state.value.isRestTimerActive) {
+                    _workoutTimerUpdates.emit(
+                        WorkoutTimerUpdate(
+                            workoutName = session.templateName,
+                            elapsedSeconds = elapsed,
+                            completedSets = session.totalCompletedSets,
+                            totalSets = session.totalSets,
+                            totalVolume = session.totalVolume,
+                            isPaused = _state.value.isPaused
+                        )
+                    )
+                }
+                
                 delay(1000)
             }
         }
@@ -274,18 +300,34 @@ class ActiveWorkoutViewModel @Inject constructor(
 
         restTimerJob = viewModelScope.launch {
             var remaining = restSeconds
+            val exerciseName = _state.value.session?.exerciseLogs?.getOrNull(exerciseIndex)?.exercise?.name
+            
+            // Emit initial rest timer update
+            _restTimerUpdates.emit(RestTimerUpdate(remaining, true, exerciseName))
+            
             while (remaining > 0) {
                 delay(1000)
                 remaining--
                 _state.update { it.copy(restTimerSeconds = remaining) }
+                
+                // Emit rest timer update for notification
+                _restTimerUpdates.emit(RestTimerUpdate(remaining, true, exerciseName))
             }
             _state.update { it.copy(isRestTimerActive = false) }
+            
+            // Emit rest ended update
+            _restTimerUpdates.emit(RestTimerUpdate(0, false, null))
         }
     }
 
     fun skipRestTimer() {
         restTimerJob?.cancel()
         _state.update { it.copy(isRestTimerActive = false) }
+        
+        // Emit rest ended update
+        viewModelScope.launch {
+            _restTimerUpdates.emit(RestTimerUpdate(0, false, null))
+        }
     }
 
     fun pauseWorkout() {

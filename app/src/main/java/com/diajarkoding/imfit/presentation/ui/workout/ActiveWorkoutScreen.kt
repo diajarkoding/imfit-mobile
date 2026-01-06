@@ -1,5 +1,10 @@
 package com.diajarkoding.imfit.presentation.ui.workout
 
+import android.content.BroadcastReceiver
+import android.content.Intent
+import android.content.IntentFilter
+import android.content.Context
+import android.os.Build
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -54,6 +59,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -65,6 +71,7 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.TextFieldValue
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.TextRange
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
@@ -83,6 +90,8 @@ import com.diajarkoding.imfit.theme.IMFITSizes
 import com.diajarkoding.imfit.theme.IMFITSpacing
 import com.diajarkoding.imfit.theme.Primary
 import com.diajarkoding.imfit.theme.PrimaryLight
+import com.diajarkoding.imfit.core.service.WorkoutService
+import com.diajarkoding.imfit.core.notification.WorkoutNotificationReceiver
 import com.diajarkoding.imfit.theme.SetComplete
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -97,6 +106,41 @@ fun ActiveWorkoutScreen(
     var showRestConfigSheet by remember { mutableStateOf(false) }
     val snackbarHostState = remember { SnackbarHostState() }
     val coroutineScope = rememberCoroutineScope()
+    val context = LocalContext.current
+    
+    // Listen for notification action broadcasts
+    DisposableEffect(Unit) {
+        val receiver = object : BroadcastReceiver() {
+            override fun onReceive(ctx: Context?, intent: Intent?) {
+                when (intent?.getStringExtra(WorkoutNotificationReceiver.EXTRA_COMMAND)) {
+                    WorkoutNotificationReceiver.COMMAND_STOP -> {
+                        viewModel.showCancelDialog()
+                    }
+                    WorkoutNotificationReceiver.COMMAND_PAUSE -> {
+                        viewModel.pauseWorkout()
+                    }
+                    WorkoutNotificationReceiver.COMMAND_RESUME -> {
+                        viewModel.resumeWorkout()
+                    }
+                    WorkoutNotificationReceiver.COMMAND_SKIP_REST -> {
+                        viewModel.skipRestTimer()
+                    }
+                }
+            }
+        }
+        
+        val filter = IntentFilter(WorkoutNotificationReceiver.ACTION_WORKOUT_COMMAND)
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            context.registerReceiver(receiver, filter, Context.RECEIVER_NOT_EXPORTED)
+        } else {
+            @Suppress("UnspecifiedRegisterReceiverFlag")
+            context.registerReceiver(receiver, filter)
+        }
+        
+        onDispose {
+            context.unregisterReceiver(receiver)
+        }
+    }
     
     // Show pause error via snackbar
     LaunchedEffect(state.pauseError) {
@@ -111,9 +155,59 @@ fun ActiveWorkoutScreen(
     LaunchedEffect(templateId) {
         viewModel.startWorkout(templateId)
     }
+    
+    // Start foreground service when workout session is available
+    LaunchedEffect(state.session?.id) {
+        state.session?.let { session ->
+            val intent = Intent(context, WorkoutService::class.java).apply {
+                action = WorkoutService.ACTION_START_WORKOUT
+                putExtra(WorkoutService.EXTRA_WORKOUT_NAME, session.templateName)
+                putExtra(WorkoutService.EXTRA_TEMPLATE_ID, session.templateId)
+            }
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                context.startForegroundService(intent)
+            } else {
+                context.startService(intent)
+            }
+        }
+    }
+    
+    // Send workout timer updates to service
+    LaunchedEffect(Unit) {
+        viewModel.workoutTimerUpdates.collect { update ->
+            val intent = Intent(context, WorkoutService::class.java).apply {
+                action = WorkoutService.ACTION_UPDATE_WORKOUT
+                putExtra(WorkoutService.EXTRA_WORKOUT_NAME, update.workoutName)
+                putExtra(WorkoutService.EXTRA_ELAPSED_SECONDS, update.elapsedSeconds)
+                putExtra(WorkoutService.EXTRA_COMPLETED_SETS, update.completedSets)
+                putExtra(WorkoutService.EXTRA_TOTAL_SETS, update.totalSets)
+                putExtra(WorkoutService.EXTRA_TOTAL_VOLUME, update.totalVolume)
+                putExtra(WorkoutService.EXTRA_IS_PAUSED, update.isPaused)
+            }
+            context.startService(intent)
+        }
+    }
+    
+    // Send rest timer updates to service
+    LaunchedEffect(Unit) {
+        viewModel.restTimerUpdates.collect { update ->
+            val intent = Intent(context, WorkoutService::class.java).apply {
+                action = WorkoutService.ACTION_UPDATE_REST
+                putExtra(WorkoutService.EXTRA_REMAINING_SECONDS, update.remainingSeconds)
+                putExtra(WorkoutService.EXTRA_EXERCISE_NAME, update.currentExerciseName)
+                putExtra(WorkoutService.EXTRA_IS_REST_ACTIVE, update.isRestActive)
+            }
+            context.startService(intent)
+        }
+    }
 
     LaunchedEffect(state.workoutLogId) {
         state.workoutLogId?.let { logId ->
+            // Stop service when workout is finished
+            val stopIntent = Intent(context, WorkoutService::class.java).apply {
+                action = WorkoutService.ACTION_STOP_WORKOUT
+            }
+            context.startService(stopIntent)
             onWorkoutFinished(logId)
         }
     }
@@ -150,6 +244,11 @@ fun ActiveWorkoutScreen(
             confirmText = stringResource(R.string.action_cancel_workout),
             dismissText = stringResource(R.string.action_continue),
             onConfirm = {
+                // Stop service when workout is cancelled
+                val stopIntent = Intent(context, WorkoutService::class.java).apply {
+                    action = WorkoutService.ACTION_STOP_WORKOUT
+                }
+                context.startService(stopIntent)
                 viewModel.cancelWorkout()
                 onNavigateBack()
             },

@@ -1,5 +1,6 @@
 package com.diajarkoding.imfit.presentation.ui.workout
 
+import android.util.Log
 import androidx.lifecycle.SavedStateHandle
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
@@ -16,6 +17,7 @@ data class EditWorkoutState(
     val workoutName: String = "",
     val exercises: List<TemplateExercise> = emptyList(),
     val isLoading: Boolean = false,
+    val isSaving: Boolean = false,
     val isSaved: Boolean = false,
     val error: String? = null
 )
@@ -125,17 +127,27 @@ class EditWorkoutViewModel @Inject constructor(
 
     fun saveChanges() {
         viewModelScope.launch {
-            _state.update { it.copy(isLoading = true) }
+            _state.update { it.copy(isSaving = true, error = null) }
             try {
                 workoutRepository.updateTemplate(
                     templateId = workoutId,
                     name = _state.value.workoutName,
                     exercises = _state.value.exercises
                 )
-                _state.update { it.copy(isSaved = true, isLoading = false) }
+                _state.update { it.copy(isSaved = true, isSaving = false) }
             } catch (e: Exception) {
-                _state.update { it.copy(error = e.message, isLoading = false) }
+                Log.e("EditWorkoutViewModel", "Failed to save workout: ${e.message}", e)
+                _state.update { 
+                    it.copy(
+                        isSaving = false, 
+                        error = "Failed to save changes. Please check your connection."
+                    ) 
+                }
             }
         }
+    }
+
+    fun clearError() {
+        _state.update { it.copy(error = null) }
     }
 }

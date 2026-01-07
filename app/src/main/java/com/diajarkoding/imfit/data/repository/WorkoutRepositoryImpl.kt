@@ -2,6 +2,7 @@ package com.diajarkoding.imfit.data.repository
 
 import android.util.Log
 import com.diajarkoding.imfit.core.data.WorkoutPreferences
+import com.diajarkoding.imfit.core.network.NetworkMonitor
 import com.diajarkoding.imfit.core.network.NetworkOperationException
 import com.diajarkoding.imfit.core.network.NoNetworkException
 import com.diajarkoding.imfit.data.local.FakeWorkoutDataSource
@@ -48,7 +49,8 @@ class WorkoutRepositoryImpl @Inject constructor(
     private val workoutTemplateDao: com.diajarkoding.imfit.data.local.dao.WorkoutTemplateDao,
     private val templateExerciseDao: com.diajarkoding.imfit.data.local.dao.TemplateExerciseDao,
     private val activeSessionDao: ActiveSessionDao,
-    private val workoutPreferences: WorkoutPreferences
+    private val workoutPreferences: WorkoutPreferences,
+    private val networkMonitor: NetworkMonitor
 ) : WorkoutRepository {
 
     private var activeSession: WorkoutSession? = null
@@ -92,10 +94,16 @@ class WorkoutRepositoryImpl @Inject constructor(
     }
 
     private suspend fun cacheTemplates(templates: List<WorkoutTemplate>, userId: String) {
-        // Clear existing templates for this user and insert fresh data
-        workoutTemplateDao.deleteTemplatesByUser(userId)
-        templateExerciseDao.deleteExercisesByUser(userId)
+        // Use REPLACE strategy to avoid data loss
+        // First, collect all template IDs we're about to cache
+        val templateIds = templates.map { it.id }.toSet()
         
+        // Delete template exercises for templates we're updating
+        templateIds.forEach { templateId ->
+            templateExerciseDao.deleteExercisesByTemplate(templateId)
+        }
+        
+        // Insert/update templates and their exercises
         templates.forEach { template ->
             val templateEntity = com.diajarkoding.imfit.data.local.entity.WorkoutTemplateEntity(
                 id = template.id,
@@ -117,6 +125,15 @@ class WorkoutRepositoryImpl @Inject constructor(
                     restSeconds = exercise.restSeconds
                 )
                 templateExerciseDao.insertTemplateExercise(exerciseEntity)
+            }
+        }
+        
+        // Clean up templates that exist locally but not in remote (soft deleted remotely)
+        val localTemplates = workoutTemplateDao.getTemplatesByUserList(userId)
+        localTemplates.forEach { local ->
+            if (local.id !in templateIds) {
+                // Mark as deleted locally (don't hard delete to preserve history)
+                workoutTemplateDao.deleteTemplate(local.id)
             }
         }
     }
@@ -168,10 +185,44 @@ class WorkoutRepositoryImpl @Inject constructor(
                 }
                 .decodeSingleOrNull<WorkoutTemplateDto>()
             
-            response?.toDomain()
+            val template = response?.toDomain()
+            
+            // Cache the template if found
+            if (template != null) {
+                cacheTemplate(template)
+            }
+            
+            template
         } catch (e: Exception) {
             Log.w(TAG, "Failed to fetch template from Supabase, using cache: ${e.message}")
             getTemplateByIdFromCache(templateId)
+        }
+    }
+
+    private suspend fun cacheTemplate(template: WorkoutTemplate) {
+        val templateEntity = com.diajarkoding.imfit.data.local.entity.WorkoutTemplateEntity(
+            id = template.id,
+            userId = template.userId,
+            name = template.name,
+            isDeleted = false,
+            createdAt = template.createdAt,
+            updatedAt = System.currentTimeMillis()
+        )
+        workoutTemplateDao.insertTemplate(templateEntity)
+        
+        // Clear existing exercises for this template and insert fresh
+        templateExerciseDao.deleteExercisesByTemplate(template.id)
+        
+        template.exercises.forEachIndexed { index, exercise ->
+            val exerciseEntity = com.diajarkoding.imfit.data.local.entity.TemplateExerciseEntity(
+                templateId = template.id,
+                exerciseId = exercise.exercise.id,
+                orderIndex = index,
+                sets = exercise.sets,
+                reps = exercise.reps,
+                restSeconds = exercise.restSeconds
+            )
+            templateExerciseDao.insertTemplateExercise(exerciseEntity)
         }
     }
 
@@ -210,6 +261,11 @@ class WorkoutRepositoryImpl @Inject constructor(
     override suspend fun createTemplate(userId: String, name: String, exercises: List<TemplateExercise>): WorkoutTemplate {
         val templateId = UUID.randomUUID().toString()
         val now = System.currentTimeMillis()
+
+        // Check network connectivity first
+        if (!networkMonitor.isOnline) {
+            throw NoNetworkException("No internet connection. Please check your network and try again.")
+        }
 
         // Online-first: Create on Supabase first
         try {
@@ -273,6 +329,11 @@ class WorkoutRepositoryImpl @Inject constructor(
 
     override suspend fun updateTemplate(templateId: String, name: String, exercises: List<TemplateExercise>): WorkoutTemplate? {
         val now = System.currentTimeMillis()
+
+        // Check network connectivity first
+        if (!networkMonitor.isOnline) {
+            throw NoNetworkException("No internet connection. Please check your network and try again.")
+        }
 
         // Online-first: Update on Supabase first
         try {
@@ -338,6 +399,11 @@ class WorkoutRepositoryImpl @Inject constructor(
     }
 
     override suspend fun updateTemplateExercise(templateId: String, exerciseId: String, sets: Int, reps: Int, restSeconds: Int): WorkoutTemplate? {
+        // Check network connectivity first
+        if (!networkMonitor.isOnline) {
+            throw NoNetworkException("No internet connection. Please check your network and try again.")
+        }
+
         // Online-first: Update on Supabase first
         try {
             supabaseClient.postgrest.from("template_exercises")
@@ -373,6 +439,11 @@ class WorkoutRepositoryImpl @Inject constructor(
     }
 
     override suspend fun deleteTemplate(templateId: String): Boolean {
+        // Check network connectivity first
+        if (!networkMonitor.isOnline) {
+            throw NoNetworkException("No internet connection. Please check your network and try again.")
+        }
+
         // Online-first: Delete on Supabase first
         try {
             supabaseClient.postgrest.from("workout_templates")
@@ -515,26 +586,73 @@ class WorkoutRepositoryImpl @Inject constructor(
         // Store session ID before clearing
         val sessionId = session.id
         
-        return try {
-            val userId = supabaseClient.auth.currentUserOrNull()?.id
-                ?: return FakeWorkoutDataSource.finishWorkout()
+        val userId = supabaseClient.auth.currentUserOrNull()?.id
+        if (userId == null || !isValidUUID(userId)) {
+            Log.e(TAG, "Invalid or missing user ID, cannot finish workout")
+            throw NetworkOperationException("User not authenticated. Please log in again.")
+        }
 
-            // Use fake data if user ID is not valid UUID
-            if (!isValidUUID(userId)) {
-                Log.w("WorkoutRepository", "Invalid user ID format: $userId, using fake data")
-                return FakeWorkoutDataSource.finishWorkout()
+        val workoutLogId = UUID.randomUUID().toString()
+        val startDateTime = OffsetDateTime.ofInstant(
+            java.time.Instant.ofEpochMilli(session.startTime),
+            ZoneOffset.UTC
+        )
+        val endDateTime = OffsetDateTime.ofInstant(
+            java.time.Instant.ofEpochMilli(endTime),
+            ZoneOffset.UTC
+        )
+
+        // Save to local database FIRST (ensures data is never lost)
+        val workoutLogEntity = com.diajarkoding.imfit.data.local.entity.WorkoutLogEntity(
+            id = workoutLogId,
+            userId = userId,
+            templateId = session.templateId,
+            templateName = session.templateName,
+            date = session.startTime,
+            startTime = session.startTime,
+            endTime = endTime,
+            totalVolume = session.totalVolume,
+            totalSets = session.totalCompletedSets,
+            totalReps = session.exerciseLogs.sumOf { log -> log.sets.filter { it.isCompleted }.sumOf { it.reps } }
+        )
+        workoutLogDao.insertWorkoutLog(workoutLogEntity)
+        
+        // Generate exercise log IDs upfront for consistency between local and remote
+        val exerciseLogIds = session.exerciseLogs.map { UUID.randomUUID().toString() }
+        
+        session.exerciseLogs.forEachIndexed { index, exerciseLog ->
+            val exerciseLogId = exerciseLogIds[index]
+            val exerciseLogEntity = com.diajarkoding.imfit.data.local.entity.ExerciseLogEntity(
+                id = exerciseLogId,
+                workoutLogId = workoutLogId,
+                exerciseId = exerciseLog.exercise.id,
+                exerciseName = exerciseLog.exercise.name,
+                muscleCategory = exerciseLog.exercise.muscleCategory.name,
+                orderIndex = index,
+                totalVolume = exerciseLog.totalVolume,
+                totalSets = exerciseLog.sets.count { it.isCompleted },
+                totalReps = exerciseLog.sets.filter { it.isCompleted }.sumOf { it.reps }
+            )
+            exerciseLogDao.insertExerciseLog(exerciseLogEntity)
+
+            exerciseLog.sets.forEach { set ->
+                val setEntity = com.diajarkoding.imfit.data.local.entity.WorkoutSetEntity(
+                    id = UUID.randomUUID().toString(),
+                    exerciseLogId = exerciseLogId,
+                    workoutLogId = workoutLogId,
+                    exerciseId = exerciseLog.exercise.id,
+                    setNumber = set.setNumber,
+                    weight = set.weight,
+                    reps = set.reps,
+                    isCompleted = set.isCompleted
+                )
+                workoutSetDao.insertWorkoutSet(setEntity)
             }
-            
-            val workoutLogId = UUID.randomUUID().toString()
-            val startDateTime = OffsetDateTime.ofInstant(
-                java.time.Instant.ofEpochMilli(session.startTime),
-                ZoneOffset.UTC
-            )
-            val endDateTime = OffsetDateTime.ofInstant(
-                java.time.Instant.ofEpochMilli(endTime),
-                ZoneOffset.UTC
-            )
-            
+        }
+        Log.d(TAG, "Saved workout log to local database: $workoutLogId")
+        
+        // Now try to upload to Supabase
+        try {
             val workoutLogDto = CreateWorkoutLogDto(
                 id = workoutLogId,
                 userId = userId,
@@ -548,11 +666,10 @@ class WorkoutRepositoryImpl @Inject constructor(
                 totalReps = session.exerciseLogs.sumOf { log -> log.sets.filter { it.isCompleted }.sumOf { it.reps } }
             )
             
-            supabaseClient.postgrest.from("workout_logs")
-                .insert(workoutLogDto)
+            supabaseClient.postgrest.from("workout_logs").insert(workoutLogDto)
             
             session.exerciseLogs.forEachIndexed { index, exerciseLog ->
-                val exerciseLogId = UUID.randomUUID().toString()
+                val exerciseLogId = exerciseLogIds[index]
                 val exerciseLogDto = CreateExerciseLogDto(
                     id = exerciseLogId,
                     workoutLogId = workoutLogId,
@@ -563,8 +680,7 @@ class WorkoutRepositoryImpl @Inject constructor(
                     totalVolume = exerciseLog.totalVolume.toDouble()
                 )
                 
-                supabaseClient.postgrest.from("exercise_logs")
-                    .insert(exerciseLogDto)
+                supabaseClient.postgrest.from("exercise_logs").insert(exerciseLogDto)
                 
                 exerciseLog.sets.forEach { set ->
                     val setDto = WorkoutSetDto(
@@ -574,83 +690,34 @@ class WorkoutRepositoryImpl @Inject constructor(
                         reps = set.reps,
                         isCompleted = set.isCompleted
                     )
-                    supabaseClient.postgrest.from("workout_sets")
-                        .insert(setDto)
+                    supabaseClient.postgrest.from("workout_sets").insert(setDto)
                 }
             }
-            
-            // Save to local database for Last Known Weight feature
-            val workoutLogEntity = com.diajarkoding.imfit.data.local.entity.WorkoutLogEntity(
-                id = workoutLogId,
-                userId = userId,
-                templateId = session.templateId,
-                templateName = session.templateName,
-                date = session.startTime,
-                startTime = session.startTime,
-                endTime = endTime,
-                totalVolume = session.totalVolume,
-                totalSets = session.totalCompletedSets,
-                totalReps = session.exerciseLogs.sumOf { log -> log.sets.filter { it.isCompleted }.sumOf { it.reps } }
-            )
-            workoutLogDao.insertWorkoutLog(workoutLogEntity)
-            Log.d("WorkoutRepository", "Saved workout log to local database: $workoutLogId")
-
-            // Insert exercise logs and sets to local database
-            session.exerciseLogs.forEachIndexed { index, exerciseLog ->
-                val exerciseLogId = java.util.UUID.randomUUID().toString()
-                val exerciseLogEntity = com.diajarkoding.imfit.data.local.entity.ExerciseLogEntity(
-                    id = exerciseLogId,
-                    workoutLogId = workoutLogId,
-                    exerciseId = exerciseLog.exercise.id,
-                    exerciseName = exerciseLog.exercise.name,
-                    muscleCategory = exerciseLog.exercise.muscleCategory.name,
-                    orderIndex = index,
-                    totalVolume = exerciseLog.totalVolume,
-                    totalSets = exerciseLog.sets.count { it.isCompleted },
-                    totalReps = exerciseLog.sets.filter { it.isCompleted }.sumOf { it.reps }
-                )
-                exerciseLogDao.insertExerciseLog(exerciseLogEntity)
-
-                // Insert each set to local database
-                exerciseLog.sets.forEach { set ->
-                    val setEntity = com.diajarkoding.imfit.data.local.entity.WorkoutSetEntity(
-                        id = java.util.UUID.randomUUID().toString(),
-                        exerciseLogId = exerciseLogId,
-                        workoutLogId = workoutLogId,
-                        exerciseId = exerciseLog.exercise.id,
-                        setNumber = set.setNumber,
-                        weight = set.weight,
-                        reps = set.reps,
-                        isCompleted = set.isCompleted
-                    )
-                    workoutSetDao.insertWorkoutSet(setEntity)
-                }
-            }
-            Log.d("WorkoutRepository", "Saved all exercise logs and sets to local database")
-            
-            WorkoutLog(
-                id = workoutLogId,
-                userId = userId,
-                templateName = session.templateName,
-                date = session.startTime,
-                startTime = session.startTime,
-                endTime = endTime,
-                totalVolume = session.totalVolume,
-                exerciseLogs = session.exerciseLogs
-            )
+            Log.d(TAG, "Uploaded workout log to Supabase: $workoutLogId")
         } catch (e: Exception) {
-            Log.e("WorkoutRepository", "Error finishing workout: ${e.message}", e)
-            FakeWorkoutDataSource.finishWorkout()
-        } finally {
-            // Always delete active session from database, regardless of success/failure
-            try {
-                activeSessionDao.deleteSessionById(sessionId)
-                Log.d("WorkoutRepository", "Deleted active session from database: $sessionId")
-            } catch (e: Exception) {
-                Log.e("WorkoutRepository", "Failed to delete session: ${e.message}", e)
-            }
-            activeSession = null
+            Log.w(TAG, "Failed to upload workout to Supabase (saved locally): ${e.message}")
+            // Data is already saved locally, so we don't throw - just log the warning
         }
+        
+        // Clean up active session
+        try {
+            activeSessionDao.deleteSessionById(sessionId)
+            Log.d(TAG, "Deleted active session from database: $sessionId")
+        } catch (e: Exception) {
+            Log.e(TAG, "Failed to delete session: ${e.message}", e)
+        }
+        activeSession = null
+        
+        return WorkoutLog(
+            id = workoutLogId,
+            userId = userId,
+            templateName = session.templateName,
+            date = session.startTime,
+            startTime = session.startTime,
+            endTime = endTime,
+            totalVolume = session.totalVolume,
+            exerciseLogs = session.exerciseLogs
+        )
     }
 
     override suspend fun cancelWorkout() {
@@ -725,8 +792,10 @@ class WorkoutRepositoryImpl @Inject constructor(
     }
 
     private suspend fun cacheWorkoutLogs(logs: List<WorkoutLog>, userId: String) {
-        // Clear existing workout logs for this user and insert fresh data
-        workoutLogDao.deleteWorkoutLogsByUser(userId)
+        // Note: We DON'T delete existing local workout logs/sets to preserve:
+        // 1. Last Known Weight data for exercises
+        // 2. Any locally saved workouts that haven't synced yet
+        // Instead, we use REPLACE strategy which will update existing and add new
         
         logs.forEach { log ->
             val logEntity = com.diajarkoding.imfit.data.local.entity.WorkoutLogEntity(
@@ -742,6 +811,11 @@ class WorkoutRepositoryImpl @Inject constructor(
                 totalReps = log.exerciseLogs.sumOf { el -> el.sets.filter { s -> s.isCompleted }.sumOf { s -> s.reps } }
             )
             workoutLogDao.insertWorkoutLog(logEntity)
+            
+            // Delete existing exercise logs and sets for this specific workout log
+            // to avoid duplicates, then insert fresh data
+            workoutSetDao.deleteSetsByWorkoutLog(log.id)
+            exerciseLogDao.deleteExerciseLogsByWorkout(log.id)
             
             log.exerciseLogs.forEachIndexed { index, exerciseLog ->
                 val exerciseLogId = UUID.randomUUID().toString()

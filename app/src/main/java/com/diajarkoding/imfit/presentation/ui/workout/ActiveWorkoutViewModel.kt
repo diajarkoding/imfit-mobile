@@ -30,7 +30,8 @@ data class ActiveWorkoutState(
     val sessionRestOverride: Int? = null,
     val isPaused: Boolean = false,
     val pauseError: String? = null,
-    val isFinishing: Boolean = false
+    val isFinishing: Boolean = false,
+    val finishError: String? = null
 )
 
 @HiltViewModel
@@ -407,14 +408,37 @@ class ActiveWorkoutViewModel @Inject constructor(
         if (_state.value.isFinishing) return
         
         viewModelScope.launch {
-            _state.update { it.copy(isFinishing = true) }
+            _state.update { it.copy(isFinishing = true, finishError = null) }
             elapsedTimeJob?.cancel()
 
-            val workoutLog = workoutRepository.finishWorkout()
-            workoutLog?.let { log ->
-                _state.update { it.copy(workoutLogId = log.id) }
+            try {
+                val workoutLog = workoutRepository.finishWorkout()
+                workoutLog?.let { log ->
+                    _state.update { it.copy(workoutLogId = log.id, isFinishing = false) }
+                } ?: run {
+                    _state.update { 
+                        it.copy(
+                            isFinishing = false, 
+                            finishError = "No active workout to finish"
+                        ) 
+                    }
+                }
+            } catch (e: Exception) {
+                android.util.Log.e("ActiveWorkoutVM", "Failed to finish workout: ${e.message}", e)
+                _state.update { 
+                    it.copy(
+                        isFinishing = false, 
+                        finishError = "Failed to save workout. Your data has been saved locally."
+                    ) 
+                }
+                // Even on error, the workout is saved locally, so still navigate
+                _state.update { it.copy(workoutLogId = "local") }
             }
         }
+    }
+
+    fun clearFinishError() {
+        _state.update { it.copy(finishError = null) }
     }
 
     override fun onCleared() {

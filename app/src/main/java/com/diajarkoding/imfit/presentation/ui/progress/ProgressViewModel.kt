@@ -1,5 +1,6 @@
 package com.diajarkoding.imfit.presentation.ui.progress
 
+import android.util.Log
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.diajarkoding.imfit.domain.model.WorkoutLog
@@ -27,7 +28,8 @@ data class ProgressState(
     val weeklyWorkoutTimeMinutes: Int = 0,
     val workoutDates: Set<LocalDate> = emptySet(),
     val workoutLogsByDate: Map<LocalDate, List<WorkoutLog>> = emptyMap(),
-    val isLoading: Boolean = true
+    val isLoading: Boolean = true,
+    val error: String? = null
 )
 
 @HiltViewModel
@@ -107,6 +109,7 @@ class ProgressViewModel @Inject constructor(
                     )
                 }
             } catch (e: Exception) {
+                Log.e("ProgressViewModel", "Failed to load workout data: ${e.message}", e)
                 // Get signed URL for profile photo even on error
                 val signedAvatarUrl = authRepository.getSignedAvatarUrl(user.profilePhotoUri)
                 
@@ -120,11 +123,16 @@ class ProgressViewModel @Inject constructor(
                         weeklyWorkoutTimeMinutes = 0,
                         workoutDates = emptySet(),
                         workoutLogsByDate = emptyMap(),
-                        isLoading = false
+                        isLoading = false,
+                        error = "Failed to load workout history. Please check your connection."
                     )
                 }
             }
         }
+    }
+
+    fun clearError() {
+        _state.update { it.copy(error = null) }
     }
 
     fun logout() {

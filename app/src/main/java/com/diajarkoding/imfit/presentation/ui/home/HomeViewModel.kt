@@ -20,6 +20,8 @@ data class HomeState(
     val templates: List<WorkoutTemplate> = emptyList(),
     val lastWorkout: WorkoutLog? = null,
     val isLoading: Boolean = true,
+    val isCreating: Boolean = false,
+    val error: String? = null,
     val newlyCreatedWorkoutId: String? = null,
     val activeWorkoutTemplateId: String? = null
 )
@@ -86,7 +88,8 @@ class HomeViewModel @Inject constructor(
                         templates = emptyList(),
                         lastWorkout = null,
                         isLoading = false,
-                        activeWorkoutTemplateId = null
+                        activeWorkoutTemplateId = null,
+                        error = "Failed to load data. Please check your connection."
                     )
                 }
             }
@@ -108,25 +111,37 @@ class HomeViewModel @Inject constructor(
             val user = authRepository.getCurrentUser()
             if (user == null) {
                 // User is not authenticated, cannot create workout
+                _state.update { it.copy(error = "Please log in to create a workout") }
                 return@launch
             }
 
+            _state.update { it.copy(isCreating = true, error = null) }
+            
             try {
                 val newWorkout = workoutRepository.createTemplate(
                     userId = user.id,
                     name = name,
                     exercises = emptyList()
                 )
-                _state.update { it.copy(newlyCreatedWorkoutId = newWorkout.id) }
+                _state.update { it.copy(newlyCreatedWorkoutId = newWorkout.id, isCreating = false) }
                 refresh()
             } catch (e: Exception) {
-                // Handle error silently or show error state
                 Log.e("HomeViewModel", "Failed to create workout: ${e.message}", e)
+                _state.update { 
+                    it.copy(
+                        isCreating = false, 
+                        error = "Failed to create workout. Please check your connection."
+                    ) 
+                }
             }
         }
     }
 
     fun clearNewlyCreatedWorkoutId() {
         _state.update { it.copy(newlyCreatedWorkoutId = null) }
+    }
+
+    fun clearError() {
+        _state.update { it.copy(error = null) }
     }
 }

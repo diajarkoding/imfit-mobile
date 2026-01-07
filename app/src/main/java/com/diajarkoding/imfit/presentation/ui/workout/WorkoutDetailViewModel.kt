@@ -1,5 +1,6 @@
 package com.diajarkoding.imfit.presentation.ui.workout
 
+import android.util.Log
 import androidx.lifecycle.SavedStateHandle
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
@@ -18,6 +19,8 @@ data class WorkoutDetailState(
     val workout: WorkoutTemplate? = null,
     val isLoading: Boolean = true,
     val error: String? = null,
+    val isDeleting: Boolean = false,
+    val isUpdating: Boolean = false,
     val isWorkoutActive: Boolean = false,       // True if ANY active session exists
     val isCurrentWorkoutActive: Boolean = false, // True if this specific template has active session
     val workoutFinished: Boolean = false,
@@ -72,8 +75,19 @@ class WorkoutDetailViewModel @Inject constructor(
 
     fun deleteWorkout() {
         viewModelScope.launch {
-            workoutRepository.deleteTemplate(workoutId)
-            _state.update { it.copy(isDeleted = true) }
+            _state.update { it.copy(isDeleting = true, error = null) }
+            try {
+                workoutRepository.deleteTemplate(workoutId)
+                _state.update { it.copy(isDeleted = true, isDeleting = false) }
+            } catch (e: Exception) {
+                Log.e("WorkoutDetailViewModel", "Failed to delete workout: ${e.message}", e)
+                _state.update { 
+                    it.copy(
+                        isDeleting = false, 
+                        error = "Failed to delete workout. Please check your connection."
+                    ) 
+                }
+            }
         }
     }
 
@@ -89,13 +103,26 @@ class WorkoutDetailViewModel @Inject constructor(
             
             if (newExercises.isEmpty()) return@launch
             
+            _state.update { it.copy(isUpdating = true, error = null) }
+            
             val templateExercises = newExercises.map { exercise ->
                 TemplateExercise(exercise = exercise)
             }
             val updatedExercises = currentWorkout.exercises + templateExercises
             
-            workoutRepository.updateTemplateExercises(workoutId, updatedExercises)
-            loadWorkout()
+            try {
+                workoutRepository.updateTemplateExercises(workoutId, updatedExercises)
+                _state.update { it.copy(isUpdating = false) }
+                loadWorkout()
+            } catch (e: Exception) {
+                Log.e("WorkoutDetailViewModel", "Failed to add exercises: ${e.message}", e)
+                _state.update { 
+                    it.copy(
+                        isUpdating = false, 
+                        error = "Failed to add exercises. Please check your connection."
+                    ) 
+                }
+            }
         }
     }
 
@@ -104,16 +131,46 @@ class WorkoutDetailViewModel @Inject constructor(
             val currentWorkout = _state.value.workout ?: return@launch
             val updatedExercises = currentWorkout.exercises.filter { it.id != templateExercise.id }
             
-            workoutRepository.updateTemplateExercises(workoutId, updatedExercises)
-            loadWorkout()
+            _state.update { it.copy(isUpdating = true, error = null) }
+            
+            try {
+                workoutRepository.updateTemplateExercises(workoutId, updatedExercises)
+                _state.update { it.copy(isUpdating = false) }
+                loadWorkout()
+            } catch (e: Exception) {
+                Log.e("WorkoutDetailViewModel", "Failed to remove exercise: ${e.message}", e)
+                _state.update { 
+                    it.copy(
+                        isUpdating = false, 
+                        error = "Failed to remove exercise. Please check your connection."
+                    ) 
+                }
+            }
         }
     }
 
     fun updateExerciseConfig(exerciseId: String, sets: Int, reps: Int, restSeconds: Int) {
         viewModelScope.launch {
-            workoutRepository.updateTemplateExercise(workoutId, exerciseId, sets, reps, restSeconds)
-            loadWorkout()
+            _state.update { it.copy(isUpdating = true, error = null) }
+            
+            try {
+                workoutRepository.updateTemplateExercise(workoutId, exerciseId, sets, reps, restSeconds)
+                _state.update { it.copy(isUpdating = false) }
+                loadWorkout()
+            } catch (e: Exception) {
+                Log.e("WorkoutDetailViewModel", "Failed to update exercise: ${e.message}", e)
+                _state.update { 
+                    it.copy(
+                        isUpdating = false, 
+                        error = "Failed to update exercise. Please check your connection."
+                    ) 
+                }
+            }
         }
+    }
+
+    fun clearError() {
+        _state.update { it.copy(error = null) }
     }
 
     val estimatedDuration: Int

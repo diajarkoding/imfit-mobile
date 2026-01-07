@@ -27,6 +27,9 @@ interface ExerciseLogDao {
     @Query("DELETE FROM exercise_logs WHERE workout_log_id = :workoutLogId")
     suspend fun deleteExerciseLogsByWorkout(workoutLogId: String)
 
+    @Query("DELETE FROM exercise_logs WHERE workout_log_id IN (SELECT id FROM workout_logs WHERE user_id = :userId)")
+    suspend fun deleteExerciseLogsByUser(userId: String)
+
     @Query("DELETE FROM exercise_logs")
     suspend fun deleteAllExerciseLogs()
 

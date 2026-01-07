@@ -28,6 +28,8 @@ data class WorkoutLogDto(
     val totalReps: Int = 0,
     val notes: String? = null,
     val rating: Int? = null,
+    @SerialName("deleted_at")
+    val deletedAt: String? = null,
     @SerialName("exercise_logs")
     val exerciseLogs: List<ExerciseLogDto>? = null
 )

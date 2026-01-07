@@ -1,6 +1,9 @@
 package com.diajarkoding.imfit.data.repository
 
 import android.util.Log
+import com.diajarkoding.imfit.core.data.WorkoutPreferences
+import com.diajarkoding.imfit.core.network.NetworkOperationException
+import com.diajarkoding.imfit.core.network.NoNetworkException
 import com.diajarkoding.imfit.data.local.FakeWorkoutDataSource
 import com.diajarkoding.imfit.data.local.dao.ActiveSessionDao
 import com.diajarkoding.imfit.data.local.entity.ActiveSessionEntity
@@ -44,7 +47,8 @@ class WorkoutRepositoryImpl @Inject constructor(
     private val workoutLogDao: com.diajarkoding.imfit.data.local.dao.WorkoutLogDao,
     private val workoutTemplateDao: com.diajarkoding.imfit.data.local.dao.WorkoutTemplateDao,
     private val templateExerciseDao: com.diajarkoding.imfit.data.local.dao.TemplateExerciseDao,
-    private val activeSessionDao: ActiveSessionDao
+    private val activeSessionDao: ActiveSessionDao,
+    private val workoutPreferences: WorkoutPreferences
 ) : WorkoutRepository {
 
     private var activeSession: WorkoutSession? = null
@@ -54,49 +58,73 @@ class WorkoutRepositoryImpl @Inject constructor(
         encodeDefaults = true
     }
 
-    override suspend fun getTemplates(userId: String): List<WorkoutTemplate> {
-        return try {
-            val localTemplates = workoutTemplateDao.getTemplatesByUserList(userId)
+    // ==================== TEMPLATES (Online-First) ====================
 
-            localTemplates.map { templateEntity ->
-                val templateExercises = templateExerciseDao.getExercisesForTemplateList(templateEntity.id)
-                val exercises = templateExercises.mapNotNull { te ->
-                    val exerciseEntity = exerciseDao.getExerciseById(te.exerciseId)
-                    exerciseEntity?.let {
-                        val muscleCategory = MuscleCategory.entries.getOrNull(it.muscleCategoryId - 1) 
-                            ?: MuscleCategory.CHEST
-                        TemplateExercise(
-                            exercise = Exercise(
-                                id = it.id,
-                                name = it.name,
-                                muscleCategory = muscleCategory,
-                                description = it.description,
-                                imageUrl = it.imageUrl
-                            ),
-                            sets = te.sets,
-                            reps = te.reps,
-                            restSeconds = te.restSeconds
-                        )
-                    }
-                }
-                
-                WorkoutTemplate(
-                    id = templateEntity.id,
-                    userId = templateEntity.userId,
-                    name = templateEntity.name,
-                    exercises = exercises
-                )
-            }
+    override suspend fun getTemplates(userId: String): List<WorkoutTemplate> {
+        // Online-first: Try to fetch from Supabase first
+        return try {
+            val remoteTemplates = fetchTemplatesFromSupabase(userId)
+            
+            // Cache to local database
+            cacheTemplates(remoteTemplates, userId)
+            
+            Log.d(TAG, "Fetched ${remoteTemplates.size} templates from Supabase")
+            remoteTemplates
         } catch (e: Exception) {
-            Log.e("WorkoutRepository", "Error fetching templates from local: ${e.message}", e)
-            emptyList()
+            Log.w(TAG, "Failed to fetch templates from Supabase, using cache: ${e.message}")
+            // Fallback to local cache
+            getTemplatesFromCache(userId)
         }
     }
 
-    override suspend fun getTemplateById(templateId: String): WorkoutTemplate? {
-        return try {
-            val templateEntity = workoutTemplateDao.getTemplateById(templateId) ?: return null
+    private suspend fun fetchTemplatesFromSupabase(userId: String): List<WorkoutTemplate> {
+        val response = supabaseClient.postgrest
+            .from("workout_templates")
+            .select(Columns.raw("*, template_exercises(*, exercises(*))")) {
+                filter {
+                    eq("user_id", userId)
+                    eq("is_deleted", false)
+                }
+            }
+            .decodeList<WorkoutTemplateDto>()
+        
+        return response.map { it.toDomain() }
+    }
+
+    private suspend fun cacheTemplates(templates: List<WorkoutTemplate>, userId: String) {
+        // Clear existing templates for this user and insert fresh data
+        workoutTemplateDao.deleteTemplatesByUser(userId)
+        templateExerciseDao.deleteExercisesByUser(userId)
+        
+        templates.forEach { template ->
+            val templateEntity = com.diajarkoding.imfit.data.local.entity.WorkoutTemplateEntity(
+                id = template.id,
+                userId = template.userId,
+                name = template.name,
+                isDeleted = false,
+                createdAt = template.createdAt,
+                updatedAt = System.currentTimeMillis()
+            )
+            workoutTemplateDao.insertTemplate(templateEntity)
             
+            template.exercises.forEachIndexed { index, exercise ->
+                val exerciseEntity = com.diajarkoding.imfit.data.local.entity.TemplateExerciseEntity(
+                    templateId = template.id,
+                    exerciseId = exercise.exercise.id,
+                    orderIndex = index,
+                    sets = exercise.sets,
+                    reps = exercise.reps,
+                    restSeconds = exercise.restSeconds
+                )
+                templateExerciseDao.insertTemplateExercise(exerciseEntity)
+            }
+        }
+    }
+
+    private suspend fun getTemplatesFromCache(userId: String): List<WorkoutTemplate> {
+        val localTemplates = workoutTemplateDao.getTemplatesByUserList(userId)
+        
+        return localTemplates.map { templateEntity ->
             val templateExercises = templateExerciseDao.getExercisesForTemplateList(templateEntity.id)
             val exercises = templateExercises.mapNotNull { te ->
                 val exerciseEntity = exerciseDao.getExerciseById(te.exerciseId)
@@ -124,68 +152,115 @@ class WorkoutRepositoryImpl @Inject constructor(
                 name = templateEntity.name,
                 exercises = exercises
             )
-        } catch (e: Exception) {
-            Log.e("WorkoutRepository", "Error fetching template from local: ${e.message}", e)
-            null
         }
+    }
+
+    override suspend fun getTemplateById(templateId: String): WorkoutTemplate? {
+        // Try remote first, fallback to cache
+        return try {
+            val response = supabaseClient.postgrest
+                .from("workout_templates")
+                .select(Columns.raw("*, template_exercises(*, exercises(*))")) {
+                    filter {
+                        eq("id", templateId)
+                        eq("is_deleted", false)
+                    }
+                }
+                .decodeSingleOrNull<WorkoutTemplateDto>()
+            
+            response?.toDomain()
+        } catch (e: Exception) {
+            Log.w(TAG, "Failed to fetch template from Supabase, using cache: ${e.message}")
+            getTemplateByIdFromCache(templateId)
+        }
+    }
+
+    private suspend fun getTemplateByIdFromCache(templateId: String): WorkoutTemplate? {
+        val templateEntity = workoutTemplateDao.getTemplateById(templateId) ?: return null
+        
+        val templateExercises = templateExerciseDao.getExercisesForTemplateList(templateEntity.id)
+        val exercises = templateExercises.mapNotNull { te ->
+            val exerciseEntity = exerciseDao.getExerciseById(te.exerciseId)
+            exerciseEntity?.let {
+                val muscleCategory = MuscleCategory.entries.getOrNull(it.muscleCategoryId - 1) 
+                    ?: MuscleCategory.CHEST
+                TemplateExercise(
+                    exercise = Exercise(
+                        id = it.id,
+                        name = it.name,
+                        muscleCategory = muscleCategory,
+                        description = it.description,
+                        imageUrl = it.imageUrl
+                    ),
+                    sets = te.sets,
+                    reps = te.reps,
+                    restSeconds = te.restSeconds
+                )
+            }
+        }
+        
+        return WorkoutTemplate(
+            id = templateEntity.id,
+            userId = templateEntity.userId,
+            name = templateEntity.name,
+            exercises = exercises
+        )
     }
 
     override suspend fun createTemplate(userId: String, name: String, exercises: List<TemplateExercise>): WorkoutTemplate {
         val templateId = UUID.randomUUID().toString()
         val now = System.currentTimeMillis()
 
-        // Save to Room database
-        val templateEntity = com.diajarkoding.imfit.data.local.entity.WorkoutTemplateEntity(
-            id = templateId,
-            userId = userId,
-            name = name,
-            isDeleted = false,
-            createdAt = now,
-            updatedAt = now
-        )
-        workoutTemplateDao.insertTemplate(templateEntity)
-
-        // Save template exercises
-        exercises.forEachIndexed { index, exercise ->
-            val templateExerciseEntity = com.diajarkoding.imfit.data.local.entity.TemplateExerciseEntity(
-                templateId = templateId,
-                exerciseId = exercise.exercise.id,
-                orderIndex = index,
-                sets = exercise.sets,
-                reps = exercise.reps,
-                restSeconds = exercise.restSeconds
+        // Online-first: Create on Supabase first
+        try {
+            val templateDto = CreateTemplateDto(
+                id = templateId,
+                userId = userId,
+                name = name
             )
-            templateExerciseDao.insertTemplateExercise(templateExerciseEntity)
-        }
-
-        Log.d("WorkoutRepository", "Created template locally: $templateId with ${exercises.size} exercises")
-
-        // Sync to Supabase
-        if (isValidUUID(userId)) {
-            try {
-                val templateDto = CreateTemplateDto(
-                    id = templateId,
-                    userId = userId,
-                    name = name
+            supabaseClient.postgrest.from("workout_templates").insert(templateDto)
+            
+            exercises.forEachIndexed { index, exercise ->
+                val exerciseDto = TemplateExerciseDto(
+                    templateId = templateId,
+                    exerciseId = exercise.exercise.id,
+                    orderIndex = index,
+                    sets = exercise.sets,
+                    reps = exercise.reps,
+                    restSeconds = exercise.restSeconds
                 )
-                supabaseClient.postgrest.from("workout_templates").insert(templateDto)
-                
-                exercises.forEachIndexed { index, exercise ->
-                    val exerciseDto = TemplateExerciseDto(
-                        templateId = templateId,
-                        exerciseId = exercise.exercise.id,
-                        orderIndex = index,
-                        sets = exercise.sets,
-                        reps = exercise.reps,
-                        restSeconds = exercise.restSeconds
-                    )
-                    supabaseClient.postgrest.from("template_exercises").insert(exerciseDto)
-                }
-                
-                Log.d("WorkoutRepository", "Synced template to Supabase: $templateId")
-            } catch (e: Exception) {
-                Log.w("WorkoutRepository", "Failed to sync template to Supabase: ${e.message}")
+                supabaseClient.postgrest.from("template_exercises").insert(exerciseDto)
             }
+            
+            Log.d(TAG, "Created template on Supabase: $templateId")
+            
+            // Cache locally after successful remote creation
+            val templateEntity = com.diajarkoding.imfit.data.local.entity.WorkoutTemplateEntity(
+                id = templateId,
+                userId = userId,
+                name = name,
+                isDeleted = false,
+                createdAt = now,
+                updatedAt = now
+            )
+            workoutTemplateDao.insertTemplate(templateEntity)
+
+            exercises.forEachIndexed { index, exercise ->
+                val templateExerciseEntity = com.diajarkoding.imfit.data.local.entity.TemplateExerciseEntity(
+                    templateId = templateId,
+                    exerciseId = exercise.exercise.id,
+                    orderIndex = index,
+                    sets = exercise.sets,
+                    reps = exercise.reps,
+                    restSeconds = exercise.restSeconds
+                )
+                templateExerciseDao.insertTemplateExercise(templateExerciseEntity)
+            }
+            
+            Log.d(TAG, "Cached template locally: $templateId")
+        } catch (e: Exception) {
+            Log.e(TAG, "Failed to create template on Supabase: ${e.message}", e)
+            throw NetworkOperationException("Failed to create template. Please check your connection.", e)
         }
         
         return WorkoutTemplate(
@@ -197,36 +272,10 @@ class WorkoutRepositoryImpl @Inject constructor(
     }
 
     override suspend fun updateTemplate(templateId: String, name: String, exercises: List<TemplateExercise>): WorkoutTemplate? {
-        val existingTemplate = workoutTemplateDao.getTemplateById(templateId) ?: return null
         val now = System.currentTimeMillis()
 
-        // Update local database first
-        val updatedEntity = existingTemplate.copy(
-            name = name,
-            updatedAt = now
-        )
-        workoutTemplateDao.updateTemplate(updatedEntity)
-
-        // Delete existing template exercises and replace with new ones
-        templateExerciseDao.deleteExercisesByTemplate(templateId)
-        exercises.forEachIndexed { index, exercise ->
-            val templateExerciseEntity = com.diajarkoding.imfit.data.local.entity.TemplateExerciseEntity(
-                templateId = templateId,
-                exerciseId = exercise.exercise.id,
-                orderIndex = index,
-                sets = exercise.sets,
-                reps = exercise.reps,
-                restSeconds = exercise.restSeconds
-            )
-            templateExerciseDao.insertTemplateExercise(templateExerciseEntity)
-        }
-        
-        Log.d("WorkoutRepository", "Updated template locally: $templateId with ${exercises.size} exercises")
-
+        // Online-first: Update on Supabase first
         try {
-            Log.d("WorkoutRepository", "Starting Supabase sync for template: $templateId")
-
-            // Update template
             supabaseClient.postgrest.from("workout_templates")
                 .update({
                     set("name", name)
@@ -235,58 +284,61 @@ class WorkoutRepositoryImpl @Inject constructor(
                     filter { eq("id", templateId) }
                 }
 
-            // Delete existing template exercises
             supabaseClient.postgrest.from("template_exercises")
                 .delete {
                     filter { eq("template_id", templateId) }
                 }
 
-            // Insert new template exercises one by one with error handling
             exercises.forEachIndexed { index, exercise ->
-                try {
-                    val exerciseDto = TemplateExerciseDto(
-                        templateId = templateId,
-                        exerciseId = exercise.exercise.id,
-                        orderIndex = index,
-                        sets = exercise.sets,
-                        reps = exercise.reps,
-                        restSeconds = exercise.restSeconds
-                    )
-                    supabaseClient.postgrest.from("template_exercises").insert(exerciseDto)
-                } catch (insertError: Exception) {
-                    Log.e("WorkoutRepository", "Failed to insert exercise ${exercise.exercise.id}: ${insertError.message}", insertError)
-                    throw insertError
-                }
+                val exerciseDto = TemplateExerciseDto(
+                    templateId = templateId,
+                    exerciseId = exercise.exercise.id,
+                    orderIndex = index,
+                    sets = exercise.sets,
+                    reps = exercise.reps,
+                    restSeconds = exercise.restSeconds
+                )
+                supabaseClient.postgrest.from("template_exercises").insert(exerciseDto)
             }
 
-            Log.d("WorkoutRepository", "Synced template update to Supabase: $templateId with ${exercises.size} exercises")
+            Log.d(TAG, "Updated template on Supabase: $templateId")
+            
+            // Cache locally after successful remote update
+            val existingTemplate = workoutTemplateDao.getTemplateById(templateId)
+            if (existingTemplate != null) {
+                val updatedEntity = existingTemplate.copy(name = name, updatedAt = now)
+                workoutTemplateDao.updateTemplate(updatedEntity)
+            }
+
+            templateExerciseDao.deleteExercisesByTemplate(templateId)
+            exercises.forEachIndexed { index, exercise ->
+                val templateExerciseEntity = com.diajarkoding.imfit.data.local.entity.TemplateExerciseEntity(
+                    templateId = templateId,
+                    exerciseId = exercise.exercise.id,
+                    orderIndex = index,
+                    sets = exercise.sets,
+                    reps = exercise.reps,
+                    restSeconds = exercise.restSeconds
+                )
+                templateExerciseDao.insertTemplateExercise(templateExerciseEntity)
+            }
+            
+            Log.d(TAG, "Cached template update locally: $templateId")
         } catch (e: Exception) {
-            Log.e("WorkoutRepository", "Failed to sync template update to Supabase: ${e.message}", e)
+            Log.e(TAG, "Failed to update template on Supabase: ${e.message}", e)
+            throw NetworkOperationException("Failed to update template. Please check your connection.", e)
         }
 
-        return getTemplateById(templateId)
+        return getTemplateByIdFromCache(templateId)
     }
 
     override suspend fun updateTemplateExercises(templateId: String, exercises: List<TemplateExercise>): WorkoutTemplate? {
-        val template = getTemplateById(templateId) ?: return null
+        val template = getTemplateByIdFromCache(templateId) ?: return null
         return updateTemplate(templateId, template.name, exercises)
     }
 
     override suspend fun updateTemplateExercise(templateId: String, exerciseId: String, sets: Int, reps: Int, restSeconds: Int): WorkoutTemplate? {
-        // Update local database first
-        val existingExercise = templateExerciseDao.getTemplateExercise(templateId, exerciseId)
-        if (existingExercise != null) {
-            val updatedExercise = existingExercise.copy(
-                sets = sets,
-                reps = reps,
-                restSeconds = restSeconds,
-                updatedAt = System.currentTimeMillis()
-            )
-            templateExerciseDao.updateTemplateExercise(updatedExercise)
-            Log.d("WorkoutRepository", "Updated exercise locally: $exerciseId in template $templateId")
-        }
-
-        // Try to sync to Supabase
+        // Online-first: Update on Supabase first
         try {
             supabaseClient.postgrest.from("template_exercises")
                 .update({
@@ -299,43 +351,61 @@ class WorkoutRepositoryImpl @Inject constructor(
                         eq("exercise_id", exerciseId)
                     }
                 }
-            Log.d("WorkoutRepository", "Synced exercise update to Supabase")
+            Log.d(TAG, "Updated exercise on Supabase: $exerciseId")
+
+            // Cache locally
+            val existingExercise = templateExerciseDao.getTemplateExercise(templateId, exerciseId)
+            if (existingExercise != null) {
+                val updatedExercise = existingExercise.copy(
+                    sets = sets,
+                    reps = reps,
+                    restSeconds = restSeconds,
+                    updatedAt = System.currentTimeMillis()
+                )
+                templateExerciseDao.updateTemplateExercise(updatedExercise)
+            }
         } catch (e: Exception) {
-            Log.e("WorkoutRepository", "Failed to sync exercise update: ${e.message}", e)
+            Log.e(TAG, "Failed to update exercise on Supabase: ${e.message}", e)
+            throw NetworkOperationException("Failed to update exercise. Please check your connection.", e)
         }
 
-        return getTemplateById(templateId)
+        return getTemplateByIdFromCache(templateId)
     }
 
     override suspend fun deleteTemplate(templateId: String): Boolean {
-        // Mark as deleted in local first
-        val existingTemplate = workoutTemplateDao.getTemplateById(templateId)
-        if (existingTemplate != null) {
-            val updatedTemplate = existingTemplate.copy(
-                isDeleted = true,
-                updatedAt = System.currentTimeMillis()
-            )
-            workoutTemplateDao.updateTemplate(updatedTemplate)
-            Log.d("WorkoutRepository", "Marked template as deleted locally: $templateId")
-        }
-
-        // Try to sync to Supabase
-        return try {
+        // Online-first: Delete on Supabase first
+        try {
             supabaseClient.postgrest.from("workout_templates")
                 .update({
                     set("is_deleted", true)
                 }) {
                     filter { eq("id", templateId) }
                 }
-            Log.d("WorkoutRepository", "Synced template deletion to Supabase")
-            true
+            Log.d(TAG, "Deleted template on Supabase: $templateId")
+
+            // Cache locally
+            val existingTemplate = workoutTemplateDao.getTemplateById(templateId)
+            if (existingTemplate != null) {
+                val updatedTemplate = existingTemplate.copy(
+                    isDeleted = true,
+                    updatedAt = System.currentTimeMillis()
+                )
+                workoutTemplateDao.updateTemplate(updatedTemplate)
+            }
+            
+            return true
         } catch (e: Exception) {
-            Log.e("WorkoutRepository", "Failed to sync template deletion: ${e.message}", e)
-            true // Return true since local delete succeeded
+            Log.e(TAG, "Failed to delete template on Supabase: ${e.message}", e)
+            throw NetworkOperationException("Failed to delete template. Please check your connection.", e)
         }
     }
 
+    // ==================== ACTIVE WORKOUT SESSION ====================
+
     override suspend fun startWorkout(template: WorkoutTemplate): WorkoutSession {
+        // Get default rest timer from preferences
+        val defaultRestSeconds = workoutPreferences.getDefaultRestTimerSeconds()
+        
         val exerciseLogs = template.exercises.map { templateExercise ->
             ExerciseLog(
                 exercise = templateExercise.exercise,
@@ -347,7 +417,7 @@ class WorkoutRepositoryImpl @Inject constructor(
                         isCompleted = false
                     )
                 },
-                restSeconds = templateExercise.restSeconds
+                restSeconds = defaultRestSeconds ?: templateExercise.restSeconds
             )
         }
         
@@ -620,37 +690,150 @@ class WorkoutRepositoryImpl @Inject constructor(
         }
     }
 
-    override suspend fun getWorkoutLogs(userId: String): List<WorkoutLog> {
-        return try {
-            val localLogs = workoutLogDao.getWorkoutLogsByUserList(userId)
+    // ==================== WORKOUT LOGS (Online-First) ====================
 
-            localLogs.map { logEntity ->
-                mapWorkoutLogEntityToDomain(logEntity)
-            }
+    override suspend fun getWorkoutLogs(userId: String): List<WorkoutLog> {
+        // Online-first: Try to fetch from Supabase first
+        return try {
+            val remoteLogs = fetchWorkoutLogsFromSupabase(userId)
+            
+            // Cache to local database
+            cacheWorkoutLogs(remoteLogs, userId)
+            
+            Log.d(TAG, "Fetched ${remoteLogs.size} workout logs from Supabase")
+            remoteLogs
         } catch (e: Exception) {
-            Log.e("WorkoutRepository", "Error fetching workout logs from local: ${e.message}", e)
-            emptyList()
+            Log.w(TAG, "Failed to fetch workout logs from Supabase, using cache: ${e.message}")
+            // Fallback to local cache
+            getWorkoutLogsFromCache(userId)
         }
     }
 
+    private suspend fun fetchWorkoutLogsFromSupabase(userId: String): List<WorkoutLog> {
+        val response = supabaseClient.postgrest
+            .from("workout_logs")
+            .select(Columns.raw("*, exercise_logs(*, exercises(*), workout_sets(*))")) {
+                filter {
+                    eq("user_id", userId)
+                }
+                order("date", io.github.jan.supabase.postgrest.query.Order.DESCENDING)
+            }
+            .decodeList<WorkoutLogDto>()
+        
+        // Filter out deleted logs (deleted_at is not null) on client side
+        return response.filter { it.deletedAt == null }.map { it.toDomain() }
+    }
+
+    private suspend fun cacheWorkoutLogs(logs: List<WorkoutLog>, userId: String) {
+        // Clear existing workout logs for this user and insert fresh data
+        workoutLogDao.deleteWorkoutLogsByUser(userId)
+        
+        logs.forEach { log ->
+            val logEntity = com.diajarkoding.imfit.data.local.entity.WorkoutLogEntity(
+                id = log.id,
+                userId = log.userId,
+                templateId = null,
+                templateName = log.templateName,
+                date = log.date,
+                startTime = log.startTime,
+                endTime = log.endTime,
+                totalVolume = log.totalVolume,
+                totalSets = log.exerciseLogs.sumOf { it.sets.count { s -> s.isCompleted } },
+                totalReps = log.exerciseLogs.sumOf { el -> el.sets.filter { s -> s.isCompleted }.sumOf { s -> s.reps } }
+            )
+            workoutLogDao.insertWorkoutLog(logEntity)
+            
+            log.exerciseLogs.forEachIndexed { index, exerciseLog ->
+                val exerciseLogId = UUID.randomUUID().toString()
+                val exerciseLogEntity = com.diajarkoding.imfit.data.local.entity.ExerciseLogEntity(
+                    id = exerciseLogId,
+                    workoutLogId = log.id,
+                    exerciseId = exerciseLog.exercise.id,
+                    exerciseName = exerciseLog.exercise.name,
+                    muscleCategory = exerciseLog.exercise.muscleCategory.name,
+                    orderIndex = index,
+                    totalVolume = exerciseLog.totalVolume,
+                    totalSets = exerciseLog.sets.count { it.isCompleted },
+                    totalReps = exerciseLog.sets.filter { it.isCompleted }.sumOf { it.reps }
+                )
+                exerciseLogDao.insertExerciseLog(exerciseLogEntity)
+                
+                exerciseLog.sets.forEach { set ->
+                    val setEntity = com.diajarkoding.imfit.data.local.entity.WorkoutSetEntity(
+                        id = UUID.randomUUID().toString(),
+                        exerciseLogId = exerciseLogId,
+                        workoutLogId = log.id,
+                        exerciseId = exerciseLog.exercise.id,
+                        setNumber = set.setNumber,
+                        weight = set.weight,
+                        reps = set.reps,
+                        isCompleted = set.isCompleted
+                    )
+                    workoutSetDao.insertWorkoutSet(setEntity)
+                }
+            }
+        }
+    }
+
+    private suspend fun getWorkoutLogsFromCache(userId: String): List<WorkoutLog> {
+        val localLogs = workoutLogDao.getWorkoutLogsByUserList(userId)
+        return localLogs.map { logEntity -> mapWorkoutLogEntityToDomain(logEntity) }
+    }
+
     override suspend fun getWorkoutLogById(logId: String): WorkoutLog? {
+        // Try remote first, fallback to cache
         return try {
+            val response = supabaseClient.postgrest
+                .from("workout_logs")
+                .select(Columns.raw("*, exercise_logs(*, exercises(*), workout_sets(*))")) {
+                    filter { eq("id", logId) }
+                }
+                .decodeSingleOrNull<WorkoutLogDto>()
+            
+            response?.toDomain()
+        } catch (e: Exception) {
+            Log.w(TAG, "Failed to fetch workout log from Supabase, using cache: ${e.message}")
             val logEntity = workoutLogDao.getWorkoutLogById(logId) ?: return null
             mapWorkoutLogEntityToDomain(logEntity)
-        } catch (e: Exception) {
-            Log.e("WorkoutRepository", "Error fetching workout log from local: ${e.message}", e)
-            null
         }
     }
 
     override suspend fun getLastWorkoutLog(userId: String): WorkoutLog? {
+        // Try remote first, fallback to cache
         return try {
+            val response = supabaseClient.postgrest
+                .from("workout_logs")
+                .select(Columns.raw("*, exercise_logs(*, exercises(*), workout_sets(*))")) {
+                    filter {
+                        eq("user_id", userId)
+                    }
+                    order("date", io.github.jan.supabase.postgrest.query.Order.DESCENDING)
+                }
+                .decodeList<WorkoutLogDto>()
+            
+            // Filter out deleted logs and get the first one
+            response.filter { it.deletedAt == null }.firstOrNull()?.toDomain()
+        } catch (e: Exception) {
+            Log.w(TAG, "Failed to fetch last workout log from Supabase, using cache: ${e.message}")
             val logEntity = workoutLogDao.getLastWorkoutLog(userId) ?: return null
             mapWorkoutLogEntityToDomain(logEntity)
-        } catch (e: Exception) {
-            Log.e("WorkoutRepository", "Error fetching last workout log from local: ${e.message}", e)
-            null
         }
+    }
+
+    // ==================== REST TIMER PREFERENCES ====================
+
+    override suspend fun setDefaultRestTimer(seconds: Int) {
+        workoutPreferences.setDefaultRestTimerSeconds(seconds)
+        Log.d(TAG, "Saved default rest timer: $seconds seconds")
+    }
+
+    override suspend fun getDefaultRestTimer(): Int? {
+        return workoutPreferences.getDefaultRestTimerSeconds()
+    }
+
+    override suspend fun clearDefaultRestTimer() {
+        workoutPreferences.clearDefaultRestTimer()
+        Log.d(TAG, "Cleared default rest timer")
     }
 
     /**
@@ -766,12 +949,14 @@ class WorkoutRepositoryImpl @Inject constructor(
             val lastSets = workoutSetDao.getLastWorkoutSetsForExercise(exerciseId, userId)
             lastSets.associate { it.setNumber to it.weight }
         } catch (e: Exception) {
-            Log.e("WorkoutRepository", "Error getting last weights for exercise: ${e.message}", e)
+            Log.e(TAG, "Error getting last weights for exercise: ${e.message}", e)
             emptyMap()
         }
     }
 
     companion object {
+        private const val TAG = "WorkoutRepository"
+        
         /**
          * Validates if a string is a valid UUID format
          */

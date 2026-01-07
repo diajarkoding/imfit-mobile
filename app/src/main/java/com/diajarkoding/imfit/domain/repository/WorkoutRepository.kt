@@ -33,4 +33,9 @@ interface WorkoutRepository {
     
     // Last Known Weight operations
     suspend fun getLastWeightsForExercise(exerciseId: String, userId: String): Map<Int, Float>
+
+    // Rest Timer Preferences
+    suspend fun setDefaultRestTimer(seconds: Int)
+    suspend fun getDefaultRestTimer(): Int?
+    suspend fun clearDefaultRestTimer()
 }

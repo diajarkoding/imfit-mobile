@@ -260,6 +260,17 @@ fun ActiveWorkoutScreen(
         }
     }
 
+    // Show finish error via snackbar
+    LaunchedEffect(state.finishError) {
+        state.finishError?.let { error ->
+            coroutineScope.launch {
+                snackbarHostState.showSnackbar(error)
+                viewModel.clearFinishError()
+            }
+        }
+    }
+
+
     LaunchedEffect(templateId) {
         viewModel.startWorkout(templateId)
     }

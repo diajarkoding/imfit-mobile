@@ -154,7 +154,10 @@ fun NavGraph(
                 onNavigateToEdit = { id ->
                     navController.navigate(Routes.editWorkout(id))
                 },
-                selectedExercises = selectedExercises
+                selectedExercises = selectedExercises,
+                onClearSelectedExercises = {
+                    backStackEntry.savedStateHandle.remove<List<com.diajarkoding.imfit.domain.model.Exercise>>("selected_exercises")
+                }
             )
         }
 

@@ -28,12 +28,17 @@ import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Scaffold
+import androidx.compose.material3.SnackbarHost
+import androidx.compose.material3.SnackbarHostState
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -62,6 +67,7 @@ import java.time.LocalDate
 import java.time.YearMonth
 import java.time.format.TextStyle
 import java.util.Locale
+import kotlinx.coroutines.launch
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -72,103 +78,121 @@ fun ProgressScreen(
     viewModel: ProgressViewModel = hiltViewModel()
 ) {
     val state by viewModel.state.collectAsState()
+    val snackbarHostState = remember { SnackbarHostState() }
+    val scope = rememberCoroutineScope()
 
     LaunchedEffect(Unit) {
         viewModel.loadData()
     }
 
-    LazyColumn(
-        modifier = Modifier.fillMaxSize(),
-        contentPadding = PaddingValues(IMFITSpacing.screenHorizontal),
-        verticalArrangement = Arrangement.spacedBy(IMFITSpacing.lg)
-    ) {
-        if (state.isLoading) {
-            item {
-                Spacer(modifier = Modifier.height(IMFITSpacing.sm))
-                ShimmerProfileHeader()
-            }
-            item {
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(IMFITSpacing.md)
-                ) {
-                    Card(
-                        modifier = Modifier.weight(1f),
-                        shape = IMFITShapes.Card,
-                        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
-                    ) {
-                        Column(
-                            modifier = Modifier.padding(IMFITSpacing.cardPadding),
-                            horizontalAlignment = Alignment.CenterHorizontally
-                        ) {
-                            ShimmerBox(width = 40.dp, height = 40.dp, shape = RoundedCornerShape(12.dp))
-                            Spacer(modifier = Modifier.height(IMFITSpacing.sm))
-                            ShimmerBox(width = 60.dp, height = 18.dp)
-                            Spacer(modifier = Modifier.height(IMFITSpacing.xxs))
-                            ShimmerBox(width = 80.dp, height = 12.dp)
-                        }
-                    }
-                    Card(
-                        modifier = Modifier.weight(1f),
-                        shape = IMFITShapes.Card,
-                        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
-                    ) {
-                        Column(
-                            modifier = Modifier.padding(IMFITSpacing.cardPadding),
-                            horizontalAlignment = Alignment.CenterHorizontally
-                        ) {
-                            ShimmerBox(width = 40.dp, height = 40.dp, shape = RoundedCornerShape(12.dp))
-                            Spacer(modifier = Modifier.height(IMFITSpacing.sm))
-                            ShimmerBox(width = 60.dp, height = 18.dp)
-                            Spacer(modifier = Modifier.height(IMFITSpacing.xxs))
-                            ShimmerBox(width = 80.dp, height = 12.dp)
-                        }
-                    }
-                }
-            }
-            item { ShimmerCalendarCard() }
-        } else {
-            item {
-                Spacer(modifier = Modifier.height(IMFITSpacing.sm))
-                ProfileHeader(
-                    name = state.userName,
-                    email = state.userEmail,
-                    profilePhotoUri = state.userProfilePhotoUri,
-                    onProfileClick = onNavigateToProfile
-                )
-            }
-
-            item {
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(IMFITSpacing.md)
-                ) {
-                    StatCard(
-                        icon = Icons.Default.FitnessCenter,
-                        title = stringResource(R.string.progress_total_volume),
-                        value = "${state.totalVolume.toInt()} kg",
-                        modifier = Modifier.weight(1f)
-                    )
-                    StatCard(
-                        icon = Icons.Default.Schedule,
-                        title = stringResource(R.string.progress_weekly_time),
-                        value = "${state.weeklyWorkoutTimeMinutes} min",
-                        modifier = Modifier.weight(1f)
-                    )
-                }
-            }
-
-            item {
-                WorkoutCalendar(
-                    workoutDates = state.workoutDates,
-                    onDateSelected = onNavigateToWorkoutHistory,
-                    onNavigateToYearlyCalendar = onNavigateToYearlyCalendar
-                )
+    // Show error via snackbar
+    LaunchedEffect(state.error) {
+        state.error?.let { error ->
+            scope.launch {
+                snackbarHostState.showSnackbar(error)
+                viewModel.clearError()
             }
         }
+    }
 
-        item {
-            Spacer(modifier = Modifier.height(IMFITSpacing.huge))
+    Scaffold(
+        snackbarHost = { SnackbarHost(hostState = snackbarHostState) }
+    ) { padding ->
+        LazyColumn(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(padding),
+            contentPadding = PaddingValues(IMFITSpacing.screenHorizontal),
+            verticalArrangement = Arrangement.spacedBy(IMFITSpacing.lg)
+        ) {
+            if (state.isLoading) {
+                item {
+                    Spacer(modifier = Modifier.height(IMFITSpacing.sm))
+                    ShimmerProfileHeader()
+                }
+                item {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(IMFITSpacing.md)
+                    ) {
+                        Card(
+                            modifier = Modifier.weight(1f),
+                            shape = IMFITShapes.Card,
+                            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
+                        ) {
+                            Column(
+                                modifier = Modifier.padding(IMFITSpacing.cardPadding),
+                                horizontalAlignment = Alignment.CenterHorizontally
+                            ) {
+                                ShimmerBox(width = 40.dp, height = 40.dp, shape = RoundedCornerShape(12.dp))
+                                Spacer(modifier = Modifier.height(IMFITSpacing.sm))
+                                ShimmerBox(width = 60.dp, height = 18.dp)
+                                Spacer(modifier = Modifier.height(IMFITSpacing.xxs))
+                                ShimmerBox(width = 80.dp, height = 12.dp)
+                            }
+                        }
+                        Card(
+                            modifier = Modifier.weight(1f),
+                            shape = IMFITShapes.Card,
+                            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
+                        ) {
+                            Column(
+                                modifier = Modifier.padding(IMFITSpacing.cardPadding),
+                                horizontalAlignment = Alignment.CenterHorizontally
+                            ) {
+                                ShimmerBox(width = 40.dp, height = 40.dp, shape = RoundedCornerShape(12.dp))
+                                Spacer(modifier = Modifier.height(IMFITSpacing.sm))
+                                ShimmerBox(width = 60.dp, height = 18.dp)
+                                Spacer(modifier = Modifier.height(IMFITSpacing.xxs))
+                                ShimmerBox(width = 80.dp, height = 12.dp)
+                            }
+                        }
+                    }
+                }
+                item { ShimmerCalendarCard() }
+            } else {
+                item {
+                    Spacer(modifier = Modifier.height(IMFITSpacing.sm))
+                    ProfileHeader(
+                        name = state.userName,
+                        email = state.userEmail,
+                        profilePhotoUri = state.userProfilePhotoUri,
+                        onProfileClick = onNavigateToProfile
+                    )
+                }
+
+                item {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(IMFITSpacing.md)
+                    ) {
+                        StatCard(
+                            icon = Icons.Default.FitnessCenter,
+                            title = stringResource(R.string.progress_total_volume),
+                            value = "${state.totalVolume.toInt()} kg",
+                            modifier = Modifier.weight(1f)
+                        )
+                        StatCard(
+                            icon = Icons.Default.Schedule,
+                            title = stringResource(R.string.progress_weekly_time),
+                            value = "${state.weeklyWorkoutTimeMinutes} min",
+                            modifier = Modifier.weight(1f)
+                        )
+                    }
+                }
+
+                item {
+                    WorkoutCalendar(
+                        workoutDates = state.workoutDates,
+                        onDateSelected = onNavigateToWorkoutHistory,
+                        onNavigateToYearlyCalendar = onNavigateToYearlyCalendar
+                    )
+                }
+            }
+
+            item {
+                Spacer(modifier = Modifier.height(IMFITSpacing.huge))
+            }
         }
     }
 }

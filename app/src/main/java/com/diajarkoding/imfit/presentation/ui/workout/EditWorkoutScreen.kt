@@ -41,6 +41,8 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.SnackbarHost
+import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.SwipeToDismissBox
 import androidx.compose.material3.SwipeToDismissBoxValue
 import androidx.compose.material3.Text
@@ -53,6 +55,7 @@ import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -78,6 +81,7 @@ import com.diajarkoding.imfit.theme.IMFITSpacing
 import com.diajarkoding.imfit.theme.Primary
 import com.diajarkoding.imfit.theme.PrimaryLight
 import com.diajarkoding.imfit.theme.SetComplete
+import kotlinx.coroutines.launch
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -87,9 +91,21 @@ fun EditWorkoutScreen(
     viewModel: EditWorkoutViewModel = hiltViewModel()
 ) {
     val state by viewModel.state.collectAsState()
+    val snackbarHostState = remember { SnackbarHostState() }
+    val scope = rememberCoroutineScope()
 
     LaunchedEffect(Unit) {
         viewModel.loadWorkout()
+    }
+
+    // Show error via snackbar
+    LaunchedEffect(state.error) {
+        state.error?.let { error ->
+            scope.launch {
+                snackbarHostState.showSnackbar(error)
+                viewModel.clearError()
+            }
+        }
     }
 
     LaunchedEffect(state.isSaved) {
@@ -100,6 +116,7 @@ fun EditWorkoutScreen(
 
     Scaffold(
         contentWindowInsets = WindowInsets(0),
+        snackbarHost = { SnackbarHost(hostState = snackbarHostState) },
         topBar = {
             TopAppBar(
                 modifier = Modifier.windowInsetsPadding(WindowInsets.statusBars),
@@ -218,8 +235,8 @@ fun EditWorkoutScreen(
                 IMFITButton(
                     text = stringResource(R.string.action_save_changes),
                     onClick = { viewModel.saveChanges() },
-                    enabled = state.workoutName.isNotBlank() && !state.isLoading,
-                    isLoading = state.isLoading,
+                    enabled = state.workoutName.isNotBlank() && !state.isSaving,
+                    isLoading = state.isSaving,
                     icon = Icons.Default.Check
                 )
             }

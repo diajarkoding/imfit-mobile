@@ -3,6 +3,7 @@ package com.diajarkoding.imfit.presentation.ui.workout
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -32,6 +33,7 @@ import androidx.compose.material.icons.filled.Schedule
 import androidx.compose.material.icons.filled.Stop
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -97,6 +99,7 @@ fun WorkoutDetailScreen(
     onStartWorkout: (String) -> Unit,
     onNavigateToEdit: (String) -> Unit = {},
     selectedExercises: List<Exercise>? = null,
+    onClearSelectedExercises: () -> Unit = {},
     viewModel: WorkoutDetailViewModel = hiltViewModel()
 ) {
     val state by viewModel.state.collectAsState()
@@ -105,17 +108,37 @@ fun WorkoutDetailScreen(
     val scope = rememberCoroutineScope()
     val activeWorkoutWarning = stringResource(R.string.warning_workout_active)
     val cannotStartWorkoutWarning = stringResource(R.string.warning_cannot_start_workout)
+    
+    // Track if exercises have been added to prevent duplicate additions
+    var exercisesAdded by remember { mutableStateOf(false) }
 
-    LaunchedEffect(selectedExercises) {
-        selectedExercises?.let { exercises ->
-            if (exercises.isNotEmpty()) {
-                viewModel.addExercises(exercises)
+    // Show error via snackbar
+    LaunchedEffect(state.error) {
+        state.error?.let { error ->
+            scope.launch {
+                snackbarHostState.showSnackbar(error)
+                viewModel.clearError()
             }
         }
     }
 
+
     LaunchedEffect(Unit) {
         viewModel.loadWorkout()
+    }
+
+    // Add exercises after workout is loaded
+    LaunchedEffect(selectedExercises, state.workout, state.isLoading) {
+        if (state.workout != null && !state.isLoading && !exercisesAdded) {
+            selectedExercises?.let { exercises ->
+                if (exercises.isNotEmpty()) {
+                    exercisesAdded = true
+                    viewModel.addExercises(exercises)
+                    // Clear the selected exercises from savedStateHandle
+                    onClearSelectedExercises()
+                }
+            }
+        }
     }
 
     LaunchedEffect(state.workoutFinished) {
@@ -355,6 +378,40 @@ fun WorkoutDetailScreen(
                     .align(Alignment.BottomCenter)
                     .padding(bottom = 100.dp)
             )
+
+            // Loading overlay for updating/deleting operations
+            if (state.isUpdating || state.isDeleting) {
+                Box(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .background(Color.Black.copy(alpha = 0.3f))
+                        .clickable(enabled = false) { },
+                    contentAlignment = Alignment.Center
+                ) {
+                    Card(
+                        shape = IMFITShapes.Card,
+                        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+                        elevation = CardDefaults.cardElevation(defaultElevation = 8.dp)
+                    ) {
+                        Row(
+                            modifier = Modifier.padding(IMFITSpacing.xl),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(IMFITSpacing.lg)
+                        ) {
+                            CircularProgressIndicator(
+                                modifier = Modifier.size(24.dp),
+                                strokeWidth = 2.dp,
+                                color = Primary
+                            )
+                            Text(
+                                text = if (state.isDeleting) "Deleting..." else "Updating...",
+                                style = MaterialTheme.typography.bodyMedium,
+                                fontWeight = FontWeight.Medium
+                            )
+                        }
+                    }
+                }
+            }
         }
     }
 }

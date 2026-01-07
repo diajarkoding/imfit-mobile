@@ -193,8 +193,10 @@ class ActiveWorkoutViewModel @Inject constructor(
             updatedExerciseLogs[exerciseIndex] = exerciseLog.copy(restSeconds = seconds)
             
             val updatedSession = currentSession.copy(exerciseLogs = updatedExerciseLogs)
-            workoutRepository.updateActiveSession(updatedSession)
+            // Update UI immediately
             _state.update { it.copy(session = updatedSession) }
+            // Persist in background
+            workoutRepository.updateActiveSession(updatedSession)
         }
     }
 
@@ -212,8 +214,10 @@ class ActiveWorkoutViewModel @Inject constructor(
             updatedExerciseLogs[exerciseIndex] = exerciseLog.copy(sets = updatedSets)
 
             val updatedSession = currentSession.copy(exerciseLogs = updatedExerciseLogs)
-            workoutRepository.updateActiveSession(updatedSession)
+            // Update UI immediately
             _state.update { it.copy(session = updatedSession) }
+            // Persist in background
+            workoutRepository.updateActiveSession(updatedSession)
         }
     }
 
@@ -236,14 +240,16 @@ class ActiveWorkoutViewModel @Inject constructor(
             updatedExerciseLogs[exerciseIndex] = exerciseLog.copy(sets = updatedSets)
 
             val updatedSession = currentSession.copy(exerciseLogs = updatedExerciseLogs)
-            workoutRepository.updateActiveSession(updatedSession)
+            // Update UI immediately
             _state.update { it.copy(session = updatedSession) }
+            // Persist in background
+            workoutRepository.updateActiveSession(updatedSession)
 
             // Start rest timer
-            val restSeconds = _state.value.sessionRestOverride 
-                ?: _state.value.session?.getRestSecondsForExercise(exerciseIndex) 
+            val restSeconds = _state.value.sessionRestOverride
+                ?: updatedSession.getRestSecondsForExercise(exerciseIndex)
                 ?: 60
-            val exerciseName = _state.value.session?.exerciseLogs?.getOrNull(exerciseIndex)?.exercise?.name
+            val exerciseName = updatedSession.exerciseLogs.getOrNull(exerciseIndex)?.exercise?.name
             
             _state.update {
                 it.copy(
@@ -271,8 +277,10 @@ class ActiveWorkoutViewModel @Inject constructor(
             updatedExerciseLogs[exerciseIndex] = exerciseLog.copy(sets = updatedSets)
 
             val updatedSession = currentSession.copy(exerciseLogs = updatedExerciseLogs)
-            workoutRepository.updateActiveSession(updatedSession)
+            // Update UI immediately
             _state.update { it.copy(session = updatedSession) }
+            // Persist in background
+            workoutRepository.updateActiveSession(updatedSession)
         }
     }
 
@@ -293,8 +301,10 @@ class ActiveWorkoutViewModel @Inject constructor(
             updatedExerciseLogs[exerciseIndex] = exerciseLog.copy(sets = renumberedSets)
 
             val updatedSession = currentSession.copy(exerciseLogs = updatedExerciseLogs)
-            workoutRepository.updateActiveSession(updatedSession)
+            // Update UI immediately
             _state.update { it.copy(session = updatedSession) }
+            // Persist in background
+            workoutRepository.updateActiveSession(updatedSession)
         }
     }
 
@@ -353,8 +363,10 @@ class ActiveWorkoutViewModel @Inject constructor(
                 lastPauseTime = pauseStartTime
             )
             
-            workoutRepository.updateActiveSession(updatedSession)
+            // Update UI immediately
             _state.update { it.copy(session = updatedSession, isPaused = true) }
+            // Persist in background
+            workoutRepository.updateActiveSession(updatedSession)
             
             android.util.Log.d("ActiveWorkoutVM", "Workout paused at $pauseStartTime")
         }
@@ -378,8 +390,10 @@ class ActiveWorkoutViewModel @Inject constructor(
                 totalPausedTimeMs = currentSession.totalPausedTimeMs + pauseDuration
             )
             
-            workoutRepository.updateActiveSession(updatedSession)
+            // Update UI immediately
             _state.update { it.copy(session = updatedSession, isPaused = false) }
+            // Persist in background
+            workoutRepository.updateActiveSession(updatedSession)
             
             android.util.Log.d("ActiveWorkoutVM", "Workout resumed. Pause duration: ${pauseDuration}ms, Total paused: ${updatedSession.totalPausedTimeMs}ms")
         }

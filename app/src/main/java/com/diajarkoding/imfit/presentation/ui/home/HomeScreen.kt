@@ -41,6 +41,8 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.SnackbarHost
+import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
@@ -51,6 +53,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -76,6 +79,7 @@ import com.diajarkoding.imfit.theme.IMFITSpacing
 import com.diajarkoding.imfit.theme.Primary
 import com.diajarkoding.imfit.theme.PrimaryLight
 import com.diajarkoding.imfit.theme.SetComplete
+import kotlinx.coroutines.launch
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -87,9 +91,29 @@ fun HomeScreen(
     val state by viewModel.state.collectAsState()
     var showAddDayDialog by remember { mutableStateOf(false) }
     var newDayName by remember { mutableStateOf("") }
+    val snackbarHostState = remember { SnackbarHostState() }
+    val scope = rememberCoroutineScope()
 
     LaunchedEffect(Unit) {
         viewModel.refresh()
+    }
+
+    // Show error via snackbar
+    LaunchedEffect(state.error) {
+        state.error?.let { error ->
+            scope.launch {
+                snackbarHostState.showSnackbar(error)
+                viewModel.clearError()
+            }
+        }
+    }
+
+    // Close dialog when workout is created successfully
+    LaunchedEffect(state.workoutCreatedSuccessfully) {
+        if (state.workoutCreatedSuccessfully) {
+            showAddDayDialog = false
+            newDayName = ""
+        }
     }
 
     LaunchedEffect(state.newlyCreatedWorkoutId) {
@@ -110,12 +134,11 @@ fun HomeScreen(
             icon = Icons.Default.Add,
             confirmText = stringResource(R.string.action_create),
             dismissText = stringResource(R.string.action_cancel),
-            confirmEnabled = newDayName.isNotBlank(),
+            confirmEnabled = newDayName.isNotBlank() && !state.isCreating,
+            isLoading = state.isCreating,
             onConfirm = {
-                if (newDayName.isNotBlank()) {
+                if (newDayName.isNotBlank() && !state.isCreating) {
                     viewModel.createWorkout(newDayName)
-                    showAddDayDialog = false
-                    newDayName = ""
                 }
             }
         ) {
@@ -174,6 +197,9 @@ fun HomeScreen(
                 ),
                 windowInsets = WindowInsets(0)
             )
+        },
+        snackbarHost = {
+            SnackbarHost(hostState = snackbarHostState)
         }
     ) { padding ->
         LazyColumn(

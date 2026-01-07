@@ -103,21 +103,24 @@ class WorkoutDetailViewModel @Inject constructor(
             
             if (newExercises.isEmpty()) return@launch
             
-            _state.update { it.copy(isUpdating = true, error = null) }
-            
             val templateExercises = newExercises.map { exercise ->
                 TemplateExercise(exercise = exercise)
             }
             val updatedExercises = currentWorkout.exercises + templateExercises
             
+            // Optimistic update - update UI immediately
+            val optimisticWorkout = currentWorkout.copy(exercises = updatedExercises)
+            _state.update { it.copy(workout = optimisticWorkout, isUpdating = true, error = null) }
+            
             try {
                 workoutRepository.updateTemplateExercises(workoutId, updatedExercises)
                 _state.update { it.copy(isUpdating = false) }
-                loadWorkout()
             } catch (e: Exception) {
                 Log.e("WorkoutDetailViewModel", "Failed to add exercises: ${e.message}", e)
+                // Revert to original state on error
                 _state.update { 
                     it.copy(
+                        workout = currentWorkout,
                         isUpdating = false, 
                         error = "Failed to add exercises. Please check your connection."
                     ) 
@@ -131,16 +134,19 @@ class WorkoutDetailViewModel @Inject constructor(
             val currentWorkout = _state.value.workout ?: return@launch
             val updatedExercises = currentWorkout.exercises.filter { it.id != templateExercise.id }
             
-            _state.update { it.copy(isUpdating = true, error = null) }
+            // Optimistic update - update UI immediately
+            val optimisticWorkout = currentWorkout.copy(exercises = updatedExercises)
+            _state.update { it.copy(workout = optimisticWorkout, isUpdating = true, error = null) }
             
             try {
                 workoutRepository.updateTemplateExercises(workoutId, updatedExercises)
                 _state.update { it.copy(isUpdating = false) }
-                loadWorkout()
             } catch (e: Exception) {
                 Log.e("WorkoutDetailViewModel", "Failed to remove exercise: ${e.message}", e)
+                // Revert to original state on error
                 _state.update { 
                     it.copy(
+                        workout = currentWorkout,
                         isUpdating = false, 
                         error = "Failed to remove exercise. Please check your connection."
                     ) 
@@ -151,16 +157,28 @@ class WorkoutDetailViewModel @Inject constructor(
 
     fun updateExerciseConfig(exerciseId: String, sets: Int, reps: Int, restSeconds: Int) {
         viewModelScope.launch {
-            _state.update { it.copy(isUpdating = true, error = null) }
+            val currentWorkout = _state.value.workout ?: return@launch
+            
+            // Optimistic update - update UI immediately
+            val updatedExercises = currentWorkout.exercises.map { exercise ->
+                if (exercise.exercise.id == exerciseId) {
+                    exercise.copy(sets = sets, reps = reps, restSeconds = restSeconds)
+                } else {
+                    exercise
+                }
+            }
+            val optimisticWorkout = currentWorkout.copy(exercises = updatedExercises)
+            _state.update { it.copy(workout = optimisticWorkout, isUpdating = true, error = null) }
             
             try {
                 workoutRepository.updateTemplateExercise(workoutId, exerciseId, sets, reps, restSeconds)
                 _state.update { it.copy(isUpdating = false) }
-                loadWorkout()
             } catch (e: Exception) {
                 Log.e("WorkoutDetailViewModel", "Failed to update exercise: ${e.message}", e)
+                // Revert to original state on error
                 _state.update { 
                     it.copy(
+                        workout = currentWorkout,
                         isUpdating = false, 
                         error = "Failed to update exercise. Please check your connection."
                     ) 

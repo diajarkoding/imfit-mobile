@@ -23,7 +23,8 @@ data class HomeState(
     val isCreating: Boolean = false,
     val error: String? = null,
     val newlyCreatedWorkoutId: String? = null,
-    val activeWorkoutTemplateId: String? = null
+    val activeWorkoutTemplateId: String? = null,
+    val workoutCreatedSuccessfully: Boolean = false
 )
 
 @HiltViewModel
@@ -123,7 +124,13 @@ class HomeViewModel @Inject constructor(
                     name = name,
                     exercises = emptyList()
                 )
-                _state.update { it.copy(newlyCreatedWorkoutId = newWorkout.id, isCreating = false) }
+                _state.update { 
+                    it.copy(
+                        newlyCreatedWorkoutId = newWorkout.id, 
+                        isCreating = false,
+                        workoutCreatedSuccessfully = true
+                    ) 
+                }
                 refresh()
             } catch (e: Exception) {
                 Log.e("HomeViewModel", "Failed to create workout: ${e.message}", e)
@@ -138,7 +145,7 @@ class HomeViewModel @Inject constructor(
     }
 
     fun clearNewlyCreatedWorkoutId() {
-        _state.update { it.copy(newlyCreatedWorkoutId = null) }
+        _state.update { it.copy(newlyCreatedWorkoutId = null, workoutCreatedSuccessfully = false) }
     }
 
     fun clearError() {

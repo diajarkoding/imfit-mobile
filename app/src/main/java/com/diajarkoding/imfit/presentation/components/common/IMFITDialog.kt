@@ -14,6 +14,7 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -179,6 +180,7 @@ fun IMFITInputDialog(
     confirmText: String = "Confirm",
     dismissText: String = "Cancel",
     confirmEnabled: Boolean = true,
+    isLoading: Boolean = false,
     onConfirm: () -> Unit,
     content: @Composable () -> Unit
 ) {
@@ -258,23 +260,35 @@ fun IMFITInputDialog(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.End
                 ) {
-                    TextButton(onClick = onDismissRequest) {
+                    TextButton(
+                        onClick = onDismissRequest,
+                        enabled = !isLoading
+                    ) {
                         Text(
                             text = dismissText,
                             fontWeight = FontWeight.Medium,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                            color = if (!isLoading) MaterialTheme.colorScheme.onSurfaceVariant 
+                                   else MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f)
                         )
                     }
                     Spacer(modifier = Modifier.width(IMFITSpacing.sm))
                     TextButton(
                         onClick = onConfirm,
-                        enabled = confirmEnabled
+                        enabled = confirmEnabled && !isLoading
                     ) {
-                        Text(
-                            text = confirmText,
-                            fontWeight = FontWeight.SemiBold,
-                            color = if (confirmEnabled) Primary else Primary.copy(alpha = 0.5f)
-                        )
+                        if (isLoading) {
+                            CircularProgressIndicator(
+                                modifier = Modifier.size(20.dp),
+                                strokeWidth = 2.dp,
+                                color = Primary
+                            )
+                        } else {
+                            Text(
+                                text = confirmText,
+                                fontWeight = FontWeight.SemiBold,
+                                color = if (confirmEnabled) Primary else Primary.copy(alpha = 0.5f)
+                            )
+                        }
                     }
                 }
             }

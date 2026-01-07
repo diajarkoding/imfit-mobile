@@ -41,7 +41,8 @@ android {
             buildConfigField("String", "SUPABASE_ANON_KEY", "\"$supabaseKey\"")
         }
         release {
-            isMinifyEnabled = false
+            isMinifyEnabled = true
+            isShrinkResources = true
             proguardFiles(
                 getDefaultProguardFile("proguard-android-optimize.txt"),
                 "proguard-rules.pro"
@@ -99,14 +100,6 @@ dependencies {
     kapt(libs.hilt.compiler)
     implementation(libs.androidx.hilt.navigation.compose)
 
-    // --- NETWORKING ---
-    implementation(libs.retrofit.core)
-    implementation(libs.retrofit.moshi)
-    implementation(libs.okhttp.logging)
-
-    // --- JSON PARSING ---
-    implementation(libs.moshi.kotlin)
-
     // --- IMAGE LOADING ---
     implementation(libs.coil.compose)
 
@@ -122,7 +115,6 @@ dependencies {
     implementation(libs.supabase.postgrest)
     implementation(libs.supabase.auth)
     implementation(libs.supabase.storage)
-    implementation(libs.supabase.realtime)
 
     // --- KTOR (for Supabase) ---
     implementation(libs.ktor.client.android)

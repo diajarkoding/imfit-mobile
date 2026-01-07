@@ -277,6 +277,134 @@ fun HomeScreen(
     }
 }
 
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun HomeScreenContent(
+    userName: String,
+    templates: List<WorkoutTemplate>,
+    lastWorkout: WorkoutLog?,
+    activeWorkoutTemplateId: String?,
+    isLoading: Boolean,
+    onNavigateToWorkoutDetail: (String) -> Unit,
+    onNavigateToActiveWorkout: (String) -> Unit,
+    onAddWorkoutClick: () -> Unit
+) {
+    Scaffold(
+        contentWindowInsets = WindowInsets(0),
+        topBar = {
+            TopAppBar(
+                title = {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Box(
+                            modifier = Modifier
+                                .size(40.dp)
+                                .clip(IMFITShapes.IconContainer)
+                                .background(
+                                    Brush.linearGradient(listOf(Primary, PrimaryLight))
+                                ),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.FitnessCenter,
+                                contentDescription = null,
+                                tint = MaterialTheme.colorScheme.onPrimary,
+                                modifier = Modifier.size(IMFITSizes.iconSm)
+                            )
+                        }
+                        Spacer(modifier = Modifier.width(IMFITSpacing.md))
+                        Text(
+                            text = stringResource(R.string.app_name),
+                            style = MaterialTheme.typography.titleLarge,
+                            fontWeight = FontWeight.Bold
+                        )
+                    }
+                },
+                colors = TopAppBarDefaults.topAppBarColors(
+                    containerColor = MaterialTheme.colorScheme.surface
+                ),
+                windowInsets = WindowInsets(0)
+            )
+        }
+    ) { padding ->
+        LazyColumn(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(padding),
+            contentPadding = PaddingValues(IMFITSpacing.screenHorizontal),
+            verticalArrangement = Arrangement.spacedBy(IMFITSpacing.lg)
+        ) {
+            if (isLoading) {
+                item {
+                    Spacer(modifier = Modifier.height(IMFITSpacing.xs))
+                    ShimmerWelcomeSection()
+                    Spacer(modifier = Modifier.height(IMFITSpacing.xs))
+                }
+                item { ShimmerStatCard() }
+                item {
+                    Spacer(modifier = Modifier.height(IMFITSpacing.sm))
+                    Text(
+                        text = stringResource(R.string.home_title_my_workouts),
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.Bold
+                    )
+                }
+                items(3, key = { it }) { ShimmerWorkoutCard() }
+                item { Spacer(modifier = Modifier.height(IMFITSpacing.huge)) }
+            } else {
+                item {
+                    Spacer(modifier = Modifier.height(IMFITSpacing.xs))
+                    WelcomeSection(userName = userName)
+                    Spacer(modifier = Modifier.height(IMFITSpacing.xs))
+                }
+
+                item {
+                    LastWorkoutCard(workout = lastWorkout)
+                }
+
+                item {
+                    Spacer(modifier = Modifier.height(IMFITSpacing.sm))
+                    Text(
+                        text = stringResource(R.string.home_title_my_workouts),
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.Bold
+                    )
+                }
+
+                if (templates.isEmpty()) {
+                    item {
+                        EmptyWorkoutCard(onClick = onAddWorkoutClick)
+                    }
+                } else {
+                    items(templates, key = { it.id }) { template ->
+                        val isActive = activeWorkoutTemplateId == template.id
+                        WorkoutCard(
+                            template = template,
+                            isActive = isActive,
+                            onClick = {
+                                if (isActive) {
+                                    onNavigateToActiveWorkout(template.id)
+                                } else {
+                                    onNavigateToWorkoutDetail(template.id)
+                                }
+                            }
+                        )
+                    }
+                }
+
+                item {
+                    Spacer(modifier = Modifier.height(IMFITSpacing.sm))
+                    IMFITButton(
+                        text = stringResource(R.string.action_add_workout),
+                        onClick = onAddWorkoutClick,
+                        icon = Icons.Default.Add
+                    )
+                    Spacer(modifier = Modifier.height(IMFITSpacing.huge))
+                }
+            }
+        }
+    }
+}
+
 @Composable
 private fun WelcomeSection(userName: String) {
     Column {
@@ -575,19 +703,54 @@ private fun EmptyWorkoutCard(onClick: () -> Unit) {
     }
 }
 
-@Preview(showBackground = true)
+@Preview(showBackground = true, showSystemUi = true)
 @Composable
 private fun HomeScreenPreviewLight() {
     com.diajarkoding.imfit.theme.IMFITTheme(darkTheme = false) {
-        EmptyWorkoutCard(onClick = {})
+        HomeScreenContent(
+            userName = "John",
+            templates = emptyList(),
+            lastWorkout = null,
+            activeWorkoutTemplateId = null,
+            isLoading = false,
+            onNavigateToWorkoutDetail = {},
+            onNavigateToActiveWorkout = {},
+            onAddWorkoutClick = {}
+        )
     }
 }
 
-@Preview(showBackground = true)
+@Preview(showBackground = true, showSystemUi = true)
 @Composable
 private fun HomeScreenPreviewDark() {
     com.diajarkoding.imfit.theme.IMFITTheme(darkTheme = true) {
-        EmptyWorkoutCard(onClick = {})
+        HomeScreenContent(
+            userName = "John",
+            templates = emptyList(),
+            lastWorkout = null,
+            activeWorkoutTemplateId = null,
+            isLoading = false,
+            onNavigateToWorkoutDetail = {},
+            onNavigateToActiveWorkout = {},
+            onAddWorkoutClick = {}
+        )
+    }
+}
+
+@Preview(showBackground = true, showSystemUi = true)
+@Composable
+private fun HomeScreenPreviewLoading() {
+    com.diajarkoding.imfit.theme.IMFITTheme(darkTheme = false) {
+        HomeScreenContent(
+            userName = "",
+            templates = emptyList(),
+            lastWorkout = null,
+            activeWorkoutTemplateId = null,
+            isLoading = true,
+            onNavigateToWorkoutDetail = {},
+            onNavigateToActiveWorkout = {},
+            onAddWorkoutClick = {}
+        )
     }
 }
 
@@ -596,13 +759,5 @@ private fun HomeScreenPreviewDark() {
 private fun LastWorkoutCardPreview() {
     com.diajarkoding.imfit.theme.IMFITTheme(darkTheme = false) {
         LastWorkoutCard(workout = null)
-    }
-}
-
-@Preview(showBackground = true)
-@Composable
-private fun WelcomeSectionPreview() {
-    com.diajarkoding.imfit.theme.IMFITTheme(darkTheme = false) {
-        WelcomeSection(userName = "John")
     }
 }

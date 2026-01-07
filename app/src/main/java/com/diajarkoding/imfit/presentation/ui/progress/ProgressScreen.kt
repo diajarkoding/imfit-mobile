@@ -174,6 +174,115 @@ fun ProgressScreen(
 }
 
 @Composable
+private fun ProgressScreenContent(
+    userName: String,
+    userEmail: String,
+    userProfilePhotoUri: String?,
+    totalVolume: Float,
+    weeklyWorkoutTimeMinutes: Int,
+    workoutDates: Set<LocalDate>,
+    isLoading: Boolean,
+    onNavigateToWorkoutHistory: (LocalDate) -> Unit,
+    onNavigateToYearlyCalendar: () -> Unit,
+    onNavigateToProfile: () -> Unit
+) {
+    LazyColumn(
+        modifier = Modifier.fillMaxSize(),
+        contentPadding = PaddingValues(IMFITSpacing.screenHorizontal),
+        verticalArrangement = Arrangement.spacedBy(IMFITSpacing.lg)
+    ) {
+        if (isLoading) {
+            item {
+                Spacer(modifier = Modifier.height(IMFITSpacing.sm))
+                ShimmerProfileHeader()
+            }
+            item {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(IMFITSpacing.md)
+                ) {
+                    Card(
+                        modifier = Modifier.weight(1f),
+                        shape = IMFITShapes.Card,
+                        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
+                    ) {
+                        Column(
+                            modifier = Modifier.padding(IMFITSpacing.cardPadding),
+                            horizontalAlignment = Alignment.CenterHorizontally
+                        ) {
+                            ShimmerBox(width = 40.dp, height = 40.dp, shape = RoundedCornerShape(12.dp))
+                            Spacer(modifier = Modifier.height(IMFITSpacing.sm))
+                            ShimmerBox(width = 60.dp, height = 18.dp)
+                            Spacer(modifier = Modifier.height(IMFITSpacing.xxs))
+                            ShimmerBox(width = 80.dp, height = 12.dp)
+                        }
+                    }
+                    Card(
+                        modifier = Modifier.weight(1f),
+                        shape = IMFITShapes.Card,
+                        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
+                    ) {
+                        Column(
+                            modifier = Modifier.padding(IMFITSpacing.cardPadding),
+                            horizontalAlignment = Alignment.CenterHorizontally
+                        ) {
+                            ShimmerBox(width = 40.dp, height = 40.dp, shape = RoundedCornerShape(12.dp))
+                            Spacer(modifier = Modifier.height(IMFITSpacing.sm))
+                            ShimmerBox(width = 60.dp, height = 18.dp)
+                            Spacer(modifier = Modifier.height(IMFITSpacing.xxs))
+                            ShimmerBox(width = 80.dp, height = 12.dp)
+                        }
+                    }
+                }
+            }
+            item { ShimmerCalendarCard() }
+        } else {
+            item {
+                Spacer(modifier = Modifier.height(IMFITSpacing.sm))
+                ProfileHeader(
+                    name = userName,
+                    email = userEmail,
+                    profilePhotoUri = userProfilePhotoUri,
+                    onProfileClick = onNavigateToProfile
+                )
+            }
+
+            item {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(IMFITSpacing.md)
+                ) {
+                    StatCard(
+                        icon = Icons.Default.FitnessCenter,
+                        title = stringResource(R.string.progress_total_volume),
+                        value = "${totalVolume.toInt()} kg",
+                        modifier = Modifier.weight(1f)
+                    )
+                    StatCard(
+                        icon = Icons.Default.Schedule,
+                        title = stringResource(R.string.progress_weekly_time),
+                        value = "$weeklyWorkoutTimeMinutes min",
+                        modifier = Modifier.weight(1f)
+                    )
+                }
+            }
+
+            item {
+                WorkoutCalendar(
+                    workoutDates = workoutDates,
+                    onDateSelected = onNavigateToWorkoutHistory,
+                    onNavigateToYearlyCalendar = onNavigateToYearlyCalendar
+                )
+            }
+        }
+
+        item {
+            Spacer(modifier = Modifier.height(IMFITSpacing.huge))
+        }
+    }
+}
+
+@Composable
 private fun ProfileHeader(
     name: String,
     email: String,
@@ -432,28 +541,67 @@ private fun buildCalendarWeeks(daysInMonth: Int, firstDayOfWeek: Int): List<List
     return weeks
 }
 
-@Preview(showBackground = true)
+@Preview(showBackground = true, showSystemUi = true)
 @Composable
 private fun ProgressScreenPreviewLight() {
     com.diajarkoding.imfit.theme.IMFITTheme(darkTheme = false) {
-        ProfileHeader(
-            name = "John Doe",
-            email = "john@example.com",
-            profilePhotoUri = null,
-            onProfileClick = {}
+        ProgressScreenContent(
+            userName = "John Doe",
+            userEmail = "john@example.com",
+            userProfilePhotoUri = null,
+            totalVolume = 15250f,
+            weeklyWorkoutTimeMinutes = 180,
+            workoutDates = setOf(
+                LocalDate.now(),
+                LocalDate.now().minusDays(2),
+                LocalDate.now().minusDays(5)
+            ),
+            isLoading = false,
+            onNavigateToWorkoutHistory = {},
+            onNavigateToYearlyCalendar = {},
+            onNavigateToProfile = {}
         )
     }
 }
 
-@Preview(showBackground = true)
+@Preview(showBackground = true, showSystemUi = true)
 @Composable
 private fun ProgressScreenPreviewDark() {
     com.diajarkoding.imfit.theme.IMFITTheme(darkTheme = true) {
-        ProfileHeader(
-            name = "John Doe",
-            email = "john@example.com",
-            profilePhotoUri = null,
-            onProfileClick = {}
+        ProgressScreenContent(
+            userName = "John Doe",
+            userEmail = "john@example.com",
+            userProfilePhotoUri = null,
+            totalVolume = 15250f,
+            weeklyWorkoutTimeMinutes = 180,
+            workoutDates = setOf(
+                LocalDate.now(),
+                LocalDate.now().minusDays(2),
+                LocalDate.now().minusDays(5)
+            ),
+            isLoading = false,
+            onNavigateToWorkoutHistory = {},
+            onNavigateToYearlyCalendar = {},
+            onNavigateToProfile = {}
+        )
+    }
+}
+
+@Preview(showBackground = true, showSystemUi = true)
+@Composable
+private fun ProgressScreenPreviewLoading() {
+    com.diajarkoding.imfit.theme.IMFITTheme(darkTheme = false) {
+        ProgressScreenContent(
+            userName = "",
+            userEmail = "",
+            userProfilePhotoUri = null,
+            totalVolume = 0f,
+            weeklyWorkoutTimeMinutes = 0,
+            workoutDates = emptySet(),
+            isLoading = true,
+            onNavigateToWorkoutHistory = {},
+            onNavigateToYearlyCalendar = {},
+            onNavigateToProfile = {}
         )
     }
 }

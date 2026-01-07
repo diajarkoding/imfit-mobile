@@ -258,6 +258,184 @@ fun ProfileScreen(
     }
 }
 
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun ProfileScreenContent(
+    userName: String,
+    userEmail: String,
+    userBirthDate: String?,
+    userProfilePhotoUri: String?,
+    isDarkMode: Boolean,
+    isIndonesian: Boolean,
+    isLoading: Boolean,
+    onNavigateBack: () -> Unit,
+    onLogout: () -> Unit,
+    onToggleTheme: () -> Unit,
+    onToggleLanguage: () -> Unit
+) {
+    Scaffold(
+        contentWindowInsets = WindowInsets(0),
+        topBar = {
+            TopAppBar(
+                modifier = Modifier.windowInsetsPadding(WindowInsets.statusBars),
+                title = {
+                    Text(
+                        text = stringResource(R.string.title_profile),
+                        style = MaterialTheme.typography.titleLarge,
+                        fontWeight = FontWeight.Bold
+                    )
+                },
+                navigationIcon = {
+                    IconButton(onClick = onNavigateBack) {
+                        Icon(
+                            Icons.AutoMirrored.Filled.ArrowBack,
+                            contentDescription = stringResource(R.string.action_back)
+                        )
+                    }
+                },
+                colors = TopAppBarDefaults.topAppBarColors(
+                    containerColor = MaterialTheme.colorScheme.surface
+                ),
+                windowInsets = WindowInsets(0)
+            )
+        }
+    ) { padding ->
+        LazyColumn(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(padding),
+            contentPadding = PaddingValues(IMFITSpacing.screenHorizontal),
+            verticalArrangement = Arrangement.spacedBy(IMFITSpacing.lg)
+        ) {
+            if (isLoading) {
+                item { ShimmerProfileHeader() }
+                item { SectionTitle(title = stringResource(R.string.profile_section_info)) }
+                item { ShimmerInfoCard(itemCount = 3) }
+            } else {
+                item {
+                    ProfileHeaderCard(
+                        name = userName,
+                        email = userEmail,
+                        profilePhotoUri = userProfilePhotoUri
+                    )
+                }
+
+                item {
+                    SectionTitle(title = stringResource(R.string.profile_section_info))
+                }
+
+                item {
+                    Card(
+                        modifier = Modifier.fillMaxWidth(),
+                        shape = IMFITShapes.Card,
+                        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+                        elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
+                    ) {
+                        Column {
+                            ProfileInfoItem(
+                                icon = Icons.Default.Person,
+                                label = stringResource(R.string.label_fullname),
+                                value = userName
+                            )
+                            ProfileInfoItem(
+                                icon = Icons.Default.Email,
+                                label = stringResource(R.string.label_email),
+                                value = userEmail
+                            )
+                            ProfileInfoItem(
+                                icon = Icons.Default.Cake,
+                                label = stringResource(R.string.label_date_of_birth),
+                                value = userBirthDate ?: stringResource(R.string.placeholder_dash),
+                                showDivider = false
+                            )
+                        }
+                    }
+                }
+            }
+
+            item {
+                SectionTitle(title = stringResource(R.string.profile_section_settings))
+            }
+
+            item {
+                Card(
+                    modifier = Modifier.fillMaxWidth(),
+                    shape = IMFITShapes.Card,
+                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+                    elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
+                ) {
+                    Column {
+                        SettingsToggleItem(
+                            icon = Icons.Default.DarkMode,
+                            title = stringResource(R.string.settings_dark_mode),
+                            subtitle = if (isDarkMode) stringResource(R.string.settings_dark_mode_on) else stringResource(R.string.settings_dark_mode_off),
+                            content = {
+                                IMFITThemeSwitch(
+                                    isDarkMode = isDarkMode,
+                                    onToggle = onToggleTheme
+                                )
+                            }
+                        )
+
+                        SettingsToggleItem(
+                            icon = Icons.Default.Language,
+                            title = stringResource(R.string.settings_language),
+                            subtitle = if (isIndonesian) stringResource(R.string.settings_language_id) else stringResource(R.string.settings_language_en),
+                            showDivider = false,
+                            content = {
+                                IMFITLanguageSwitch(
+                                    isIndonesian = isIndonesian,
+                                    onToggle = onToggleLanguage
+                                )
+                            }
+                        )
+                    }
+                }
+            }
+
+            item {
+                Spacer(modifier = Modifier.height(IMFITSpacing.md))
+            }
+
+            item {
+                Card(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clickable { onLogout() },
+                    shape = IMFITShapes.Card,
+                    colors = CardDefaults.cardColors(
+                        containerColor = DeletePink.copy(alpha = 0.1f)
+                    )
+                ) {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(IMFITSpacing.cardPadding),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.Center
+                    ) {
+                        Icon(
+                            imageVector = Icons.AutoMirrored.Filled.ExitToApp,
+                            contentDescription = null,
+                            tint = DeletePink,
+                            modifier = Modifier.size(IMFITSizes.iconMd)
+                        )
+                        Spacer(modifier = Modifier.width(IMFITSpacing.sm))
+                        Text(
+                            text = stringResource(R.string.action_logout),
+                            style = MaterialTheme.typography.titleMedium,
+                            fontWeight = FontWeight.SemiBold,
+                            color = DeletePink
+                        )
+                    }
+                }
+            }
+
+            item { Spacer(modifier = Modifier.height(IMFITSpacing.huge)) }
+        }
+    }
+}
+
 @Composable
 private fun ProfileHeaderCard(
     name: String,
@@ -388,26 +566,62 @@ private fun ProfileInfoItem(
     }
 }
 
-@Preview(showBackground = true)
+@Preview(showBackground = true, showSystemUi = true)
 @Composable
 private fun ProfileScreenPreviewLight() {
     com.diajarkoding.imfit.theme.IMFITTheme(darkTheme = false) {
-        ProfileHeaderCard(
-            name = "John Doe",
-            email = "john@example.com",
-            profilePhotoUri = null
+        ProfileScreenContent(
+            userName = "John Doe",
+            userEmail = "john@example.com",
+            userBirthDate = "15 Januari 1990",
+            userProfilePhotoUri = null,
+            isDarkMode = false,
+            isIndonesian = true,
+            isLoading = false,
+            onNavigateBack = {},
+            onLogout = {},
+            onToggleTheme = {},
+            onToggleLanguage = {}
         )
     }
 }
 
-@Preview(showBackground = true)
+@Preview(showBackground = true, showSystemUi = true)
 @Composable
 private fun ProfileScreenPreviewDark() {
     com.diajarkoding.imfit.theme.IMFITTheme(darkTheme = true) {
-        ProfileHeaderCard(
-            name = "John Doe",
-            email = "john@example.com",
-            profilePhotoUri = null
+        ProfileScreenContent(
+            userName = "John Doe",
+            userEmail = "john@example.com",
+            userBirthDate = "15 Januari 1990",
+            userProfilePhotoUri = null,
+            isDarkMode = true,
+            isIndonesian = true,
+            isLoading = false,
+            onNavigateBack = {},
+            onLogout = {},
+            onToggleTheme = {},
+            onToggleLanguage = {}
+        )
+    }
+}
+
+@Preview(showBackground = true, showSystemUi = true)
+@Composable
+private fun ProfileScreenPreviewLoading() {
+    com.diajarkoding.imfit.theme.IMFITTheme(darkTheme = false) {
+        ProfileScreenContent(
+            userName = "",
+            userEmail = "",
+            userBirthDate = null,
+            userProfilePhotoUri = null,
+            isDarkMode = false,
+            isIndonesian = true,
+            isLoading = true,
+            onNavigateBack = {},
+            onLogout = {},
+            onToggleTheme = {},
+            onToggleLanguage = {}
         )
     }
 }

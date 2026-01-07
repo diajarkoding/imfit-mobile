@@ -226,13 +226,98 @@ fun SplashScreen(
     }
 }
 
+@Composable
+private fun SplashScreenContent() {
+    val infiniteTransition = rememberInfiniteTransition(label = "pulse")
+    val pulseScale by infiniteTransition.animateFloat(
+        initialValue = 1f,
+        targetValue = 1.05f,
+        animationSpec = infiniteRepeatable(
+            animation = tween(1000, easing = FastOutSlowInEasing),
+            repeatMode = RepeatMode.Reverse
+        ),
+        label = "pulseScale"
+    )
+
+    val floatOffset by infiniteTransition.animateFloat(
+        initialValue = -3f,
+        targetValue = 3f,
+        animationSpec = infiniteRepeatable(
+            animation = tween(1500, easing = LinearEasing),
+            repeatMode = RepeatMode.Reverse
+        ),
+        label = "floatOffset"
+    )
+
+    Box(
+        modifier = Modifier
+            .fillMaxSize()
+            .background(
+                Brush.verticalGradient(
+                    listOf(Primary, PrimaryLight)
+                )
+            )
+    ) {
+        Column(
+            modifier = Modifier.fillMaxSize(),
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.Center
+        ) {
+            Box(
+                modifier = Modifier
+                    .graphicsLayer {
+                        scaleX = pulseScale
+                        scaleY = pulseScale
+                        translationY = floatOffset
+                    }
+            ) {
+                Icon(
+                    imageVector = Icons.Default.FitnessCenter,
+                    contentDescription = stringResource(R.string.desc_logo),
+                    modifier = Modifier.size(IMFITSizes.iconHuge),
+                    tint = MaterialTheme.colorScheme.onPrimary
+                )
+            }
+
+            Spacer(modifier = Modifier.height(IMFITSpacing.xl))
+
+            Column(
+                horizontalAlignment = Alignment.CenterHorizontally
+            ) {
+                Text(
+                    text = stringResource(R.string.app_name),
+                    style = MaterialTheme.typography.headlineLarge.copy(
+                        fontWeight = FontWeight.Bold,
+                        fontSize = 42.sp,
+                        letterSpacing = 4.sp
+                    ),
+                    color = MaterialTheme.colorScheme.onPrimary
+                )
+                Spacer(modifier = Modifier.height(IMFITSpacing.sm))
+                Text(
+                    text = stringResource(R.string.splash_tagline),
+                    style = MaterialTheme.typography.bodyLarge,
+                    color = MaterialTheme.colorScheme.onPrimary.copy(alpha = 0.85f)
+                )
+            }
+        }
+
+        Text(
+            text = "v${BuildConfig.VERSION_NAME}",
+            style = MaterialTheme.typography.labelMedium,
+            color = MaterialTheme.colorScheme.onPrimary.copy(alpha = 0.6f),
+            modifier = Modifier
+                .align(Alignment.BottomCenter)
+                .windowInsetsPadding(WindowInsets.navigationBars)
+                .padding(bottom = IMFITSpacing.xl)
+        )
+    }
+}
+
 @Preview(showBackground = true, showSystemUi = true)
 @Composable
 private fun SplashScreenPreview() {
     com.diajarkoding.imfit.theme.IMFITTheme(darkTheme = false) {
-        SplashScreen(
-            onNavigateToLogin = {},
-            onNavigateToHome = {}
-        )
+        SplashScreenContent()
     }
 }

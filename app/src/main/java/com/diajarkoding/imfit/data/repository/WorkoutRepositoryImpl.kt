@@ -134,20 +134,18 @@ class WorkoutRepositoryImpl @Inject constructor(
         val templateId = UUID.randomUUID().toString()
         val now = System.currentTimeMillis()
 
-        // Save to Room database first
+        // Save to Room database
         val templateEntity = com.diajarkoding.imfit.data.local.entity.WorkoutTemplateEntity(
             id = templateId,
             userId = userId,
             name = name,
             isDeleted = false,
             createdAt = now,
-            updatedAt = now,
-            syncStatus = com.diajarkoding.imfit.data.local.sync.SyncStatus.PENDING_SYNC.name,
-            pendingOperation = "CREATE"
+            updatedAt = now
         )
         workoutTemplateDao.insertTemplate(templateEntity)
 
-        // Save template exercises to local database
+        // Save template exercises
         exercises.forEachIndexed { index, exercise ->
             val templateExerciseEntity = com.diajarkoding.imfit.data.local.entity.TemplateExerciseEntity(
                 templateId = templateId,
@@ -155,16 +153,14 @@ class WorkoutRepositoryImpl @Inject constructor(
                 orderIndex = index,
                 sets = exercise.sets,
                 reps = exercise.reps,
-                restSeconds = exercise.restSeconds,
-                syncStatus = com.diajarkoding.imfit.data.local.sync.SyncStatus.PENDING_SYNC.name,
-                pendingOperation = "CREATE"
+                restSeconds = exercise.restSeconds
             )
             templateExerciseDao.insertTemplateExercise(templateExerciseEntity)
         }
-  
+
         Log.d("WorkoutRepository", "Created template locally: $templateId with ${exercises.size} exercises")
 
-        // Try to sync to Supabase (non-blocking)
+        // Sync to Supabase
         if (isValidUUID(userId)) {
             try {
                 val templateDto = CreateTemplateDto(
@@ -186,7 +182,6 @@ class WorkoutRepositoryImpl @Inject constructor(
                     supabaseClient.postgrest.from("template_exercises").insert(exerciseDto)
                 }
                 
-                workoutTemplateDao.markAsSynced(templateId, com.diajarkoding.imfit.data.local.sync.SyncStatus.SYNCED.name)
                 Log.d("WorkoutRepository", "Synced template to Supabase: $templateId")
             } catch (e: Exception) {
                 Log.w("WorkoutRepository", "Failed to sync template to Supabase: ${e.message}")
@@ -208,9 +203,7 @@ class WorkoutRepositoryImpl @Inject constructor(
         // Update local database first
         val updatedEntity = existingTemplate.copy(
             name = name,
-            updatedAt = now,
-            syncStatus = com.diajarkoding.imfit.data.local.sync.SyncStatus.PENDING_SYNC.name,
-            pendingOperation = "UPDATE"
+            updatedAt = now
         )
         workoutTemplateDao.updateTemplate(updatedEntity)
 
@@ -223,9 +216,7 @@ class WorkoutRepositoryImpl @Inject constructor(
                 orderIndex = index,
                 sets = exercise.sets,
                 reps = exercise.reps,
-                restSeconds = exercise.restSeconds,
-                syncStatus = com.diajarkoding.imfit.data.local.sync.SyncStatus.PENDING_SYNC.name,
-                pendingOperation = "CREATE"
+                restSeconds = exercise.restSeconds
             )
             templateExerciseDao.insertTemplateExercise(templateExerciseEntity)
         }
@@ -268,7 +259,6 @@ class WorkoutRepositoryImpl @Inject constructor(
                 }
             }
 
-            workoutTemplateDao.markAsSynced(templateId, com.diajarkoding.imfit.data.local.sync.SyncStatus.SYNCED.name)
             Log.d("WorkoutRepository", "Synced template update to Supabase: $templateId with ${exercises.size} exercises")
         } catch (e: Exception) {
             Log.e("WorkoutRepository", "Failed to sync template update to Supabase: ${e.message}", e)
@@ -290,8 +280,6 @@ class WorkoutRepositoryImpl @Inject constructor(
                 sets = sets,
                 reps = reps,
                 restSeconds = restSeconds,
-                syncStatus = com.diajarkoding.imfit.data.local.sync.SyncStatus.PENDING_SYNC.name,
-                pendingOperation = "UPDATE",
                 updatedAt = System.currentTimeMillis()
             )
             templateExerciseDao.updateTemplateExercise(updatedExercise)
@@ -325,8 +313,6 @@ class WorkoutRepositoryImpl @Inject constructor(
         if (existingTemplate != null) {
             val updatedTemplate = existingTemplate.copy(
                 isDeleted = true,
-                syncStatus = com.diajarkoding.imfit.data.local.sync.SyncStatus.PENDING_SYNC.name,
-                pendingOperation = "DELETE",
                 updatedAt = System.currentTimeMillis()
             )
             workoutTemplateDao.updateTemplate(updatedTemplate)
@@ -523,7 +509,7 @@ class WorkoutRepositoryImpl @Inject constructor(
                 }
             }
             
-            // Save to local database for offline-first and Last Known Weight feature
+            // Save to local database for Last Known Weight feature
             val workoutLogEntity = com.diajarkoding.imfit.data.local.entity.WorkoutLogEntity(
                 id = workoutLogId,
                 userId = userId,
@@ -534,8 +520,7 @@ class WorkoutRepositoryImpl @Inject constructor(
                 endTime = endTime,
                 totalVolume = session.totalVolume,
                 totalSets = session.totalCompletedSets,
-                totalReps = session.exerciseLogs.sumOf { log -> log.sets.filter { it.isCompleted }.sumOf { it.reps } },
-                syncStatus = com.diajarkoding.imfit.data.local.sync.SyncStatus.SYNCED.name
+                totalReps = session.exerciseLogs.sumOf { log -> log.sets.filter { it.isCompleted }.sumOf { it.reps } }
             )
             workoutLogDao.insertWorkoutLog(workoutLogEntity)
             Log.d("WorkoutRepository", "Saved workout log to local database: $workoutLogId")

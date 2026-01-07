@@ -39,35 +39,13 @@ interface WorkoutLogDao {
     @Query("DELETE FROM workout_logs")
     suspend fun deleteAllWorkoutLogs()
 
-    // Soft delete - marks record as deleted and sets pending sync
-    @Query("""
-        UPDATE workout_logs 
-        SET deleted_at = :timestamp,
-            sync_status = 'PENDING_SYNC',
-            pending_operation = 'DELETE',
-            updated_at = :timestamp
-        WHERE id = :logId
-    """)
+    // Soft delete - marks record as deleted
+    @Query("UPDATE workout_logs SET deleted_at = :timestamp, updated_at = :timestamp WHERE id = :logId")
     suspend fun softDeleteLog(logId: String, timestamp: Long = System.currentTimeMillis())
 
-    // Hard delete - only used after sync is complete
+    // Hard delete
     @Query("DELETE FROM workout_logs WHERE id = :logId")
     suspend fun hardDeleteLog(logId: String)
-
-    // Sync-aware queries
-    @Query("SELECT * FROM workout_logs WHERE sync_status = :syncStatus")
-    suspend fun getWorkoutLogsBySyncStatus(syncStatus: String): List<WorkoutLogEntity>
-
-    // Get all pending logs for sync (including soft deleted)
-    @Query("SELECT * FROM workout_logs WHERE sync_status = 'PENDING_SYNC'")
-    suspend fun getPendingLogs(): List<WorkoutLogEntity>
-
-    @Query("UPDATE workout_logs SET sync_status = :syncStatus WHERE id = :id")
-    suspend fun updateSyncStatus(id: String, syncStatus: String)
-
-    // Mark as synced and clear pending operation
-    @Query("UPDATE workout_logs SET sync_status = 'SYNCED', pending_operation = NULL WHERE id = :id")
-    suspend fun markAsSynced(id: String)
 
     @Query("SELECT * FROM workout_logs WHERE user_id = :userId AND deleted_at IS NULL ORDER BY date DESC")
     suspend fun getWorkoutLogsByUserList(userId: String): List<WorkoutLogEntity>

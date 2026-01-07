@@ -78,16 +78,6 @@ interface WorkoutSetDao {
     """)
     suspend fun getLastWorkoutSetsForExercise(exerciseId: String, userId: String): List<WorkoutSetEntity>
 
-    // Sync methods
-    @Query("SELECT * FROM workout_sets WHERE sync_status != 'SYNCED'")
-    suspend fun getPendingWorkoutSets(): List<WorkoutSetEntity>
-
     @Query("SELECT * FROM workout_sets WHERE workout_log_id = :workoutLogId ORDER BY set_number")
     suspend fun getSetsByWorkoutLogId(workoutLogId: String): List<WorkoutSetEntity>
-
-    @Query("UPDATE workout_sets SET sync_status = 'SYNCED', pending_operation = NULL WHERE id = :id")
-    suspend fun markAsSynced(id: String)
-
-    @Query("UPDATE workout_sets SET sync_status = :status WHERE id = :id")
-    suspend fun updateSyncStatus(id: String, status: String)
 }

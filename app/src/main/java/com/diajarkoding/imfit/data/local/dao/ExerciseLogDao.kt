@@ -39,16 +39,6 @@ interface ExerciseLogDao {
     """)
     suspend fun getLastExerciseLog(exerciseId: String): ExerciseLogEntity?
 
-    // Sync methods
-    @Query("SELECT * FROM exercise_logs WHERE sync_status != 'SYNCED'")
-    suspend fun getPendingExerciseLogs(): List<ExerciseLogEntity>
-
     @Query("SELECT * FROM exercise_logs WHERE workout_log_id = :workoutLogId ORDER BY order_index")
     suspend fun getExerciseLogsByWorkoutLogId(workoutLogId: String): List<ExerciseLogEntity>
-
-    @Query("UPDATE exercise_logs SET sync_status = 'SYNCED', pending_operation = NULL WHERE id = :id")
-    suspend fun markAsSynced(id: String)
-
-    @Query("UPDATE exercise_logs SET sync_status = :status WHERE id = :id")
-    suspend fun updateSyncStatus(id: String, status: String)
 }

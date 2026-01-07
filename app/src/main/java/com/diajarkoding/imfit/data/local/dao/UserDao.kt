@@ -32,14 +32,4 @@ interface UserDao {
 
     @Query("DELETE FROM users")
     suspend fun deleteAllUsers()
-
-    // Sync methods
-    @Query("SELECT * FROM users WHERE sync_status != 'SYNCED'")
-    suspend fun getPendingUsers(): List<UserEntity>
-
-    @Query("UPDATE users SET sync_status = 'SYNCED', pending_operation = NULL WHERE id = :userId")
-    suspend fun markAsSynced(userId: String)
-
-    @Query("UPDATE users SET sync_status = :status WHERE id = :userId")
-    suspend fun updateSyncStatus(userId: String, status: String)
 }

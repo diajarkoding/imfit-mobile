@@ -76,8 +76,6 @@ import com.diajarkoding.imfit.theme.IMFITSpacing
 import com.diajarkoding.imfit.theme.Primary
 import com.diajarkoding.imfit.theme.PrimaryLight
 import com.diajarkoding.imfit.theme.SetComplete
-import com.diajarkoding.imfit.presentation.components.common.SyncIndicator
-import com.diajarkoding.imfit.presentation.components.common.SyncProgressDialog
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -87,25 +85,11 @@ fun HomeScreen(
     viewModel: HomeViewModel = hiltViewModel()
 ) {
     val state by viewModel.state.collectAsState()
-    val syncState by viewModel.syncState.collectAsState()
     var showAddDayDialog by remember { mutableStateOf(false) }
     var newDayName by remember { mutableStateOf("") }
-    
-    // Track last sync status to detect when sync completes
-    var lastSyncStatus by remember { mutableStateOf(syncState.status) }
 
     LaunchedEffect(Unit) {
         viewModel.refresh()
-    }
-    
-    // Refresh data when sync completes
-    LaunchedEffect(syncState.status) {
-        if (lastSyncStatus == com.diajarkoding.imfit.data.sync.SyncState.SyncStatus.SYNCING &&
-            syncState.status == com.diajarkoding.imfit.data.sync.SyncState.SyncStatus.SYNCED) {
-            // Sync just completed, refresh data
-            viewModel.refresh()
-        }
-        lastSyncStatus = syncState.status
     }
 
     LaunchedEffect(state.newlyCreatedWorkoutId) {
@@ -184,12 +168,6 @@ fun HomeScreen(
                             fontWeight = FontWeight.Bold
                         )
                     }
-                },
-                actions = {
-                    SyncIndicator(
-                        syncState = syncState,
-                        showText = false
-                    )
                 },
                 colors = TopAppBarDefaults.topAppBarColors(
                     containerColor = MaterialTheme.colorScheme.surface

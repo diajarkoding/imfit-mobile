@@ -26,7 +26,8 @@ object DatabaseModule {
         )
             .addMigrations(
                 IMFITDatabase.MIGRATION_4_5,
-                IMFITDatabase.MIGRATION_5_6
+                IMFITDatabase.MIGRATION_5_6,
+                IMFITDatabase.MIGRATION_6_7
             )
             .fallbackToDestructiveMigration()
             .build()

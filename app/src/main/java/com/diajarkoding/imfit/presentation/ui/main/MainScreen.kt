@@ -1,8 +1,6 @@
 package com.diajarkoding.imfit.presentation.ui.main
 
-import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.WindowInsets
-import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.navigationBars
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.windowInsetsPadding
@@ -22,13 +20,11 @@ import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
-import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.navigation.NavDestination.Companion.hierarchy
 import androidx.navigation.NavGraph.Companion.findStartDestination
 import androidx.navigation.NavHostController
@@ -36,10 +32,8 @@ import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
-import com.diajarkoding.imfit.presentation.components.common.SyncProgressDialog
 import com.diajarkoding.imfit.presentation.ui.exercise.ExerciseBrowserScreen
 import com.diajarkoding.imfit.presentation.ui.home.HomeScreen
-import com.diajarkoding.imfit.presentation.ui.home.HomeViewModel
 import com.diajarkoding.imfit.presentation.ui.progress.ProgressScreen
 import com.diajarkoding.imfit.theme.Primary
 import java.time.LocalDate
@@ -64,101 +58,90 @@ fun MainScreen(
     onNavigateToYearlyCalendar: () -> Unit = {},
     onNavigateToProfile: () -> Unit = {},
     onLogout: () -> Unit,
-    bottomNavController: NavHostController = rememberNavController(),
-    homeViewModel: HomeViewModel = hiltViewModel()
+    bottomNavController: NavHostController = rememberNavController()
 ) {
     val items = listOf(
         BottomNavItem.Home,
         BottomNavItem.Exercise,
         BottomNavItem.Progress
     )
-    
-    // Get sync state from HomeViewModel
-    val syncState by homeViewModel.syncState.collectAsState()
 
-    // Wrap everything in Box for full-screen overlay capability
-    Box(modifier = Modifier.fillMaxSize()) {
-        Scaffold(
-            bottomBar = {
-                NavigationBar(
-                    modifier = Modifier.windowInsetsPadding(WindowInsets.navigationBars),
-                    containerColor = MaterialTheme.colorScheme.surface,
-                    contentColor = Primary,
-                    tonalElevation = 0.dp
-                ) {
-                    val navBackStackEntry by bottomNavController.currentBackStackEntryAsState()
-                    val currentDestination = navBackStackEntry?.destination
-
-                    items.forEach { item ->
-                        val selected = currentDestination?.hierarchy?.any { it.route == item.route } == true
-                        
-                        NavigationBarItem(
-                            icon = { 
-                                Icon(
-                                    if (selected) item.selectedIcon else item.unselectedIcon, 
-                                    contentDescription = item.title
-                                ) 
-                            },
-                            label = { 
-                                Text(
-                                    item.title,
-                                    fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Normal
-                                ) 
-                            },
-                            selected = selected,
-                            colors = NavigationBarItemDefaults.colors(
-                                selectedIconColor = Primary,
-                                selectedTextColor = Primary,
-                                indicatorColor = Primary.copy(alpha = 0.12f),
-                                unselectedIconColor = MaterialTheme.colorScheme.onSurfaceVariant,
-                                unselectedTextColor = MaterialTheme.colorScheme.onSurfaceVariant
-                            ),
-                            onClick = {
-                                bottomNavController.navigate(item.route) {
-                                    popUpTo(bottomNavController.graph.findStartDestination().id) {
-                                        saveState = true
-                                    }
-                                    launchSingleTop = true
-                                    restoreState = true
-                                }
-                            }
-                        )
-                    }
-                }
-            }
-        ) { innerPadding ->
-            NavHost(
-                navController = bottomNavController,
-                startDestination = BottomNavItem.Home.route,
-                modifier = Modifier.padding(innerPadding)
+    Scaffold(
+        bottomBar = {
+            NavigationBar(
+                modifier = Modifier.windowInsetsPadding(WindowInsets.navigationBars),
+                containerColor = MaterialTheme.colorScheme.surface,
+                contentColor = Primary,
+                tonalElevation = 0.dp
             ) {
-                composable(BottomNavItem.Home.route) {
-                    HomeScreen(
-                        onNavigateToWorkoutDetail = onNavigateToWorkoutDetail,
-                        onNavigateToActiveWorkout = onNavigateToActiveWorkout,
-                        viewModel = homeViewModel
-                    )
-                }
-                composable(BottomNavItem.Exercise.route) {
-                    ExerciseBrowserScreen(
-                        onNavigateBack = { },
-                        onCategorySelected = { category ->
-                            onNavigateToExerciseList(category.name)
+                val navBackStackEntry by bottomNavController.currentBackStackEntryAsState()
+                val currentDestination = navBackStackEntry?.destination
+
+                items.forEach { item ->
+                    val selected = currentDestination?.hierarchy?.any { it.route == item.route } == true
+                    
+                    NavigationBarItem(
+                        icon = { 
+                            Icon(
+                                if (selected) item.selectedIcon else item.unselectedIcon, 
+                                contentDescription = item.title
+                            ) 
+                        },
+                        label = { 
+                            Text(
+                                item.title,
+                                fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Normal
+                            ) 
+                        },
+                        selected = selected,
+                        colors = NavigationBarItemDefaults.colors(
+                            selectedIconColor = Primary,
+                            selectedTextColor = Primary,
+                            indicatorColor = Primary.copy(alpha = 0.12f),
+                            unselectedIconColor = MaterialTheme.colorScheme.onSurfaceVariant,
+                            unselectedTextColor = MaterialTheme.colorScheme.onSurfaceVariant
+                        ),
+                        onClick = {
+                            bottomNavController.navigate(item.route) {
+                                popUpTo(bottomNavController.graph.findStartDestination().id) {
+                                    saveState = true
+                                }
+                                launchSingleTop = true
+                                restoreState = true
+                            }
                         }
-                    )
-                }
-                composable(BottomNavItem.Progress.route) {
-                    ProgressScreen(
-                        onNavigateToWorkoutHistory = onNavigateToWorkoutHistory,
-                        onNavigateToYearlyCalendar = onNavigateToYearlyCalendar,
-                        onNavigateToProfile = onNavigateToProfile
                     )
                 }
             }
         }
-        
-        // Full-screen sync overlay - covers entire screen including bottom nav
-        SyncProgressDialog(syncState = syncState)
+    ) { innerPadding ->
+        NavHost(
+            navController = bottomNavController,
+            startDestination = BottomNavItem.Home.route,
+            modifier = Modifier.padding(innerPadding)
+        ) {
+            composable(BottomNavItem.Home.route) {
+                HomeScreen(
+                    onNavigateToWorkoutDetail = onNavigateToWorkoutDetail,
+                    onNavigateToActiveWorkout = onNavigateToActiveWorkout
+                )
+            }
+            composable(BottomNavItem.Exercise.route) {
+                ExerciseBrowserScreen(
+                    onNavigateBack = { },
+                    onCategorySelected = { category ->
+                        onNavigateToExerciseList(category.name)
+                    }
+                )
+            }
+            composable(BottomNavItem.Progress.route) {
+                ProgressScreen(
+                    onNavigateToWorkoutHistory = onNavigateToWorkoutHistory,
+                    onNavigateToYearlyCalendar = onNavigateToYearlyCalendar,
+                    onNavigateToProfile = onNavigateToProfile
+                )
+            }
+        }
     }
 }
 

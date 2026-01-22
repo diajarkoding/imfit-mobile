@@ -87,6 +87,8 @@ import androidx.compose.ui.text.TextRange
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Dialog
+import androidx.compose.ui.window.DialogProperties
+import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.hilt.navigation.compose.hiltViewModel
 import com.diajarkoding.imfit.R
 import com.diajarkoding.imfit.domain.model.ExerciseLog
@@ -617,91 +619,118 @@ private fun RestTimerConfigSheet(
     var minutes by remember { mutableIntStateOf(initialMinutes) }
     var seconds by remember { mutableIntStateOf(initialSeconds) }
 
-    Dialog(onDismissRequest = onDismiss) {
-        Card(
-            shape = IMFITShapes.Dialog,
-            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
+    Dialog(
+        onDismissRequest = onDismiss,
+        properties = DialogProperties(
+            usePlatformDefaultWidth = false,
+            decorFitsSystemWindows = false
+        )
+    ) {
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .background(Color.Black.copy(alpha = 0.5f))
+                .clickable(
+                    interactionSource = MutableInteractionSource(),
+                    indication = null,
+                    onClick = onDismiss
+                ),
+            contentAlignment = Alignment.Center
         ) {
-            Column(
+            Card(
                 modifier = Modifier
-                    .padding(IMFITSpacing.xl)
-                    .fillMaxWidth(),
-                horizontalAlignment = Alignment.CenterHorizontally
+                    .fillMaxWidth()
+                    .padding(horizontal = IMFITSpacing.xl)
+                    .clickable(
+                        interactionSource = MutableInteractionSource(),
+                        indication = null,
+                        onClick = {}
+                    ),
+                shape = IMFITShapes.Dialog,
+                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+                elevation = CardDefaults.cardElevation(defaultElevation = 8.dp)
             ) {
-                Text(
-                    text = stringResource(R.string.active_workout_rest_timer),
-                    style = MaterialTheme.typography.titleLarge,
-                    fontWeight = FontWeight.Bold
-                )
-                Spacer(modifier = Modifier.height(IMFITSpacing.xl))
-
-                // Scrollable Time Picker
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.Center,
-                    verticalAlignment = Alignment.CenterVertically
+                Column(
+                    modifier = Modifier
+                        .padding(IMFITSpacing.xl)
+                        .fillMaxWidth(),
+                    horizontalAlignment = Alignment.CenterHorizontally
                 ) {
-                    // Hours
-                    TimePickerColumn(
-                        value = hours,
-                        onValueChange = { hours = it },
-                        range = 0..23,
-                        label = "hours"
-                    )
-                    
                     Text(
-                        text = ":",
-                        style = MaterialTheme.typography.headlineLarge,
-                        fontWeight = FontWeight.SemiBold,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        modifier = Modifier.padding(horizontal = IMFITSpacing.sm)
+                        text = stringResource(R.string.active_workout_rest_timer),
+                        style = MaterialTheme.typography.titleLarge,
+                        fontWeight = FontWeight.Bold
                     )
-                    
-                    // Minutes
-                    TimePickerColumn(
-                        value = minutes,
-                        onValueChange = { minutes = it },
-                        range = 0..59,
-                        label = "min"
-                    )
-                    
-                    Text(
-                        text = ":",
-                        style = MaterialTheme.typography.headlineLarge,
-                        fontWeight = FontWeight.SemiBold,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        modifier = Modifier.padding(horizontal = IMFITSpacing.sm)
-                    )
-                    
-                    // Seconds
-                    TimePickerColumn(
-                        value = seconds,
-                        onValueChange = { seconds = it },
-                        range = 0..59,
-                        label = "sec"
-                    )
-                }
+                    Spacer(modifier = Modifier.height(IMFITSpacing.xl))
 
-                Spacer(modifier = Modifier.height(IMFITSpacing.xl))
-
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(IMFITSpacing.md)
-                ) {
-                    Box(modifier = Modifier.weight(1f)) {
-                        IMFITSecondaryButton(
-                            text = stringResource(R.string.action_cancel),
-                            onClick = onDismiss
+                    // Scrollable Time Picker
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.Center,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        // Hours
+                        TimePickerColumn(
+                            value = hours,
+                            onValueChange = { hours = it },
+                            range = 0..23,
+                            label = "hours"
+                        )
+                        
+                        Text(
+                            text = ":",
+                            style = MaterialTheme.typography.headlineLarge,
+                            fontWeight = FontWeight.SemiBold,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            modifier = Modifier.padding(horizontal = IMFITSpacing.sm)
+                        )
+                        
+                        // Minutes
+                        TimePickerColumn(
+                            value = minutes,
+                            onValueChange = { minutes = it },
+                            range = 0..59,
+                            label = "min"
+                        )
+                        
+                        Text(
+                            text = ":",
+                            style = MaterialTheme.typography.headlineLarge,
+                            fontWeight = FontWeight.SemiBold,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            modifier = Modifier.padding(horizontal = IMFITSpacing.sm)
+                        )
+                        
+                        // Seconds
+                        TimePickerColumn(
+                            value = seconds,
+                            onValueChange = { seconds = it },
+                            range = 0..59,
+                            label = "sec"
                         )
                     }
-                    Box(modifier = Modifier.weight(1f)) {
-                        IMFITButton(
-                            text = stringResource(R.string.action_save),
-                            onClick = {
-                                val totalSeconds = hours * 3600 + minutes * 60 + seconds
-                                onConfirm(if (totalSeconds > 0) totalSeconds else 60)
-                            }
-                        )
+
+                    Spacer(modifier = Modifier.height(IMFITSpacing.xl))
+
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(IMFITSpacing.md)
+                    ) {
+                        Box(modifier = Modifier.weight(1f)) {
+                            IMFITSecondaryButton(
+                                text = stringResource(R.string.action_cancel),
+                                onClick = onDismiss
+                            )
+                        }
+                        Box(modifier = Modifier.weight(1f)) {
+                            IMFITButton(
+                                text = stringResource(R.string.action_save),
+                                onClick = {
+                                    val totalSeconds = hours * 3600 + minutes * 60 + seconds
+                                    onConfirm(if (totalSeconds > 0) totalSeconds else 60)
+                                }
+                            )
+                        }
                     }
                 }
             }
@@ -1187,57 +1216,79 @@ private fun RestTimerDialog(
     remainingSeconds: Int,
     onDismiss: () -> Unit
 ) {
-    Dialog(onDismissRequest = {}) {
-        Card(
-            shape = IMFITShapes.Dialog,
-            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
+    Dialog(
+        onDismissRequest = {},
+        properties = DialogProperties(
+            usePlatformDefaultWidth = false,
+            decorFitsSystemWindows = false
+        )
+    ) {
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .background(Color.Black.copy(alpha = 0.5f)),
+            contentAlignment = Alignment.Center
         ) {
-            Column(
+            Card(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(IMFITSpacing.xxl),
-                horizontalAlignment = Alignment.CenterHorizontally
+                    .padding(horizontal = IMFITSpacing.xl)
+                    .clickable(
+                        interactionSource = MutableInteractionSource(),
+                        indication = null,
+                        onClick = {}
+                    ),
+                shape = IMFITShapes.Dialog,
+                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+                elevation = CardDefaults.cardElevation(defaultElevation = 8.dp)
             ) {
-                Box(
+                Column(
                     modifier = Modifier
-                        .size(64.dp)
-                        .clip(CircleShape)
-                        .background(
-                            Brush.linearGradient(listOf(Primary, PrimaryLight))
-                        ),
-                    contentAlignment = Alignment.Center
+                        .fillMaxWidth()
+                        .padding(IMFITSpacing.xxl),
+                    horizontalAlignment = Alignment.CenterHorizontally
                 ) {
-                    Icon(
-                        imageVector = Icons.Default.Timer,
-                        contentDescription = null,
-                        tint = Color.White,
-                        modifier = Modifier.size(IMFITSizes.iconLg)
+                    Box(
+                        modifier = Modifier
+                            .size(64.dp)
+                            .clip(CircleShape)
+                            .background(
+                                Brush.linearGradient(listOf(Primary, PrimaryLight))
+                            ),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Timer,
+                            contentDescription = null,
+                            tint = Color.White,
+                            modifier = Modifier.size(IMFITSizes.iconLg)
+                        )
+                    }
+
+                    Spacer(modifier = Modifier.height(IMFITSpacing.lg))
+
+                    Text(
+                        text = stringResource(R.string.active_workout_rest_timer),
+                        style = MaterialTheme.typography.titleLarge,
+                        fontWeight = FontWeight.Bold
+                    )
+
+                    Spacer(modifier = Modifier.height(IMFITSpacing.xxl))
+
+                    Text(
+                        text = String.format("%d:%02d", remainingSeconds / 60, remainingSeconds % 60),
+                        style = MaterialTheme.typography.displayMedium,
+                        fontWeight = FontWeight.Bold,
+                        color = Primary
+                    )
+
+                    Spacer(modifier = Modifier.height(IMFITSpacing.xxl))
+
+                    IMFITSecondaryButton(
+                        text = stringResource(R.string.action_skip),
+                        onClick = onDismiss
                     )
                 }
-
-                Spacer(modifier = Modifier.height(IMFITSpacing.lg))
-
-                Text(
-                    text = stringResource(R.string.active_workout_rest_timer),
-                    style = MaterialTheme.typography.titleLarge,
-                    fontWeight = FontWeight.Bold
-                )
-
-                Spacer(modifier = Modifier.height(IMFITSpacing.xxl))
-
-                Text(
-                    text = String.format("%d:%02d", remainingSeconds / 60, remainingSeconds % 60),
-                    style = MaterialTheme.typography.displayMedium,
-                    fontWeight = FontWeight.Bold,
-                    color = Primary
-                )
-
-                Spacer(modifier = Modifier.height(IMFITSpacing.xxl))
-
-                IMFITSecondaryButton(
-                    text = stringResource(R.string.action_skip),
-                    onClick = onDismiss
-                )
             }
         }
     }

@@ -7,6 +7,7 @@
  import android.os.Build
  import android.os.IBinder
 import android.os.PowerManager
+import com.diajarkoding.imfit.core.constants.WorkoutConstants
  import android.util.Log
  import androidx.core.app.ServiceCompat
  import com.diajarkoding.imfit.core.model.WorkoutTimerUpdate
@@ -315,12 +316,23 @@ import kotlinx.coroutines.flow.asSharedFlow
                 PowerManager.PARTIAL_WAKE_LOCK,
                 "IMFIT::WorkoutWakeLock"
             ).apply {
-                acquire(4 * 60 * 60 * 1000L) // 4 hours max
+                acquire(WorkoutConstants.MAX_WAKELOCK_DURATION_MS) // 4 hours max
             }
             Log.d(TAG, "WakeLock acquired")
         }
     }
     
+
+    /**
+     * Called when the task is removed from recent apps.
+     * Ensures WakeLock is released to prevent battery drain.
+     */
+    override fun onTaskRemoved(rootIntent: Intent?) {
+        Log.d(TAG, "Task removed, releasing resources")
+        releaseWakeLock()
+        super.onTaskRemoved(rootIntent)
+    }
+
     private fun releaseWakeLock() {
         wakeLock?.let {
             if (it.isHeld) {
@@ -335,7 +347,7 @@ import kotlinx.coroutines.flow.asSharedFlow
          val hh = seconds / 3600
          val mm = (seconds % 3600) / 60
          val ss = seconds % 60
-         return String.format("%02d:%02d:%02d", hh, mm, ss)
+         return String.format(WorkoutConstants.TIME_FORMAT_PATTERN, hh, mm, ss)
      }
      
      companion object {

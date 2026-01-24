@@ -8,6 +8,8 @@ import com.diajarkoding.imfit.domain.repository.AuthRepository
 import com.diajarkoding.imfit.domain.repository.WorkoutRepository
 import com.diajarkoding.imfit.core.model.WorkoutTimerUpdate
 import dagger.hilt.android.lifecycle.HiltViewModel
+import android.util.Log
+import kotlinx.coroutines.CoroutineExceptionHandler
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -40,6 +42,16 @@ class ActiveWorkoutViewModel @Inject constructor(
     private val authRepository: AuthRepository
 ) : ViewModel() {
 
+    private val exceptionHandler = CoroutineExceptionHandler { _, throwable ->
+        Log.e(TAG, "Coroutine exception: ${throwable.message}", throwable)
+        _state.update { 
+            it.copy(
+                isFinishing = false,
+                finishError = throwable.message ?: "An unexpected error occurred"
+            ) 
+        }
+    }
+
     private val _state = MutableStateFlow(ActiveWorkoutState())
     val state = _state.asStateFlow()
 
@@ -55,7 +67,7 @@ class ActiveWorkoutViewModel @Inject constructor(
     private var elapsedTimeJob: Job? = null
 
     fun startWorkout(templateId: String) {
-        viewModelScope.launch {
+        viewModelScope.launch(exceptionHandler) {
             // First check for an existing active session
             val existingSession = workoutRepository.getActiveSession()
             
@@ -412,7 +424,7 @@ class ActiveWorkoutViewModel @Inject constructor(
     }
 
     fun cancelWorkout() {
-        viewModelScope.launch {
+        viewModelScope.launch(exceptionHandler) {
             elapsedTimeJob?.cancel()
             workoutRepository.cancelWorkout()
         }
@@ -458,6 +470,10 @@ class ActiveWorkoutViewModel @Inject constructor(
     override fun onCleared() {
         super.onCleared()
         elapsedTimeJob?.cancel()
+    }
+    
+    companion object {
+        private const val TAG = "ActiveWorkoutViewModel"
     }
 }
 

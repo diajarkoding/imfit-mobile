@@ -4,6 +4,7 @@
  import androidx.room.withTransaction
  import com.diajarkoding.imfit.core.constants.WorkoutConstants
  import com.diajarkoding.imfit.core.network.NetworkOperationException
+import com.diajarkoding.imfit.core.network.RetryUtils
  import com.diajarkoding.imfit.data.local.dao.ExerciseDao
  import com.diajarkoding.imfit.data.local.dao.ExerciseLogDao
  import com.diajarkoding.imfit.data.local.dao.WorkoutLogDao

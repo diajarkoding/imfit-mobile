@@ -5,6 +5,7 @@
  import com.diajarkoding.imfit.core.network.NetworkMonitor
  import com.diajarkoding.imfit.core.network.NetworkOperationException
  import com.diajarkoding.imfit.core.network.NoNetworkException
+import com.diajarkoding.imfit.core.network.RetryUtils
  import com.diajarkoding.imfit.data.local.dao.ExerciseDao
  import com.diajarkoding.imfit.data.local.dao.TemplateExerciseDao
  import com.diajarkoding.imfit.data.local.dao.WorkoutTemplateDao

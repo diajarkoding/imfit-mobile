@@ -8,6 +8,7 @@ import com.diajarkoding.imfit.domain.model.WorkoutTemplate
 import com.diajarkoding.imfit.domain.repository.AuthRepository
 import com.diajarkoding.imfit.domain.repository.WorkoutRepository
 import dagger.hilt.android.lifecycle.HiltViewModel
+import kotlinx.coroutines.CoroutineExceptionHandler
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
@@ -33,6 +34,17 @@ class HomeViewModel @Inject constructor(
     private val workoutRepository: WorkoutRepository
 ) : ViewModel() {
 
+    private val exceptionHandler = CoroutineExceptionHandler { _, throwable ->
+        Log.e(TAG, "Coroutine exception: ${throwable.message}", throwable)
+        _state.update { 
+            it.copy(
+                isLoading = false, 
+                isCreating = false, 
+                error = throwable.message ?: "An unexpected error occurred"
+            ) 
+        }
+    }
+
     private val _state = MutableStateFlow(HomeState())
     val state = _state.asStateFlow()
 
@@ -41,7 +53,7 @@ class HomeViewModel @Inject constructor(
     }
 
     private fun loadData() {
-        viewModelScope.launch {
+        viewModelScope.launch(exceptionHandler) {
             _state.update { it.copy(isLoading = true) }
 
             val user = authRepository.getCurrentUser()
@@ -98,7 +110,7 @@ class HomeViewModel @Inject constructor(
     }
 
     fun logout() {
-        viewModelScope.launch {
+        viewModelScope.launch(exceptionHandler) {
             authRepository.logout()
         }
     }
@@ -108,10 +120,9 @@ class HomeViewModel @Inject constructor(
     }
 
     fun createWorkout(name: String) {
-        viewModelScope.launch {
+        viewModelScope.launch(exceptionHandler) {
             val user = authRepository.getCurrentUser()
             if (user == null) {
-                // User is not authenticated, cannot create workout
                 _state.update { it.copy(error = "Please log in to create a workout") }
                 return@launch
             }
@@ -133,7 +144,7 @@ class HomeViewModel @Inject constructor(
                 }
                 refresh()
             } catch (e: Exception) {
-                Log.e("HomeViewModel", "Failed to create workout: ${e.message}", e)
+                Log.e(TAG, "Failed to create workout: ${e.message}", e)
                 _state.update { 
                     it.copy(
                         isCreating = false, 
@@ -150,5 +161,9 @@ class HomeViewModel @Inject constructor(
 
     fun clearError() {
         _state.update { it.copy(error = null) }
+    }
+    
+    companion object {
+        private const val TAG = "HomeViewModel"
     }
 }

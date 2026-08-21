@@ -5,6 +5,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.diajarkoding.imfit.domain.model.WorkoutLog
 import com.diajarkoding.imfit.domain.model.WorkoutTemplate
+import com.diajarkoding.imfit.data.sync.SyncStateProvider
 import com.diajarkoding.imfit.domain.repository.AuthRepository
 import com.diajarkoding.imfit.domain.repository.WorkoutRepository
 import dagger.hilt.android.lifecycle.HiltViewModel
@@ -28,14 +29,14 @@ data class HomeState(
 class HomeViewModel @Inject constructor(
     private val authRepository: AuthRepository,
     private val workoutRepository: WorkoutRepository,
-    private val syncManager: com.diajarkoding.imfit.data.sync.SyncManager
+    syncStateProvider: SyncStateProvider
 ) : ViewModel() {
 
     private val _state = MutableStateFlow(HomeState())
     val state = _state.asStateFlow()
     
     // Expose sync state for UI
-    val syncState = syncManager.syncState
+    val syncState = syncStateProvider.syncState
 
     init {
         loadData()

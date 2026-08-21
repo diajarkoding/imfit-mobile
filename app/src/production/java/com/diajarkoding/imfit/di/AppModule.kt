@@ -3,6 +3,11 @@ package com.diajarkoding.imfit.di
 import com.diajarkoding.imfit.data.repository.AuthRepositoryImpl
 import com.diajarkoding.imfit.data.repository.ExerciseRepositoryImpl
 import com.diajarkoding.imfit.data.repository.WorkoutRepositoryImpl
+import com.diajarkoding.imfit.data.sync.SyncManager
+import com.diajarkoding.imfit.data.sync.SyncScheduler
+import com.diajarkoding.imfit.data.sync.SyncRunner
+import com.diajarkoding.imfit.data.sync.WorkManagerSyncScheduler
+import com.diajarkoding.imfit.data.sync.SyncStateProvider
 import com.diajarkoding.imfit.domain.repository.AuthRepository
 import com.diajarkoding.imfit.domain.repository.ExerciseRepository
 import com.diajarkoding.imfit.domain.repository.WorkoutRepository
@@ -27,4 +32,16 @@ abstract class AppModule {
     @Binds
     @Singleton
     abstract fun bindWorkoutRepository(impl: WorkoutRepositoryImpl): WorkoutRepository
+
+    @Binds
+    @Singleton
+    abstract fun bindSyncStateProvider(impl: SyncManager): SyncStateProvider
+
+    @Binds
+    @Singleton
+    abstract fun bindSyncScheduler(impl: WorkManagerSyncScheduler): SyncScheduler
+
+    @Binds
+    @Singleton
+    abstract fun bindSyncRunner(impl: SyncManager): SyncRunner
 }

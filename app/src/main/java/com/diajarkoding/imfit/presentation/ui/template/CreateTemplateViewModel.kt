@@ -6,6 +6,7 @@ import androidx.lifecycle.viewModelScope
 import com.diajarkoding.imfit.domain.model.Exercise
 import com.diajarkoding.imfit.domain.model.TemplateExercise
 import com.diajarkoding.imfit.domain.repository.AuthRepository
+import com.diajarkoding.imfit.domain.repository.ExerciseRepository
 import com.diajarkoding.imfit.domain.repository.WorkoutRepository
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -27,6 +28,7 @@ data class CreateTemplateState(
 class CreateTemplateViewModel @Inject constructor(
     private val authRepository: AuthRepository,
     private val workoutRepository: WorkoutRepository,
+    private val exerciseRepository: ExerciseRepository,
     savedStateHandle: SavedStateHandle
 ) : ViewModel() {
 
@@ -34,11 +36,17 @@ class CreateTemplateViewModel @Inject constructor(
     val state = _state.asStateFlow()
 
     init {
-        savedStateHandle.getStateFlow<List<Exercise>?>("selected_exercises", null)
+        savedStateHandle.getStateFlow<List<String>?>("selected_exercise_ids", null)
             .let { flow ->
                 viewModelScope.launch {
-                    flow.collect { exercises ->
-                        exercises?.let { addExercises(it) }
+                    flow.collect { exerciseIds ->
+                        exerciseIds?.let { ids ->
+                            val exercises = mutableListOf<Exercise>()
+                            for (id in ids.distinct()) {
+                                exerciseRepository.getExerciseById(id)?.let(exercises::add)
+                            }
+                            addExercises(exercises)
+                        }
                     }
                 }
             }

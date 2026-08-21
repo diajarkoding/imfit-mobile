@@ -1,5 +1,7 @@
 package com.diajarkoding.imfit.presentation.ui.exercise
 
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
+
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -19,9 +21,9 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.ArrowBack
-import androidx.compose.material.icons.filled.FitnessCenter
+import com.diajarkoding.imfit.presentation.components.common.ArrowBack
+import com.diajarkoding.imfit.presentation.components.common.FitnessCenter
+import com.diajarkoding.imfit.presentation.components.common.Symbols
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -57,7 +59,7 @@ fun ExerciseListScreen(
     onNavigateBack: () -> Unit,
     viewModel: ExerciseBrowserViewModel = hiltViewModel()
 ) {
-    val state by viewModel.state.collectAsState()
+    val state by viewModel.state.collectAsStateWithLifecycle()
     val category = MuscleCategory.entries.find { it.name == categoryName } ?: MuscleCategory.CHEST
     val exercises = (state.exercisesByCategory[category] ?: emptyList()).distinctBy { it.id }
 
@@ -76,7 +78,7 @@ fun ExerciseListScreen(
                 navigationIcon = {
                     IconButton(onClick = onNavigateBack) {
                         Icon(
-                            Icons.AutoMirrored.Filled.ArrowBack,
+                            Symbols.AutoMirrored.Filled.ArrowBack,
                             contentDescription = stringResource(R.string.action_back)
                         )
                     }
@@ -150,7 +152,7 @@ private fun ExerciseCard(exercise: Exercise) {
                 contentAlignment = Alignment.Center
             ) {
                 Icon(
-                    imageVector = Icons.Default.FitnessCenter,
+                    imageVector = Symbols.Default.FitnessCenter,
                     contentDescription = null,
                     tint = MaterialTheme.colorScheme.onPrimaryContainer,
                     modifier = Modifier.size(IMFITSizes.iconMd)

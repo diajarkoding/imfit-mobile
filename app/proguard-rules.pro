@@ -57,9 +57,6 @@
 -keep class * extends dagger.hilt.android.internal.managers.ComponentSupplier { *; }
 -keep class * extends dagger.hilt.android.internal.managers.ViewComponentManager$FragmentContextWrapper { *; }
 
-# ===== COIL =====
--dontwarn coil.**
-
 # ===== COMPOSE =====
 -dontwarn androidx.compose.**
 -keep class androidx.compose.** { *; }

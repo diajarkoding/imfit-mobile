@@ -1,5 +1,7 @@
 package com.diajarkoding.imfit.presentation.ui.template
 
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
+
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -21,11 +23,11 @@ import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.ArrowBack
-import androidx.compose.material.icons.filled.Add
-import androidx.compose.material.icons.filled.Close
-import androidx.compose.material.icons.filled.FitnessCenter
+import com.diajarkoding.imfit.presentation.components.common.Add
+import com.diajarkoding.imfit.presentation.components.common.ArrowBack
+import com.diajarkoding.imfit.presentation.components.common.Close
+import com.diajarkoding.imfit.presentation.components.common.FitnessCenter
+import com.diajarkoding.imfit.presentation.components.common.Symbols
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -70,7 +72,7 @@ fun CreateTemplateScreen(
     viewModel: CreateTemplateViewModel = hiltViewModel(),
     selectedExercises: List<Exercise>? = null
 ) {
-    val state by viewModel.state.collectAsState()
+    val state by viewModel.state.collectAsStateWithLifecycle()
 
     LaunchedEffect(selectedExercises) {
         selectedExercises?.let { exercises ->
@@ -98,7 +100,7 @@ fun CreateTemplateScreen(
                 },
                 navigationIcon = {
                     IconButton(onClick = onNavigateBack) {
-                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = stringResource(R.string.action_back))
+                        Icon(Symbols.AutoMirrored.Filled.ArrowBack, contentDescription = stringResource(R.string.action_back))
                     }
                 },
                 colors = TopAppBarDefaults.topAppBarColors(
@@ -149,7 +151,7 @@ fun CreateTemplateScreen(
                     IMFITOutlinedButton(
                         text = stringResource(R.string.action_add_exercise),
                         onClick = { onNavigateToExerciseSelection(state.tempTemplateId) },
-                        icon = Icons.Default.Add
+                        icon = Symbols.Default.Add
                     )
                 }
 
@@ -222,7 +224,7 @@ private fun EmptyExercisePrompt() {
                 contentAlignment = Alignment.Center
             ) {
                 Icon(
-                    imageVector = Icons.Default.Add,
+                    imageVector = Symbols.Default.Add,
                     contentDescription = null,
                     tint = MaterialTheme.colorScheme.onSurfaceVariant,
                     modifier = Modifier.size(IMFITSizes.iconLg)
@@ -275,7 +277,7 @@ private fun ExerciseItem(
                     contentAlignment = Alignment.Center
                 ) {
                     Icon(
-                        imageVector = Icons.Default.FitnessCenter,
+                        imageVector = Symbols.Default.FitnessCenter,
                         contentDescription = null,
                         tint = MaterialTheme.colorScheme.onPrimaryContainer,
                         modifier = Modifier.size(IMFITSizes.iconSm)
@@ -307,7 +309,7 @@ private fun ExerciseItem(
 
             IconButton(onClick = onRemove) {
                 Icon(
-                    imageVector = Icons.Default.Close,
+                    imageVector = Symbols.Default.Close,
                     contentDescription = stringResource(R.string.action_remove),
                     tint = DeletePink,
                     modifier = Modifier.size(IMFITSizes.iconMd)

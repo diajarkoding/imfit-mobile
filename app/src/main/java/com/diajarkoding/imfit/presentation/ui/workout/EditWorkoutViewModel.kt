@@ -23,19 +23,26 @@ data class EditWorkoutState(
 @HiltViewModel
 class EditWorkoutViewModel @Inject constructor(
     private val workoutRepository: WorkoutRepository,
-    savedStateHandle: SavedStateHandle
+    private val savedStateHandle: SavedStateHandle
 ) : ViewModel() {
 
-    private val workoutId: String = savedStateHandle.get<String>("workoutId") ?: ""
+    private var workoutId: String? = savedStateHandle["workoutId"]
+    private var initialized = false
 
     private val _state = MutableStateFlow(EditWorkoutState())
     val state = _state.asStateFlow()
 
-    init {
+    fun initialize(workoutId: String) {
+        if (workoutId.isBlank() || (initialized && this.workoutId == workoutId)) return
+
+        this.workoutId = workoutId
+        savedStateHandle["workoutId"] = workoutId
+        initialized = true
         loadWorkout()
     }
 
     fun loadWorkout() {
+        val workoutId = workoutId ?: return
         viewModelScope.launch {
             _state.update { it.copy(isLoading = true) }
             try {
@@ -124,6 +131,7 @@ class EditWorkoutViewModel @Inject constructor(
     }
 
     fun saveChanges() {
+        val workoutId = workoutId ?: return
         viewModelScope.launch {
             _state.update { it.copy(isLoading = true) }
             try {

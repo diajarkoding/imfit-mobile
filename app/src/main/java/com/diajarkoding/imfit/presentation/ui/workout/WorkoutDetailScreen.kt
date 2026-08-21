@@ -1,5 +1,7 @@
 package com.diajarkoding.imfit.presentation.ui.workout
 
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
+
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.foundation.background
@@ -21,15 +23,15 @@ import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.text.KeyboardOptions
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.ArrowBack
-import androidx.compose.material.icons.filled.Add
-import androidx.compose.material.icons.filled.Delete
-import androidx.compose.material.icons.filled.Edit
-import androidx.compose.material.icons.filled.FitnessCenter
-import androidx.compose.material.icons.filled.PlayArrow
-import androidx.compose.material.icons.filled.Schedule
-import androidx.compose.material.icons.filled.Stop
+import com.diajarkoding.imfit.presentation.components.common.Add
+import com.diajarkoding.imfit.presentation.components.common.ArrowBack
+import com.diajarkoding.imfit.presentation.components.common.Delete
+import com.diajarkoding.imfit.presentation.components.common.Edit
+import com.diajarkoding.imfit.presentation.components.common.FitnessCenter
+import com.diajarkoding.imfit.presentation.components.common.PlayArrow
+import com.diajarkoding.imfit.presentation.components.common.Schedule
+import com.diajarkoding.imfit.presentation.components.common.Stop
+import com.diajarkoding.imfit.presentation.components.common.Symbols
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -49,7 +51,6 @@ import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.material3.rememberSwipeToDismissBoxState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -96,26 +97,31 @@ fun WorkoutDetailScreen(
     onNavigateToExerciseSelection: (String) -> Unit,
     onStartWorkout: (String) -> Unit,
     onNavigateToEdit: (String) -> Unit = {},
-    selectedExercises: List<Exercise>? = null,
+    selectedExerciseIds: List<String>? = null,
+    onSelectedExercisesConsumed: () -> Unit = {},
     viewModel: WorkoutDetailViewModel = hiltViewModel()
 ) {
-    val state by viewModel.state.collectAsState()
+    val state by viewModel.state.collectAsStateWithLifecycle()
     var showDeleteDialog by remember { mutableStateOf(false) }
     val snackbarHostState = remember { SnackbarHostState() }
     val scope = rememberCoroutineScope()
     val activeWorkoutWarning = stringResource(R.string.warning_workout_active)
     val cannotStartWorkoutWarning = stringResource(R.string.warning_cannot_start_workout)
 
-    LaunchedEffect(selectedExercises) {
-        selectedExercises?.let { exercises ->
-            if (exercises.isNotEmpty()) {
-                viewModel.addExercises(exercises)
-            }
-        }
+    LaunchedEffect(workoutId) {
+        viewModel.initialize(workoutId)
     }
 
-    LaunchedEffect(Unit) {
-        viewModel.loadWorkout()
+    LaunchedEffect(selectedExerciseIds, state.workout?.id) {
+        if (selectedExerciseIds != null) {
+            if (selectedExerciseIds.isNotEmpty() && state.workout == null) {
+                return@LaunchedEffect
+            }
+            if (selectedExerciseIds.isNotEmpty()) {
+                viewModel.addExercisesByIds(selectedExerciseIds)
+            }
+            onSelectedExercisesConsumed()
+        }
     }
 
     LaunchedEffect(state.workoutFinished) {
@@ -164,7 +170,7 @@ fun WorkoutDetailScreen(
                 navigationIcon = {
                     IconButton(onClick = onNavigateBack) {
                         Icon(
-                            imageVector = Icons.AutoMirrored.Filled.ArrowBack,
+                            imageVector = Symbols.AutoMirrored.Filled.ArrowBack,
                             contentDescription = stringResource(R.string.action_back)
                         )
                     }
@@ -178,7 +184,7 @@ fun WorkoutDetailScreen(
                         }
                     }) {
                         Icon(
-                            imageVector = Icons.Default.Edit,
+                            imageVector = Symbols.Default.Edit,
                             contentDescription = stringResource(R.string.action_edit),
                             tint = if (state.isWorkoutActive) Primary.copy(alpha = 0.4f) else Primary
                         )
@@ -191,7 +197,7 @@ fun WorkoutDetailScreen(
                         }
                     }) {
                         Icon(
-                            imageVector = Icons.Default.Delete,
+                            imageVector = Symbols.Default.Delete,
                             contentDescription = stringResource(R.string.action_delete),
                             tint = if (state.isWorkoutActive) DeletePink.copy(alpha = 0.4f) else DeletePink
                         )
@@ -293,7 +299,7 @@ fun WorkoutDetailScreen(
                         IMFITOutlinedButton(
                             text = stringResource(R.string.action_add_exercise),
                             onClick = { onNavigateToExerciseSelection(workoutId) },
-                            icon = Icons.Default.Add
+                            icon = Symbols.Default.Add
                         )
                     }
 
@@ -302,7 +308,7 @@ fun WorkoutDetailScreen(
                             IMFITButton(
                                 text = stringResource(R.string.action_end_workout),
                                 onClick = { viewModel.endWorkout() },
-                                icon = Icons.Default.Stop
+                                icon = Symbols.Default.Stop
                             )
                         } else {
                             IMFITButton(
@@ -315,7 +321,7 @@ fun WorkoutDetailScreen(
                                     }
                                 },
                                 enabled = (state.workout?.exerciseCount ?: 0) > 0 && !state.isWorkoutActive,
-                                icon = Icons.Default.PlayArrow
+                                icon = Symbols.Default.PlayArrow
                             )
                         }
                     }
@@ -336,14 +342,14 @@ fun WorkoutDetailScreen(
 //                        IMFITButton(
 //                            text = stringResource(R.string.action_end_workout),
 //                            onClick = { viewModel.endWorkout() },
-//                            icon = Icons.Default.Stop
+//                            icon = Symbols.Default.Stop
 //                        )
 //                    } else {
 //                        IMFITButton(
 //                            text = stringResource(R.string.action_start_workout),
 //                            onClick = { onStartWorkout(workoutId) },
 //                            enabled = (state.workout?.exerciseCount ?: 0) > 0,
-//                            icon = Icons.Default.PlayArrow
+//                            icon = Symbols.Default.PlayArrow
 //                        )
 //                    }
 //                }
@@ -380,7 +386,7 @@ private fun SwipeToDeleteExerciseItem(
                 R.string.dialog_remove_exercise_message,
                 templateExercise.name
             ),
-            icon = Icons.Default.Delete,
+            icon = Symbols.Default.Delete,
             type = IMFITDialogType.DESTRUCTIVE,
             confirmText = stringResource(R.string.action_remove),
             dismissText = stringResource(R.string.action_cancel),
@@ -419,7 +425,7 @@ private fun SwipeToDeleteExerciseItem(
                     modifier = Modifier.scale(scale)
                 ) {
                     Icon(
-                        imageVector = Icons.Default.Delete,
+                        imageVector = Symbols.Default.Delete,
                         contentDescription = stringResource(R.string.action_delete),
                         tint = DeletePink,
                         modifier = Modifier.size(IMFITSizes.iconLg)
@@ -451,7 +457,7 @@ private fun ExerciseItemCard(
         IMFITInputDialog(
             onDismissRequest = { showEditDialog = false },
             title = templateExercise.name,
-            icon = Icons.Default.FitnessCenter,
+            icon = Symbols.Default.FitnessCenter,
             confirmText = stringResource(R.string.action_save),
             dismissText = stringResource(R.string.action_cancel),
             onConfirm = {
@@ -505,7 +511,7 @@ private fun ExerciseItemCard(
                 contentAlignment = Alignment.Center
             ) {
                 Icon(
-                    imageVector = Icons.Default.FitnessCenter,
+                    imageVector = Symbols.Default.FitnessCenter,
                     contentDescription = null,
                     tint = MaterialTheme.colorScheme.onPrimaryContainer,
                     modifier = Modifier.size(IMFITSizes.iconMd)
@@ -599,12 +605,12 @@ private fun WorkoutInfoCard(
                 horizontalArrangement = Arrangement.SpaceEvenly
             ) {
                 InfoItem(
-                    icon = Icons.Default.FitnessCenter,
+                    icon = Symbols.Default.FitnessCenter,
                     value = "$exerciseCount",
                     label = stringResource(R.string.workout_exercises_label)
                 )
                 InfoItem(
-                    icon = Icons.Default.Schedule,
+                    icon = Symbols.Default.Schedule,
                     value = if (estimatedMinutes > 0) "~$estimatedMinutes" else "-",
                     label = stringResource(R.string.workout_est_minutes)
                 )
@@ -667,7 +673,7 @@ private fun EmptyExercisesCard() {
                 contentAlignment = Alignment.Center
             ) {
                 Icon(
-                    imageVector = Icons.Default.FitnessCenter,
+                    imageVector = Symbols.Default.FitnessCenter,
                     contentDescription = null,
                     tint = MaterialTheme.colorScheme.onSurfaceVariant,
                     modifier = Modifier.size(IMFITSizes.iconLg)
@@ -723,7 +729,7 @@ private fun WorkoutDetailScreenContent(
                 navigationIcon = {
                     IconButton(onClick = onNavigateBack) {
                         Icon(
-                            imageVector = Icons.AutoMirrored.Filled.ArrowBack,
+                            imageVector = Symbols.AutoMirrored.Filled.ArrowBack,
                             contentDescription = stringResource(R.string.action_back)
                         )
                     }
@@ -731,14 +737,14 @@ private fun WorkoutDetailScreenContent(
                 actions = {
                     IconButton(onClick = onNavigateToEdit) {
                         Icon(
-                            imageVector = Icons.Default.Edit,
+                            imageVector = Symbols.Default.Edit,
                             contentDescription = stringResource(R.string.action_edit),
                             tint = if (isWorkoutActive) Primary.copy(alpha = 0.4f) else Primary
                         )
                     }
                     IconButton(onClick = onDelete) {
                         Icon(
-                            imageVector = Icons.Default.Delete,
+                            imageVector = Symbols.Default.Delete,
                             contentDescription = stringResource(R.string.action_delete),
                             tint = if (isWorkoutActive) DeletePink.copy(alpha = 0.4f) else DeletePink
                         )
@@ -828,7 +834,7 @@ private fun WorkoutDetailScreenContent(
                         IMFITOutlinedButton(
                             text = stringResource(R.string.action_add_exercise),
                             onClick = onAddExercise,
-                            icon = Icons.Default.Add
+                            icon = Symbols.Default.Add
                         )
                     }
 
@@ -837,14 +843,14 @@ private fun WorkoutDetailScreenContent(
                             IMFITButton(
                                 text = stringResource(R.string.action_end_workout),
                                 onClick = onEndWorkout,
-                                icon = Icons.Default.Stop
+                                icon = Symbols.Default.Stop
                             )
                         } else {
                             IMFITButton(
                                 text = stringResource(R.string.action_start_workout),
                                 onClick = onStartWorkout,
                                 enabled = exerciseCount > 0,
-                                icon = Icons.Default.PlayArrow
+                                icon = Symbols.Default.PlayArrow
                             )
                         }
                     }

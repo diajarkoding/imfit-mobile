@@ -90,4 +90,7 @@ interface WorkoutSetDao {
 
     @Query("UPDATE workout_sets SET sync_status = :status WHERE id = :id")
     suspend fun updateSyncStatus(id: String, status: String)
+
+    @Query("UPDATE workout_sets SET sync_status = 'SYNCED', pending_operation = NULL WHERE workout_log_id = :workoutLogId")
+    suspend fun markWorkoutSetsAsSynced(workoutLogId: String)
 }

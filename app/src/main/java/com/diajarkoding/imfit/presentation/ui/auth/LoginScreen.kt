@@ -1,5 +1,7 @@
 package com.diajarkoding.imfit.presentation.ui.auth
 
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
+
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
@@ -24,8 +26,8 @@ import androidx.compose.foundation.layout.statusBars
 import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.FitnessCenter
+import com.diajarkoding.imfit.presentation.components.common.FitnessCenter
+import com.diajarkoding.imfit.presentation.components.common.Symbols
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.SnackbarHost
@@ -77,7 +79,7 @@ fun LoginScreen(
     onToggleLanguage: () -> Unit = {},
     viewModel: LoginViewModel = hiltViewModel()
 ) {
-    val state by viewModel.state.collectAsState()
+    val state by viewModel.state.collectAsStateWithLifecycle()
     val snackbarHostState = remember { SnackbarHostState() }
     val passwordFocusRequester = remember { FocusRequester() }
     val keyboardController = LocalSoftwareKeyboardController.current
@@ -125,7 +127,7 @@ fun LoginScreen(
                 contentAlignment = Alignment.Center
             ) {
                 Icon(
-                    imageVector = Icons.Default.FitnessCenter,
+                    imageVector = Symbols.Default.FitnessCenter,
                     contentDescription = "IMFIT Logo",
                     modifier = Modifier.size(IMFITSizes.iconXxl),
                     tint = MaterialTheme.colorScheme.onPrimary
@@ -310,7 +312,7 @@ private fun LoginScreenContent(
                 contentAlignment = Alignment.Center
             ) {
                 Icon(
-                    imageVector = Icons.Default.FitnessCenter,
+                    imageVector = Symbols.Default.FitnessCenter,
                     contentDescription = "IMFIT Logo",
                     modifier = Modifier.size(IMFITSizes.iconXxl),
                     tint = MaterialTheme.colorScheme.onPrimary

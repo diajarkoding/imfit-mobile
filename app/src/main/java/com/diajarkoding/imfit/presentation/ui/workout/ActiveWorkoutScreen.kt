@@ -1,5 +1,7 @@
 package com.diajarkoding.imfit.presentation.ui.workout
 
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
+
 import android.Manifest
 import android.content.BroadcastReceiver
 import android.content.ComponentName
@@ -37,15 +39,15 @@ import androidx.compose.foundation.lazy.rememberLazyListState
 import kotlinx.coroutines.launch
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.text.KeyboardOptions
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Add
-import androidx.compose.material.icons.filled.Check
-import androidx.compose.material.icons.filled.Close
-import androidx.compose.material.icons.filled.Delete
-import androidx.compose.material.icons.filled.FitnessCenter
-import androidx.compose.material.icons.filled.Pause
-import androidx.compose.material.icons.filled.PlayArrow
-import androidx.compose.material.icons.filled.Timer
+import com.diajarkoding.imfit.presentation.components.common.Add
+import com.diajarkoding.imfit.presentation.components.common.Check
+import com.diajarkoding.imfit.presentation.components.common.Close
+import com.diajarkoding.imfit.presentation.components.common.Delete
+import com.diajarkoding.imfit.presentation.components.common.FitnessCenter
+import com.diajarkoding.imfit.presentation.components.common.Pause
+import com.diajarkoding.imfit.presentation.components.common.PlayArrow
+import com.diajarkoding.imfit.presentation.components.common.Symbols
+import com.diajarkoding.imfit.presentation.components.common.Timer
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.Checkbox
@@ -115,7 +117,7 @@ fun ActiveWorkoutScreen(
     onWorkoutFinished: (String) -> Unit,
     viewModel: ActiveWorkoutViewModel = hiltViewModel()
 ) {
-    val state by viewModel.state.collectAsState()
+    val state by viewModel.state.collectAsStateWithLifecycle()
     var showRestConfigSheet by remember { mutableStateOf(false) }
     val snackbarHostState = remember { SnackbarHostState() }
     val coroutineScope = rememberCoroutineScope()
@@ -365,7 +367,7 @@ fun ActiveWorkoutScreen(
             onDismissRequest = { viewModel.dismissCancelDialog() },
             title = stringResource(R.string.active_workout_cancel_title),
             message = stringResource(R.string.active_workout_cancel_message),
-            icon = Icons.Default.Close,
+            icon = Symbols.Default.Close,
             type = IMFITDialogType.DESTRUCTIVE,
             confirmText = stringResource(R.string.action_cancel_workout),
             dismissText = stringResource(R.string.action_continue),
@@ -409,7 +411,7 @@ fun ActiveWorkoutScreen(
                     navigationIcon = {
                         IconButton(onClick = { viewModel.showCancelDialog() }) {
                             Icon(
-                                Icons.Default.Close,
+                                Symbols.Default.Close,
                                 contentDescription = stringResource(R.string.action_cancel)
                             )
                         }
@@ -433,7 +435,7 @@ fun ActiveWorkoutScreen(
                             }
                         ) {
                             Icon(
-                                if (state.isPaused) Icons.Default.PlayArrow else Icons.Default.Pause,
+                                if (state.isPaused) Symbols.Default.PlayArrow else Symbols.Default.Pause,
                                 contentDescription = if (state.isPaused) stringResource(R.string.action_resume) else stringResource(R.string.action_pause)
                             )
                         }
@@ -488,7 +490,7 @@ fun ActiveWorkoutScreen(
                         contentAlignment = Alignment.Center
                     ) {
                         Icon(
-                            imageVector = Icons.Default.Timer,
+                            imageVector = Symbols.Default.Timer,
                             contentDescription = stringResource(R.string.active_workout_rest_timer),
                             tint = MaterialTheme.colorScheme.onSurfaceVariant,
                             modifier = Modifier.size(24.dp)
@@ -502,7 +504,7 @@ fun ActiveWorkoutScreen(
                             onClick = { viewModel.finishWorkout() },
                             enabled = (state.session?.totalCompletedSets ?: 0) > 0 && !state.isFinishing,
                             isLoading = state.isFinishing,
-                            icon = Icons.Default.Check
+                            icon = Symbols.Default.Check
                         )
                     }
                 }
@@ -872,7 +874,7 @@ private fun ExerciseSection(
                     contentAlignment = Alignment.Center
                 ) {
                     Icon(
-                        imageVector = Icons.Default.FitnessCenter,
+                        imageVector = Symbols.Default.FitnessCenter,
                         contentDescription = null,
                         tint = MaterialTheme.colorScheme.onPrimaryContainer,
                         modifier = Modifier.size(IMFITSizes.iconSm)
@@ -960,7 +962,7 @@ private fun ExerciseSection(
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 Icon(
-                    imageVector = Icons.Default.Add,
+                    imageVector = Symbols.Default.Add,
                     contentDescription = stringResource(R.string.action_add_set),
                     tint = Primary,
                     modifier = Modifier.size(IMFITSizes.iconSm)
@@ -1008,7 +1010,7 @@ private fun SetInputRow(
         ) {
             if (set.isCompleted) {
                 Icon(
-                    imageVector = Icons.Default.Check,
+                    imageVector = Symbols.Default.Check,
                     contentDescription = null,
                     tint = Color.White,
                     modifier = Modifier.size(18.dp)
@@ -1150,7 +1152,7 @@ private fun SetInputRow(
             modifier = Modifier.size(36.dp)
         ) {
             Icon(
-                imageVector = Icons.Default.Delete,
+                imageVector = Symbols.Default.Delete,
                 contentDescription = stringResource(R.string.action_delete),
                 tint = if (canDelete && !set.isCompleted) DeletePink.copy(alpha = 0.8f)
                 else MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.2f),
@@ -1197,7 +1199,7 @@ private fun RestTimerDialog(
                     contentAlignment = Alignment.Center
                 ) {
                     Icon(
-                        imageVector = Icons.Default.Timer,
+                        imageVector = Symbols.Default.Timer,
                         contentDescription = null,
                         tint = Color.White,
                         modifier = Modifier.size(IMFITSizes.iconLg)

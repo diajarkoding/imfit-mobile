@@ -15,6 +15,9 @@ interface WorkoutTemplateDao {
     @Query("SELECT * FROM workout_templates WHERE id = :id AND is_deleted = 0")
     suspend fun getTemplateById(id: String): WorkoutTemplateEntity?
 
+    @Query("SELECT * FROM workout_templates WHERE id = :id")
+    suspend fun getTemplateByIdIncludingDeleted(id: String): WorkoutTemplateEntity?
+
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insertTemplate(template: WorkoutTemplateEntity)
 
@@ -40,11 +43,24 @@ interface WorkoutTemplateDao {
     @Query("SELECT * FROM workout_templates WHERE sync_status = :syncStatus")
     suspend fun getTemplatesBySyncStatus(syncStatus: String): List<WorkoutTemplateEntity>
 
-    @Query("SELECT * FROM workout_templates WHERE pending_operation IS NOT NULL")
-    suspend fun getPendingSyncTemplates(): List<WorkoutTemplateEntity>
+    @Query("SELECT * FROM workout_templates WHERE user_id = :userId AND pending_operation IS NOT NULL")
+    suspend fun getPendingSyncTemplates(userId: String): List<WorkoutTemplateEntity>
 
     @Query("UPDATE workout_templates SET sync_status = :syncStatus, pending_operation = NULL WHERE id = :id")
     suspend fun markAsSynced(id: String, syncStatus: String)
+
+    @Query("""
+        UPDATE workout_templates
+        SET sync_status = 'SYNCED', pending_operation = NULL
+        WHERE id = :id
+          AND updated_at = :expectedUpdatedAt
+          AND pending_operation = :expectedOperation
+    """)
+    suspend fun markAsSyncedIfUnchanged(
+        id: String,
+        expectedUpdatedAt: Long,
+        expectedOperation: String
+    ): Int
 
     @Query("UPDATE workout_templates SET sync_status = :syncStatus WHERE id = :id")
     suspend fun updateSyncStatus(id: String, syncStatus: String)

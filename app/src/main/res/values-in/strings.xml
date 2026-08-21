@@ -259,9 +259,12 @@
     <string name="action_start_workout">Mulai Latihan</string>
     <string name="action_end_workout">Akhiri Latihan</string>
     <string name="action_cancel_workout">Batalkan Latihan</string>
+    <string name="action_pause">Jeda</string>
+    <string name="action_resume">Lanjutkan</string>
 
     <!-- Warnings -->
     <string name="warning_workout_active">Tidak dapat mengubah saat latihan sedang berlangsung</string>
+    <string name="warning_cannot_start_workout">Tidak dapat memulai latihan baru saat latihan lain masih aktif</string>
 
     <!-- Dialog Messages -->
     <string name="dialog_delete_workout">Hapus Latihan</string>
@@ -390,4 +393,21 @@
     <string name="exercise_placeholder"></string>
     <string name="workout_duration_zero">0m</string>
     <string name="workout_volume_zero">0 kg</string>
+
+    <!-- Notification -->
+    <string name="notification_workout_active">Latihan Aktif</string>
+    <string name="notification_workout_paused">Latihan Dijeda</string>
+    <string name="notification_rest_timer">Timer Istirahat</string>
+    <string name="notification_rest_timer_title">Istirahat: %s</string>
+    <string name="notification_stop">Berhenti</string>
+    <string name="notification_pause">Jeda</string>
+    <string name="notification_resume">Lanjutkan</string>
+    <string name="notification_skip_rest">Lewati</string>
+    <string name="notification_workout_content">%1$s • Set: %2$d/%3$d • Vol: %4$.0f kg</string>
+    <string name="notification_resting_after">Istirahat setelah: %s</string>
+
+    <!-- Notification Channels -->
+    <string name="channel_workout_active">Latihan Aktif</string>
+    <string name="channel_workout_rest">Timer Istirahat</string>
+    <string name="channel_workout_desc">Menampilkan progres latihan aktif Anda</string>
 </resources>

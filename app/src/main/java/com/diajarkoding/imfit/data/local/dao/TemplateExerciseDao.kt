@@ -32,4 +32,7 @@ interface TemplateExerciseDao {
 
     @Query("DELETE FROM template_exercises")
     suspend fun deleteAllTemplateExercises()
+
+    @Query("UPDATE template_exercises SET sync_status = 'SYNCED', pending_operation = NULL WHERE template_id = :templateId")
+    suspend fun markTemplateExercisesAsSynced(templateId: String)
 }

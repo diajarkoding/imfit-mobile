@@ -8,6 +8,7 @@ import com.diajarkoding.imfit.data.exception.AuthException
 import com.diajarkoding.imfit.data.exception.mapSupabaseException
 import com.diajarkoding.imfit.data.remote.dto.ProfileDto
 import com.diajarkoding.imfit.data.remote.dto.toDomain
+import com.diajarkoding.imfit.data.sync.SyncScheduler
 import com.diajarkoding.imfit.domain.model.User
 import com.diajarkoding.imfit.domain.repository.AuthRepository
 import dagger.hilt.android.qualifiers.ApplicationContext
@@ -29,6 +30,7 @@ private const val AVATARS_BUCKET = "avatars"
 @Singleton
 class AuthRepositoryImpl @Inject constructor(
     private val supabaseClient: SupabaseClient,
+    private val syncScheduler: SyncScheduler,
     @ApplicationContext private val context: Context
 ) : AuthRepository {
 
@@ -106,6 +108,7 @@ class AuthRepositoryImpl @Inject constructor(
             }
 
             cachedUser = newUser
+            syncScheduler.enqueue(userId)
             Result.success(newUser)
         } catch (e: Exception) {
             Log.e(TAG, "Register error: ${e.message}", e)
@@ -226,6 +229,7 @@ class AuthRepositoryImpl @Inject constructor(
 
             if (profile != null) {
                 cachedUser = profile
+                syncScheduler.enqueue(userId)
                 Result.success(profile)
             } else {
                 val currentUser = supabaseClient.auth.currentUserOrNull()
@@ -238,6 +242,7 @@ class AuthRepositoryImpl @Inject constructor(
                         profilePhotoUri = null
                     )
                     cachedUser = basicUser
+                    syncScheduler.enqueue(userId)
                     Result.success(basicUser)
                 } else {
                     Result.failure(AuthException.UserNotFound())
@@ -252,6 +257,7 @@ class AuthRepositoryImpl @Inject constructor(
 
     override suspend fun logout() {
         try {
+            supabaseClient.auth.currentUserOrNull()?.id?.let(syncScheduler::cancel)
             supabaseClient.auth.signOut()
             cachedUser = null
         } catch (e: Exception) {

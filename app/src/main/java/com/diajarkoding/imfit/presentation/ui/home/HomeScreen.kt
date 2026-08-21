@@ -1,5 +1,7 @@
 package com.diajarkoding.imfit.presentation.ui.home
 
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
+
 import androidx.compose.animation.core.LinearEasing
 import androidx.compose.animation.core.RepeatMode
 import androidx.compose.animation.core.animateFloat
@@ -26,13 +28,13 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
-import androidx.compose.material.icons.filled.Add
-import androidx.compose.material.icons.filled.FitnessCenter
-import androidx.compose.material.icons.filled.PlayArrow
-import androidx.compose.material.icons.filled.Schedule
-import androidx.compose.material.icons.filled.Timer
+import com.diajarkoding.imfit.presentation.components.common.Add
+import com.diajarkoding.imfit.presentation.components.common.FitnessCenter
+import com.diajarkoding.imfit.presentation.components.common.KeyboardArrowRight
+import com.diajarkoding.imfit.presentation.components.common.PlayArrow
+import com.diajarkoding.imfit.presentation.components.common.Schedule
+import com.diajarkoding.imfit.presentation.components.common.Symbols
+import com.diajarkoding.imfit.presentation.components.common.Timer
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -86,8 +88,8 @@ fun HomeScreen(
     onNavigateToActiveWorkout: (String) -> Unit = {},
     viewModel: HomeViewModel = hiltViewModel()
 ) {
-    val state by viewModel.state.collectAsState()
-    val syncState by viewModel.syncState.collectAsState()
+    val state by viewModel.state.collectAsStateWithLifecycle()
+    val syncState by viewModel.syncState.collectAsStateWithLifecycle()
     var showAddDayDialog by remember { mutableStateOf(false) }
     var newDayName by remember { mutableStateOf("") }
     
@@ -123,7 +125,7 @@ fun HomeScreen(
             },
             title = stringResource(R.string.home_create_workout_title),
             message = stringResource(R.string.home_create_workout_message),
-            icon = Icons.Default.Add,
+            icon = Symbols.Default.Add,
             confirmText = stringResource(R.string.action_create),
             dismissText = stringResource(R.string.action_cancel),
             confirmEnabled = newDayName.isNotBlank(),
@@ -171,7 +173,7 @@ fun HomeScreen(
                             contentAlignment = Alignment.Center
                         ) {
                             Icon(
-                                imageVector = Icons.Default.FitnessCenter,
+                                imageVector = Symbols.Default.FitnessCenter,
                                 contentDescription = null,
                                 tint = MaterialTheme.colorScheme.onPrimary,
                                 modifier = Modifier.size(IMFITSizes.iconSm)
@@ -268,7 +270,7 @@ fun HomeScreen(
                     IMFITButton(
                         text = stringResource(R.string.action_add_workout),
                         onClick = { showAddDayDialog = true },
-                        icon = Icons.Default.Add
+                        icon = Symbols.Default.Add
                     )
                     Spacer(modifier = Modifier.height(IMFITSpacing.huge))
                 }
@@ -305,7 +307,7 @@ private fun HomeScreenContent(
                             contentAlignment = Alignment.Center
                         ) {
                             Icon(
-                                imageVector = Icons.Default.FitnessCenter,
+                                imageVector = Symbols.Default.FitnessCenter,
                                 contentDescription = null,
                                 tint = MaterialTheme.colorScheme.onPrimary,
                                 modifier = Modifier.size(IMFITSizes.iconSm)
@@ -396,7 +398,7 @@ private fun HomeScreenContent(
                     IMFITButton(
                         text = stringResource(R.string.action_add_workout),
                         onClick = onAddWorkoutClick,
-                        icon = Icons.Default.Add
+                        icon = Symbols.Default.Add
                     )
                     Spacer(modifier = Modifier.height(IMFITSpacing.huge))
                 }
@@ -467,12 +469,12 @@ private fun LastWorkoutCard(workout: WorkoutLog?) {
                     horizontalArrangement = Arrangement.SpaceEvenly
                 ) {
                     StatChip(
-                        icon = Icons.Default.Timer,
+                        icon = Symbols.Default.Timer,
                         value = workout?.formattedDuration ?: "--:--",
                         label = "Duration"
                     )
                     StatChip(
-                        icon = Icons.Default.FitnessCenter,
+                        icon = Symbols.Default.FitnessCenter,
                         value = workout?.formattedVolume ?: "0 kg",
                         label = "Volume"
                     )
@@ -568,8 +570,8 @@ private fun WorkoutCard(
                 contentAlignment = Alignment.Center
             ) {
                 Icon(
-                    imageVector = if (isActive) Icons.Default.PlayArrow
-                    else Icons.Default.FitnessCenter,
+                    imageVector = if (isActive) Symbols.Default.PlayArrow
+                    else Symbols.Default.FitnessCenter,
                     contentDescription = null,
                     tint = if (isActive) MaterialTheme.colorScheme.onPrimary
                     else MaterialTheme.colorScheme.onPrimaryContainer,
@@ -613,7 +615,7 @@ private fun WorkoutCard(
                 ) {
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         Icon(
-                            imageVector = Icons.Default.Schedule,
+                            imageVector = Symbols.Default.Schedule,
                             contentDescription = null,
                             tint = MaterialTheme.colorScheme.onSurfaceVariant,
                             modifier = Modifier.size(IMFITSizes.iconXs)
@@ -627,7 +629,7 @@ private fun WorkoutCard(
                     }
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         Icon(
-                            imageVector = Icons.Default.FitnessCenter,
+                            imageVector = Symbols.Default.FitnessCenter,
                             contentDescription = null,
                             tint = MaterialTheme.colorScheme.onSurfaceVariant,
                             modifier = Modifier.size(IMFITSizes.iconXs)
@@ -646,7 +648,7 @@ private fun WorkoutCard(
             }
 
             Icon(
-                imageVector = Icons.AutoMirrored.Filled.KeyboardArrowRight,
+                imageVector = Symbols.AutoMirrored.Filled.KeyboardArrowRight,
                 contentDescription = stringResource(R.string.desc_view_details),
                 tint = MaterialTheme.colorScheme.onSurfaceVariant,
                 modifier = Modifier.size(IMFITSizes.iconMd)
@@ -680,7 +682,7 @@ private fun EmptyWorkoutCard(onClick: () -> Unit) {
                 contentAlignment = Alignment.Center
             ) {
                 Icon(
-                    imageVector = Icons.Default.Add,
+                    imageVector = Symbols.Default.Add,
                     contentDescription = null,
                     tint = MaterialTheme.colorScheme.onPrimaryContainer,
                     modifier = Modifier.size(IMFITSizes.iconLg)

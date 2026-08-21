@@ -1,5 +1,7 @@
 package com.diajarkoding.imfit.presentation.ui.progress
 
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
+
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -22,10 +24,10 @@ import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.ArrowBack
-import androidx.compose.material.icons.automirrored.filled.KeyboardArrowLeft
-import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
+import com.diajarkoding.imfit.presentation.components.common.ArrowBack
+import com.diajarkoding.imfit.presentation.components.common.KeyboardArrowLeft
+import com.diajarkoding.imfit.presentation.components.common.KeyboardArrowRight
+import com.diajarkoding.imfit.presentation.components.common.Symbols
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -47,6 +49,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalLocale
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -69,7 +72,7 @@ fun YearlyCalendarScreen(
     onDateSelected: (LocalDate) -> Unit,
     viewModel: ProgressViewModel = hiltViewModel()
 ) {
-    val state by viewModel.state.collectAsState()
+    val state by viewModel.state.collectAsStateWithLifecycle()
     val currentYear = Year.now().value
     var selectedYear by remember { mutableIntStateOf(currentYear) }
     val months = (1..12).map { YearMonth.of(selectedYear, it) }
@@ -92,7 +95,7 @@ fun YearlyCalendarScreen(
                             modifier = Modifier.size(36.dp)
                         ) {
                             Icon(
-                                Icons.AutoMirrored.Filled.KeyboardArrowLeft,
+                                Symbols.AutoMirrored.Filled.KeyboardArrowLeft,
                                 contentDescription = stringResource(R.string.calendar_previous_year),
                                 tint = Primary
                             )
@@ -109,7 +112,7 @@ fun YearlyCalendarScreen(
                             modifier = Modifier.size(36.dp)
                         ) {
                             Icon(
-                                Icons.AutoMirrored.Filled.KeyboardArrowRight,
+                                Symbols.AutoMirrored.Filled.KeyboardArrowRight,
                                 contentDescription = stringResource(R.string.calendar_next_year),
                                 tint = if (selectedYear < currentYear) Primary 
                                        else MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.3f)
@@ -119,7 +122,7 @@ fun YearlyCalendarScreen(
                 },
                 navigationIcon = {
                     IconButton(onClick = onNavigateBack) {
-                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = stringResource(R.string.action_back))
+                        Icon(Symbols.AutoMirrored.Filled.ArrowBack, contentDescription = stringResource(R.string.action_back))
                     }
                 },
                 colors = TopAppBarDefaults.topAppBarColors(
@@ -158,6 +161,7 @@ private fun MonthCard(
     onDateSelected: (LocalDate) -> Unit
 ) {
     val daysInMonth = yearMonth.lengthOfMonth()
+    val locale = Locale.forLanguageTag(LocalLocale.current.toLanguageTag())
     val firstDayOfWeek = yearMonth.atDay(1).dayOfWeek.value
     val weeks = buildCalendarWeeks(daysInMonth, firstDayOfWeek)
     val today = LocalDate.now()
@@ -170,7 +174,7 @@ private fun MonthCard(
     ) {
         Column(modifier = Modifier.padding(IMFITSpacing.cardPadding)) {
             Text(
-                text = yearMonth.month.getDisplayName(TextStyle.FULL, Locale.getDefault()),
+                text = yearMonth.month.getDisplayName(TextStyle.FULL, locale),
                 style = MaterialTheme.typography.titleMedium,
                 fontWeight = FontWeight.Bold,
                 modifier = Modifier.padding(bottom = IMFITSpacing.md)

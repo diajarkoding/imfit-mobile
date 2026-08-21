@@ -1,35 +1,33 @@
 package com.diajarkoding.imfit.presentation.navigation
 
 import androidx.compose.runtime.Composable
-import androidx.navigation.NavHostController
-import androidx.navigation.NavType
-import androidx.navigation.compose.NavHost
-import androidx.navigation.compose.composable
-import androidx.navigation.compose.rememberNavController
-import androidx.navigation.navArgument
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.setValue
+import androidx.lifecycle.viewmodel.navigation3.rememberViewModelStoreNavEntryDecorator
+import androidx.navigation3.runtime.NavKey
+import androidx.navigation3.runtime.entryProvider
+import androidx.navigation3.runtime.rememberNavBackStack
+import androidx.navigation3.runtime.rememberSaveableStateHolderNavEntryDecorator
+import androidx.navigation3.ui.NavDisplay
 import com.diajarkoding.imfit.presentation.ui.auth.LoginScreen
 import com.diajarkoding.imfit.presentation.ui.auth.RegisterScreen
-import com.diajarkoding.imfit.presentation.ui.exercise.ExerciseBrowserScreen
 import com.diajarkoding.imfit.presentation.ui.exercise.ExerciseListScreen
 import com.diajarkoding.imfit.presentation.ui.exercise.ExerciseSelectionScreen
-import com.diajarkoding.imfit.presentation.ui.home.HomeScreen
 import com.diajarkoding.imfit.presentation.ui.main.MainScreen
 import com.diajarkoding.imfit.presentation.ui.profile.ProfileScreen
-import com.diajarkoding.imfit.presentation.ui.workout.WorkoutDetailScreen
+import com.diajarkoding.imfit.presentation.ui.progress.WorkoutHistoryDetailScreen
+import com.diajarkoding.imfit.presentation.ui.progress.YearlyCalendarScreen
 import com.diajarkoding.imfit.presentation.ui.splash.SplashScreen
 import com.diajarkoding.imfit.presentation.ui.workout.ActiveWorkoutScreen
 import com.diajarkoding.imfit.presentation.ui.workout.EditWorkoutScreen
+import com.diajarkoding.imfit.presentation.ui.workout.WorkoutDetailScreen
 import com.diajarkoding.imfit.presentation.ui.workout.WorkoutSummaryScreen
-import com.diajarkoding.imfit.presentation.ui.progress.WorkoutHistoryDetailScreen
-import com.diajarkoding.imfit.presentation.ui.progress.YearlyCalendarScreen
-import java.text.SimpleDateFormat
-import java.util.Calendar
-import java.util.Locale
 
 @Composable
 fun NavGraph(
-    navController: NavHostController = rememberNavController(),
-    startDestination: String = Routes.SPLASH,
     isDarkMode: Boolean = false,
     onToggleTheme: () -> Unit = {},
     isIndonesian: Boolean = true,
@@ -38,236 +36,188 @@ fun NavGraph(
     activeWorkoutTemplateId: String? = null,
     onActiveWorkoutOpened: () -> Unit = {}
 ) {
-    // Handle navigation to active workout from notification
-    androidx.compose.runtime.LaunchedEffect(openActiveWorkout, activeWorkoutTemplateId) {
-        if (openActiveWorkout) {
-            // Check if we're already on ActiveWorkoutScreen
-            val currentRoute = navController.currentBackStackEntry?.destination?.route
-            val isAlreadyOnActiveWorkout = currentRoute?.startsWith("active_workout") == true
-            
-            if (!isAlreadyOnActiveWorkout) {
-                // Navigate to active workout - use templateId if available, otherwise use a placeholder
-                // The ActiveWorkoutScreen will check for existing session anyway
-                val templateId = activeWorkoutTemplateId ?: "active"
-                navController.navigate(Routes.activeWorkout(templateId)) {
-                    popUpTo(Routes.MAIN) { inclusive = false }
-                    launchSingleTop = true
-                }
-            }
-            onActiveWorkoutOpened()
-        }
+    val backStack = rememberNavBackStack(Splash)
+    var exerciseSelectionResult by rememberSaveable {
+        mutableStateOf<ArrayList<String>?>(null)
     }
 
-    NavHost(
-        navController = navController,
-        startDestination = startDestination
+    LaunchedEffect(
+        openActiveWorkout,
+        activeWorkoutTemplateId,
+        backStack.size,
+        backStack.lastOrNull()
     ) {
-        composable(Routes.SPLASH) {
-            SplashScreen(
-                onNavigateToLogin = {
-                    navController.navigate(Routes.LOGIN) {
-                        popUpTo(Routes.SPLASH) { inclusive = true }
+        if (!openActiveWorkout || backStack.none { it is Main }) return@LaunchedEffect
+
+        if (backStack.lastOrNull() !is ActiveWorkout) {
+            backStack.trimToMain()
+            backStack.add(ActiveWorkout(activeWorkoutTemplateId ?: "active"))
+        }
+        onActiveWorkoutOpened()
+    }
+
+    NavDisplay(
+        backStack = backStack,
+        onBack = {
+            if (backStack.size > 1) {
+                backStack.removeLastOrNull()
+            }
+        },
+        entryDecorators = listOf(
+            rememberSaveableStateHolderNavEntryDecorator(),
+            rememberViewModelStoreNavEntryDecorator()
+        ),
+        entryProvider = entryProvider {
+            entry<Splash> {
+                SplashScreen(
+                    onNavigateToLogin = { backStack.resetTo(Login) },
+                    onNavigateToHome = { backStack.resetTo(Main) }
+                )
+            }
+
+            entry<Login> {
+                LoginScreen(
+                    onNavigateToRegister = { backStack.add(Register) },
+                    onLoginSuccess = { backStack.resetTo(Main) },
+                    isDarkMode = isDarkMode,
+                    onToggleTheme = onToggleTheme,
+                    isIndonesian = isIndonesian,
+                    onToggleLanguage = onToggleLanguage
+                )
+            }
+
+            entry<Register> {
+                RegisterScreen(
+                    onNavigateToLogin = { backStack.removeLastOrNull() },
+                    onRegisterSuccess = { backStack.resetTo(Main) }
+                )
+            }
+
+            entry<Main> {
+                MainScreen(
+                    onNavigateToWorkoutDetail = { workoutId ->
+                        backStack.add(WorkoutDetail(workoutId))
+                    },
+                    onNavigateToActiveWorkout = { templateId ->
+                        backStack.add(ActiveWorkout(templateId))
+                    },
+                    onNavigateToExerciseList = { categoryName ->
+                        backStack.add(ExerciseList(categoryName))
+                    },
+                    onNavigateToWorkoutHistory = { date ->
+                        backStack.add(WorkoutHistory(date.toString()))
+                    },
+                    onNavigateToYearlyCalendar = {
+                        backStack.add(YearlyCalendar)
+                    },
+                    onNavigateToProfile = {
+                        backStack.add(Profile)
                     }
-                },
-                onNavigateToHome = {
-                    navController.navigate(Routes.MAIN) {
-                        popUpTo(Routes.SPLASH) { inclusive = true }
+                )
+            }
+
+            entry<WorkoutDetail> { key ->
+                WorkoutDetailScreen(
+                    workoutId = key.workoutId,
+                    onNavigateBack = { backStack.removeLastOrNull() },
+                    onNavigateToExerciseSelection = { templateId ->
+                        exerciseSelectionResult = null
+                        backStack.add(ExerciseSelection(templateId))
+                    },
+                    onStartWorkout = { templateId ->
+                        backStack.add(ActiveWorkout(templateId))
+                    },
+                    onNavigateToEdit = { workoutId ->
+                        backStack.add(EditWorkout(workoutId))
+                    },
+                    selectedExerciseIds = exerciseSelectionResult,
+                    onSelectedExercisesConsumed = { exerciseSelectionResult = null }
+                )
+            }
+
+            entry<EditWorkout> { key ->
+                EditWorkoutScreen(
+                    workoutId = key.workoutId,
+                    onNavigateBack = { backStack.removeLastOrNull() }
+                )
+            }
+
+            entry<ExerciseList> { key ->
+                ExerciseListScreen(
+                    categoryName = key.categoryName,
+                    onNavigateBack = { backStack.removeLastOrNull() }
+                )
+            }
+
+            entry<ExerciseSelection> { key ->
+                ExerciseSelectionScreen(
+                    templateId = key.templateId,
+                    onNavigateBack = { backStack.removeLastOrNull() },
+                    onExercisesSelected = { selectedExercises ->
+                        exerciseSelectionResult = ArrayList(selectedExercises.map { it.id })
+                        backStack.removeLastOrNull()
                     }
-                }
-            )
-        }
+                )
+            }
 
-        composable(Routes.LOGIN) {
-            LoginScreen(
-                onNavigateToRegister = {
-                    navController.navigate(Routes.REGISTER)
-                },
-                onLoginSuccess = {
-                    navController.navigate(Routes.MAIN) {
-                        popUpTo(Routes.LOGIN) { inclusive = true }
+            entry<ActiveWorkout> { key ->
+                ActiveWorkoutScreen(
+                    templateId = key.templateId,
+                    onNavigateBack = { backStack.removeLastOrNull() },
+                    onWorkoutFinished = { workoutLogId ->
+                        backStack.trimToMain()
+                        backStack.add(WorkoutSummary(workoutLogId))
                     }
-                },
-                isDarkMode = isDarkMode,
-                onToggleTheme = onToggleTheme,
-                isIndonesian = isIndonesian,
-                onToggleLanguage = onToggleLanguage
-            )
-        }
+                )
+            }
 
-        composable(Routes.REGISTER) {
-            RegisterScreen(
-                onNavigateToLogin = {
-                    navController.navigateUp()
-                },
-                onRegisterSuccess = {
-                    navController.navigate(Routes.MAIN) {
-                        popUpTo(Routes.REGISTER) { inclusive = true }
-                        popUpTo(Routes.LOGIN) { inclusive = true }
+            entry<WorkoutSummary> { key ->
+                WorkoutSummaryScreen(
+                    workoutLogId = key.workoutLogId,
+                    onNavigateToHome = { backStack.resetTo(Main) }
+                )
+            }
+
+            entry<WorkoutHistory> { key ->
+                WorkoutHistoryDetailScreen(
+                    date = key.date,
+                    onNavigateBack = { backStack.removeLastOrNull() }
+                )
+            }
+
+            entry<YearlyCalendar> {
+                YearlyCalendarScreen(
+                    onNavigateBack = { backStack.removeLastOrNull() },
+                    onDateSelected = { date ->
+                        backStack.add(WorkoutHistory(date.toString()))
                     }
-                }
-            )
-        }
+                )
+            }
 
-        composable(Routes.MAIN) {
-            MainScreen(
-                onNavigateToWorkoutDetail = { workoutId ->
-                    navController.navigate(Routes.workoutDetail(workoutId))
-                },
-                onNavigateToActiveWorkout = { templateId ->
-                    navController.navigate(Routes.activeWorkout(templateId))
-                },
-                onNavigateToExerciseList = { categoryName ->
-                    navController.navigate(Routes.exerciseList(categoryName))
-                },
-                onNavigateToWorkoutHistory = { date ->
-                    navController.navigate(Routes.workoutHistory(date.toString()))
-                },
-                onNavigateToYearlyCalendar = {
-                    navController.navigate(Routes.YEARLY_CALENDAR)
-                },
-                onNavigateToProfile = {
-                    navController.navigate(Routes.PROFILE)
-                },
-                onLogout = {
-                    navController.navigate(Routes.LOGIN) {
-                        popUpTo(Routes.MAIN) { inclusive = true }
-                    }
-                }
-            )
+            entry<Profile> {
+                ProfileScreen(
+                    onNavigateBack = { backStack.removeLastOrNull() },
+                    onLogout = { backStack.resetTo(Login) },
+                    isDarkMode = isDarkMode,
+                    onToggleTheme = onToggleTheme,
+                    isIndonesian = isIndonesian,
+                    onToggleLanguage = onToggleLanguage
+                )
+            }
         }
+    )
+}
 
-        composable(
-            route = Routes.WORKOUT_DETAIL,
-            arguments = listOf(navArgument("workoutId") { type = NavType.StringType })
-        ) { backStackEntry ->
-            val workoutId = backStackEntry.arguments?.getString("workoutId") ?: ""
-            val selectedExercises = backStackEntry.savedStateHandle.get<List<com.diajarkoding.imfit.domain.model.Exercise>>("selected_exercises")
-            WorkoutDetailScreen(
-                workoutId = workoutId,
-                onNavigateBack = { navController.navigateUp() },
-                onNavigateToExerciseSelection = { id ->
-                    navController.navigate(Routes.exerciseSelection(id))
-                },
-                onStartWorkout = { templateId ->
-                    navController.navigate(Routes.activeWorkout(templateId))
-                },
-                onNavigateToEdit = { id ->
-                    navController.navigate(Routes.editWorkout(id))
-                },
-                selectedExercises = selectedExercises
-            )
-        }
+private fun MutableList<NavKey>.resetTo(destination: NavKey) {
+    clear()
+    add(destination)
+}
 
-        composable(
-            route = Routes.EDIT_WORKOUT,
-            arguments = listOf(navArgument("workoutId") { type = NavType.StringType })
-        ) { backStackEntry ->
-            val workoutId = backStackEntry.arguments?.getString("workoutId") ?: ""
-            EditWorkoutScreen(
-                workoutId = workoutId,
-                onNavigateBack = { navController.navigateUp() }
-            )
-        }
+private fun MutableList<NavKey>.trimToMain() {
+    val mainIndex = indexOfLast { it is Main }
+    if (mainIndex < 0) return
 
-        composable(
-            route = Routes.EXERCISE_LIST,
-            arguments = listOf(navArgument("categoryName") { type = NavType.StringType })
-        ) { backStackEntry ->
-            val categoryName = backStackEntry.arguments?.getString("categoryName") ?: ""
-            ExerciseListScreen(
-                categoryName = categoryName,
-                onNavigateBack = { navController.navigateUp() }
-            )
-        }
-
-        composable(Routes.EXERCISE_BROWSER) {
-            ExerciseBrowserScreen(
-                onNavigateBack = { navController.navigateUp() },
-                onCategorySelected = { /* handled in MainScreen */ }
-            )
-        }
-
-        composable(
-            route = Routes.EXERCISE_SELECTION,
-            arguments = listOf(navArgument("templateId") { type = NavType.StringType })
-        ) { backStackEntry ->
-            val templateId = backStackEntry.arguments?.getString("templateId") ?: ""
-            ExerciseSelectionScreen(
-                templateId = templateId,
-                onNavigateBack = { navController.navigateUp() },
-                onExercisesSelected = { selectedExercises ->
-                    navController.previousBackStackEntry
-                        ?.savedStateHandle
-                        ?.set("selected_exercises", selectedExercises)
-                    navController.navigateUp()
-                }
-            )
-        }
-
-        composable(
-            route = Routes.ACTIVE_WORKOUT,
-            arguments = listOf(navArgument("templateId") { type = NavType.StringType })
-        ) { backStackEntry ->
-            val templateId = backStackEntry.arguments?.getString("templateId") ?: ""
-            ActiveWorkoutScreen(
-                templateId = templateId,
-                onNavigateBack = { navController.navigateUp() },
-                onWorkoutFinished = { workoutLogId ->
-                    navController.navigate(Routes.workoutSummary(workoutLogId)) {
-                        popUpTo(Routes.MAIN)
-                    }
-                }
-            )
-        }
-
-        composable(
-            route = Routes.WORKOUT_SUMMARY,
-            arguments = listOf(navArgument("workoutLogId") { type = NavType.StringType })
-        ) { backStackEntry ->
-            val workoutLogId = backStackEntry.arguments?.getString("workoutLogId") ?: ""
-            WorkoutSummaryScreen(
-                workoutLogId = workoutLogId,
-                onNavigateToHome = {
-                    navController.navigate(Routes.MAIN) {
-                        popUpTo(Routes.MAIN) { inclusive = true }
-                    }
-                }
-            )
-        }
-
-        composable(
-            route = Routes.WORKOUT_HISTORY,
-            arguments = listOf(navArgument("date") { type = NavType.StringType })
-        ) { backStackEntry ->
-            val date = backStackEntry.arguments?.getString("date") ?: SimpleDateFormat("yyyy-MM-dd", Locale.getDefault()).format(Calendar.getInstance().time)
-            WorkoutHistoryDetailScreen(
-                date = date,
-                onNavigateBack = { navController.navigateUp() }
-            )
-        }
-
-        composable(Routes.YEARLY_CALENDAR) {
-            YearlyCalendarScreen(
-                onNavigateBack = { navController.navigateUp() },
-                onDateSelected = { date ->
-                    navController.navigate(Routes.workoutHistory(date.toString()))
-                }
-            )
-        }
-
-        composable(Routes.PROFILE) {
-            ProfileScreen(
-                onNavigateBack = { navController.navigateUp() },
-                onLogout = {
-                    navController.navigate(Routes.LOGIN) {
-                        popUpTo(Routes.MAIN) { inclusive = true }
-                    }
-                },
-                isDarkMode = isDarkMode,
-                onToggleTheme = onToggleTheme,
-                isIndonesian = isIndonesian,
-                onToggleLanguage = onToggleLanguage
-            )
-        }
+    while (lastIndex > mainIndex) {
+        removeAt(lastIndex)
     }
 }

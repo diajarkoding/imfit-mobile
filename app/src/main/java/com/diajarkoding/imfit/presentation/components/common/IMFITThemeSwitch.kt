@@ -13,9 +13,9 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.DarkMode
-import androidx.compose.material.icons.filled.LightMode
+import com.diajarkoding.imfit.presentation.components.common.DarkMode
+import com.diajarkoding.imfit.presentation.components.common.LightMode
+import com.diajarkoding.imfit.presentation.components.common.Symbols
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.Composable
@@ -67,7 +67,7 @@ fun IMFITThemeSwitch(
             contentAlignment = Alignment.Center
         ) {
             Icon(
-                imageVector = if (isDarkMode) Icons.Default.DarkMode else Icons.Default.LightMode,
+                imageVector = if (isDarkMode) Symbols.Default.DarkMode else Symbols.Default.LightMode,
                 contentDescription = if (isDarkMode) "Dark mode" else "Light mode",
                 tint = Color.White,
                 modifier = Modifier.size(14.dp)

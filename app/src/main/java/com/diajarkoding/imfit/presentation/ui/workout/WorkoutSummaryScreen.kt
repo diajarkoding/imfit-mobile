@@ -1,5 +1,7 @@
 package com.diajarkoding.imfit.presentation.ui.workout
 
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
+
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -16,11 +18,11 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.CheckCircle
+import com.diajarkoding.imfit.presentation.components.common.CheckCircle
+import com.diajarkoding.imfit.presentation.components.common.Symbols
 import androidx.compose.ui.tooling.preview.Preview
-import androidx.compose.material.icons.filled.FitnessCenter
-import androidx.compose.material.icons.filled.Timer
+import com.diajarkoding.imfit.presentation.components.common.FitnessCenter
+import com.diajarkoding.imfit.presentation.components.common.Timer
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.Icon
@@ -62,7 +64,7 @@ fun WorkoutSummaryScreen(
     onNavigateToHome: () -> Unit,
     viewModel: WorkoutSummaryViewModel = hiltViewModel()
 ) {
-    val state by viewModel.state.collectAsState()
+    val state by viewModel.state.collectAsStateWithLifecycle()
 
     LaunchedEffect(workoutLogId) {
         viewModel.loadWorkoutLog(workoutLogId)
@@ -118,7 +120,7 @@ fun WorkoutSummaryScreen(
                             contentAlignment = Alignment.Center
                         ) {
                             Icon(
-                                imageVector = Icons.Default.CheckCircle,
+                                imageVector = Symbols.Default.CheckCircle,
                                 contentDescription = null,
                                 tint = Color.White,
                                 modifier = Modifier.size(IMFITSizes.iconXxl)
@@ -153,13 +155,13 @@ fun WorkoutSummaryScreen(
                     ) {
                         SummaryStatCard(
                             modifier = Modifier.weight(1f),
-                            icon = Icons.Default.Timer,
+                            icon = Symbols.Default.Timer,
                             value = state.workoutLog?.formattedDuration ?: stringResource(R.string.workout_duration_zero),
                             label = stringResource(R.string.label_duration)
                         )
                         SummaryStatCard(
                             modifier = Modifier.weight(1f),
-                            icon = Icons.Default.FitnessCenter,
+                            icon = Symbols.Default.FitnessCenter,
                             value = state.workoutLog?.formattedVolume ?: stringResource(R.string.workout_volume_zero),
                             label = stringResource(R.string.label_volume)
                         )
@@ -188,7 +190,7 @@ fun WorkoutSummaryScreen(
                     IMFITButton(
                         text = stringResource(R.string.action_done),
                         onClick = onNavigateToHome,
-                        icon = Icons.Default.CheckCircle
+                        icon = Symbols.Default.CheckCircle
                     )
                     Spacer(modifier = Modifier.height(IMFITSpacing.xxl))
                 }
@@ -300,7 +302,7 @@ private fun ExerciseSummaryCard(exerciseLog: ExerciseLog) {
                         contentAlignment = Alignment.Center
                     ) {
                         Icon(
-                            imageVector = Icons.Default.FitnessCenter,
+                            imageVector = Symbols.Default.FitnessCenter,
                             contentDescription = null,
                             tint = MaterialTheme.colorScheme.onPrimaryContainer,
                             modifier = Modifier.size(IMFITSizes.iconSm)

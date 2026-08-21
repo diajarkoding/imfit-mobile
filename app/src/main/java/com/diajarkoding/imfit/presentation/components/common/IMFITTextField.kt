@@ -18,9 +18,9 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Visibility
-import androidx.compose.material.icons.filled.VisibilityOff
+import com.diajarkoding.imfit.presentation.components.common.Symbols
+import com.diajarkoding.imfit.presentation.components.common.Visibility
+import com.diajarkoding.imfit.presentation.components.common.VisibilityOff
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -231,7 +231,7 @@ fun IMFITPasswordField(
                     modifier = Modifier.size(IMFITSizes.iconMd)
                 ) {
                     Icon(
-                        imageVector = if (passwordVisible) Icons.Default.Visibility else Icons.Default.VisibilityOff,
+                        imageVector = if (passwordVisible) Symbols.Default.Visibility else Symbols.Default.VisibilityOff,
                         contentDescription = if (passwordVisible) "Hide password" else "Show password",
                         tint = MaterialTheme.colorScheme.onSurfaceVariant,
                         modifier = Modifier.size(IMFITSizes.iconSm)

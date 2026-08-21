@@ -1,31 +1,43 @@
 package com.diajarkoding.imfit.presentation.navigation
 
-object Routes {
-    const val SPLASH = "splash"
-    const val LOGIN = "login"
-    const val REGISTER = "register"
-    const val MAIN = "main"
-    const val HOME = "home"
-    const val TEMPLATE_LIST = "templates"
-    const val CREATE_TEMPLATE = "create_template"
-    const val EDIT_TEMPLATE = "edit_template/{templateId}"
-    const val WORKOUT_DETAIL = "workout_detail/{workoutId}"
-    const val EXERCISE_BROWSER = "exercise_browser"
-    const val EXERCISE_SELECTION = "exercise_selection/{templateId}"
-    const val EXERCISE_LIST = "exercise_list/{categoryName}"
-    const val ACTIVE_WORKOUT = "active_workout/{templateId}"
-    const val WORKOUT_SUMMARY = "workout_summary/{workoutLogId}"
-    const val WORKOUT_HISTORY = "workout_history/{date}"
-    const val YEARLY_CALENDAR = "yearly_calendar"
-    const val EDIT_WORKOUT = "edit_workout/{workoutId}"
-    const val PROFILE = "profile"
+import androidx.navigation3.runtime.NavKey
+import kotlinx.serialization.Serializable
 
-    fun editTemplate(templateId: String) = "edit_template/$templateId"
-    fun editWorkout(workoutId: String) = "edit_workout/$workoutId"
-    fun workoutDetail(workoutId: String) = "workout_detail/$workoutId"
-    fun exerciseSelection(templateId: String) = "exercise_selection/$templateId"
-    fun exerciseList(categoryName: String) = "exercise_list/$categoryName"
-    fun activeWorkout(templateId: String) = "active_workout/$templateId"
-    fun workoutSummary(workoutLogId: String) = "workout_summary/$workoutLogId"
-    fun workoutHistory(date: String) = "workout_history/$date"
-}
+@Serializable
+data object Splash : NavKey
+
+@Serializable
+data object Login : NavKey
+
+@Serializable
+data object Register : NavKey
+
+@Serializable
+data object Main : NavKey
+
+@Serializable
+data class WorkoutDetail(val workoutId: String) : NavKey
+
+@Serializable
+data class EditWorkout(val workoutId: String) : NavKey
+
+@Serializable
+data class ExerciseList(val categoryName: String) : NavKey
+
+@Serializable
+data class ExerciseSelection(val templateId: String) : NavKey
+
+@Serializable
+data class ActiveWorkout(val templateId: String) : NavKey
+
+@Serializable
+data class WorkoutSummary(val workoutLogId: String) : NavKey
+
+@Serializable
+data class WorkoutHistory(val date: String) : NavKey
+
+@Serializable
+data object YearlyCalendar : NavKey
+
+@Serializable
+data object Profile : NavKey

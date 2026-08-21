@@ -5,8 +5,8 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.CircleShape
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Person
+import com.diajarkoding.imfit.presentation.components.common.Person
+import com.diajarkoding.imfit.presentation.components.common.Symbols
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.runtime.Composable
@@ -26,10 +26,11 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
-import coil.compose.AsyncImage
-import coil.compose.AsyncImagePainter
-import coil.request.CachePolicy
-import coil.request.ImageRequest
+import coil3.compose.AsyncImage
+import coil3.compose.AsyncImagePainter
+import coil3.request.CachePolicy
+import coil3.request.ImageRequest
+import coil3.request.crossfade
 import com.diajarkoding.imfit.R
 import com.diajarkoding.imfit.theme.Primary
 import com.diajarkoding.imfit.theme.PrimaryLight
@@ -150,7 +151,7 @@ fun IMFITProfilePhoto(
         // Show placeholder if no URI, loading, or if image failed to load
         if (showPlaceholder) {
             Icon(
-                imageVector = Icons.Default.Person,
+                imageVector = Symbols.Default.Person,
                 contentDescription = null,
                 tint = Color.White,
                 modifier = Modifier.size(size * 0.5f)

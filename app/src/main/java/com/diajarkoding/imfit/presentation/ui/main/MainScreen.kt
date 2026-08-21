@@ -1,18 +1,17 @@
 package com.diajarkoding.imfit.presentation.ui.main
 
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
+
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.navigationBars
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.windowInsetsPadding
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.CalendarMonth
-import androidx.compose.material.icons.filled.FitnessCenter
-import androidx.compose.material.icons.filled.Home
-import androidx.compose.material.icons.outlined.CalendarMonth
-import androidx.compose.material.icons.outlined.FitnessCenter
-import androidx.compose.material.icons.outlined.Home
+import com.diajarkoding.imfit.presentation.components.common.CalendarMonth
+import com.diajarkoding.imfit.presentation.components.common.FitnessCenter
+import com.diajarkoding.imfit.presentation.components.common.Home
+import com.diajarkoding.imfit.presentation.components.common.Symbols
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.NavigationBar
@@ -22,20 +21,18 @@ import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
-import androidx.navigation.NavDestination.Companion.hierarchy
-import androidx.navigation.NavGraph.Companion.findStartDestination
-import androidx.navigation.NavHostController
-import androidx.navigation.compose.NavHost
-import androidx.navigation.compose.composable
-import androidx.navigation.compose.currentBackStackEntryAsState
-import androidx.navigation.compose.rememberNavController
+import androidx.lifecycle.viewmodel.navigation3.rememberViewModelStoreNavEntryDecorator
+import androidx.navigation3.runtime.NavKey
+import androidx.navigation3.runtime.entryProvider
+import androidx.navigation3.runtime.rememberNavBackStack
+import androidx.navigation3.runtime.rememberSaveableStateHolderNavEntryDecorator
+import androidx.navigation3.ui.NavDisplay
 import com.diajarkoding.imfit.presentation.components.common.SyncProgressDialog
 import com.diajarkoding.imfit.presentation.ui.exercise.ExerciseBrowserScreen
 import com.diajarkoding.imfit.presentation.ui.home.HomeScreen
@@ -43,17 +40,23 @@ import com.diajarkoding.imfit.presentation.ui.home.HomeViewModel
 import com.diajarkoding.imfit.presentation.ui.progress.ProgressScreen
 import com.diajarkoding.imfit.theme.Primary
 import java.time.LocalDate
+import kotlinx.serialization.Serializable
 
-sealed class BottomNavItem(
-    val route: String, 
+private data class BottomNavItem(
+    val key: NavKey,
     val title: String, 
     val selectedIcon: ImageVector,
     val unselectedIcon: ImageVector
-) {
-    object Home : BottomNavItem("home_tab", "Home", Icons.Filled.Home, Icons.Outlined.Home)
-    object Exercise : BottomNavItem("exercise_tab", "Exercise", Icons.Filled.FitnessCenter, Icons.Outlined.FitnessCenter)
-    object Progress : BottomNavItem("progress_tab", "Progress", Icons.Filled.CalendarMonth, Icons.Outlined.CalendarMonth)
-}
+)
+
+@Serializable
+private data object HomeTab : NavKey
+
+@Serializable
+private data object ExerciseTab : NavKey
+
+@Serializable
+private data object ProgressTab : NavKey
 
 @Composable
 fun MainScreen(
@@ -63,18 +66,18 @@ fun MainScreen(
     onNavigateToWorkoutHistory: (LocalDate) -> Unit = {},
     onNavigateToYearlyCalendar: () -> Unit = {},
     onNavigateToProfile: () -> Unit = {},
-    onLogout: () -> Unit,
-    bottomNavController: NavHostController = rememberNavController(),
     homeViewModel: HomeViewModel = hiltViewModel()
 ) {
     val items = listOf(
-        BottomNavItem.Home,
-        BottomNavItem.Exercise,
-        BottomNavItem.Progress
+        BottomNavItem(HomeTab, "Home", Symbols.Filled.Home, Symbols.Outlined.Home),
+        BottomNavItem(ExerciseTab, "Exercise", Symbols.Filled.FitnessCenter, Symbols.Outlined.FitnessCenter),
+        BottomNavItem(ProgressTab, "Progress", Symbols.Filled.CalendarMonth, Symbols.Outlined.CalendarMonth)
     )
+    val bottomBackStack = rememberNavBackStack(HomeTab)
+    val currentTab = bottomBackStack.lastOrNull()
     
     // Get sync state from HomeViewModel
-    val syncState by homeViewModel.syncState.collectAsState()
+    val syncState by homeViewModel.syncState.collectAsStateWithLifecycle()
 
     // Wrap everything in Box for full-screen overlay capability
     Box(modifier = Modifier.fillMaxSize()) {
@@ -86,11 +89,8 @@ fun MainScreen(
                     contentColor = Primary,
                     tonalElevation = 0.dp
                 ) {
-                    val navBackStackEntry by bottomNavController.currentBackStackEntryAsState()
-                    val currentDestination = navBackStackEntry?.destination
-
                     items.forEach { item ->
-                        val selected = currentDestination?.hierarchy?.any { it.route == item.route } == true
+                        val selected = currentTab == item.key
                         
                         NavigationBarItem(
                             icon = { 
@@ -114,12 +114,10 @@ fun MainScreen(
                                 unselectedTextColor = MaterialTheme.colorScheme.onSurfaceVariant
                             ),
                             onClick = {
-                                bottomNavController.navigate(item.route) {
-                                    popUpTo(bottomNavController.graph.findStartDestination().id) {
-                                        saveState = true
-                                    }
-                                    launchSingleTop = true
-                                    restoreState = true
+                                bottomBackStack.clear()
+                                bottomBackStack.add(HomeTab)
+                                if (item.key != HomeTab) {
+                                    bottomBackStack.add(item.key)
                                 }
                             }
                         )
@@ -127,34 +125,43 @@ fun MainScreen(
                 }
             }
         ) { innerPadding ->
-            NavHost(
-                navController = bottomNavController,
-                startDestination = BottomNavItem.Home.route,
-                modifier = Modifier.padding(innerPadding)
-            ) {
-                composable(BottomNavItem.Home.route) {
-                    HomeScreen(
-                        onNavigateToWorkoutDetail = onNavigateToWorkoutDetail,
-                        onNavigateToActiveWorkout = onNavigateToActiveWorkout,
-                        viewModel = homeViewModel
-                    )
+            NavDisplay(
+                backStack = bottomBackStack,
+                onBack = {
+                    if (bottomBackStack.size > 1) {
+                        bottomBackStack.removeLastOrNull()
+                    }
+                },
+                modifier = Modifier.padding(innerPadding),
+                entryDecorators = listOf(
+                    rememberSaveableStateHolderNavEntryDecorator(),
+                    rememberViewModelStoreNavEntryDecorator()
+                ),
+                entryProvider = entryProvider {
+                    entry<HomeTab> {
+                        HomeScreen(
+                            onNavigateToWorkoutDetail = onNavigateToWorkoutDetail,
+                            onNavigateToActiveWorkout = onNavigateToActiveWorkout,
+                            viewModel = homeViewModel
+                        )
+                    }
+                    entry<ExerciseTab> {
+                        ExerciseBrowserScreen(
+                            onNavigateBack = { },
+                            onCategorySelected = { category ->
+                                onNavigateToExerciseList(category.name)
+                            }
+                        )
+                    }
+                    entry<ProgressTab> {
+                        ProgressScreen(
+                            onNavigateToWorkoutHistory = onNavigateToWorkoutHistory,
+                            onNavigateToYearlyCalendar = onNavigateToYearlyCalendar,
+                            onNavigateToProfile = onNavigateToProfile
+                        )
+                    }
                 }
-                composable(BottomNavItem.Exercise.route) {
-                    ExerciseBrowserScreen(
-                        onNavigateBack = { },
-                        onCategorySelected = { category ->
-                            onNavigateToExerciseList(category.name)
-                        }
-                    )
-                }
-                composable(BottomNavItem.Progress.route) {
-                    ProgressScreen(
-                        onNavigateToWorkoutHistory = onNavigateToWorkoutHistory,
-                        onNavigateToYearlyCalendar = onNavigateToYearlyCalendar,
-                        onNavigateToProfile = onNavigateToProfile
-                    )
-                }
-            }
+            )
         }
         
         // Full-screen sync overlay - covers entire screen including bottom nav
@@ -172,8 +179,7 @@ private fun MainScreenPreview() {
             onNavigateToExerciseList = {},
             onNavigateToWorkoutHistory = {},
             onNavigateToYearlyCalendar = {},
-            onNavigateToProfile = {},
-            onLogout = {}
+            onNavigateToProfile = {}
         )
     }
 }

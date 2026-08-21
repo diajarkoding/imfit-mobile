@@ -3,19 +3,14 @@ package com.diajarkoding.imfit.data.repository
 import android.util.Log
 import com.diajarkoding.imfit.data.local.FakeExerciseDataSource
 import com.diajarkoding.imfit.data.local.dao.ExerciseDao
-import com.diajarkoding.imfit.data.remote.dto.ExerciseDto
-import com.diajarkoding.imfit.data.remote.dto.toDomain
 import com.diajarkoding.imfit.domain.model.Exercise
 import com.diajarkoding.imfit.domain.model.MuscleCategory
 import com.diajarkoding.imfit.domain.repository.ExerciseRepository
-import io.github.jan.supabase.SupabaseClient
-import io.github.jan.supabase.postgrest.postgrest
 import javax.inject.Inject
 import javax.inject.Singleton
 
 @Singleton
 class ExerciseRepositoryImpl @Inject constructor(
-    private val supabaseClient: SupabaseClient,
     private val exerciseDao: ExerciseDao
 ) : ExerciseRepository {
 
@@ -90,7 +85,7 @@ class ExerciseRepositoryImpl @Inject constructor(
                     description = it.description,
                     imageUrl = it.imageUrl
                 )
-            }
+            } ?: FakeExerciseDataSource.getExerciseById(id)
         } catch (e: Exception) {
             Log.e("ExerciseRepository", "Error fetching exercise by ID from local: ${e.message}", e)
             FakeExerciseDataSource.getExerciseById(id)

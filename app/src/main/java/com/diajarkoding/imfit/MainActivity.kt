@@ -1,5 +1,7 @@
 package com.diajarkoding.imfit
 
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
+
 import android.content.Context
 import android.content.Intent
 import android.os.Bundle
@@ -11,8 +13,6 @@ import androidx.compose.runtime.getValue
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.material3.Surface
 import androidx.compose.runtime.CompositionLocalProvider
-import androidx.compose.runtime.collectAsState
-import androidx.compose.runtime.getValue
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Modifier
 import androidx.core.splashscreen.SplashScreen.Companion.installSplashScreen
@@ -50,7 +50,7 @@ class MainActivity : ComponentActivity() {
         handleNotificationIntent(intent)
 
         setContent {
-            val isDarkMode by themeManager.isDarkMode.collectAsState(initial = false)
+            val isDarkMode by themeManager.isDarkMode.collectAsStateWithLifecycle(initialValue = false)
             // Observe language state - this triggers recomposition when language changes
             val isIndonesian = LocaleManager.isIndonesian
             // Also observe configVersion to ensure recomposition happens

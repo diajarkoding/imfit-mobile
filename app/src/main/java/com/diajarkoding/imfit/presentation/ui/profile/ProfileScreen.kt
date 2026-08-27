@@ -69,7 +69,6 @@ import com.diajarkoding.imfit.theme.IMFITSizes
 import com.diajarkoding.imfit.theme.IMFITSpacing
 import com.diajarkoding.imfit.theme.Primary
 import com.diajarkoding.imfit.theme.PrimaryLight
-
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun ProfileScreen(
@@ -85,29 +84,9 @@ fun ProfileScreen(
 
     Scaffold(
         contentWindowInsets = WindowInsets(0),
+        containerColor = MaterialTheme.colorScheme.background,
         topBar = {
-            TopAppBar(
-                modifier = Modifier.windowInsetsPadding(WindowInsets.statusBars),
-                title = {
-                    Text(
-                        text = stringResource(R.string.title_profile),
-                        style = MaterialTheme.typography.titleLarge,
-                        fontWeight = FontWeight.Bold
-                    )
-                },
-                navigationIcon = {
-                    IconButton(onClick = onNavigateBack) {
-                        Icon(
-                            Symbols.AutoMirrored.Filled.ArrowBack,
-                            contentDescription = stringResource(R.string.action_back)
-                        )
-                    }
-                },
-                colors = TopAppBarDefaults.topAppBarColors(
-                    containerColor = MaterialTheme.colorScheme.surface
-                ),
-                windowInsets = WindowInsets(0)
-            )
+            ProfileTopAppBar(onNavigateBack = onNavigateBack)
         }
     ) { padding ->
         LazyColumn(
@@ -275,29 +254,9 @@ private fun ProfileScreenContent(
 ) {
     Scaffold(
         contentWindowInsets = WindowInsets(0),
+        containerColor = MaterialTheme.colorScheme.background,
         topBar = {
-            TopAppBar(
-                modifier = Modifier.windowInsetsPadding(WindowInsets.statusBars),
-                title = {
-                    Text(
-                        text = stringResource(R.string.title_profile),
-                        style = MaterialTheme.typography.titleLarge,
-                        fontWeight = FontWeight.Bold
-                    )
-                },
-                navigationIcon = {
-                    IconButton(onClick = onNavigateBack) {
-                        Icon(
-                            Symbols.AutoMirrored.Filled.ArrowBack,
-                            contentDescription = stringResource(R.string.action_back)
-                        )
-                    }
-                },
-                colors = TopAppBarDefaults.topAppBarColors(
-                    containerColor = MaterialTheme.colorScheme.surface
-                ),
-                windowInsets = WindowInsets(0)
-            )
+            ProfileTopAppBar(onNavigateBack = onNavigateBack)
         }
     ) { padding ->
         LazyColumn(
@@ -434,6 +393,40 @@ private fun ProfileScreenContent(
             item { Spacer(modifier = Modifier.height(IMFITSpacing.huge)) }
         }
     }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun ProfileTopAppBar(
+    onNavigateBack: () -> Unit
+) {
+    TopAppBar(
+        modifier = Modifier.windowInsetsPadding(WindowInsets.statusBars),
+        title = {
+            Text(
+                text = stringResource(R.string.title_profile),
+                style = MaterialTheme.typography.titleLarge,
+                fontWeight = FontWeight.Bold,
+                color = MaterialTheme.colorScheme.onSurface
+            )
+        },
+        navigationIcon = {
+            IconButton(onClick = onNavigateBack) {
+                Icon(
+                    imageVector = Symbols.AutoMirrored.Filled.ArrowBack,
+                    contentDescription = stringResource(R.string.action_back),
+                    tint = MaterialTheme.colorScheme.onSurface
+                )
+            }
+        },
+        colors = TopAppBarDefaults.topAppBarColors(
+            containerColor = MaterialTheme.colorScheme.surface,
+            scrolledContainerColor = MaterialTheme.colorScheme.surface,
+            navigationIconContentColor = MaterialTheme.colorScheme.onSurface,
+            titleContentColor = MaterialTheme.colorScheme.onSurface
+        ),
+        windowInsets = WindowInsets(0)
+    )
 }
 
 @Composable

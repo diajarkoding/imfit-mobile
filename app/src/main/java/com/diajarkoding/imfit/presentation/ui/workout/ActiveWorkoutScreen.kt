@@ -25,6 +25,7 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -88,7 +89,6 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.TextRange
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.window.Dialog
 import androidx.hilt.navigation.compose.hiltViewModel
 import com.diajarkoding.imfit.R
 import com.diajarkoding.imfit.domain.model.ExerciseLog
@@ -96,6 +96,7 @@ import com.diajarkoding.imfit.domain.model.WorkoutSet
 import com.diajarkoding.imfit.presentation.components.common.IMFITButton
 import com.diajarkoding.imfit.presentation.components.common.IMFITDialog
 import com.diajarkoding.imfit.presentation.components.common.IMFITDialogType
+import com.diajarkoding.imfit.presentation.components.common.IMFITPlatformDialog
 import com.diajarkoding.imfit.presentation.components.common.IMFITSecondaryButton
 import com.diajarkoding.imfit.theme.DeletePink
 import com.diajarkoding.imfit.theme.IMFITShapes
@@ -608,7 +609,7 @@ private fun RestTimerConfigSheet(
     var minutes by remember { mutableIntStateOf(initialMinutes) }
     var seconds by remember { mutableIntStateOf(initialSeconds) }
 
-    Dialog(onDismissRequest = onDismiss) {
+    IMFITPlatformDialog(onDismissRequest = onDismiss) {
         Card(
             shape = IMFITShapes.Dialog,
             colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
@@ -1031,9 +1032,7 @@ private fun SetInputRow(
         Box(
             modifier = Modifier
                 .weight(1f)
-                .height(48.dp)
-                .clip(IMFITShapes.Chip)
-                .background(inputBackground)
+                .background(inputBackground, IMFITShapes.Chip)
                 .padding(horizontal = 2.dp),
             contentAlignment = Alignment.Center
         ) {
@@ -1058,7 +1057,9 @@ private fun SetInputRow(
                     
                     onUpdate(weight, set.reps)
                 },
-                modifier = Modifier.fillMaxSize(),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .heightIn(min = IMFITSizes.textFieldHeight),
                 enabled = !set.isCompleted,
                 keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
                 singleLine = true,
@@ -1095,9 +1096,7 @@ private fun SetInputRow(
         Box(
             modifier = Modifier
                 .weight(1f)
-                .height(48.dp)
-                .clip(IMFITShapes.Chip)
-                .background(inputBackground)
+                .background(inputBackground, IMFITShapes.Chip)
                 .padding(horizontal = 2.dp),
             contentAlignment = Alignment.Center
         ) {
@@ -1122,7 +1121,9 @@ private fun SetInputRow(
                     
                     onUpdate(set.weight, reps)
                 },
-                modifier = Modifier.fillMaxSize(),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .heightIn(min = IMFITSizes.textFieldHeight),
                 enabled = !set.isCompleted,
                 keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
                 singleLine = true,
@@ -1178,7 +1179,7 @@ private fun RestTimerDialog(
     remainingSeconds: Int,
     onDismiss: () -> Unit
 ) {
-    Dialog(onDismissRequest = {}) {
+    IMFITPlatformDialog(onDismissRequest = {}) {
         Card(
             shape = IMFITShapes.Dialog,
             colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)

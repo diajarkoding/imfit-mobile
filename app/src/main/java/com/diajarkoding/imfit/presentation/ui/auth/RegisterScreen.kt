@@ -75,6 +75,7 @@ import androidx.compose.ui.res.stringResource
 import com.diajarkoding.imfit.presentation.components.common.IMFITButton
 import com.diajarkoding.imfit.presentation.components.common.IMFITPasswordField
 import com.diajarkoding.imfit.presentation.components.common.IMFITTextField
+import com.diajarkoding.imfit.presentation.components.common.IMFITDialogBackdrop
 import com.diajarkoding.imfit.theme.IMFITShapes
 import com.diajarkoding.imfit.theme.IMFITSpacing
 import com.diajarkoding.imfit.theme.IMFITSizes
@@ -171,6 +172,7 @@ fun RegisterScreen(
                 }
             }
         ) {
+            IMFITDialogBackdrop()
             DatePicker(state = datePickerState)
         }
     }

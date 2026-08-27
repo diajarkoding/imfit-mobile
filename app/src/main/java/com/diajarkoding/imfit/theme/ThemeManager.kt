@@ -30,10 +30,4 @@ class ThemeManager @Inject constructor(
         }
     }
 
-    suspend fun toggleTheme() {
-        context.themeDataStore.edit { preferences ->
-            val current = preferences[isDarkModeKey] ?: false
-            preferences[isDarkModeKey] = !current
-        }
-    }
 }

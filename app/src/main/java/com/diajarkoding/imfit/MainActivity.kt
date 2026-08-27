@@ -1,19 +1,18 @@
 package com.diajarkoding.imfit
 
-import androidx.lifecycle.compose.collectAsStateWithLifecycle
-
 import android.content.Context
 import android.content.Intent
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
+import androidx.activity.viewModels
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.material3.Surface
 import androidx.compose.runtime.CompositionLocalProvider
-import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Modifier
 import androidx.core.splashscreen.SplashScreen.Companion.installSplashScreen
 import com.diajarkoding.imfit.core.notification.WorkoutNotificationManager
@@ -21,16 +20,13 @@ import com.diajarkoding.imfit.presentation.navigation.NavGraph
 import com.diajarkoding.imfit.theme.IMFITTheme
 import com.diajarkoding.imfit.theme.LocaleManager
 import com.diajarkoding.imfit.theme.LocalIsDarkTheme
-import com.diajarkoding.imfit.theme.ThemeManager
+import com.diajarkoding.imfit.theme.ThemeViewModel
 import dagger.hilt.android.AndroidEntryPoint
-import kotlinx.coroutines.launch
-import javax.inject.Inject
 
 @AndroidEntryPoint
 class MainActivity : ComponentActivity() {
 
-    @Inject
-    lateinit var themeManager: ThemeManager
+    private val themeViewModel: ThemeViewModel by viewModels()
 
     private var pendingWorkoutNavigation = mutableStateOf(false)
     private var pendingTemplateId = mutableStateOf<String?>(null)
@@ -40,9 +36,12 @@ class MainActivity : ComponentActivity() {
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {
-        installSplashScreen()
+        val splashScreen = installSplashScreen()
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
+        splashScreen.setKeepOnScreenCondition {
+            !themeViewModel.uiState.value.isInitialized
+        }
 
         LocaleManager.init(this)
         
@@ -50,15 +49,14 @@ class MainActivity : ComponentActivity() {
         handleNotificationIntent(intent)
 
         setContent {
-            val isDarkMode by themeManager.isDarkMode.collectAsStateWithLifecycle(initialValue = false)
+            val themeUiState by themeViewModel.uiState.collectAsStateWithLifecycle()
+            val isDarkMode = themeUiState.isDarkMode
             // Observe language state - this triggers recomposition when language changes
             val isIndonesian = LocaleManager.isIndonesian
             // Also observe configVersion to ensure recomposition happens
             // This is read but not used as key - just reading it creates a dependency
             @Suppress("UNUSED_VARIABLE")
             val configVersion = LocaleManager.configurationVersion
-            val scope = rememberCoroutineScope()
-
             val shouldNavigateToWorkout by pendingWorkoutNavigation
             val templateId by pendingTemplateId
 
@@ -69,11 +67,7 @@ class MainActivity : ComponentActivity() {
                         // Instead rely on state observation for recomposition
                         NavGraph(
                             isDarkMode = isDarkMode,
-                            onToggleTheme = {
-                                scope.launch {
-                                    themeManager.toggleTheme()
-                                }
-                            },
+                            onToggleTheme = themeViewModel::toggleTheme,
                             isIndonesian = isIndonesian,
                             onToggleLanguage = {
                                 LocaleManager.toggleLanguage(this@MainActivity)
@@ -110,4 +104,3 @@ class MainActivity : ComponentActivity() {
         }
     }
 }
-

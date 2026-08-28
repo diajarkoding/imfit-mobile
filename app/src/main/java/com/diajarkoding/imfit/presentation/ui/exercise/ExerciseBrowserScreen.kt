@@ -1,9 +1,9 @@
 package com.diajarkoding.imfit.presentation.ui.exercise
 
 import androidx.compose.foundation.background
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
@@ -89,20 +89,36 @@ fun ExerciseBrowserScreen(
             )
         }
     ) { padding ->
-        LazyVerticalGrid(
-            columns = GridCells.Fixed(3),
+        BoxWithConstraints(
             modifier = Modifier
                 .fillMaxSize()
-                .padding(padding),
-            contentPadding = PaddingValues(IMFITSpacing.screenHorizontal),
-            horizontalArrangement = Arrangement.spacedBy(IMFITSpacing.sm),
-            verticalArrangement = Arrangement.spacedBy(IMFITSpacing.sm)
+                .padding(padding)
         ) {
-            items(MuscleCategory.entries, key = { it.name }) { category ->
-                MuscleCategoryCard(
-                    category = category,
-                    onClick = { onCategorySelected(category) }
-                )
+            val gridColumns = if (maxWidth < 600.dp) {
+                GridCells.Fixed(2)
+            } else {
+                GridCells.Adaptive(minSize = 160.dp)
+            }
+
+            LazyVerticalGrid(
+                columns = gridColumns,
+                modifier = Modifier.fillMaxSize(),
+                contentPadding = PaddingValues(
+                    horizontal = IMFITSpacing.screenHorizontal,
+                    vertical = IMFITSpacing.screenVertical
+                ),
+                horizontalArrangement = Arrangement.spacedBy(IMFITSpacing.md),
+                verticalArrangement = Arrangement.spacedBy(IMFITSpacing.md)
+            ) {
+                items(MuscleCategory.entries, key = { it.name }) { category ->
+                    MuscleCategoryCard(
+                        category = category,
+                        onClick = { onCategorySelected(category) },
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .aspectRatio(1.15f)
+                    )
+                }
             }
         }
     }
@@ -111,13 +127,12 @@ fun ExerciseBrowserScreen(
 @Composable
 private fun MuscleCategoryCard(
     category: MuscleCategory,
-    onClick: () -> Unit
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier
 ) {
     Card(
-        modifier = Modifier
-            .fillMaxWidth()
-            .aspectRatio(0.85f)
-            .clickable { onClick() },
+        onClick = onClick,
+        modifier = modifier,
         shape = IMFITShapes.Card,
         colors = CardDefaults.cardColors(
             containerColor = MaterialTheme.colorScheme.surface
@@ -135,7 +150,7 @@ private fun MuscleCategoryCard(
                         )
                     )
                 )
-                .padding(IMFITSpacing.md),
+                .padding(IMFITSpacing.cardPadding),
             contentAlignment = Alignment.Center
         ) {
             Column(
@@ -144,7 +159,7 @@ private fun MuscleCategoryCard(
             ) {
                 Box(
                     modifier = Modifier
-                        .size(40.dp)
+                        .size(48.dp)
                         .clip(IMFITShapes.IconContainer)
                         .background(MaterialTheme.colorScheme.primaryContainer),
                     contentAlignment = Alignment.Center
@@ -153,13 +168,13 @@ private fun MuscleCategoryCard(
                         imageVector = Symbols.Default.FitnessCenter,
                         contentDescription = null,
                         tint = MaterialTheme.colorScheme.onPrimaryContainer,
-                        modifier = Modifier.size(IMFITSizes.iconSm)
+                        modifier = Modifier.size(IMFITSizes.iconMd)
                     )
                 }
-                Spacer(modifier = Modifier.size(IMFITSpacing.sm))
+                Spacer(modifier = Modifier.size(IMFITSpacing.md))
                 Text(
                     text = stringResource(id = category.stringResourceId),
-                    style = MaterialTheme.typography.labelMedium,
+                    style = MaterialTheme.typography.labelLarge,
                     fontWeight = FontWeight.Bold,
                     color = MaterialTheme.colorScheme.onSurface,
                     textAlign = TextAlign.Center,
@@ -170,7 +185,13 @@ private fun MuscleCategoryCard(
     }
 }
 
-@Preview(showBackground = true, showSystemUi = true)
+@Preview(
+    name = "Compact phone",
+    widthDp = 360,
+    heightDp = 800,
+    showBackground = true,
+    showSystemUi = true
+)
 @Composable
 private fun ExerciseBrowserScreenPreview() {
     com.diajarkoding.imfit.theme.IMFITTheme(darkTheme = false) {
@@ -181,10 +202,32 @@ private fun ExerciseBrowserScreenPreview() {
     }
 }
 
-@Preview(showBackground = true, showSystemUi = true)
+@Preview(
+    name = "Compact phone dark",
+    widthDp = 360,
+    heightDp = 800,
+    showBackground = true,
+    showSystemUi = true
+)
 @Composable
 private fun ExerciseBrowserScreenPreviewDark() {
     com.diajarkoding.imfit.theme.IMFITTheme(darkTheme = true) {
+        ExerciseBrowserScreen(
+            onNavigateBack = {},
+            onCategorySelected = {}
+        )
+    }
+}
+
+@Preview(
+    name = "Expanded screen",
+    widthDp = 800,
+    heightDp = 1280,
+    showBackground = true
+)
+@Composable
+private fun ExerciseBrowserScreenExpandedPreview() {
+    com.diajarkoding.imfit.theme.IMFITTheme(darkTheme = false) {
         ExerciseBrowserScreen(
             onNavigateBack = {},
             onCategorySelected = {}

@@ -3,6 +3,7 @@ package com.diajarkoding.imfit.data.local.database
 import androidx.room.Database
 import androidx.room.RoomDatabase
 import androidx.room.TypeConverters
+import androidx.room.withTransaction
 import androidx.room.migration.Migration
 import androidx.sqlite.db.SupportSQLiteDatabase
 import com.diajarkoding.imfit.data.local.dao.ActiveSessionDao
@@ -46,6 +47,16 @@ abstract class IMFITDatabase : RoomDatabase() {
     abstract fun exerciseLogDao(): ExerciseLogDao
     abstract fun workoutSetDao(): WorkoutSetDao
     abstract fun activeSessionDao(): ActiveSessionDao
+
+    suspend fun deleteUserData(userId: String) = withTransaction {
+        workoutSetDao().deleteSetsByUser(userId)
+        exerciseLogDao().deleteExerciseLogsByUser(userId)
+        workoutLogDao().deleteWorkoutLogsByUser(userId)
+        templateExerciseDao().deleteExercisesByUser(userId)
+        workoutTemplateDao().deleteTemplatesByUser(userId)
+        activeSessionDao().deleteSession(userId)
+        userDao().deleteUserById(userId)
+    }
 
     companion object {
         val MIGRATION_4_5 = object : Migration(4, 5) {

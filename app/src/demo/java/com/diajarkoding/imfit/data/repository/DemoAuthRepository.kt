@@ -2,6 +2,7 @@ package com.diajarkoding.imfit.data.repository
 
 import com.diajarkoding.imfit.data.local.FakeUserDataSource
 import com.diajarkoding.imfit.domain.model.User
+import com.diajarkoding.imfit.domain.model.RegisterResult
 import com.diajarkoding.imfit.domain.repository.AuthRepository
 import javax.inject.Inject
 import javax.inject.Singleton
@@ -19,13 +20,13 @@ class DemoAuthRepository @Inject constructor() : AuthRepository {
         password: String,
         birthDate: String?,
         profilePhotoUri: String?
-    ): Result<User> = FakeUserDataSource.register(
+    ): Result<RegisterResult> = FakeUserDataSource.register(
         name = name,
         email = email,
         password = password,
         birthDate = birthDate,
         profilePhotoUri = profilePhotoUri
-    )
+    ).map(RegisterResult::Authenticated)
 
     override suspend fun login(email: String, password: String): Result<User> =
         FakeUserDataSource.login(email, password)

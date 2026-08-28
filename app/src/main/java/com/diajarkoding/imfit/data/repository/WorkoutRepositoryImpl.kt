@@ -47,6 +47,7 @@ class WorkoutRepositoryImpl @Inject constructor(
 ) : WorkoutRepository {
 
     private var activeSession: WorkoutSession? = null
+    private var activeSessionUserId: String? = null
     
     private val json = Json { 
         ignoreUnknownKeys = true 
@@ -317,27 +318,24 @@ class WorkoutRepositoryImpl @Inject constructor(
             activeSessionDao.insertSession(entity)
         }
         activeSession = session
+        activeSessionUserId = userId
         return session
     }
 
     override suspend fun getActiveSession(): WorkoutSession? {
-        // First check in-memory cache
-        if (activeSession != null) {
+        val userId = authRepository.getCurrentUser()?.id ?: return null
+        if (activeSession != null && activeSessionUserId == userId) {
             return activeSession
         }
 
         // Try to restore from database
         return try {
-            val userId = authRepository.getCurrentUser()?.id
-            val entity = if (userId != null) {
-                activeSessionDao.getActiveSession(userId)
-            } else {
-                activeSessionDao.getAnyActiveSession()
-            }
+            val entity = activeSessionDao.getActiveSession(userId)
             
             if (entity != null) {
                 val sessionData = json.decodeFromString<SerializableSession>(entity.sessionDataJson)
                 activeSession = sessionData.toDomain()
+                activeSessionUserId = userId
                 Log.d("WorkoutRepository", "Restored active session from Room: ${activeSession?.id}")
                 activeSession
             } else {
@@ -351,7 +349,7 @@ class WorkoutRepositoryImpl @Inject constructor(
 
     override suspend fun updateActiveSession(session: WorkoutSession) {
         val sessionDataJson = json.encodeToString(session.toSerializable())
-        val fallbackUserId = authRepository.getCurrentUser()?.id ?: "local_user"
+        val userId = authRepository.getCurrentUser()?.id ?: return
         database.withTransaction {
             val existing = activeSessionDao.getSessionById(session.id)
             val entity = existing?.copy(
@@ -366,7 +364,7 @@ class WorkoutRepositoryImpl @Inject constructor(
                 updatedAt = System.currentTimeMillis()
             ) ?: ActiveSessionEntity(
                 id = session.id,
-                userId = fallbackUserId,
+                userId = userId,
                 templateId = session.templateId,
                 templateName = session.templateName,
                 startTime = session.startTime,
@@ -379,6 +377,7 @@ class WorkoutRepositoryImpl @Inject constructor(
             activeSessionDao.insertSession(entity)
         }
         activeSession = session
+        activeSessionUserId = userId
     }
 
     override suspend fun finishWorkout(): WorkoutLog? {
@@ -467,6 +466,7 @@ class WorkoutRepositoryImpl @Inject constructor(
 
             if (result != null) {
                 activeSession = null
+                activeSessionUserId = null
                 syncScheduler.enqueue(result.userId)
             }
             result
@@ -482,12 +482,15 @@ class WorkoutRepositoryImpl @Inject constructor(
         val session = activeSession ?: getActiveSession()
         if (session != null) activeSessionDao.deleteSessionById(session.id)
         activeSession = null
+        activeSessionUserId = null
     }
 
     override suspend fun updateSessionRestOverride(seconds: Int) {
         try {
-            val entity = activeSession?.let { activeSessionDao.getSessionById(it.id) }
-                ?: activeSessionDao.getAnyActiveSession()
+            val userId = authRepository.getCurrentUser()?.id ?: return
+            val entity = activeSession?.takeIf { activeSessionUserId == userId }
+                ?.let { activeSessionDao.getSessionById(it.id) }
+                ?: activeSessionDao.getActiveSession(userId)
                 ?: return
             val updatedEntity = entity.copy(
                 sessionRestOverride = seconds,
@@ -502,8 +505,10 @@ class WorkoutRepositoryImpl @Inject constructor(
     
     override suspend fun getSessionRestOverride(): Int? {
         return try {
-            activeSession?.let { activeSessionDao.getSessionById(it.id) }?.sessionRestOverride
-                ?: activeSessionDao.getAnyActiveSession()?.sessionRestOverride
+            val userId = authRepository.getCurrentUser()?.id ?: return null
+            activeSession?.takeIf { activeSessionUserId == userId }
+                ?.let { activeSessionDao.getSessionById(it.id) }?.sessionRestOverride
+                ?: activeSessionDao.getActiveSession(userId)?.sessionRestOverride
         } catch (e: Exception) {
             Log.e("WorkoutRepository", "Failed to get session rest override: ${e.message}", e)
             null

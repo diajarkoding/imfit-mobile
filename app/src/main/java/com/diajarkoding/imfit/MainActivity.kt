@@ -16,20 +16,25 @@ import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.ui.Modifier
 import androidx.core.splashscreen.SplashScreen.Companion.installSplashScreen
 import com.diajarkoding.imfit.core.notification.WorkoutNotificationManager
+import com.diajarkoding.imfit.data.auth.AuthDeepLinkHandler
 import com.diajarkoding.imfit.presentation.navigation.NavGraph
 import com.diajarkoding.imfit.theme.IMFITTheme
 import com.diajarkoding.imfit.theme.LocaleManager
 import com.diajarkoding.imfit.theme.LocalIsDarkTheme
 import com.diajarkoding.imfit.theme.ThemeViewModel
 import dagger.hilt.android.AndroidEntryPoint
+import javax.inject.Inject
 
 @AndroidEntryPoint
 class MainActivity : ComponentActivity() {
+
+    @Inject lateinit var authDeepLinkHandler: AuthDeepLinkHandler
 
     private val themeViewModel: ThemeViewModel by viewModels()
 
     private var pendingWorkoutNavigation = mutableStateOf(false)
     private var pendingTemplateId = mutableStateOf<String?>(null)
+    private var pendingAuthenticatedNavigation = mutableStateOf(false)
 
     override fun attachBaseContext(newBase: Context) {
         super.attachBaseContext(LocaleManager.attachBaseContext(newBase))
@@ -45,8 +50,7 @@ class MainActivity : ComponentActivity() {
 
         LocaleManager.init(this)
         
-        // Handle notification intent
-        handleNotificationIntent(intent)
+        handleIntent(intent)
 
         setContent {
             val themeUiState by themeViewModel.uiState.collectAsStateWithLifecycle()
@@ -59,6 +63,7 @@ class MainActivity : ComponentActivity() {
             val configVersion = LocaleManager.configurationVersion
             val shouldNavigateToWorkout by pendingWorkoutNavigation
             val templateId by pendingTemplateId
+            val shouldNavigateToMain by pendingAuthenticatedNavigation
 
             CompositionLocalProvider(LocalIsDarkTheme provides isDarkMode) {
                 IMFITTheme(darkTheme = isDarkMode) {
@@ -77,7 +82,11 @@ class MainActivity : ComponentActivity() {
                             onActiveWorkoutOpened = {
                                 pendingWorkoutNavigation.value = false
                                 pendingTemplateId.value = null
-                            }                            
+                            },
+                            authenticatedFromDeepLink = shouldNavigateToMain,
+                            onAuthenticatedFromDeepLinkConsumed = {
+                                pendingAuthenticatedNavigation.value = false
+                            },
                         )
                     }
                 }
@@ -87,7 +96,15 @@ class MainActivity : ComponentActivity() {
     
     override fun onNewIntent(intent: Intent) {
         super.onNewIntent(intent)
+        setIntent(intent)
+        handleIntent(intent)
+    }
+
+    private fun handleIntent(intent: Intent?) {
         handleNotificationIntent(intent)
+        authDeepLinkHandler.handle(intent) {
+            runOnUiThread { pendingAuthenticatedNavigation.value = true }
+        }
     }
     
     private fun handleNotificationIntent(intent: Intent?) {

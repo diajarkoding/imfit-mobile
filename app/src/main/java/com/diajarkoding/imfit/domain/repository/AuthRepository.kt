@@ -1,6 +1,7 @@
 package com.diajarkoding.imfit.domain.repository
 
 import com.diajarkoding.imfit.domain.model.User
+import com.diajarkoding.imfit.domain.model.RegisterResult
 
 interface AuthRepository {
     suspend fun register(
@@ -9,7 +10,7 @@ interface AuthRepository {
         password: String,
         birthDate: String? = null,
         profilePhotoUri: String? = null
-    ): Result<User>
+    ): Result<RegisterResult>
     suspend fun login(email: String, password: String): Result<User>
     suspend fun logout()
     suspend fun getCurrentUser(): User?

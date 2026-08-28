@@ -63,6 +63,16 @@ class SyncPreferences @Inject constructor(
         dataStore.edit { it.clear() }
     }
 
+    suspend fun clearForUser(userId: String) {
+        dataStore.edit { preferences ->
+            preferences.remove(longKey(KEY_LAST_SYNC_TIMESTAMP, userId))
+            preferences.remove(longKey(KEY_LAST_TEMPLATES_SYNC, userId))
+            preferences.remove(longKey(KEY_LAST_WORKOUT_LOGS_SYNC, userId))
+            preferences.remove(longKey(KEY_LAST_EXERCISES_SYNC, userId))
+            preferences.remove(booleanKey(KEY_INITIAL_SYNC_COMPLETED, userId))
+        }
+    }
+
     private suspend fun setLong(key: String, userId: String, value: Long) {
         dataStore.edit { preferences ->
             preferences[longKey(key, userId)] = value

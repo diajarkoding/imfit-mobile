@@ -27,7 +27,7 @@ object SupabaseModule {
             install(Auth) {
                 flowType = FlowType.PKCE
                 scheme = "imfit"
-                host = "login-callback"
+                host = "auth"
             }
             install(Postgrest)
             install(Storage)

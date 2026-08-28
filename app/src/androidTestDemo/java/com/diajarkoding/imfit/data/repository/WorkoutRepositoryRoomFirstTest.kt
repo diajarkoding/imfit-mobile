@@ -12,6 +12,7 @@ import com.diajarkoding.imfit.domain.model.Exercise
 import com.diajarkoding.imfit.domain.model.MuscleCategory
 import com.diajarkoding.imfit.domain.model.TemplateExercise
 import com.diajarkoding.imfit.domain.model.User
+import com.diajarkoding.imfit.domain.model.RegisterResult
 import com.diajarkoding.imfit.domain.model.WorkoutTemplate
 import com.diajarkoding.imfit.domain.repository.AuthRepository
 import kotlinx.coroutines.runBlocking
@@ -131,7 +132,7 @@ private class RecordingSyncScheduler : SyncScheduler {
         if (userId != null) enqueuedUsers += userId
     }
 
-    override fun cancel(userId: String) = Unit
+    override fun cancelForUser(userId: String) = Unit
 }
 
 private class FakeAuthRepository(private var user: User?) : AuthRepository {
@@ -141,7 +142,7 @@ private class FakeAuthRepository(private var user: User?) : AuthRepository {
         password: String,
         birthDate: String?,
         profilePhotoUri: String?
-    ) = Result.failure<User>(UnsupportedOperationException())
+    ): Result<RegisterResult> = Result.failure(UnsupportedOperationException())
 
     override suspend fun login(email: String, password: String) =
         Result.failure<User>(UnsupportedOperationException())

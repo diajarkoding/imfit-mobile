@@ -1,12 +1,15 @@
 package com.diajarkoding.imfit.di
 
 import com.diajarkoding.imfit.data.repository.DemoAuthRepository
+import com.diajarkoding.imfit.data.auth.AuthDeepLinkHandler
+import com.diajarkoding.imfit.data.auth.DemoAuthDeepLinkHandler
 import com.diajarkoding.imfit.data.repository.DemoExerciseRepository
 import com.diajarkoding.imfit.data.repository.DemoWorkoutRepository
 import com.diajarkoding.imfit.data.sync.DemoSyncStateProvider
 import com.diajarkoding.imfit.data.sync.SyncScheduler
 import com.diajarkoding.imfit.data.sync.SyncRunner
 import com.diajarkoding.imfit.data.sync.SyncStateProvider
+import com.diajarkoding.imfit.data.sync.SyncLifecycleController
 import com.diajarkoding.imfit.domain.repository.AuthRepository
 import com.diajarkoding.imfit.domain.repository.ExerciseRepository
 import com.diajarkoding.imfit.domain.repository.WorkoutRepository
@@ -43,4 +46,12 @@ abstract class AppModule {
     @Binds
     @Singleton
     abstract fun bindSyncRunner(impl: DemoSyncStateProvider): SyncRunner
+
+    @Binds
+    @Singleton
+    abstract fun bindSyncLifecycleController(impl: DemoSyncStateProvider): SyncLifecycleController
+
+    @Binds
+    @Singleton
+    abstract fun bindAuthDeepLinkHandler(impl: DemoAuthDeepLinkHandler): AuthDeepLinkHandler
 }

@@ -15,6 +15,7 @@ import com.diajarkoding.imfit.data.local.entity.WorkoutTemplateEntity
 import com.diajarkoding.imfit.data.local.database.IMFITDatabase
 import com.diajarkoding.imfit.data.local.sync.PendingOperation
 import com.diajarkoding.imfit.data.local.sync.SyncStatus
+import com.diajarkoding.imfit.data.remote.ImfitAggregateRemoteDataSource
 import com.diajarkoding.imfit.data.remote.dto.TemplateExerciseDto
 import io.github.jan.supabase.SupabaseClient
 import io.github.jan.supabase.auth.auth
@@ -33,10 +34,15 @@ import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
+import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.encodeToJsonElement
+import kotlinx.serialization.json.jsonArray
+import kotlinx.serialization.json.jsonObject
 import java.time.Instant
 import java.time.OffsetDateTime
 import java.time.ZoneOffset
 import java.time.format.DateTimeFormatter
+import java.util.Collections
 import javax.inject.Inject
 import javax.inject.Singleton
 
@@ -56,8 +62,9 @@ class SyncManager @Inject constructor(
     private val exerciseLogDao: ExerciseLogDao,
     private val workoutSetDao: WorkoutSetDao,
     private val exerciseDao: ExerciseDao,
-    private val database: IMFITDatabase
-) : SyncStateProvider, SyncRunner {
+    private val database: IMFITDatabase,
+    private val aggregateRemoteDataSource: ImfitAggregateRemoteDataSource,
+) : SyncStateProvider, SyncRunner, SyncLifecycleController {
     private val scope = CoroutineScope(Dispatchers.IO + SupervisorJob())
     
     // Exposed sync state for UI
@@ -65,6 +72,7 @@ class SyncManager @Inject constructor(
     override val syncState: StateFlow<SyncState> = _syncState.asStateFlow()
     
     private val syncMutex = Mutex()
+    private val blockedUsers = Collections.synchronizedSet(mutableSetOf<String>())
 
     init {
         // Observe network changes and trigger sync when online
@@ -113,7 +121,7 @@ class SyncManager @Inject constructor(
             _syncState.value = SyncState(status = SyncState.SyncStatus.IDLE)
             return@withLock
         }
-        syncAllLocked(userId)
+        if (userId !in blockedUsers) syncAllLocked(userId)
     }
 
     override suspend fun run(expectedUserId: String?): SyncRunResult = syncMutex.withLock {
@@ -123,12 +131,24 @@ class SyncManager @Inject constructor(
             return@withLock SyncRunResult.NO_AUTHENTICATED_USER
         }
 
+        if (currentUserId in blockedUsers) return@withLock SyncRunResult.NO_AUTHENTICATED_USER
         syncAllLocked(currentUserId)
         when (_syncState.value.status) {
             SyncState.SyncStatus.SYNCED -> SyncRunResult.SUCCESS
             SyncState.SyncStatus.IDLE -> SyncRunResult.NO_AUTHENTICATED_USER
             else -> SyncRunResult.RETRYABLE_FAILURE
         }
+    }
+
+    override suspend fun blockAndAwaitIdle(userId: String) {
+        blockedUsers += userId
+        syncMutex.withLock {
+            _syncState.value = SyncState(status = SyncState.SyncStatus.IDLE)
+        }
+    }
+
+    override fun unblock(userId: String) {
+        blockedUsers -= userId
     }
 
     private suspend fun syncAllLocked(userId: String) {
@@ -401,7 +421,6 @@ class SyncManager @Inject constructor(
                 throw e
             } catch (e: Exception) {
                 Log.e(TAG, "Failed to sync workout log ${log.id}: ${e.message}", e)
-                workoutLogDao.updateSyncStatus(log.id, SyncStatus.SYNC_FAILED.name)
                 allSucceeded = false
             }
         }
@@ -418,20 +437,12 @@ class SyncManager @Inject constructor(
         val workoutSets = workoutSetDao.getSetsByWorkoutLogId(log.id)
         
         try {
-            // 1. Push WorkoutLog
-            upsertWorkoutLogRemote(log)
-            
-            // 2. Push ExerciseLogs
-            for (exerciseLog in exerciseLogs) {
-                upsertExerciseLogRemote(exerciseLog)
-            }
-            
-            // 3. Push WorkoutSets
-            for (set in workoutSets) {
-                upsertWorkoutSetRemote(set)
-            }
-            
-            // 4. Mark all as SYNCED (only if all succeeded)
+            val result = aggregateRemoteDataSource.upsertWorkout(
+                workout = rpcJson.encodeToJsonElement(workoutDto(log)).jsonObject,
+                exercises = rpcJson.encodeToJsonElement(exerciseLogs.map(::exerciseLogDto)).jsonArray,
+                sets = rpcJson.encodeToJsonElement(workoutSets.map(::workoutSetDto)).jsonArray,
+            )
+
             database.withTransaction {
                 val marked = workoutLogDao.markAsSyncedIfUnchanged(
                     log.id,
@@ -444,7 +455,7 @@ class SyncManager @Inject constructor(
                 }
             }
             
-            Log.d(TAG, "Aggregate sync completed for workout: ${log.id} (${exerciseLogs.size} exercises, ${workoutSets.size} sets)")
+            Log.d(TAG, "Aggregate sync completed for workout: ${result.workoutId} (${result.exerciseCount} exercises, ${result.setCount} sets)")
         } catch (e: Exception) {
             Log.e(TAG, "Aggregate sync failed for workout ${log.id}: ${e.message}", e)
             // Rollback: keep all as PENDING_SYNC
@@ -765,12 +776,7 @@ class SyncManager @Inject constructor(
         }
     }
 
-    /**
-     * Upserts a workout log to the remote server.
-     */
-    private suspend fun upsertWorkoutLogRemote(
-        log: com.diajarkoding.imfit.data.local.entity.WorkoutLogEntity
-    ) {
+    private fun workoutDto(log: WorkoutLogEntity): UpsertWorkoutLogDto {
         val startDateTime = OffsetDateTime.ofInstant(
             java.time.Instant.ofEpochMilli(log.startTime),
             ZoneOffset.UTC
@@ -787,7 +793,7 @@ class SyncManager @Inject constructor(
             ).format(DateTimeFormatter.ISO_OFFSET_DATE_TIME)
         }
 
-        val dto = UpsertWorkoutLogDto(
+        return UpsertWorkoutLogDto(
             id = log.id,
             userId = log.userId,
             templateId = log.templateId,
@@ -800,19 +806,11 @@ class SyncManager @Inject constructor(
             totalReps = log.totalReps,
             deletedAt = deletedAtString
         )
-        
-        supabaseClient.postgrest.from("workout_logs").upsert(dto) {
-            onConflict = "id"
-        }
     }
 
-    /**
-     * Upserts an exercise log to the remote server.
-     */
-    private suspend fun upsertExerciseLogRemote(
+    private fun exerciseLogDto(
         log: com.diajarkoding.imfit.data.local.entity.ExerciseLogEntity
-    ) {
-        val dto = UpsertExerciseLogDto(
+    ) = UpsertExerciseLogDto(
             id = log.id,
             workoutLogId = log.workoutLogId,
             exerciseId = log.exerciseId,
@@ -823,19 +821,9 @@ class SyncManager @Inject constructor(
             totalSets = log.totalSets,
             totalReps = log.totalReps
         )
-        
-        supabaseClient.postgrest.from("exercise_logs").upsert(dto) {
-            onConflict = "id"
-        }
-    }
-
-    /**
-     * Upserts a workout set to the remote server.
-     */
-    private suspend fun upsertWorkoutSetRemote(
+    private fun workoutSetDto(
         set: com.diajarkoding.imfit.data.local.entity.WorkoutSetEntity
-    ) {
-        val dto = UpsertWorkoutSetDto(
+    ) = UpsertWorkoutSetDto(
             id = set.id,
             exerciseLogId = set.exerciseLogId,
             workoutLogId = set.workoutLogId,
@@ -845,14 +833,12 @@ class SyncManager @Inject constructor(
             reps = set.reps,
             isCompleted = set.isCompleted
         )
-        
-        supabaseClient.postgrest.from("workout_sets").upsert(dto) {
-            onConflict = "id"
-        }
-    }
-
     companion object {
         private const val TAG = "SyncManager"
+        private val rpcJson = Json {
+            encodeDefaults = true
+            explicitNulls = false
+        }
     }
 }
 
@@ -1032,4 +1018,3 @@ private data class RemoteTemplateExerciseDto(
     @SerialName("rest_seconds")
     val restSeconds: Int? = 60
 )
-

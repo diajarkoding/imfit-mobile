@@ -6,6 +6,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.diajarkoding.imfit.data.exception.AuthException
 import com.diajarkoding.imfit.domain.repository.AuthRepository
+import com.diajarkoding.imfit.domain.model.RegisterResult
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -26,7 +27,7 @@ data class RegisterState(
     val confirmPasswordError: String? = null,
     val birthDateError: String? = null,
     val isLoading: Boolean = false,
-    val registerSuccess: Boolean = false,
+    val registerResult: RegisterResult? = null,
     val errorMessage: String? = null
 )
 
@@ -88,8 +89,8 @@ class RegisterViewModel @Inject constructor(
         if (currentState.password.isBlank()) {
             passwordError = "Password is required"
             hasError = true
-        } else if (currentState.password.length < 6) {
-            passwordError = "Password must be at least 6 characters"
+        } else if (!isStrongPassword(currentState.password)) {
+            passwordError = "Use 8+ characters with uppercase, lowercase, and a number"
             hasError = true
         }
 
@@ -131,9 +132,8 @@ class RegisterViewModel @Inject constructor(
             )
 
             result.fold(
-                onSuccess = { user ->
-                    Log.d("RegisterViewModel", "Registration successful for user: ${user.email}")
-                    _state.update { it.copy(isLoading = false, registerSuccess = true) }
+                onSuccess = { registerResult ->
+                    _state.update { it.copy(isLoading = false, registerResult = registerResult) }
                 },
                 onFailure = { exception ->
                     Log.e("RegisterViewModel", "Registration failed", exception)
@@ -159,4 +159,12 @@ class RegisterViewModel @Inject constructor(
     fun clearError() {
         _state.update { it.copy(errorMessage = null) }
     }
+
+    fun consumeRegisterResult() {
+        _state.update { it.copy(registerResult = null) }
+    }
+
+    private fun isStrongPassword(password: String): Boolean =
+        password.length >= 8 && password.any(Char::isUpperCase) &&
+            password.any(Char::isLowerCase) && password.any(Char::isDigit)
 }

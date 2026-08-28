@@ -13,6 +13,9 @@ data object Login : NavKey
 data object Register : NavKey
 
 @Serializable
+data object RegisterConfirmation : NavKey
+
+@Serializable
 data object Main : NavKey
 
 @Serializable

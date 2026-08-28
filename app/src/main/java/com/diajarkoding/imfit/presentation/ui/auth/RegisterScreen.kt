@@ -71,6 +71,7 @@ import androidx.core.content.FileProvider
 import androidx.hilt.navigation.compose.hiltViewModel
 import coil3.compose.AsyncImage
 import com.diajarkoding.imfit.R
+import com.diajarkoding.imfit.domain.model.RegisterResult
 import androidx.compose.ui.res.stringResource
 import com.diajarkoding.imfit.presentation.components.common.IMFITButton
 import com.diajarkoding.imfit.presentation.components.common.IMFITPasswordField
@@ -91,7 +92,8 @@ import java.util.Locale
 @Composable
 fun RegisterScreen(
     onNavigateToLogin: () -> Unit,
-    onRegisterSuccess: () -> Unit,
+    onAuthenticated: () -> Unit,
+    onCheckEmail: () -> Unit,
     viewModel: RegisterViewModel = hiltViewModel()
 ) {
     val state by viewModel.state.collectAsStateWithLifecycle()
@@ -134,10 +136,13 @@ fun RegisterScreen(
         }
     }
 
-    LaunchedEffect(state.registerSuccess) {
-        if (state.registerSuccess) {
-            onRegisterSuccess()
+    LaunchedEffect(state.registerResult) {
+        when (state.registerResult) {
+            is RegisterResult.Authenticated -> onAuthenticated()
+            RegisterResult.CheckEmail -> onCheckEmail()
+            null -> Unit
         }
+        if (state.registerResult != null) viewModel.consumeRegisterResult()
     }
 
     LaunchedEffect(state.errorMessage) {

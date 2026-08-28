@@ -8,7 +8,11 @@ import com.diajarkoding.imfit.data.exception.AuthException
 import com.diajarkoding.imfit.data.exception.mapSupabaseException
 import com.diajarkoding.imfit.data.remote.dto.ProfileDto
 import com.diajarkoding.imfit.data.remote.dto.toDomain
+import com.diajarkoding.imfit.data.local.database.IMFITDatabase
+import com.diajarkoding.imfit.data.sync.SyncLifecycleController
+import com.diajarkoding.imfit.data.sync.SyncPreferences
 import com.diajarkoding.imfit.data.sync.SyncScheduler
+import com.diajarkoding.imfit.domain.model.RegisterResult
 import com.diajarkoding.imfit.domain.model.User
 import com.diajarkoding.imfit.domain.repository.AuthRepository
 import dagger.hilt.android.qualifiers.ApplicationContext
@@ -31,6 +35,9 @@ private const val AVATARS_BUCKET = "avatars"
 class AuthRepositoryImpl @Inject constructor(
     private val supabaseClient: SupabaseClient,
     private val syncScheduler: SyncScheduler,
+    private val syncLifecycleController: SyncLifecycleController,
+    private val database: IMFITDatabase,
+    private val syncPreferences: SyncPreferences,
     @ApplicationContext private val context: Context
 ) : AuthRepository {
 
@@ -42,7 +49,7 @@ class AuthRepositoryImpl @Inject constructor(
         password: String,
         birthDate: String?,
         profilePhotoUri: String?
-    ): Result<User> {
+    ): Result<RegisterResult> {
         return try {
             // Validate input parameters
             if (name.isBlank()) {
@@ -51,7 +58,7 @@ class AuthRepositoryImpl @Inject constructor(
             if (email.isBlank() || !android.util.Patterns.EMAIL_ADDRESS.matcher(email).matches()) {
                 return Result.failure(AuthException.InvalidEmail())
             }
-            if (password.length < 6) {
+            if (!isStrongPassword(password)) {
                 return Result.failure(AuthException.WeakPassword())
             }
 
@@ -67,7 +74,7 @@ class AuthRepositoryImpl @Inject constructor(
             }
 
             val userId = supabaseClient.auth.currentUserOrNull()?.id
-                ?: return Result.failure(AuthException.UnknownError("Registration completed but no user ID received"))
+                ?: return Result.success(RegisterResult.CheckEmail)
 
             Log.d(TAG, "Registration successful for user ID: $userId")
 
@@ -108,8 +115,9 @@ class AuthRepositoryImpl @Inject constructor(
             }
 
             cachedUser = newUser
+            syncLifecycleController.unblock(userId)
             syncScheduler.enqueue(userId)
-            Result.success(newUser)
+            Result.success(RegisterResult.Authenticated(newUser))
         } catch (e: Exception) {
             Log.e(TAG, "Register error: ${e.message}", e)
             val authException = mapSupabaseException(e)
@@ -229,6 +237,7 @@ class AuthRepositoryImpl @Inject constructor(
 
             if (profile != null) {
                 cachedUser = profile
+                syncLifecycleController.unblock(userId)
                 syncScheduler.enqueue(userId)
                 Result.success(profile)
             } else {
@@ -242,6 +251,7 @@ class AuthRepositoryImpl @Inject constructor(
                         profilePhotoUri = null
                     )
                     cachedUser = basicUser
+                    syncLifecycleController.unblock(userId)
                     syncScheduler.enqueue(userId)
                     Result.success(basicUser)
                 } else {
@@ -256,13 +266,13 @@ class AuthRepositoryImpl @Inject constructor(
     }
 
     override suspend fun logout() {
-        try {
-            supabaseClient.auth.currentUserOrNull()?.id?.let(syncScheduler::cancel)
-            supabaseClient.auth.signOut()
-            cachedUser = null
-        } catch (e: Exception) {
-            Log.e("AuthRepository", "Logout error: ${e.message}", e)
-        }
+        val userId = supabaseClient.auth.currentUserOrNull()?.id ?: return
+        syncScheduler.cancelForUser(userId)
+        syncLifecycleController.blockAndAwaitIdle(userId)
+        database.deleteUserData(userId)
+        syncPreferences.clearForUser(userId)
+        cachedUser = null
+        supabaseClient.auth.signOut()
     }
 
     override suspend fun getCurrentUser(): User? {
@@ -343,4 +353,10 @@ class AuthRepositoryImpl @Inject constructor(
             null
         }
     }
+
+    private fun isStrongPassword(password: String): Boolean =
+        password.length >= 8 &&
+            password.any(Char::isUpperCase) &&
+            password.any(Char::isLowerCase) &&
+            password.any(Char::isDigit)
 }

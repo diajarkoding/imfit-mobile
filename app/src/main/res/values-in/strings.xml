@@ -32,6 +32,9 @@
     <string name="register_choose_photo">Pilih Foto</string>
     <string name="register_camera">Kamera</string>
     <string name="register_gallery">Galeri</string>
+    <string name="register_confirmation_title">Akun berhasil dibuat</string>
+    <string name="register_confirmation_message">Silakan buka email Anda dan tekan tautan konfirmasi. Setelah dikonfirmasi, kembali ke aplikasi untuk melanjutkan.</string>
+    <string name="register_confirmation_login">Masuk</string>
 
     <!-- Validation Messages -->
     <string name="validator_fullName">Nama lengkap tidak boleh kosong.</string>

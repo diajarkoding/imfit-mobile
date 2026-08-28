@@ -14,6 +14,7 @@ import androidx.navigation3.runtime.rememberSaveableStateHolderNavEntryDecorator
 import androidx.navigation3.ui.NavDisplay
 import com.diajarkoding.imfit.presentation.ui.auth.LoginScreen
 import com.diajarkoding.imfit.presentation.ui.auth.RegisterScreen
+import com.diajarkoding.imfit.presentation.ui.auth.RegisterConfirmationScreen
 import com.diajarkoding.imfit.presentation.ui.exercise.ExerciseListScreen
 import com.diajarkoding.imfit.presentation.ui.exercise.ExerciseSelectionScreen
 import com.diajarkoding.imfit.presentation.ui.main.MainScreen
@@ -34,7 +35,9 @@ fun NavGraph(
     onToggleLanguage: () -> Unit = {},
     openActiveWorkout: Boolean = false,
     activeWorkoutTemplateId: String? = null,
-    onActiveWorkoutOpened: () -> Unit = {}
+    onActiveWorkoutOpened: () -> Unit = {},
+    authenticatedFromDeepLink: Boolean = false,
+    onAuthenticatedFromDeepLinkConsumed: () -> Unit = {},
 ) {
     val backStack = rememberNavBackStack(Splash)
     var exerciseSelectionResult by rememberSaveable {
@@ -54,6 +57,13 @@ fun NavGraph(
             backStack.add(ActiveWorkout(activeWorkoutTemplateId ?: "active"))
         }
         onActiveWorkoutOpened()
+    }
+
+    LaunchedEffect(authenticatedFromDeepLink) {
+        if (authenticatedFromDeepLink) {
+            backStack.resetTo(Main)
+            onAuthenticatedFromDeepLinkConsumed()
+        }
     }
 
     NavDisplay(
@@ -89,7 +99,14 @@ fun NavGraph(
             entry<Register> {
                 RegisterScreen(
                     onNavigateToLogin = { backStack.removeLastOrNull() },
-                    onRegisterSuccess = { backStack.resetTo(Main) }
+                    onAuthenticated = { backStack.resetTo(Main) },
+                    onCheckEmail = { backStack.resetTo(RegisterConfirmation) },
+                )
+            }
+
+            entry<RegisterConfirmation> {
+                RegisterConfirmationScreen(
+                    onNavigateToLogin = { backStack.resetTo(Login) },
                 )
             }
 

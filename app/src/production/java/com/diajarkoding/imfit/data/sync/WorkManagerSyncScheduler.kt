@@ -38,7 +38,7 @@ class WorkManagerSyncScheduler @Inject constructor(
         )
     }
 
-    override fun cancel(userId: String) {
+    override fun cancelForUser(userId: String) {
         WorkManager.getInstance(context).cancelUniqueWork(workName(userId))
     }
 

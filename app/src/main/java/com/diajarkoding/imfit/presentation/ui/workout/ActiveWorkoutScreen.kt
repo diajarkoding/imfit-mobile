@@ -3,10 +3,8 @@ package com.diajarkoding.imfit.presentation.ui.workout
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 
 import android.Manifest
-import android.content.BroadcastReceiver
 import android.content.ComponentName
 import android.content.Intent
-import android.content.IntentFilter
 import android.content.Context
 import android.content.ServiceConnection
 import android.content.pm.PackageManager
@@ -105,7 +103,6 @@ import com.diajarkoding.imfit.theme.IMFITSpacing
 import com.diajarkoding.imfit.theme.Primary
 import com.diajarkoding.imfit.theme.PrimaryLight
 import com.diajarkoding.imfit.core.service.WorkoutService
-import com.diajarkoding.imfit.core.notification.WorkoutNotificationReceiver
 import com.diajarkoding.imfit.core.notification.NotificationChannels
 import com.diajarkoding.imfit.theme.SetComplete
 import androidx.core.content.ContextCompat
@@ -123,6 +120,9 @@ fun ActiveWorkoutScreen(
     val snackbarHostState = remember { SnackbarHostState() }
     val coroutineScope = rememberCoroutineScope()
     val context = LocalContext.current
+    val timerLimitedMessage = stringResource(R.string.rest_alert_limited)
+    val timerSettingsLabel = stringResource(R.string.rest_alarm_settings)
+    val timerStorageMessage = stringResource(R.string.rest_storage_error)
     
     // Notification permission launcher for Android 13+
     val notificationPermissionLauncher = rememberLauncherForActivityResult(
@@ -131,8 +131,9 @@ fun ActiveWorkoutScreen(
         if (isGranted) {
             android.util.Log.d("ActiveWorkout", "Notification permission granted")
         } else {
-            android.util.Log.w("ActiveWorkout", "Notification permission denied")
+            coroutineScope.launch { snackbarHostState.showSnackbar(timerLimitedMessage) }
         }
+        viewModel.refreshTimerCapabilities()
     }
     
     // Request notification permission on Android 13+
@@ -160,15 +161,7 @@ fun ActiveWorkoutScreen(
                 workoutService = binder?.getService()
                 isBound = true
                 
-                // Restore rest timer state from service
-                workoutService?.getRestTimerState()?.let { restState ->
-                    if (restState.isActive) {
-                        viewModel.restoreRestTimerState(
-                            remainingSeconds = restState.remainingSeconds,
-                            exerciseName = restState.exerciseName
-                        )
-                    }
-                }
+                viewModel.refreshTimerCapabilities()
             }
             
             override fun onServiceDisconnected(name: ComponentName?) {
@@ -191,67 +184,16 @@ fun ActiveWorkoutScreen(
         }
     }
     
-    // Listen for rest timer finished from service
-    LaunchedEffect(workoutService) {
-        workoutService?.restTimerFinished?.collect {
-            viewModel.onRestTimerFinished()
+    // Recheck Settings on resume; countdown is projected by the ViewModel from the shared deadline.
+    val lifecycleOwner = androidx.lifecycle.compose.LocalLifecycleOwner.current
+    DisposableEffect(lifecycleOwner) {
+        val observer = androidx.lifecycle.LifecycleEventObserver { _, event ->
+            if (event == androidx.lifecycle.Lifecycle.Event.ON_RESUME) viewModel.refreshTimerCapabilities()
         }
+        lifecycleOwner.lifecycle.addObserver(observer)
+        onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
     }
     
-    // Poll rest timer state from service to update UI
-    LaunchedEffect(workoutService, state.isRestTimerActive) {
-        if (workoutService != null && state.isRestTimerActive) {
-            while (state.isRestTimerActive) {
-                val restState = workoutService?.getRestTimerState()
-                if (restState != null && restState.isActive) {
-                    viewModel.updateRestTimerSeconds(restState.remainingSeconds)
-                }
-                kotlinx.coroutines.delay(500)
-            }
-        }
-    }
-    
-    // Listen for notification action broadcasts
-    DisposableEffect(Unit) {
-        val receiver = object : BroadcastReceiver() {
-            override fun onReceive(ctx: Context?, intent: Intent?) {
-                when (intent?.getStringExtra(WorkoutNotificationReceiver.EXTRA_COMMAND)) {
-                    WorkoutNotificationReceiver.COMMAND_STOP -> {
-                        viewModel.showCancelDialog()
-                    }
-                    WorkoutNotificationReceiver.COMMAND_PAUSE -> {
-                        viewModel.pauseWorkout()
-                        val pauseIntent = Intent(context, WorkoutService::class.java).apply {
-                            action = WorkoutService.ACTION_PAUSE_WORKOUT
-                        }
-                        context.startService(pauseIntent)
-                    }
-                    WorkoutNotificationReceiver.COMMAND_RESUME -> {
-                        viewModel.resumeWorkout()
-                        val resumeIntent = Intent(context, WorkoutService::class.java).apply {
-                            action = WorkoutService.ACTION_RESUME_WORKOUT
-                        }
-                        context.startService(resumeIntent)
-                    }
-                    WorkoutNotificationReceiver.COMMAND_SKIP_REST -> {
-                        viewModel.skipRestTimer()
-                    }
-                }
-            }
-        }
-        
-        val filter = IntentFilter(WorkoutNotificationReceiver.ACTION_WORKOUT_COMMAND)
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-            context.registerReceiver(receiver, filter, Context.RECEIVER_NOT_EXPORTED)
-        } else {
-            @Suppress("UnspecifiedRegisterReceiverFlag")
-            context.registerReceiver(receiver, filter)
-        }
-        
-        onDispose {
-            context.unregisterReceiver(receiver)
-        }
-    }
     
     // Show pause error via snackbar
     LaunchedEffect(state.pauseError) {
@@ -265,6 +207,9 @@ fun ActiveWorkoutScreen(
 
     LaunchedEffect(templateId) {
         viewModel.startWorkout(templateId)
+    }
+    LaunchedEffect(state.sessionEnded) {
+        if (state.sessionEnded) onNavigateBack()
     }
     
     // Start foreground service when workout session is available
@@ -308,35 +253,9 @@ fun ActiveWorkoutScreen(
         }
     }
     
-    // Start rest timer in service
-    LaunchedEffect(Unit) {
-        viewModel.startRestTimer.collect { request ->
-            val intent = Intent(context, WorkoutService::class.java).apply {
-                action = WorkoutService.ACTION_START_REST
-                putExtra(WorkoutService.EXTRA_REMAINING_SECONDS, request.seconds)
-                putExtra(WorkoutService.EXTRA_EXERCISE_NAME, request.exerciseName)
-            }
-            context.startService(intent)
-        }
-    }
-    
-    // Skip rest timer in service
-    LaunchedEffect(Unit) {
-        viewModel.skipRestTimerFlow.collect {
-            val intent = Intent(context, WorkoutService::class.java).apply {
-                action = WorkoutService.ACTION_SKIP_REST
-            }
-            context.startService(intent)
-        }
-    }
 
     LaunchedEffect(state.workoutLogId) {
         state.workoutLogId?.let { logId ->
-            // Stop service when workout is finished
-            val stopIntent = Intent(context, WorkoutService::class.java).apply {
-                action = WorkoutService.ACTION_STOP_WORKOUT
-            }
-            context.startService(stopIntent)
             onWorkoutFinished(logId)
         }
     }
@@ -344,8 +263,27 @@ fun ActiveWorkoutScreen(
     if (state.isRestTimerActive) {
         RestTimerDialog(
             remainingSeconds = state.restTimerSeconds,
-            onDismiss = { viewModel.skipRestTimer() }
+            onDismiss = { viewModel.skipRestTimer() },
+            onExtend = viewModel::extendRest
         )
+    }
+    LaunchedEffect(state.timerError) {
+        if (state.timerError) snackbarHostState.showSnackbar(timerStorageMessage)
+    }
+    LaunchedEffect(state.restLimited) {
+        if (state.restLimited && state.session != null) {
+            val result = snackbarHostState.showSnackbar(timerLimitedMessage, timerSettingsLabel)
+            if (result == androidx.compose.material3.SnackbarResult.ActionPerformed && Build.VERSION.SDK_INT >= 31) {
+                val settingsAction = if (androidx.core.app.NotificationManagerCompat.from(context).areNotificationsEnabled()) {
+                    android.provider.Settings.ACTION_REQUEST_SCHEDULE_EXACT_ALARM
+                } else android.provider.Settings.ACTION_APPLICATION_DETAILS_SETTINGS
+                try {
+                    context.startActivity(Intent(settingsAction, android.net.Uri.parse("package:${context.packageName}")))
+                } catch (_: android.content.ActivityNotFoundException) {
+                    snackbarHostState.showSnackbar(timerLimitedMessage)
+                }
+            }
+        }
     }
 
     if (showRestConfigSheet) {
@@ -354,6 +292,20 @@ fun ActiveWorkoutScreen(
         
         RestTimerConfigSheet(
             currentRestSeconds = currentRestTime,
+            soundEnabled = state.restSoundEnabled,
+            onSoundChange = viewModel::setRestSoundEnabled,
+            vibrationEnabled = state.restVibrationEnabled,
+            onVibrationChange = viewModel::setRestVibrationEnabled,
+            fullScreenAllowed = state.fullScreenAlarmAllowed,
+            onAlarmSettings = {
+                val settingsAction = if (Build.VERSION.SDK_INT >= 34) android.provider.Settings.ACTION_MANAGE_APP_USE_FULL_SCREEN_INTENT
+                    else android.provider.Settings.ACTION_APPLICATION_DETAILS_SETTINGS
+                try {
+                    context.startActivity(Intent(settingsAction, android.net.Uri.parse("package:${context.packageName}")))
+                } catch (_: android.content.ActivityNotFoundException) {
+                    coroutineScope.launch { snackbarHostState.showSnackbar(timerLimitedMessage) }
+                }
+            },
             onDismiss = { showRestConfigSheet = false },
             onConfirm = { seconds ->
                 // Set session-level override - applies to ALL rest timers for this session
@@ -373,11 +325,6 @@ fun ActiveWorkoutScreen(
             confirmText = stringResource(R.string.action_cancel_workout),
             dismissText = stringResource(R.string.action_continue),
             onConfirm = {
-                // Stop service when workout is cancelled
-                val stopIntent = Intent(context, WorkoutService::class.java).apply {
-                    action = WorkoutService.ACTION_STOP_WORKOUT
-                }
-                context.startService(stopIntent)
                 viewModel.cancelWorkout()
                 onNavigateBack()
             },
@@ -422,16 +369,8 @@ fun ActiveWorkoutScreen(
                             onClick = {
                                 if (state.isPaused) {
                                     viewModel.resumeWorkout()
-                                    val resumeIntent = Intent(context, WorkoutService::class.java).apply {
-                                        action = WorkoutService.ACTION_RESUME_WORKOUT
-                                    }
-                                    context.startService(resumeIntent)
                                 } else {
                                     viewModel.pauseWorkout()
-                                    val pauseIntent = Intent(context, WorkoutService::class.java).apply {
-                                        action = WorkoutService.ACTION_PAUSE_WORKOUT
-                                    }
-                                    context.startService(pauseIntent)
                                 }
                             }
                         ) {
@@ -597,6 +536,12 @@ private fun ProgressChipPrimaryPreview() {
 @Composable
 private fun RestTimerConfigSheet(
     currentRestSeconds: Int,
+    soundEnabled: Boolean = true,
+    onSoundChange: (Boolean) -> Unit = {},
+    vibrationEnabled: Boolean = false,
+    onVibrationChange: (Boolean) -> Unit = {},
+    fullScreenAllowed: Boolean = true,
+    onAlarmSettings: () -> Unit = {},
     onDismiss: () -> Unit,
     onConfirm: (Int) -> Unit
 ) {
@@ -628,6 +573,20 @@ private fun RestTimerConfigSheet(
                 Spacer(modifier = Modifier.height(IMFITSpacing.xl))
 
                 // Scrollable Time Picker
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text(stringResource(R.string.rest_sound_enabled))
+                    androidx.compose.material3.Switch(checked = soundEnabled, onCheckedChange = onSoundChange)
+                }
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text(stringResource(R.string.rest_vibration_enabled))
+                    androidx.compose.material3.Switch(checked = vibrationEnabled, onCheckedChange = onVibrationChange)
+                }
+                if (!fullScreenAllowed) {
+                    Text(stringResource(R.string.rest_full_screen_limited), style = MaterialTheme.typography.bodySmall)
+                }
+                androidx.compose.material3.TextButton(onClick = onAlarmSettings) {
+                    Text(stringResource(R.string.rest_full_screen_settings))
+                }
                 Row(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.Center,
@@ -1177,7 +1136,8 @@ private fun SetInputRow(
 @Composable
 private fun RestTimerDialog(
     remainingSeconds: Int,
-    onDismiss: () -> Unit
+    onDismiss: () -> Unit,
+    onExtend: () -> Unit = {}
 ) {
     IMFITPlatformDialog(onDismissRequest = {}) {
         Card(
@@ -1230,6 +1190,9 @@ private fun RestTimerDialog(
                     text = stringResource(R.string.action_skip),
                     onClick = onDismiss
                 )
+                androidx.compose.material3.TextButton(onClick = onExtend) {
+                    Text(stringResource(R.string.rest_extend))
+                }
             }
         }
     }

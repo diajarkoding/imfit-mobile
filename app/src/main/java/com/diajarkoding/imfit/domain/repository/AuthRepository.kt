@@ -14,6 +14,8 @@ interface AuthRepository {
     suspend fun login(email: String, password: String): Result<User>
     suspend fun logout()
     suspend fun getCurrentUser(): User?
+    /** Local auth identity for timer recovery; never fetch a remote profile. */
+    suspend fun getLocalUserId(): String? = getCurrentUser()?.id
     suspend fun isLoggedIn(): Boolean
     suspend fun updateProfile(user: User): Result<User>
     

@@ -1,5 +1,21 @@
 <resources>
     <string name="app_name">IMFIT</string>
+    <string name="rest_finished">Rest finished</string>
+    <string name="rest_stop_alert">Stop alert</string>
+    <string name="channel_rest_finished">Rest completion</string>
+    <string name="rest_alert_limited">Background rest alerts may be delayed. Enable notifications and Alarms &amp; reminders in Settings.</string>
+    <string name="rest_alarm_settings">Alarm settings</string>
+    <string name="rest_storage_error">Unable to save or restore rest timer. Please try again.</string>
+    <string name="rest_extend">+30 seconds</string>
+    <string name="rest_sound_enabled">Rest alert sound</string>
+    <string name="rest_vibration_enabled">Rest alert vibration</string>
+    <string name="rest_full_screen_settings">Alarm banner settings</string>
+    <string name="rest_full_screen_limited">Full-screen alarms are disabled. The banner may disappear automatically; the notification remains available.</string>
+    <string name="rest_alarm_notification_stop">Pull down the notification panel, then tap Stop or dismiss the notification.</string>
+    <string name="rest_alarm_notification_title">Stop from the notification</string>
+    <string name="rest_alarm_exercise_label">EXERCISE</string>
+    <string name="rest_open_workout">Back to workout</string>
+    <string name="rest_open_workout_hint">Opening the workout does not stop the alarm.</string>
 
     <!-- Common Labels -->
     <string name="label_email">Email</string>

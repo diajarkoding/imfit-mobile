@@ -38,7 +38,8 @@ class AuthRepositoryImpl @Inject constructor(
     private val syncLifecycleController: SyncLifecycleController,
     private val database: IMFITDatabase,
     private val syncPreferences: SyncPreferences,
-    @ApplicationContext private val context: Context
+    @ApplicationContext private val context: Context,
+    private val timerCleanup: com.diajarkoding.imfit.core.timer.TimerSessionCleanup
 ) : AuthRepository {
 
     private var cachedUser: User? = null
@@ -266,6 +267,7 @@ class AuthRepositoryImpl @Inject constructor(
     }
 
     override suspend fun logout() {
+        timerCleanup.stop("LOGOUT")
         val userId = supabaseClient.auth.currentUserOrNull()?.id ?: return
         syncScheduler.cancelForUser(userId)
         syncLifecycleController.blockAndAwaitIdle(userId)
@@ -273,6 +275,11 @@ class AuthRepositoryImpl @Inject constructor(
         syncPreferences.clearForUser(userId)
         cachedUser = null
         supabaseClient.auth.signOut()
+    }
+
+    override suspend fun getLocalUserId(): String? {
+        supabaseClient.auth.awaitInitialization()
+        return supabaseClient.auth.currentUserOrNull()?.id
     }
 
     override suspend fun getCurrentUser(): User? {

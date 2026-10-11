@@ -43,7 +43,8 @@ class WorkoutRepositoryImpl @Inject constructor(
     private val templateExerciseDao: com.diajarkoding.imfit.data.local.dao.TemplateExerciseDao,
     private val activeSessionDao: ActiveSessionDao,
     private val database: IMFITDatabase,
-    private val syncScheduler: SyncScheduler
+    private val syncScheduler: SyncScheduler,
+    private val timerCleanup: com.diajarkoding.imfit.core.timer.TimerSessionCleanup? = null
 ) : WorkoutRepository {
 
     private var activeSession: WorkoutSession? = null
@@ -275,6 +276,7 @@ class WorkoutRepositoryImpl @Inject constructor(
     }
 
     override suspend fun startWorkout(template: WorkoutTemplate): WorkoutSession {
+        timerCleanup?.stop("SESSION_REPLACED")
         val exerciseLogs = template.exercises.map { templateExercise ->
             ExerciseLog(
                 exercise = templateExercise.exercise,
@@ -323,7 +325,7 @@ class WorkoutRepositoryImpl @Inject constructor(
     }
 
     override suspend fun getActiveSession(): WorkoutSession? {
-        val userId = authRepository.getCurrentUser()?.id ?: return null
+        val userId = authRepository.getLocalUserId() ?: return null
         if (activeSession != null && activeSessionUserId == userId) {
             return activeSession
         }
@@ -381,6 +383,7 @@ class WorkoutRepositoryImpl @Inject constructor(
     }
 
     override suspend fun finishWorkout(): WorkoutLog? {
+        timerCleanup?.stop("WORKOUT_FINISHED")
         val session = activeSession ?: getActiveSession() ?: return null
         val endTime = System.currentTimeMillis()
 
@@ -479,6 +482,7 @@ class WorkoutRepositoryImpl @Inject constructor(
     }
 
     override suspend fun cancelWorkout() {
+        timerCleanup?.stop("WORKOUT_CANCELLED")
         val session = activeSession ?: getActiveSession()
         if (session != null) activeSessionDao.deleteSessionById(session.id)
         activeSession = null

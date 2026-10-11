@@ -1,370 +1,160 @@
- package com.diajarkoding.imfit.core.service
- 
- import android.app.Service
- import android.content.Intent
- import android.content.pm.ServiceInfo
- import android.os.Binder
- import android.os.Build
- import android.os.IBinder
-import android.os.PowerManager
- import android.util.Log
- import androidx.core.app.ServiceCompat
- import com.diajarkoding.imfit.core.model.WorkoutTimerUpdate
- import com.diajarkoding.imfit.core.notification.NotificationChannels
- import com.diajarkoding.imfit.core.notification.WorkoutNotificationManager
- import dagger.hilt.android.AndroidEntryPoint
- import kotlinx.coroutines.CoroutineScope
- import kotlinx.coroutines.Dispatchers
- import kotlinx.coroutines.SupervisorJob
- import kotlinx.coroutines.cancel
-import kotlinx.coroutines.Job
-import kotlinx.coroutines.delay
-import kotlinx.coroutines.launch
- import kotlinx.coroutines.flow.MutableStateFlow
-import kotlinx.coroutines.flow.MutableSharedFlow
-import kotlinx.coroutines.flow.SharedFlow
- import kotlinx.coroutines.flow.StateFlow
- import kotlinx.coroutines.flow.asStateFlow
-import kotlinx.coroutines.flow.asSharedFlow
- import javax.inject.Inject
- 
- @AndroidEntryPoint
- class WorkoutService : Service() {
-     
-     @Inject
-     lateinit var notificationManager: WorkoutNotificationManager
-     
-     private val serviceScope = CoroutineScope(SupervisorJob() + Dispatchers.Main)
-     private val binder = WorkoutBinder()
-     
-     private val _isRunning = MutableStateFlow(false)
-     val isRunning: StateFlow<Boolean> = _isRunning.asStateFlow()
-     
-    private val _restTimerFinished = MutableSharedFlow<Unit>()
-    val restTimerFinished: SharedFlow<Unit> = _restTimerFinished.asSharedFlow()
-    
-    private var wakeLock: PowerManager.WakeLock? = null
-    private var workoutTimerJob: Job? = null
-    private var restTimerJob: Job? = null
-    
-     private var currentWorkoutName: String = ""
-    private var workoutStartTime: Long = 0
-    private var totalPausedTimeMs: Long = 0
-    private var lastPauseTime: Long? = null
-     private var currentCompletedSets: Int = 0
-     private var currentTotalSets: Int = 0
-     private var currentTotalVolume: Float = 0f
-     private var currentIsPaused: Boolean = false
-    private var currentTemplateId: String? = null
-    
-    private var isRestTimerActive: Boolean = false
-    private var restTimerRemainingSeconds: Int = 0
-    private var restTimerExerciseName: String? = null
-     
-     inner class WorkoutBinder : Binder() {
-         fun getService(): WorkoutService = this@WorkoutService
-     }
-     
-     override fun onBind(intent: Intent?): IBinder = binder
-     
-     override fun onCreate() {
-         super.onCreate()
-         Log.d(TAG, "WorkoutService created")
-        acquireWakeLock()
-     }
-     
-     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
-         Log.d(TAG, "onStartCommand: ${intent?.action}")
-         
-         when (intent?.action) {
-             ACTION_START_WORKOUT -> {
-                // Don't restart if already running - just update metadata
-                if (_isRunning.value) {
-                    Log.d(TAG, "Service already running, skipping start")
-                    return START_STICKY
+package com.diajarkoding.imfit.core.service
+
+import android.app.Service
+import android.content.Intent
+import android.content.pm.ServiceInfo
+import android.os.Binder
+import android.os.Build
+import android.os.IBinder
+import androidx.core.app.ServiceCompat
+import com.diajarkoding.imfit.core.model.WorkoutTimerUpdate
+import com.diajarkoding.imfit.core.notification.NotificationChannels
+import com.diajarkoding.imfit.core.notification.WorkoutActions
+import com.diajarkoding.imfit.core.notification.WorkoutNotificationManager
+import com.diajarkoding.imfit.core.timer.*
+import com.diajarkoding.imfit.domain.repository.WorkoutRepository
+import dagger.hilt.android.AndroidEntryPoint
+import kotlinx.coroutines.*
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.asStateFlow
+import javax.inject.Inject
+
+/** User-started workout session. The AlarmManager deadline survives this process. */
+@AndroidEntryPoint
+class WorkoutService : Service() {
+    @Inject lateinit var notificationManager: WorkoutNotificationManager
+    @Inject lateinit var timer: RestTimerCoordinator
+    @Inject lateinit var runtime: RestTimerAndroidRuntime
+    @Inject lateinit var workouts: WorkoutRepository
+    private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main)
+    private val running = MutableStateFlow(false)
+    val isRunning = running.asStateFlow()
+    private var update = WorkoutTimerUpdate("Workout", 0, 0, 0, 0f, false)
+    private var templateId: String? = null
+    private var ticker: Job? = null
+    private var lastNotification: Pair<WorkoutTimerUpdate, Int?>? = null
+
+    inner class WorkoutBinder : Binder() { fun getService() = this@WorkoutService }
+    override fun onBind(intent: Intent?): IBinder = WorkoutBinder()
+
+    override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
+        if (!running.value) {
+            update = update.copy(workoutName = intent?.getStringExtra(EXTRA_WORKOUT_NAME) ?: "Workout")
+            templateId = intent?.getStringExtra(EXTRA_TEMPLATE_ID)
+            val notification = notificationManager.buildWorkoutNotification(update.workoutName, "00:00:00", 0, 0, 0f, templateId = templateId)
+            try {
+                ServiceCompat.startForeground(this, NotificationChannels.WORKOUT_NOTIFICATION_ID, notification,
+                    if (Build.VERSION.SDK_INT >= 34) ServiceInfo.FOREGROUND_SERVICE_TYPE_SPECIAL_USE else 0)
+                running.value = true
+                runtime.foregroundServiceActive = true
+                ticker = scope.launch {
+                    timer.reconcile()
+                    var exactAvailable = runtime.exactAlarmAvailable()
+                    while (isActive) {
+                        runtime.monitorPlayback()
+                        val available = runtime.exactAlarmAvailable()
+                        if (available != exactAvailable) {
+                            exactAvailable = available
+                            timer.capabilitiesChanged()
+                        }
+                        timer.reconcile()
+                        renderNotification()
+                        delay(1000)
+                    }
                 }
-                
-                 val workoutName = intent.getStringExtra(EXTRA_WORKOUT_NAME) ?: "Workout"
-                val templateId = intent.getStringExtra(EXTRA_TEMPLATE_ID)
-                val startTime = intent.getLongExtra(EXTRA_START_TIME, System.currentTimeMillis())
-                val pausedTime = intent.getLongExtra(EXTRA_TOTAL_PAUSED_TIME, 0L)
-                currentTemplateId = templateId
-                workoutStartTime = startTime
-                totalPausedTimeMs = pausedTime
-                startForegroundWorkout(workoutName, templateId, startTime)
-             }
-             ACTION_UPDATE_WORKOUT -> {
-                 val update = WorkoutTimerUpdate(
-                     workoutName = intent.getStringExtra(EXTRA_WORKOUT_NAME) ?: currentWorkoutName,
-                     elapsedSeconds = intent.getLongExtra(EXTRA_ELAPSED_SECONDS, 0),
-                     completedSets = intent.getIntExtra(EXTRA_COMPLETED_SETS, 0),
-                     totalSets = intent.getIntExtra(EXTRA_TOTAL_SETS, 0),
-                     totalVolume = intent.getFloatExtra(EXTRA_TOTAL_VOLUME, 0f),
-                     isPaused = intent.getBooleanExtra(EXTRA_IS_PAUSED, false)
-                 )
-                 updateWorkoutNotification(update)
-             }
-            ACTION_START_REST -> {
-                 val remainingSeconds = intent.getIntExtra(EXTRA_REMAINING_SECONDS, 0)
-                 val exerciseName = intent.getStringExtra(EXTRA_EXERCISE_NAME)
-                startRestTimer(remainingSeconds, exerciseName)
-            }
-            ACTION_SKIP_REST -> {
-                skipRestTimer()
-            }
-            ACTION_PAUSE_WORKOUT -> {
-                pauseWorkoutTimer()
-            }
-            ACTION_RESUME_WORKOUT -> {
-                resumeWorkoutTimer()
-             }
-             ACTION_STOP_WORKOUT -> {
-                 stopWorkout()
-             }
-         }
-         
-         return START_STICKY
-     }
-     
-    private fun startForegroundWorkout(workoutName: String, templateId: String?, startTime: Long) {
-         currentWorkoutName = workoutName
-        currentTemplateId = templateId
-        workoutStartTime = startTime
-         _isRunning.value = true
-         
-        startWorkoutTimer()
-        
-         val notification = notificationManager.buildWorkoutNotification(
-             workoutName = workoutName,
-             elapsedTime = "00:00:00",
-             completedSets = 0,
-             totalSets = 0,
-             totalVolume = 0f,
-            isPaused = false,
-            templateId = templateId
-         )
-         
-         try {
-             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-                 ServiceCompat.startForeground(
-                     this,
-                     NotificationChannels.WORKOUT_NOTIFICATION_ID,
-                     notification,
-                     ServiceInfo.FOREGROUND_SERVICE_TYPE_DATA_SYNC
-                 )
-             } else {
-                 startForeground(NotificationChannels.WORKOUT_NOTIFICATION_ID, notification)
-             }
-             Log.d(TAG, "Started foreground service for workout: $workoutName")
-         } catch (e: Exception) {
-             Log.e(TAG, "Failed to start foreground: ${e.message}", e)
-         }
-     }
-     
-    private fun startWorkoutTimer() {
-        workoutTimerJob?.cancel()
-        workoutTimerJob = serviceScope.launch {
-            while (_isRunning.value) {
-                if (!currentIsPaused && !isRestTimerActive) {
-                    val elapsed = calculateElapsedSeconds()
-                    notificationManager.showWorkoutNotification(
-                        workoutName = currentWorkoutName,
-                        elapsedTime = formatElapsedTime(elapsed),
-                        completedSets = currentCompletedSets,
-                        totalSets = currentTotalSets,
-                        totalVolume = currentTotalVolume,
-                        isPaused = currentIsPaused,
-                        templateId = currentTemplateId
-                    )
-                }
-                delay(1000)
+            } catch (_: RuntimeException) { stopSelf(); return START_NOT_STICKY }
+        }
+        when (intent?.action) {
+            ACTION_UPDATE_WORKOUT -> updateWorkoutNotification(WorkoutTimerUpdate(
+                intent.getStringExtra(EXTRA_WORKOUT_NAME) ?: update.workoutName,
+                intent.getLongExtra(EXTRA_ELAPSED_SECONDS, 0),
+                intent.getIntExtra(EXTRA_COMPLETED_SETS, 0),
+                intent.getIntExtra(EXTRA_TOTAL_SETS, 0),
+                intent.getFloatExtra(EXTRA_TOTAL_VOLUME, 0f),
+                intent.getBooleanExtra(EXTRA_IS_PAUSED, false)
+            ))
+            ACTION_SKIP_REST -> scope.launch { timer.skip() }
+            ACTION_PAUSE_WORKOUT -> scope.launch { setPaused(true) }
+            ACTION_RESUME_WORKOUT -> scope.launch { setPaused(false) }
+            ACTION_STOP_WORKOUT -> scope.launch { workouts.cancelWorkout(); stopWorkout() }
+            WorkoutActions.EXPIRE -> scope.launch {
+                timer.expiry(intent.getStringExtra("timer_id") ?: "", intent.getLongExtra("generation", -1))
+                val state = timer.state.value
+                if (state == null || state.status == TimerStatus.CANCELLED) stopWorkout()
+                else templateId = state.templateId
             }
         }
+        return START_STICKY
     }
-    
-    private fun calculateElapsedSeconds(): Long {
-        val totalTime = System.currentTimeMillis() - workoutStartTime
-        val currentPauseDuration = if (currentIsPaused && lastPauseTime != null) {
-            System.currentTimeMillis() - lastPauseTime!!
-        } else {
-            0L
-        }
-        return (totalTime - totalPausedTimeMs - currentPauseDuration) / 1000
+
+    private suspend fun setPaused(paused: Boolean) {
+        if (paused) {
+            timer.whenRestInactive { persistPause(true) }
+        } else persistPause(false)
     }
-    
-    private fun pauseWorkoutTimer() {
-        if (!currentIsPaused) {
-            currentIsPaused = true
-            lastPauseTime = System.currentTimeMillis()
-            notificationManager.showWorkoutNotification(
-                workoutName = currentWorkoutName,
-                elapsedTime = formatElapsedTime(calculateElapsedSeconds()),
-                completedSets = currentCompletedSets,
-                totalSets = currentTotalSets,
-                totalVolume = currentTotalVolume,
-                isPaused = true,
-                templateId = currentTemplateId
-            )
-        }
+    private suspend fun persistPause(paused: Boolean) {
+        val session = workouts.getActiveSession() ?: return
+        if (session.isPaused == paused) return
+        val now = System.currentTimeMillis()
+        workouts.updateActiveSession(session.copy(
+            isPaused = paused,
+            lastPauseTime = if (paused) now else null,
+            totalPausedTimeMs = session.totalPausedTimeMs + if (!paused) (now - (session.lastPauseTime ?: now)).coerceAtLeast(0) else 0
+        ))
+        update = update.copy(isPaused = paused)
     }
-    
-    private fun resumeWorkoutTimer() {
-        if (currentIsPaused) {
-            lastPauseTime?.let { pauseStart ->
-                totalPausedTimeMs += System.currentTimeMillis() - pauseStart
-            }
-            currentIsPaused = false
-            lastPauseTime = null
-        }
+
+    private suspend fun renderNotification() {
+        val session = workouts.getActiveSession() ?: run { stopWorkout(); return }
+        // Same session-derived elapsed source as the ViewModel; ticks never accumulate time.
+        update = update.copy(workoutName = session.templateName, elapsedSeconds = session.actualElapsedMs.coerceAtLeast(0) / 1000,
+            completedSets = session.totalCompletedSets, totalSets = session.totalSets, totalVolume = session.totalVolume, isPaused = session.isPaused)
+        templateId = session.templateId
+        val rest = timer.state.value?.takeIf { it.status == TimerStatus.RUNNING && it.workoutId == session.id }
+        val remaining = rest?.remainingSeconds(android.os.SystemClock.elapsedRealtime())
+        val identity = update to remaining
+        if (lastNotification == identity) return
+        lastNotification = identity
+        if (remaining != null) notificationManager.showRestTimerNotification(remaining, rest.exerciseName, rest.timerId, rest.generation)
+        else notificationManager.showWorkoutNotification(update.workoutName, format(update.elapsedSeconds), update.completedSets,
+            update.totalSets, update.totalVolume, update.isPaused, templateId)
     }
-    
-    private fun startRestTimer(seconds: Int, exerciseName: String?) {
-        restTimerJob?.cancel()
-        isRestTimerActive = true
-        restTimerRemainingSeconds = seconds
-        restTimerExerciseName = exerciseName
-        
-        notificationManager.showRestTimerNotification(seconds, exerciseName)
-        
-        restTimerJob = serviceScope.launch {
-            var remaining = seconds
-            while (remaining > 0 && isRestTimerActive) {
-                delay(1000)
-                remaining--
-                restTimerRemainingSeconds = remaining
-                if (isRestTimerActive) {
-                    notificationManager.showRestTimerNotification(remaining, exerciseName)
-                }
-            }
-            
-            if (isRestTimerActive) {
-                isRestTimerActive = false
-                restTimerRemainingSeconds = 0
-                _restTimerFinished.emit(Unit)
-                
-                notificationManager.showWorkoutNotification(
-                    workoutName = currentWorkoutName,
-                    elapsedTime = formatElapsedTime(calculateElapsedSeconds()),
-                    completedSets = currentCompletedSets,
-                    totalSets = currentTotalSets,
-                    totalVolume = currentTotalVolume,
-                    isPaused = currentIsPaused,
-                    templateId = currentTemplateId
-                )
-            }
-        }
+
+    fun updateWorkoutNotification(next: WorkoutTimerUpdate) { update = next }
+    fun stopWorkout() {
+        running.value = false
+        ticker?.cancel()
+        timer.releasePlayback()
+        runtime.foregroundServiceActive = false
+        notificationManager.dismissNotification()
+        stopForeground(STOP_FOREGROUND_REMOVE)
+        stopSelf()
     }
-    
-    private fun skipRestTimer() {
-        restTimerJob?.cancel()
-        isRestTimerActive = false
-        restTimerRemainingSeconds = 0
-        
-        notificationManager.showWorkoutNotification(
-            workoutName = currentWorkoutName,
-            elapsedTime = formatElapsedTime(calculateElapsedSeconds()),
-            completedSets = currentCompletedSets,
-            totalSets = currentTotalSets,
-            totalVolume = currentTotalVolume,
-            isPaused = currentIsPaused,
-            templateId = currentTemplateId
-        )
+    override fun onDestroy() {
+        scope.cancel()
+        running.value = false
+        runtime.foregroundServiceActive = false
+        timer.releasePlayback() // Never cancel the persisted RUNNING timer's system alarm here.
+        super.onDestroy()
     }
-    
-    fun getRestTimerState(): RestTimerState {
-        return RestTimerState(
-            isActive = isRestTimerActive,
-            remainingSeconds = restTimerRemainingSeconds,
-            exerciseName = restTimerExerciseName
-        )
-    }
-    
-     fun updateWorkoutNotification(update: WorkoutTimerUpdate) {
-         if (!_isRunning.value) return
-         
-         currentWorkoutName = update.workoutName
-         currentCompletedSets = update.completedSets
-         currentTotalSets = update.totalSets
-         currentTotalVolume = update.totalVolume
-         currentIsPaused = update.isPaused
-     }
-     
-     fun stopWorkout() {
-         Log.d(TAG, "Stopping workout service")
-         _isRunning.value = false
-        workoutTimerJob?.cancel()
-        restTimerJob?.cancel()
-        releaseWakeLock()
-         notificationManager.dismissNotification()
-         stopForeground(STOP_FOREGROUND_REMOVE)
-         stopSelf()
-     }
-     
-     override fun onDestroy() {
-         super.onDestroy()
-         serviceScope.cancel()
-         _isRunning.value = false
-        releaseWakeLock()
-         Log.d(TAG, "WorkoutService destroyed")
-     }
-     
-    private fun acquireWakeLock() {
-        if (wakeLock == null) {
-            val powerManager = getSystemService(POWER_SERVICE) as PowerManager
-            wakeLock = powerManager.newWakeLock(
-                PowerManager.PARTIAL_WAKE_LOCK,
-                "IMFIT::WorkoutWakeLock"
-            ).apply {
-                acquire(4 * 60 * 60 * 1000L) // 4 hours max
-            }
-            Log.d(TAG, "WakeLock acquired")
-        }
-    }
-    
-    private fun releaseWakeLock() {
-        wakeLock?.let {
-            if (it.isHeld) {
-                it.release()
-                Log.d(TAG, "WakeLock released")
-            }
-        }
-        wakeLock = null
-    }
-    
-     private fun formatElapsedTime(seconds: Long): String {
-         val hh = seconds / 3600
-         val mm = (seconds % 3600) / 60
-         val ss = seconds % 60
-         return String.format("%02d:%02d:%02d", hh, mm, ss)
-     }
-     
-     companion object {
-         private const val TAG = "WorkoutService"
-         
-         const val ACTION_START_WORKOUT = "com.diajarkoding.imfit.action.START_WORKOUT"
-         const val ACTION_UPDATE_WORKOUT = "com.diajarkoding.imfit.action.UPDATE_WORKOUT"
-        const val ACTION_START_REST = "com.diajarkoding.imfit.action.START_REST"
-        const val ACTION_SKIP_REST = "com.diajarkoding.imfit.action.SKIP_REST"
-        const val ACTION_PAUSE_WORKOUT = "com.diajarkoding.imfit.action.PAUSE_WORKOUT"
-        const val ACTION_RESUME_WORKOUT = "com.diajarkoding.imfit.action.RESUME_WORKOUT"
-         const val ACTION_STOP_WORKOUT = "com.diajarkoding.imfit.action.STOP_WORKOUT"
-         
-         const val EXTRA_WORKOUT_NAME = "extra_workout_name"
+    private fun format(seconds: Long) = "%02d:%02d:%02d".format(seconds / 3600, seconds % 3600 / 60, seconds % 60)
+
+    companion object {
+        const val ACTION_START_WORKOUT = WorkoutActions.START
+        const val ACTION_UPDATE_WORKOUT = WorkoutActions.UPDATE
+        const val ACTION_START_REST = WorkoutActions.START_REST
+        const val ACTION_SKIP_REST = WorkoutActions.SKIP
+        const val ACTION_PAUSE_WORKOUT = WorkoutActions.PAUSE
+        const val ACTION_RESUME_WORKOUT = WorkoutActions.RESUME
+        const val ACTION_STOP_WORKOUT = WorkoutActions.STOP
+        const val EXTRA_WORKOUT_NAME = "extra_workout_name"
         const val EXTRA_TEMPLATE_ID = "extra_template_id"
         const val EXTRA_START_TIME = "extra_start_time"
         const val EXTRA_TOTAL_PAUSED_TIME = "extra_total_paused_time"
-         const val EXTRA_ELAPSED_SECONDS = "extra_elapsed_seconds"
-         const val EXTRA_COMPLETED_SETS = "extra_completed_sets"
-         const val EXTRA_TOTAL_SETS = "extra_total_sets"
-         const val EXTRA_TOTAL_VOLUME = "extra_total_volume"
-         const val EXTRA_IS_PAUSED = "extra_is_paused"
-         const val EXTRA_REMAINING_SECONDS = "extra_remaining_seconds"
-         const val EXTRA_EXERCISE_NAME = "extra_exercise_name"
-     }
- }
-
-data class RestTimerState(
-    val isActive: Boolean,
-    val remainingSeconds: Int,
-    val exerciseName: String?
-)
+        const val EXTRA_ELAPSED_SECONDS = "extra_elapsed_seconds"
+        const val EXTRA_COMPLETED_SETS = "extra_completed_sets"
+        const val EXTRA_TOTAL_SETS = "extra_total_sets"
+        const val EXTRA_TOTAL_VOLUME = "extra_total_volume"
+        const val EXTRA_IS_PAUSED = "extra_is_paused"
+    }
+}

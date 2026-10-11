@@ -71,9 +71,11 @@
          )
      }
      
-     private fun createSkipRestIntent(): PendingIntent {
-         val intent = Intent(context, WorkoutNotificationReceiver::class.java).apply {
-             action = ACTION_SKIP_REST
+      private fun createSkipRestIntent(timerId: String?): PendingIntent {
+          val intent = Intent(context, WorkoutNotificationReceiver::class.java).apply {
+              action = ACTION_SKIP_REST
+              data = android.net.Uri.parse("imfit-rest://skip/$timerId")
+              putExtra("timer_id", timerId)
          }
          return PendingIntent.getBroadcast(
              context,
@@ -83,7 +85,7 @@
          )
      }
      
-     fun buildWorkoutNotification(
+      fun buildWorkoutNotification(
          workoutName: String,
          elapsedTime: String,
          completedSets: Int,
@@ -132,9 +134,21 @@
             .build()
      }
      
-     fun buildRestTimerNotification(
-         remainingSeconds: Int,
-         exerciseName: String?
+      private fun createExtendIntent(timerId: String?, generation: Long): PendingIntent {
+          val intent = Intent(context, WorkoutNotificationReceiver::class.java).apply {
+              action = WorkoutActions.EXTEND
+              data = android.net.Uri.parse("imfit-rest://extend/$timerId/$generation")
+              putExtra("timer_id", timerId)
+              putExtra("generation", generation)
+          }
+          return PendingIntent.getBroadcast(context, 5, intent, PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE)
+      }
+
+      fun buildRestTimerNotification(
+          remainingSeconds: Int,
+          exerciseName: String?,
+          timerId: String? = null,
+          generation: Long = 0
      ): Notification {
          val minutes = remainingSeconds / 60
          val seconds = remainingSeconds % 60
@@ -146,22 +160,26 @@
          } ?: context.getString(R.string.notification_rest_timer)
          
         // Use same icon as workout notification to prevent flickering
-        return NotificationCompat.Builder(context, NotificationChannels.WORKOUT_ACTIVE_CHANNEL_ID)
-            .setSmallIcon(R.drawable.ic_fitness)
-             .setContentTitle(title)
-             .setContentText(contentText)
-             .setContentIntent(createContentIntent())
-             .setOngoing(true)
-             .setOnlyAlertOnce(true)
-             .setPriority(NotificationCompat.PRIORITY_HIGH)
+          return NotificationCompat.Builder(context, NotificationChannels.WORKOUT_ACTIVE_CHANNEL_ID)
+             .setSmallIcon(R.drawable.ic_fitness)
+              .setContentTitle(title)
+              .setContentText(contentText)
+              .setContentIntent(createContentIntent())
+              .setOngoing(true)
+              .setOnlyAlertOnce(true)
+              .setPriority(NotificationCompat.PRIORITY_HIGH)
+              .setWhen(System.currentTimeMillis() + remainingSeconds.toLong() * 1000)
+              .setUsesChronometer(true)
+              .setChronometerCountDown(true)
              .setCategory(NotificationCompat.CATEGORY_ALARM)
              .setVisibility(NotificationCompat.VISIBILITY_PUBLIC)
             .setForegroundServiceBehavior(NotificationCompat.FOREGROUND_SERVICE_IMMEDIATE)
              .addAction(
                  R.drawable.ic_skip,
                  context.getString(R.string.notification_skip_rest),
-                 createSkipRestIntent()
-             )
+                  createSkipRestIntent(timerId)
+              )
+              .addAction(R.drawable.ic_timer, context.getString(R.string.rest_extend), createExtendIntent(timerId, generation))
              .addAction(
                  R.drawable.ic_stop,
                  context.getString(R.string.notification_stop),
@@ -189,25 +207,71 @@
          }
      }
      
-     fun showRestTimerNotification(remainingSeconds: Int, exerciseName: String?) {
+      fun showRestTimerNotification(remainingSeconds: Int, exerciseName: String?, timerId: String? = null, generation: Long = 0) {
          try {
-             val notification = buildRestTimerNotification(remainingSeconds, exerciseName)
+              val notification = buildRestTimerNotification(remainingSeconds, exerciseName, timerId, generation)
              notificationManager.notify(NotificationChannels.WORKOUT_NOTIFICATION_ID, notification)
          } catch (e: SecurityException) {
              android.util.Log.w("WorkoutNotification", "Notification permission not granted")
          }
      }
      
-     fun dismissNotification() {
-         notificationManager.cancel(NotificationChannels.WORKOUT_NOTIFICATION_ID)
-     }
+      fun dismissNotification() {
+          notificationManager.cancel(NotificationChannels.WORKOUT_NOTIFICATION_ID)
+      }
+
+      fun showRestFinished(state: com.diajarkoding.imfit.core.timer.RestTimerState): Boolean {
+          fun acknowledgeIntent(kind: String, requestCode: Int): PendingIntent {
+              val intent = Intent(context, WorkoutNotificationReceiver::class.java).apply {
+                  action = WorkoutActions.ACKNOWLEDGE
+                  data = android.net.Uri.parse("imfit-rest://$kind/${state.timerId}/${state.generation}")
+                  putExtra("timer_id", state.timerId)
+                  putExtra("generation", state.generation)
+              }
+              return PendingIntent.getBroadcast(context, requestCode, intent,
+                  PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE)
+          }
+          val stop = acknowledgeIntent("stop", 80)
+          val dismiss = acknowledgeIntent("dismiss", 81)
+          val fullScreen = PendingIntent.getActivity(context, 82,
+              Intent(context, com.diajarkoding.imfit.core.timer.RestAlarmActivity::class.java).apply {
+                  data = android.net.Uri.parse("imfit-rest://full-screen/${state.timerId}/${state.generation}")
+                  putExtra("timer_id", state.timerId)
+                  putExtra("generation", state.generation)
+              }, PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE)
+          val content = PendingIntent.getActivity(context, 83,
+              Intent(context, MainActivity::class.java).apply {
+                  flags = Intent.FLAG_ACTIVITY_SINGLE_TOP or Intent.FLAG_ACTIVITY_CLEAR_TOP
+                  data = android.net.Uri.parse("imfit-rest://open-workout/${state.timerId}/${state.generation}")
+                  putExtra(EXTRA_OPEN_WORKOUT, true)
+                  putExtra(EXTRA_TEMPLATE_ID, state.templateId)
+              },
+              PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE)
+          val notification = NotificationCompat.Builder(context, NotificationChannels.REST_FINISHED_CHANNEL_ID)
+              .setSmallIcon(R.drawable.ic_timer)
+              .setContentTitle(context.getString(R.string.rest_finished))
+              .setContentText(state.exerciseName)
+              .setContentIntent(content)
+              .setFullScreenIntent(fullScreen, true)
+              .setOngoing(false).setAutoCancel(false).setOnlyAlertOnce(true)
+              .setDeleteIntent(dismiss).setCategory(NotificationCompat.CATEGORY_ALARM)
+              .setPriority(NotificationCompat.PRIORITY_HIGH)
+              .addAction(R.drawable.ic_stop, context.getString(R.string.rest_stop_alert), stop)
+              .build()
+          return try {
+              notificationManager.notify(NotificationChannels.REST_FINISHED_NOTIFICATION_ID, notification)
+              true
+          } catch (_: SecurityException) { false }
+      }
+
+      fun dismissRestFinished() = notificationManager.cancel(NotificationChannels.REST_FINISHED_NOTIFICATION_ID)
      
      companion object {
          const val EXTRA_OPEN_WORKOUT = "extra_open_workout"
         const val EXTRA_TEMPLATE_ID = "extra_template_id"
-         const val ACTION_STOP_WORKOUT = "com.diajarkoding.imfit.ACTION_STOP_WORKOUT"
-         const val ACTION_PAUSE_WORKOUT = "com.diajarkoding.imfit.ACTION_PAUSE_WORKOUT"
-         const val ACTION_RESUME_WORKOUT = "com.diajarkoding.imfit.ACTION_RESUME_WORKOUT"
-         const val ACTION_SKIP_REST = "com.diajarkoding.imfit.ACTION_SKIP_REST"
+          const val ACTION_STOP_WORKOUT = WorkoutActions.STOP
+          const val ACTION_PAUSE_WORKOUT = WorkoutActions.PAUSE
+          const val ACTION_RESUME_WORKOUT = WorkoutActions.RESUME
+          const val ACTION_SKIP_REST = WorkoutActions.SKIP
      }
  }

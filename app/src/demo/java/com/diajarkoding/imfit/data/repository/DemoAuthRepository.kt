@@ -8,7 +8,10 @@ import javax.inject.Inject
 import javax.inject.Singleton
 
 @Singleton
-class DemoAuthRepository @Inject constructor() : AuthRepository {
+class DemoAuthRepository @Inject constructor(
+    private val timerCleanup: com.diajarkoding.imfit.core.timer.TimerSessionCleanup?
+) : AuthRepository {
+    constructor() : this(null)
 
     init {
         FakeUserDataSource.login(DEMO_EMAIL, DEMO_PASSWORD)
@@ -32,6 +35,7 @@ class DemoAuthRepository @Inject constructor() : AuthRepository {
         FakeUserDataSource.login(email, password)
 
     override suspend fun logout() {
+        timerCleanup?.stop("LOGOUT")
         FakeUserDataSource.logout()
     }
 

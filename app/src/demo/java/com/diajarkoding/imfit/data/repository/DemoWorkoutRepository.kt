@@ -12,7 +12,10 @@ import javax.inject.Inject
 import javax.inject.Singleton
 
 @Singleton
-class DemoWorkoutRepository @Inject constructor() : WorkoutRepository {
+class DemoWorkoutRepository @Inject constructor(
+    private val timerCleanup: com.diajarkoding.imfit.core.timer.TimerSessionCleanup?
+) : WorkoutRepository {
+    constructor() : this(null)
     private var sessionRestOverride: Int? = null
 
     override suspend fun getTemplates(userId: String): List<WorkoutTemplate> =
@@ -59,6 +62,7 @@ class DemoWorkoutRepository @Inject constructor() : WorkoutRepository {
         FakeWorkoutDataSource.deleteTemplate(templateId)
 
     override suspend fun startWorkout(template: WorkoutTemplate): WorkoutSession {
+        timerCleanup?.stop("SESSION_REPLACED")
         sessionRestOverride = null
         return FakeWorkoutDataSource.startWorkout(template)
     }
@@ -71,12 +75,14 @@ class DemoWorkoutRepository @Inject constructor() : WorkoutRepository {
     }
 
     override suspend fun finishWorkout(): WorkoutLog? {
+        timerCleanup?.stop("WORKOUT_FINISHED")
         val workoutLog = FakeWorkoutDataSource.finishWorkout()
         sessionRestOverride = null
         return workoutLog
     }
 
     override suspend fun cancelWorkout() {
+        timerCleanup?.stop("WORKOUT_CANCELLED")
         FakeWorkoutDataSource.cancelWorkout()
         sessionRestOverride = null
     }

@@ -20,6 +20,7 @@ class ImFitApplication : Application(), SingletonImageLoader.Factory, Configurat
 
     @Inject
     lateinit var workerFactory: HiltWorkerFactory
+    @Inject lateinit var timerRuntime: com.diajarkoding.imfit.core.timer.RestTimerAndroidRuntime
 
     override val workManagerConfiguration: Configuration
         get() = Configuration.Builder()
@@ -29,6 +30,7 @@ class ImFitApplication : Application(), SingletonImageLoader.Factory, Configurat
     override fun onCreate() {
         super.onCreate()
         NotificationChannels.createNotificationChannels(this)
+        timerRuntime.register(this)
     }
 
     override fun newImageLoader(context: android.content.Context): ImageLoader {

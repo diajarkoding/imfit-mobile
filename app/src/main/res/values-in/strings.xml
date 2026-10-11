@@ -1,6 +1,22 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <string name="app_name">IMFIT</string>
+    <string name="rest_finished">Istirahat selesai</string>
+    <string name="rest_stop_alert">Hentikan</string>
+    <string name="channel_rest_finished">Istirahat selesai</string>
+    <string name="rest_alert_limited">Alert istirahat di background mungkin terlambat. Aktifkan notifikasi serta Alarm dan pengingat di Pengaturan.</string>
+    <string name="rest_alarm_settings">Pengaturan alarm</string>
+    <string name="rest_storage_error">Timer istirahat gagal disimpan atau dipulihkan. Coba lagi.</string>
+    <string name="rest_extend">+30 detik</string>
+    <string name="rest_sound_enabled">Bunyi selesai istirahat</string>
+    <string name="rest_vibration_enabled">Getaran selesai istirahat</string>
+    <string name="rest_full_screen_settings">Pengaturan banner alarm</string>
+    <string name="rest_full_screen_limited">Alarm layar penuh belum diizinkan. Banner bisa hilang otomatis; kartu tetap tersedia di panel notifikasi.</string>
+    <string name="rest_alarm_notification_stop">Tarik panel notifikasi, lalu ketuk Stop atau hapus notifikasinya.</string>
+    <string name="rest_alarm_notification_title">Hentikan lewat notifikasi</string>
+    <string name="rest_alarm_exercise_label">LATIHAN</string>
+    <string name="rest_open_workout">Kembali ke latihan</string>
+    <string name="rest_open_workout_hint">Membuka latihan tidak menghentikan alarm.</string>
 
     <!-- Common Labels -->
     <string name="label_email">Email</string>

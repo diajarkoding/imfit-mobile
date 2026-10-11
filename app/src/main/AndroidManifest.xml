@@ -5,9 +5,12 @@
     <uses-permission android:name="android.permission.INTERNET" />
     <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
-    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_DATA_SYNC" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_SPECIAL_USE" />
+    <uses-permission android:name="android.permission.SCHEDULE_EXACT_ALARM" />
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+    <uses-permission android:name="android.permission.USE_FULL_SCREEN_INTENT" />
     <uses-permission android:name="android.permission.WAKE_LOCK" />
+    <uses-permission android:name="android.permission.VIBRATE" />
 
     <uses-feature
         android:name="android.hardware.camera"
@@ -61,20 +64,32 @@
         </provider>
 
         <!-- Workout Foreground Service -->
+        <activity
+            android:name=".core.timer.RestAlarmActivity"
+            android:exported="false"
+            android:launchMode="singleTop"
+            android:excludeFromRecents="true"
+            android:showWhenLocked="true"
+            android:turnScreenOn="true"
+            android:theme="@style/Theme.IMFIT" />
         <service
             android:name=".core.service.WorkoutService"
-            android:foregroundServiceType="dataSync"
-            android:exported="false" />
+            android:foregroundServiceType="specialUse"
+            android:exported="false">
+            <property android:name="android.app.PROPERTY_SPECIAL_USE_FGS_SUBTYPE"
+                android:value="User-started workout session with an active rest countdown and user-dismissed completion alert" />
+        </service>
+        <receiver android:name=".core.timer.RestTimerAlarmReceiver" android:exported="false" />
 
         <!-- Notification Action Receiver -->
         <receiver
             android:name=".core.notification.WorkoutNotificationReceiver"
             android:exported="false">
             <intent-filter>
-                <action android:name="com.diajarkoding.imfit.ACTION_STOP_WORKOUT" />
-                <action android:name="com.diajarkoding.imfit.ACTION_PAUSE_WORKOUT" />
-                <action android:name="com.diajarkoding.imfit.ACTION_RESUME_WORKOUT" />
-                <action android:name="com.diajarkoding.imfit.ACTION_SKIP_REST" />
+                <action android:name="com.diajarkoding.imfit.action.STOP_WORKOUT" />
+                <action android:name="com.diajarkoding.imfit.action.PAUSE_WORKOUT" />
+                <action android:name="com.diajarkoding.imfit.action.RESUME_WORKOUT" />
+                <action android:name="com.diajarkoding.imfit.action.SKIP_REST" />
             </intent-filter>
         </receiver>
     </application>

@@ -145,6 +145,11 @@ $RECYCLE.BIN/
 *.war
 *.ear
 
+# Node / Supabase CLI
+node_modules/
+supabase/.branches/
+supabase/.temp/
+
 # ==========================================
 # Virtual Machine Crash Logs
 # ==========================================

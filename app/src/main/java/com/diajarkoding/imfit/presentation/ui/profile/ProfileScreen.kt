@@ -1,5 +1,7 @@
 package com.diajarkoding.imfit.presentation.ui.profile
 
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
+
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -20,14 +22,14 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.shape.CircleShape
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.ArrowBack
-import androidx.compose.material.icons.automirrored.filled.ExitToApp
-import androidx.compose.material.icons.filled.Cake
-import androidx.compose.material.icons.filled.DarkMode
-import androidx.compose.material.icons.filled.Email
-import androidx.compose.material.icons.filled.Language
-import androidx.compose.material.icons.filled.Person
+import com.diajarkoding.imfit.presentation.components.common.ArrowBack
+import com.diajarkoding.imfit.presentation.components.common.Cake
+import com.diajarkoding.imfit.presentation.components.common.DarkMode
+import com.diajarkoding.imfit.presentation.components.common.Email
+import com.diajarkoding.imfit.presentation.components.common.ExitToApp
+import com.diajarkoding.imfit.presentation.components.common.Language
+import com.diajarkoding.imfit.presentation.components.common.Person
+import com.diajarkoding.imfit.presentation.components.common.Symbols
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
@@ -54,7 +56,6 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
-import coil.compose.AsyncImage
 import com.diajarkoding.imfit.R
 import com.diajarkoding.imfit.presentation.components.common.IMFITLanguageSwitch
 import com.diajarkoding.imfit.presentation.components.common.IMFITThemeSwitch
@@ -68,7 +69,6 @@ import com.diajarkoding.imfit.theme.IMFITSizes
 import com.diajarkoding.imfit.theme.IMFITSpacing
 import com.diajarkoding.imfit.theme.Primary
 import com.diajarkoding.imfit.theme.PrimaryLight
-
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun ProfileScreen(
@@ -80,33 +80,13 @@ fun ProfileScreen(
     onToggleLanguage: () -> Unit,
     viewModel: ProgressViewModel = hiltViewModel()
 ) {
-    val state by viewModel.state.collectAsState()
+    val state by viewModel.state.collectAsStateWithLifecycle()
 
     Scaffold(
         contentWindowInsets = WindowInsets(0),
+        containerColor = MaterialTheme.colorScheme.background,
         topBar = {
-            TopAppBar(
-                modifier = Modifier.windowInsetsPadding(WindowInsets.statusBars),
-                title = {
-                    Text(
-                        text = stringResource(R.string.title_profile),
-                        style = MaterialTheme.typography.titleLarge,
-                        fontWeight = FontWeight.Bold
-                    )
-                },
-                navigationIcon = {
-                    IconButton(onClick = onNavigateBack) {
-                        Icon(
-                            Icons.AutoMirrored.Filled.ArrowBack,
-                            contentDescription = stringResource(R.string.action_back)
-                        )
-                    }
-                },
-                colors = TopAppBarDefaults.topAppBarColors(
-                    containerColor = MaterialTheme.colorScheme.surface
-                ),
-                windowInsets = WindowInsets(0)
-            )
+            ProfileTopAppBar(onNavigateBack = onNavigateBack)
         }
     ) { padding ->
         LazyColumn(
@@ -143,17 +123,17 @@ fun ProfileScreen(
                     ) {
                         Column {
                             ProfileInfoItem(
-                                icon = Icons.Default.Person,
+                                icon = Symbols.Default.Person,
                                 label = stringResource(R.string.label_fullname),
                                 value = state.userName
                             )
                             ProfileInfoItem(
-                                icon = Icons.Default.Email,
+                                icon = Symbols.Default.Email,
                                 label = stringResource(R.string.label_email),
                                 value = state.userEmail
                             )
                             ProfileInfoItem(
-                                icon = Icons.Default.Cake,
+                                icon = Symbols.Default.Cake,
                                 label = stringResource(R.string.label_date_of_birth),
                                 value = state.userBirthDate
                                     ?: stringResource(R.string.placeholder_dash),
@@ -179,7 +159,7 @@ fun ProfileScreen(
                     Column {
                         // Dark Mode Toggle
                         SettingsToggleItem(
-                            icon = Icons.Default.DarkMode,
+                            icon = Symbols.Default.DarkMode,
                             title = stringResource(R.string.settings_dark_mode),
                             subtitle = if (isDarkMode) stringResource(R.string.settings_dark_mode_on) else stringResource(
                                 R.string.settings_dark_mode_off
@@ -194,7 +174,7 @@ fun ProfileScreen(
 
                         // Language Toggle
                         SettingsToggleItem(
-                            icon = Icons.Default.Language,
+                            icon = Symbols.Default.Language,
                             title = stringResource(R.string.settings_language),
                             subtitle = if (isIndonesian) stringResource(R.string.settings_language_id) else stringResource(
                                 R.string.settings_language_en
@@ -221,8 +201,7 @@ fun ProfileScreen(
                     modifier = Modifier
                         .fillMaxWidth()
                         .clickable {
-                            viewModel.logout()
-                            onLogout()
+                            viewModel.logout(onLogout)
                         },
                     shape = IMFITShapes.Card,
                     colors = CardDefaults.cardColors(
@@ -237,7 +216,7 @@ fun ProfileScreen(
                         horizontalArrangement = Arrangement.Center
                     ) {
                         Icon(
-                            imageVector = Icons.AutoMirrored.Filled.ExitToApp,
+                            imageVector = Symbols.AutoMirrored.Filled.ExitToApp,
                             contentDescription = null,
                             tint = DeletePink,
                             modifier = Modifier.size(IMFITSizes.iconMd)
@@ -275,29 +254,9 @@ private fun ProfileScreenContent(
 ) {
     Scaffold(
         contentWindowInsets = WindowInsets(0),
+        containerColor = MaterialTheme.colorScheme.background,
         topBar = {
-            TopAppBar(
-                modifier = Modifier.windowInsetsPadding(WindowInsets.statusBars),
-                title = {
-                    Text(
-                        text = stringResource(R.string.title_profile),
-                        style = MaterialTheme.typography.titleLarge,
-                        fontWeight = FontWeight.Bold
-                    )
-                },
-                navigationIcon = {
-                    IconButton(onClick = onNavigateBack) {
-                        Icon(
-                            Icons.AutoMirrored.Filled.ArrowBack,
-                            contentDescription = stringResource(R.string.action_back)
-                        )
-                    }
-                },
-                colors = TopAppBarDefaults.topAppBarColors(
-                    containerColor = MaterialTheme.colorScheme.surface
-                ),
-                windowInsets = WindowInsets(0)
-            )
+            ProfileTopAppBar(onNavigateBack = onNavigateBack)
         }
     ) { padding ->
         LazyColumn(
@@ -333,17 +292,17 @@ private fun ProfileScreenContent(
                     ) {
                         Column {
                             ProfileInfoItem(
-                                icon = Icons.Default.Person,
+                                icon = Symbols.Default.Person,
                                 label = stringResource(R.string.label_fullname),
                                 value = userName
                             )
                             ProfileInfoItem(
-                                icon = Icons.Default.Email,
+                                icon = Symbols.Default.Email,
                                 label = stringResource(R.string.label_email),
                                 value = userEmail
                             )
                             ProfileInfoItem(
-                                icon = Icons.Default.Cake,
+                                icon = Symbols.Default.Cake,
                                 label = stringResource(R.string.label_date_of_birth),
                                 value = userBirthDate ?: stringResource(R.string.placeholder_dash),
                                 showDivider = false
@@ -366,7 +325,7 @@ private fun ProfileScreenContent(
                 ) {
                     Column {
                         SettingsToggleItem(
-                            icon = Icons.Default.DarkMode,
+                            icon = Symbols.Default.DarkMode,
                             title = stringResource(R.string.settings_dark_mode),
                             subtitle = if (isDarkMode) stringResource(R.string.settings_dark_mode_on) else stringResource(R.string.settings_dark_mode_off),
                             content = {
@@ -378,7 +337,7 @@ private fun ProfileScreenContent(
                         )
 
                         SettingsToggleItem(
-                            icon = Icons.Default.Language,
+                            icon = Symbols.Default.Language,
                             title = stringResource(R.string.settings_language),
                             subtitle = if (isIndonesian) stringResource(R.string.settings_language_id) else stringResource(R.string.settings_language_en),
                             showDivider = false,
@@ -415,7 +374,7 @@ private fun ProfileScreenContent(
                         horizontalArrangement = Arrangement.Center
                     ) {
                         Icon(
-                            imageVector = Icons.AutoMirrored.Filled.ExitToApp,
+                            imageVector = Symbols.AutoMirrored.Filled.ExitToApp,
                             contentDescription = null,
                             tint = DeletePink,
                             modifier = Modifier.size(IMFITSizes.iconMd)
@@ -434,6 +393,40 @@ private fun ProfileScreenContent(
             item { Spacer(modifier = Modifier.height(IMFITSpacing.huge)) }
         }
     }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun ProfileTopAppBar(
+    onNavigateBack: () -> Unit
+) {
+    TopAppBar(
+        modifier = Modifier.windowInsetsPadding(WindowInsets.statusBars),
+        title = {
+            Text(
+                text = stringResource(R.string.title_profile),
+                style = MaterialTheme.typography.titleLarge,
+                fontWeight = FontWeight.Bold,
+                color = MaterialTheme.colorScheme.onSurface
+            )
+        },
+        navigationIcon = {
+            IconButton(onClick = onNavigateBack) {
+                Icon(
+                    imageVector = Symbols.AutoMirrored.Filled.ArrowBack,
+                    contentDescription = stringResource(R.string.action_back),
+                    tint = MaterialTheme.colorScheme.onSurface
+                )
+            }
+        },
+        colors = TopAppBarDefaults.topAppBarColors(
+            containerColor = MaterialTheme.colorScheme.surface,
+            scrolledContainerColor = MaterialTheme.colorScheme.surface,
+            navigationIconContentColor = MaterialTheme.colorScheme.onSurface,
+            titleContentColor = MaterialTheme.colorScheme.onSurface
+        ),
+        windowInsets = WindowInsets(0)
+    )
 }
 
 @Composable

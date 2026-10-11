@@ -25,8 +25,8 @@ import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.windowInsetsPadding
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.FitnessCenter
+import com.diajarkoding.imfit.presentation.components.common.FitnessCenter
+import com.diajarkoding.imfit.presentation.components.common.Symbols
 import androidx.compose.material3.Icon
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.material3.MaterialTheme
@@ -180,7 +180,7 @@ fun SplashScreen(
                     }
             ) {
                 Icon(
-                    imageVector = Icons.Default.FitnessCenter,
+                    imageVector = Symbols.Default.FitnessCenter,
                     contentDescription = stringResource(R.string.desc_logo),
                     modifier = Modifier.size(IMFITSizes.iconHuge),
                     tint = MaterialTheme.colorScheme.onPrimary
@@ -272,7 +272,7 @@ private fun SplashScreenContent() {
                     }
             ) {
                 Icon(
-                    imageVector = Icons.Default.FitnessCenter,
+                    imageVector = Symbols.Default.FitnessCenter,
                     contentDescription = stringResource(R.string.desc_logo),
                     modifier = Modifier.size(IMFITSizes.iconHuge),
                     tint = MaterialTheme.colorScheme.onPrimary

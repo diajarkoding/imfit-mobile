@@ -1,0 +1,10 @@
+{
+  "name": "imfit-mobile",
+  "private": true,
+  "engines": {
+    "node": ">=20"
+  },
+  "devDependencies": {
+    "supabase": "2.116.0"
+  }
+}

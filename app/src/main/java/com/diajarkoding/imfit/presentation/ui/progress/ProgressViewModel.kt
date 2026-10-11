@@ -127,9 +127,10 @@ class ProgressViewModel @Inject constructor(
         }
     }
 
-    fun logout() {
+    fun logout(onComplete: () -> Unit = {}) {
         viewModelScope.launch {
             authRepository.logout()
+            onComplete()
         }
     }
 }

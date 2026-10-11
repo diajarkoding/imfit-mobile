@@ -1,6 +1,7 @@
 package com.diajarkoding.imfit.data.sync
 
 import android.util.Log
+import androidx.room.withTransaction
 import com.diajarkoding.imfit.core.network.NetworkMonitor
 import com.diajarkoding.imfit.data.local.dao.ExerciseDao
 import com.diajarkoding.imfit.data.local.dao.ExerciseLogDao
@@ -11,8 +12,10 @@ import com.diajarkoding.imfit.data.local.dao.TemplateExerciseDao
 import com.diajarkoding.imfit.data.local.entity.ExerciseEntity
 import com.diajarkoding.imfit.data.local.entity.WorkoutLogEntity
 import com.diajarkoding.imfit.data.local.entity.WorkoutTemplateEntity
+import com.diajarkoding.imfit.data.local.database.IMFITDatabase
 import com.diajarkoding.imfit.data.local.sync.PendingOperation
 import com.diajarkoding.imfit.data.local.sync.SyncStatus
+import com.diajarkoding.imfit.data.remote.ImfitAggregateRemoteDataSource
 import com.diajarkoding.imfit.data.remote.dto.TemplateExerciseDto
 import io.github.jan.supabase.SupabaseClient
 import io.github.jan.supabase.auth.auth
@@ -20,20 +23,26 @@ import io.github.jan.supabase.postgrest.postgrest
 import io.github.jan.supabase.postgrest.query.Columns
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.Job
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.SupervisorJob
-import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
+import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.encodeToJsonElement
+import kotlinx.serialization.json.jsonArray
+import kotlinx.serialization.json.jsonObject
 import java.time.Instant
 import java.time.OffsetDateTime
 import java.time.ZoneOffset
 import java.time.format.DateTimeFormatter
+import java.util.Collections
 import javax.inject.Inject
 import javax.inject.Singleton
 
@@ -52,17 +61,18 @@ class SyncManager @Inject constructor(
     private val workoutLogDao: WorkoutLogDao,
     private val exerciseLogDao: ExerciseLogDao,
     private val workoutSetDao: WorkoutSetDao,
-    private val exerciseDao: ExerciseDao
-) {
+    private val exerciseDao: ExerciseDao,
+    private val database: IMFITDatabase,
+    private val aggregateRemoteDataSource: ImfitAggregateRemoteDataSource,
+) : SyncStateProvider, SyncRunner, SyncLifecycleController {
     private val scope = CoroutineScope(Dispatchers.IO + SupervisorJob())
     
     // Exposed sync state for UI
     private val _syncState = MutableStateFlow(SyncState())
-    val syncState: StateFlow<SyncState> = _syncState.asStateFlow()
+    override val syncState: StateFlow<SyncState> = _syncState.asStateFlow()
     
-    // Debounced trigger job
-    private var triggerJob: Job? = null
-    private val debounceDelayMs = 2000L
+    private val syncMutex = Mutex()
+    private val blockedUsers = Collections.synchronizedSet(mutableSetOf<String>())
 
     init {
         // Observe network changes and trigger sync when online
@@ -85,37 +95,63 @@ class SyncManager @Inject constructor(
     }
     
     /**
-     * Triggers a debounced sync operation.
-     * Multiple triggers within debounceDelayMs will be consolidated into one sync.
-     */
-    fun trigger() {
-        triggerJob?.cancel()
-        triggerJob = scope.launch {
-            delay(debounceDelayMs)
-            updatePendingCount()
-            syncAll()
-        }
-    }
-
-    /**
      * Updates the pending count in the sync state.
      */
     private suspend fun updatePendingCount() {
-        val pendingTemplates = workoutTemplateDao.getPendingSyncTemplates().size
-        val pendingLogs = workoutLogDao.getPendingLogs().size
-        val pendingExerciseLogs = exerciseLogDao.getPendingExerciseLogs().size
-        val pendingSets = workoutSetDao.getPendingWorkoutSets().size
-        val total = pendingTemplates + pendingLogs + pendingExerciseLogs + pendingSets
+        val userId = supabaseClient.auth.currentUserOrNull()?.id
+        if (userId == null) {
+            _syncState.value = _syncState.value.copy(pendingCount = 0)
+            return
+        }
+        val pendingTemplates = workoutTemplateDao.getPendingSyncTemplates(userId).size
+        val pendingLogs = workoutLogDao.getPendingLogs(userId).size
+        val total = pendingTemplates + pendingLogs
         
         _syncState.value = _syncState.value.copy(pendingCount = total)
-        Log.d(TAG, "Pending count updated: $total ($pendingTemplates templates, $pendingLogs logs, $pendingExerciseLogs exerciseLogs, $pendingSets sets)")
+        Log.d(TAG, "Pending aggregate count updated: $total ($pendingTemplates templates, $pendingLogs logs)")
     }
 
     /**
      * Syncs all pending data with the remote server.
      * Bidirectional sync: push local changes first, then pull remote updates.
      */
-    suspend fun syncAll() {
+    suspend fun syncAll() = syncMutex.withLock {
+        val userId = supabaseClient.auth.currentUserOrNull()?.id
+        if (userId == null) {
+            _syncState.value = SyncState(status = SyncState.SyncStatus.IDLE)
+            return@withLock
+        }
+        if (userId !in blockedUsers) syncAllLocked(userId)
+    }
+
+    override suspend fun run(expectedUserId: String?): SyncRunResult = syncMutex.withLock {
+        val currentUserId = supabaseClient.auth.currentUserOrNull()?.id
+            ?: return@withLock SyncRunResult.NO_AUTHENTICATED_USER
+        if (expectedUserId != null && expectedUserId != currentUserId) {
+            return@withLock SyncRunResult.NO_AUTHENTICATED_USER
+        }
+
+        if (currentUserId in blockedUsers) return@withLock SyncRunResult.NO_AUTHENTICATED_USER
+        syncAllLocked(currentUserId)
+        when (_syncState.value.status) {
+            SyncState.SyncStatus.SYNCED -> SyncRunResult.SUCCESS
+            SyncState.SyncStatus.IDLE -> SyncRunResult.NO_AUTHENTICATED_USER
+            else -> SyncRunResult.RETRYABLE_FAILURE
+        }
+    }
+
+    override suspend fun blockAndAwaitIdle(userId: String) {
+        blockedUsers += userId
+        syncMutex.withLock {
+            _syncState.value = SyncState(status = SyncState.SyncStatus.IDLE)
+        }
+    }
+
+    override fun unblock(userId: String) {
+        blockedUsers -= userId
+    }
+
+    private suspend fun syncAllLocked(userId: String) {
         if (!networkMonitor.isOnline) {
             Log.d(TAG, "Network unavailable, skipping sync")
             _syncState.value = _syncState.value.copy(status = SyncState.SyncStatus.OFFLINE)
@@ -128,29 +164,38 @@ class SyncManager @Inject constructor(
         )
 
         try {
+            // Always preserve and upload durable local changes before pulling remote state.
+            val templatesSynced = syncPendingTemplates(userId)
+            val workoutsSynced = syncPendingWorkoutLogs(userId)
+            if (!templatesSynced || !workoutsSynced) {
+                throw IllegalStateException("One or more local aggregates are still pending retry")
+            }
+
             // Check if initial sync is needed (fresh install / reinstall)
-            if (needsInitialSync()) {
-                performInitialSync()
+            if (needsInitialSync(userId)) {
+                performInitialSync(userId)
                 return
             }
-            
-            // PUSH: Local changes -> Remote
-            syncPendingTemplates()
-            syncPendingWorkoutLogs()
-            
+
             // PULL: Remote changes -> Local (delta sync)
-            pullExercises() // Server-authoritative
-            pullTemplates()
-            pullWorkoutLogs()
+            requireCurrentUser(userId)
+            pullExercises(userId) // Server-authoritative
+            pullTemplates(userId)
+            pullTemplateExercises(userId)
+            pullWorkoutLogs(userId)
+            pullExerciseLogs(userId)
+            pullWorkoutSets(userId)
             
             updatePendingCount()
-            syncPreferences.lastSyncTimestamp = System.currentTimeMillis()
+            syncPreferences.setLastSyncTimestamp(userId, System.currentTimeMillis())
             
             _syncState.value = _syncState.value.copy(
                 status = SyncState.SyncStatus.SYNCED,
                 lastSyncTime = System.currentTimeMillis()
             )
             Log.d(TAG, "Sync completed successfully")
+        } catch (e: CancellationException) {
+            throw e
         } catch (e: Exception) {
             Log.e(TAG, "Sync failed: ${e.message}", e)
             _syncState.value = _syncState.value.copy(
@@ -163,17 +208,16 @@ class SyncManager @Inject constructor(
     /**
      * Checks if initial sync is needed (fresh install, reinstall, or first login).
      */
-    private suspend fun needsInitialSync(): Boolean {
+    private suspend fun needsInitialSync(userId: String): Boolean {
         // If initial sync was never completed OR local DB is empty
-        if (!syncPreferences.isInitialSyncCompleted) {
+        if (!syncPreferences.isInitialSyncCompleted(userId)) {
             return true
         }
         
         // Check if templates exist locally (basic DB presence check)
-        val userId = supabaseClient.auth.currentUserOrNull()?.id ?: return false
         val templates = workoutTemplateDao.getTemplatesByUserList(userId)
         
-        return templates.isEmpty() && syncPreferences.lastSyncTimestamp == 0L
+        return templates.isEmpty() && syncPreferences.getLastSyncTimestamp(userId) == 0L
     }
 
     /**
@@ -181,12 +225,7 @@ class SyncManager @Inject constructor(
      * Downloads ALL user data from Supabase and inserts into Room.
      * Reports progress for UI display.
      */
-    suspend fun performInitialSync() {
-        val userId = supabaseClient.auth.currentUserOrNull()?.id ?: run {
-            Log.e(TAG, "Cannot perform initial sync - no authenticated user")
-            return
-        }
-        
+    private suspend fun performInitialSync(userId: String) {
         Log.d(TAG, "Starting initial sync for user: $userId")
         _syncState.value = _syncState.value.copy(
             status = SyncState.SyncStatus.SYNCING,
@@ -199,11 +238,12 @@ class SyncManager @Inject constructor(
         try {
             // Step 1: Pull exercises (15%)
             updateProgress(0.05f, "Downloading exercises...")
-            pullExercises()
+            requireCurrentUser(userId)
+            pullExercises(userId)
             
             // Step 2: Pull all user templates (30%)
             updateProgress(0.15f, "Downloading workout templates...")
-            pullTemplates()
+            pullTemplates(userId)
             
             // Step 3: Pull template exercises (45%)
             updateProgress(0.30f, "Downloading template exercises...")
@@ -211,19 +251,19 @@ class SyncManager @Inject constructor(
             
             // Step 4: Pull all workout logs (60%)
             updateProgress(0.45f, "Downloading workout history...")
-            pullWorkoutLogs()
+            pullWorkoutLogs(userId)
             
             // Step 5: Pull exercise logs (75%)
             updateProgress(0.60f, "Downloading exercise logs...")
-            pullExerciseLogs()
+            pullExerciseLogs(userId)
             
             // Step 6: Pull workout sets (90%)
             updateProgress(0.75f, "Downloading workout sets...")
-            pullWorkoutSets()
+            pullWorkoutSets(userId)
             
             // Mark initial sync as completed
-            syncPreferences.isInitialSyncCompleted = true
-            syncPreferences.lastSyncTimestamp = System.currentTimeMillis()
+            syncPreferences.setInitialSyncCompleted(userId, true)
+            syncPreferences.setLastSyncTimestamp(userId, System.currentTimeMillis())
             
             updateProgress(1.0f, "Sync complete!")
             
@@ -271,6 +311,7 @@ class SyncManager @Inject constructor(
             
             for (template in templates) {
                 try {
+                    if (template.syncStatus != SyncStatus.SYNCED.name) continue
                     val remoteExercises = supabaseClient.postgrest
                         .from("template_exercises")
                         .select() {
@@ -282,8 +323,8 @@ class SyncManager @Inject constructor(
                     
                     Log.d(TAG, "Pulled ${remoteExercises.size} exercises for template: ${template.id}")
                     
-                    for (remote in remoteExercises) {
-                        val entity = com.diajarkoding.imfit.data.local.entity.TemplateExerciseEntity(
+                    val entities = remoteExercises.map { remote ->
+                        com.diajarkoding.imfit.data.local.entity.TemplateExerciseEntity(
                             templateId = template.id,
                             exerciseId = remote.exerciseId,
                             orderIndex = remote.orderIndex ?: 0,
@@ -293,101 +334,130 @@ class SyncManager @Inject constructor(
                             syncStatus = SyncStatus.SYNCED.name,
                             pendingOperation = null
                         )
-                        templateExerciseDao.insertTemplateExercise(entity)
+                    }
+                    database.withTransaction {
+                        val current = workoutTemplateDao.getTemplateByIdIncludingDeleted(template.id)
+                        if (current?.syncStatus == SyncStatus.SYNCED.name && !current.isDeleted) {
+                            templateExerciseDao.deleteExercisesByTemplate(template.id)
+                            if (entities.isNotEmpty()) {
+                                templateExerciseDao.insertTemplateExercises(entities)
+                            }
+                        }
                     }
                 } catch (e: Exception) {
                     Log.e(TAG, "Failed to pull exercises for template ${template.id}: ${e.message}")
+                    throw e
                 }
             }
+        } catch (e: CancellationException) {
+            throw e
         } catch (e: Exception) {
             Log.e(TAG, "Failed to pull template exercises: ${e.message}", e)
-            // Don't throw - continue with sync
+            throw e
         }
     }
 
     /**
      * Syncs pending workout templates with the remote server.
      */
-    suspend fun syncPendingTemplates() {
-        val pendingTemplates = workoutTemplateDao.getPendingSyncTemplates()
+    private suspend fun syncPendingTemplates(userId: String): Boolean {
+        val pendingTemplates = workoutTemplateDao.getPendingSyncTemplates(userId)
         Log.d(TAG, "Found ${pendingTemplates.size} pending templates to sync")
+        var allSucceeded = true
 
         for (template in pendingTemplates) {
             try {
+                val operation = template.pendingOperation ?: continue
+                val exercises = templateExerciseDao.getExercisesForTemplateList(template.id)
                 when (template.pendingOperation) {
                     PendingOperation.CREATE.name -> {
                         createTemplateRemote(template.id, template.userId, template.name)
-                        syncTemplateExercises(template.id)
-                        workoutTemplateDao.markAsSynced(template.id, SyncStatus.SYNCED.name)
+                        syncTemplateExercises(template.id, exercises)
                     }
                     PendingOperation.UPDATE.name -> {
                         updateTemplateRemote(template.id, template.name)
-                        syncTemplateExercises(template.id)
-                        workoutTemplateDao.markAsSynced(template.id, SyncStatus.SYNCED.name)
+                        syncTemplateExercises(template.id, exercises)
                     }
                     PendingOperation.DELETE.name -> {
                         deleteTemplateRemote(template.id)
-                        workoutTemplateDao.markAsSynced(template.id, SyncStatus.SYNCED.name)
+                    }
+                }
+                database.withTransaction {
+                    val marked = workoutTemplateDao.markAsSyncedIfUnchanged(
+                        template.id,
+                        template.updatedAt,
+                        operation
+                    )
+                    if (marked == 1) {
+                        templateExerciseDao.markTemplateExercisesAsSynced(template.id)
                     }
                 }
                 Log.d(TAG, "Synced template: ${template.id} (${template.pendingOperation})")
+            } catch (e: CancellationException) {
+                throw e
             } catch (e: Exception) {
                 Log.e(TAG, "Failed to sync template ${template.id}: ${e.message}", e)
                 workoutTemplateDao.updateSyncStatus(template.id, SyncStatus.SYNC_FAILED.name)
+                allSucceeded = false
             }
         }
+        return allSucceeded
     }
 
     /**
      * Syncs pending workout logs with the remote server.
      * Uses atomic sync to ensure WorkoutLog + ExerciseLogs + WorkoutSets sync together.
      */
-    suspend fun syncPendingWorkoutLogs() {
-        val pendingLogs = workoutLogDao.getPendingLogs()
+    private suspend fun syncPendingWorkoutLogs(userId: String): Boolean {
+        val pendingLogs = workoutLogDao.getPendingLogs(userId)
         Log.d(TAG, "Found ${pendingLogs.size} pending workout logs to sync")
+        var allSucceeded = true
 
         for (log in pendingLogs) {
             try {
-                syncWorkoutAtomic(log.id)
+                syncWorkoutAggregate(log)
                 Log.d(TAG, "Synced workout log: ${log.id} (operation: ${log.pendingOperation})")
+            } catch (e: CancellationException) {
+                throw e
             } catch (e: Exception) {
                 Log.e(TAG, "Failed to sync workout log ${log.id}: ${e.message}", e)
-                workoutLogDao.updateSyncStatus(log.id, SyncStatus.SYNC_FAILED.name)
+                allSucceeded = false
             }
         }
+        return allSucceeded
     }
 
     /**
      * Syncs a workout session atomically (WorkoutLog + ExerciseLogs + WorkoutSets).
      * Either all entities sync successfully, or none are marked as synced.
      */
-    suspend fun syncWorkoutAtomic(workoutLogId: String) {
-        val log = workoutLogDao.getWorkoutLogById(workoutLogId) ?: return
-        val exerciseLogs = exerciseLogDao.getExerciseLogsByWorkoutLogId(workoutLogId)
-        val workoutSets = workoutSetDao.getSetsByWorkoutLogId(workoutLogId)
+    private suspend fun syncWorkoutAggregate(log: WorkoutLogEntity) {
+        val operation = log.pendingOperation ?: return
+        val exerciseLogs = exerciseLogDao.getExerciseLogsByWorkoutLogId(log.id)
+        val workoutSets = workoutSetDao.getSetsByWorkoutLogId(log.id)
         
         try {
-            // 1. Push WorkoutLog
-            upsertWorkoutLogRemote(log)
-            
-            // 2. Push ExerciseLogs
-            for (exerciseLog in exerciseLogs) {
-                upsertExerciseLogRemote(exerciseLog)
+            val result = aggregateRemoteDataSource.upsertWorkout(
+                workout = rpcJson.encodeToJsonElement(workoutDto(log)).jsonObject,
+                exercises = rpcJson.encodeToJsonElement(exerciseLogs.map(::exerciseLogDto)).jsonArray,
+                sets = rpcJson.encodeToJsonElement(workoutSets.map(::workoutSetDto)).jsonArray,
+            )
+
+            database.withTransaction {
+                val marked = workoutLogDao.markAsSyncedIfUnchanged(
+                    log.id,
+                    log.updatedAt,
+                    operation
+                )
+                if (marked == 1) {
+                    exerciseLogDao.markWorkoutExerciseLogsAsSynced(log.id)
+                    workoutSetDao.markWorkoutSetsAsSynced(log.id)
+                }
             }
             
-            // 3. Push WorkoutSets
-            for (set in workoutSets) {
-                upsertWorkoutSetRemote(set)
-            }
-            
-            // 4. Mark all as SYNCED (only if all succeeded)
-            workoutLogDao.markAsSynced(workoutLogId)
-            exerciseLogs.forEach { exerciseLogDao.markAsSynced(it.id) }
-            workoutSets.forEach { workoutSetDao.markAsSynced(it.id) }
-            
-            Log.d(TAG, "Atomic sync completed for workout: $workoutLogId (${exerciseLogs.size} exercises, ${workoutSets.size} sets)")
+            Log.d(TAG, "Aggregate sync completed for workout: ${result.workoutId} (${result.exerciseCount} exercises, ${result.setCount} sets)")
         } catch (e: Exception) {
-            Log.e(TAG, "Atomic sync failed for workout $workoutLogId: ${e.message}", e)
+            Log.e(TAG, "Aggregate sync failed for workout ${log.id}: ${e.message}", e)
             // Rollback: keep all as PENDING_SYNC
             throw e
         }
@@ -398,7 +468,7 @@ class SyncManager @Inject constructor(
     /**
      * Pulls exercises from server. Server-authoritative - always overwrite local.
      */
-    private suspend fun pullExercises() {
+    private suspend fun pullExercises(userId: String) {
         try {
             val remoteExercises = supabaseClient.postgrest
                 .from("exercises")
@@ -418,11 +488,11 @@ class SyncManager @Inject constructor(
                 exerciseDao.insertExercise(entity)
             }
             
-            syncPreferences.lastExercisesSyncTimestamp = System.currentTimeMillis()
+            syncPreferences.setLastExercisesSyncTimestamp(userId, System.currentTimeMillis())
             Log.d(TAG, "Exercises sync completed")
         } catch (e: Exception) {
             Log.e(TAG, "Failed to pull exercises: ${e.message}", e)
-            // Don't throw - exercises are optional
+            throw e
         }
     }
 
@@ -430,16 +500,13 @@ class SyncManager @Inject constructor(
      * Pulls templates from server using delta sync based on updated_at.
      * Uses last-write-wins conflict resolution.
      */
-    private suspend fun pullTemplates() {
-        val userId = supabaseClient.auth.currentUserOrNull()?.id ?: return
-        
+    private suspend fun pullTemplates(userId: String) {
         try {
             val remoteTemplates = supabaseClient.postgrest
                 .from("workout_templates")
                 .select() {
                     filter {
                         eq("user_id", userId)
-                        eq("is_deleted", false)
                     }
                 }
                 .decodeList<RemoteTemplateDto>()
@@ -448,7 +515,7 @@ class SyncManager @Inject constructor(
 
             for (remote in remoteTemplates) {
                 val remoteUpdatedAt = parseTimestamp(remote.updatedAt)
-                val local = workoutTemplateDao.getTemplateById(remote.id)
+                val local = workoutTemplateDao.getTemplateByIdIncludingDeleted(remote.id)
                 
                 // Conflict resolution: last-write-wins
                 if (local == null) {
@@ -478,7 +545,7 @@ class SyncManager @Inject constructor(
                 // If local has pending changes, keep local version (it will push on next sync)
             }
             
-            syncPreferences.lastTemplatesSyncTimestamp = System.currentTimeMillis()
+            syncPreferences.setLastTemplatesSyncTimestamp(userId, System.currentTimeMillis())
         } catch (e: Exception) {
             Log.e(TAG, "Failed to pull templates: ${e.message}", e)
             throw e
@@ -488,9 +555,7 @@ class SyncManager @Inject constructor(
     /**
      * Pulls workout logs from server using delta sync.
      */
-    private suspend fun pullWorkoutLogs() {
-        val userId = supabaseClient.auth.currentUserOrNull()?.id ?: return
-        
+    private suspend fun pullWorkoutLogs(userId: String) {
         try {
             val remoteLogs = supabaseClient.postgrest
                 .from("workout_logs")
@@ -500,7 +565,6 @@ class SyncManager @Inject constructor(
                     }
                 }
                 .decodeList<RemoteWorkoutLogDto>()
-                .filter { it.deletedAt == null } // Filter non-deleted locally
 
             Log.d(TAG, "Pulled ${remoteLogs.size} workout logs from server")
 
@@ -523,7 +587,7 @@ class SyncManager @Inject constructor(
                         totalReps = remote.totalReps,
                         syncStatus = SyncStatus.SYNCED.name,
                         pendingOperation = null,
-                        deletedAt = null,
+                        deletedAt = remote.deletedAt?.let(::parseTimestamp),
                         createdAt = parseTimestamp(remote.createdAt ?: remote.startTime),
                         updatedAt = remoteUpdatedAt
                     )
@@ -536,6 +600,7 @@ class SyncManager @Inject constructor(
                         totalVolume = remote.totalVolume.toFloat(),
                         totalSets = remote.totalSets,
                         totalReps = remote.totalReps,
+                        deletedAt = remote.deletedAt?.let(::parseTimestamp),
                         updatedAt = remoteUpdatedAt
                     )
                     workoutLogDao.updateWorkoutLog(updated)
@@ -543,7 +608,7 @@ class SyncManager @Inject constructor(
                 }
             }
             
-            syncPreferences.lastWorkoutLogsSyncTimestamp = System.currentTimeMillis()
+            syncPreferences.setLastWorkoutLogsSyncTimestamp(userId, System.currentTimeMillis())
         } catch (e: Exception) {
             Log.e(TAG, "Failed to pull workout logs: ${e.message}", e)
             throw e
@@ -553,9 +618,7 @@ class SyncManager @Inject constructor(
     /**
      * Pulls exercise logs from server for initial sync.
      */
-    private suspend fun pullExerciseLogs() {
-        val userId = supabaseClient.auth.currentUserOrNull()?.id ?: return
-        
+    private suspend fun pullExerciseLogs(userId: String) {
         try {
             // Get all workout log IDs for this user
             val workoutLogs = workoutLogDao.getWorkoutLogsByUserList(userId)
@@ -595,16 +658,14 @@ class SyncManager @Inject constructor(
             }
         } catch (e: Exception) {
             Log.e(TAG, "Failed to pull exercise logs: ${e.message}", e)
-            // Don't throw - continue with sync
+            throw e
         }
     }
 
     /**
      * Pulls workout sets from server for initial sync.
      */
-    private suspend fun pullWorkoutSets() {
-        val userId = supabaseClient.auth.currentUserOrNull()?.id ?: return
-        
+    private suspend fun pullWorkoutSets(userId: String) {
         try {
             val workoutLogs = workoutLogDao.getWorkoutLogsByUserList(userId)
             if (workoutLogs.isEmpty()) {
@@ -642,7 +703,7 @@ class SyncManager @Inject constructor(
             }
         } catch (e: Exception) {
             Log.e(TAG, "Failed to pull workout sets: ${e.message}", e)
-            // Don't throw - continue with sync
+            throw e
         }
     }
 
@@ -662,11 +723,19 @@ class SyncManager @Inject constructor(
         }
     }
 
+    private fun requireCurrentUser(expectedUserId: String) {
+        check(supabaseClient.auth.currentUserOrNull()?.id == expectedUserId) {
+            "Authenticated user changed during synchronization"
+        }
+    }
+
     // ============ PUSH METHODS (Local -> Remote) ============
 
     private suspend fun createTemplateRemote(id: String, userId: String, name: String) {
         val dto = CreateTemplateDto(id = id, userId = userId, name = name)
-        supabaseClient.postgrest.from("workout_templates").insert(dto)
+        supabaseClient.postgrest.from("workout_templates").upsert(dto) {
+            onConflict = "id"
+        }
     }
 
     private suspend fun updateTemplateRemote(id: String, name: String) {
@@ -686,17 +755,19 @@ class SyncManager @Inject constructor(
             }
     }
 
-    private suspend fun syncTemplateExercises(templateId: String) {
+    private suspend fun syncTemplateExercises(
+        templateId: String,
+        exercises: List<com.diajarkoding.imfit.data.local.entity.TemplateExerciseEntity>
+    ) {
         // Delete existing and re-insert
         supabaseClient.postgrest.from("template_exercises")
             .delete { filter { eq("template_id", templateId) } }
 
-        val exercises = templateExerciseDao.getExercisesForTemplateList(templateId)
-        exercises.forEachIndexed { index, exercise ->
+        exercises.forEach { exercise ->
             val dto = TemplateExerciseDto(
                 templateId = templateId,
                 exerciseId = exercise.exerciseId,
-                orderIndex = index,
+                orderIndex = exercise.orderIndex,
                 sets = exercise.sets,
                 reps = exercise.reps,
                 restSeconds = exercise.restSeconds
@@ -705,12 +776,7 @@ class SyncManager @Inject constructor(
         }
     }
 
-    /**
-     * Upserts a workout log to the remote server.
-     */
-    private suspend fun upsertWorkoutLogRemote(
-        log: com.diajarkoding.imfit.data.local.entity.WorkoutLogEntity
-    ) {
+    private fun workoutDto(log: WorkoutLogEntity): UpsertWorkoutLogDto {
         val startDateTime = OffsetDateTime.ofInstant(
             java.time.Instant.ofEpochMilli(log.startTime),
             ZoneOffset.UTC
@@ -727,7 +793,7 @@ class SyncManager @Inject constructor(
             ).format(DateTimeFormatter.ISO_OFFSET_DATE_TIME)
         }
 
-        val dto = UpsertWorkoutLogDto(
+        return UpsertWorkoutLogDto(
             id = log.id,
             userId = log.userId,
             templateId = log.templateId,
@@ -740,19 +806,11 @@ class SyncManager @Inject constructor(
             totalReps = log.totalReps,
             deletedAt = deletedAtString
         )
-        
-        supabaseClient.postgrest.from("workout_logs").upsert(dto) {
-            onConflict = "id"
-        }
     }
 
-    /**
-     * Upserts an exercise log to the remote server.
-     */
-    private suspend fun upsertExerciseLogRemote(
+    private fun exerciseLogDto(
         log: com.diajarkoding.imfit.data.local.entity.ExerciseLogEntity
-    ) {
-        val dto = UpsertExerciseLogDto(
+    ) = UpsertExerciseLogDto(
             id = log.id,
             workoutLogId = log.workoutLogId,
             exerciseId = log.exerciseId,
@@ -763,19 +821,9 @@ class SyncManager @Inject constructor(
             totalSets = log.totalSets,
             totalReps = log.totalReps
         )
-        
-        supabaseClient.postgrest.from("exercise_logs").upsert(dto) {
-            onConflict = "id"
-        }
-    }
-
-    /**
-     * Upserts a workout set to the remote server.
-     */
-    private suspend fun upsertWorkoutSetRemote(
+    private fun workoutSetDto(
         set: com.diajarkoding.imfit.data.local.entity.WorkoutSetEntity
-    ) {
-        val dto = UpsertWorkoutSetDto(
+    ) = UpsertWorkoutSetDto(
             id = set.id,
             exerciseLogId = set.exerciseLogId,
             workoutLogId = set.workoutLogId,
@@ -785,14 +833,12 @@ class SyncManager @Inject constructor(
             reps = set.reps,
             isCompleted = set.isCompleted
         )
-        
-        supabaseClient.postgrest.from("workout_sets").upsert(dto) {
-            onConflict = "id"
-        }
-    }
-
     companion object {
         private const val TAG = "SyncManager"
+        private val rpcJson = Json {
+            encodeDefaults = true
+            explicitNulls = false
+        }
     }
 }
 
@@ -972,4 +1018,3 @@ private data class RemoteTemplateExerciseDto(
     @SerialName("rest_seconds")
     val restSeconds: Int? = 60
 )
-

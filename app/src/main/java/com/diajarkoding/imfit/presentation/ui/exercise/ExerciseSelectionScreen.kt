@@ -1,5 +1,7 @@
 package com.diajarkoding.imfit.presentation.ui.exercise
 
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
+
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -22,12 +24,12 @@ import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.ArrowBack
-import androidx.compose.material.icons.filled.Check
-import androidx.compose.material.icons.filled.Clear
-import androidx.compose.material.icons.filled.FitnessCenter
-import androidx.compose.material.icons.filled.Search
+import com.diajarkoding.imfit.presentation.components.common.ArrowBack
+import com.diajarkoding.imfit.presentation.components.common.Check
+import com.diajarkoding.imfit.presentation.components.common.Clear
+import com.diajarkoding.imfit.presentation.components.common.FitnessCenter
+import com.diajarkoding.imfit.presentation.components.common.Search
+import com.diajarkoding.imfit.presentation.components.common.Symbols
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.Checkbox
@@ -74,7 +76,7 @@ fun ExerciseSelectionScreen(
     onExercisesSelected: (List<Exercise>) -> Unit,
     viewModel: ExerciseSelectionViewModel = hiltViewModel()
 ) {
-    val state by viewModel.state.collectAsState()
+    val state by viewModel.state.collectAsStateWithLifecycle()
 
     Scaffold(
         contentWindowInsets = WindowInsets(0),
@@ -91,7 +93,7 @@ fun ExerciseSelectionScreen(
                 navigationIcon = {
                     IconButton(onClick = onNavigateBack) {
                         Icon(
-                            Icons.AutoMirrored.Filled.ArrowBack,
+                            Symbols.AutoMirrored.Filled.ArrowBack,
                             contentDescription = stringResource(R.string.action_back)
                         )
                     }
@@ -119,7 +121,7 @@ fun ExerciseSelectionScreen(
                             state.selectedExercises.size
                         ),
                         onClick = { onExercisesSelected(state.selectedExercises) },
-                        icon = Icons.Default.Check
+                        icon = Symbols.Default.Check
                     )
                 }
             }
@@ -141,7 +143,7 @@ fun ExerciseSelectionScreen(
                 placeholder = { Text(stringResource(R.string.exercise_search_hint)) },
                 leadingIcon = {
                     Icon(
-                        imageVector = Icons.Default.Search,
+                        imageVector = Symbols.Default.Search,
                         contentDescription = stringResource(R.string.action_search),
                         tint = MaterialTheme.colorScheme.onSurfaceVariant
                     )
@@ -150,7 +152,7 @@ fun ExerciseSelectionScreen(
                     if (state.searchQuery.isNotEmpty()) {
                         IconButton(onClick = { viewModel.onSearchQueryChange("") }) {
                             Icon(
-                                imageVector = Icons.Default.Clear,
+                                imageVector = Symbols.Default.Clear,
                                 contentDescription = stringResource(R.string.action_clear),
                                 tint = MaterialTheme.colorScheme.onSurfaceVariant
                             )
@@ -181,7 +183,7 @@ fun ExerciseSelectionScreen(
                         leadingIcon = if (state.selectedCategory == null) {
                             {
                                 Icon(
-                                    Icons.Default.Check,
+                                    Symbols.Default.Check,
                                     contentDescription = null,
                                     modifier = Modifier.size(18.dp)
                                 )
@@ -202,7 +204,7 @@ fun ExerciseSelectionScreen(
                         leadingIcon = if (state.selectedCategory == category) {
                             {
                                 Icon(
-                                    Icons.Default.Check,
+                                    Symbols.Default.Check,
                                     contentDescription = null,
                                     modifier = Modifier.size(18.dp)
                                 )
@@ -275,7 +277,7 @@ private fun SelectableExerciseCard(
                 contentAlignment = Alignment.Center
             ) {
                 Icon(
-                    imageVector = Icons.Default.FitnessCenter,
+                    imageVector = Symbols.Default.FitnessCenter,
                     contentDescription = null,
                     tint = MaterialTheme.colorScheme.onPrimaryContainer,
                     modifier = Modifier.size(IMFITSizes.iconMd)

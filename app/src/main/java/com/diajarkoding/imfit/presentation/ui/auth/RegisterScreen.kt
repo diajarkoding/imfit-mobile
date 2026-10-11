@@ -1,5 +1,7 @@
 package com.diajarkoding.imfit.presentation.ui.auth
 
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
+
 import android.Manifest
 import android.net.Uri
 import androidx.activity.compose.rememberLauncherForActivityResult
@@ -27,11 +29,11 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.ui.zIndex
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.CalendarMonth
-import androidx.compose.material.icons.filled.CameraAlt
-import androidx.compose.material.icons.filled.Person
-import androidx.compose.material.icons.filled.PhotoLibrary
+import com.diajarkoding.imfit.presentation.components.common.CalendarMonth
+import com.diajarkoding.imfit.presentation.components.common.CameraAlt
+import com.diajarkoding.imfit.presentation.components.common.Person
+import com.diajarkoding.imfit.presentation.components.common.PhotoLibrary
+import com.diajarkoding.imfit.presentation.components.common.Symbols
 import androidx.compose.material3.DatePicker
 import androidx.compose.material3.DatePickerDialog
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -67,12 +69,14 @@ import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.core.content.FileProvider
 import androidx.hilt.navigation.compose.hiltViewModel
-import coil.compose.AsyncImage
+import coil3.compose.AsyncImage
 import com.diajarkoding.imfit.R
+import com.diajarkoding.imfit.domain.model.RegisterResult
 import androidx.compose.ui.res.stringResource
 import com.diajarkoding.imfit.presentation.components.common.IMFITButton
 import com.diajarkoding.imfit.presentation.components.common.IMFITPasswordField
 import com.diajarkoding.imfit.presentation.components.common.IMFITTextField
+import com.diajarkoding.imfit.presentation.components.common.IMFITDialogBackdrop
 import com.diajarkoding.imfit.theme.IMFITShapes
 import com.diajarkoding.imfit.theme.IMFITSpacing
 import com.diajarkoding.imfit.theme.IMFITSizes
@@ -88,10 +92,11 @@ import java.util.Locale
 @Composable
 fun RegisterScreen(
     onNavigateToLogin: () -> Unit,
-    onRegisterSuccess: () -> Unit,
+    onAuthenticated: () -> Unit,
+    onCheckEmail: () -> Unit,
     viewModel: RegisterViewModel = hiltViewModel()
 ) {
-    val state by viewModel.state.collectAsState()
+    val state by viewModel.state.collectAsStateWithLifecycle()
     val snackbarHostState = remember { SnackbarHostState() }
     val context = LocalContext.current
 
@@ -131,10 +136,13 @@ fun RegisterScreen(
         }
     }
 
-    LaunchedEffect(state.registerSuccess) {
-        if (state.registerSuccess) {
-            onRegisterSuccess()
+    LaunchedEffect(state.registerResult) {
+        when (state.registerResult) {
+            is RegisterResult.Authenticated -> onAuthenticated()
+            RegisterResult.CheckEmail -> onCheckEmail()
+            null -> Unit
         }
+        if (state.registerResult != null) viewModel.consumeRegisterResult()
     }
 
     LaunchedEffect(state.errorMessage) {
@@ -169,6 +177,7 @@ fun RegisterScreen(
                 }
             }
         ) {
+            IMFITDialogBackdrop()
             DatePicker(state = datePickerState)
         }
     }
@@ -196,7 +205,7 @@ fun RegisterScreen(
                     horizontalArrangement = Arrangement.SpaceEvenly
                 ) {
                     PhotoOptionButton(
-                        icon = Icons.Default.CameraAlt,
+                        icon = Symbols.Default.CameraAlt,
                         label = stringResource(R.string.register_camera),
                         onClick = {
                             showPhotoSheet = false
@@ -204,7 +213,7 @@ fun RegisterScreen(
                         }
                     )
                     PhotoOptionButton(
-                        icon = Icons.Default.PhotoLibrary,
+                        icon = Symbols.Default.PhotoLibrary,
                         label = stringResource(R.string.register_gallery),
                         onClick = {
                             showPhotoSheet = false
@@ -292,7 +301,7 @@ fun RegisterScreen(
                             contentAlignment = Alignment.Center
                         ) {
                             Icon(
-                                imageVector = Icons.Default.Person,
+                                imageVector = Symbols.Default.Person,
                                 contentDescription = stringResource(R.string.desc_add_photo),
                                 modifier = Modifier.size(56.dp),
                                 tint = Primary.copy(alpha = 0.5f)
@@ -314,7 +323,7 @@ fun RegisterScreen(
                     contentAlignment = Alignment.Center
                 ) {
                     Icon(
-                        imageVector = Icons.Default.CameraAlt,
+                        imageVector = Symbols.Default.CameraAlt,
                         contentDescription = null,
                         modifier = Modifier.size(20.dp),
                         tint = MaterialTheme.colorScheme.onPrimary
@@ -378,7 +387,7 @@ fun RegisterScreen(
                         },
                         trailingIcon = {
                             Icon(
-                                imageVector = Icons.Default.CalendarMonth,
+                                imageVector = Symbols.Default.CalendarMonth,
                                 contentDescription = stringResource(R.string.desc_select_date),
                                 tint = Primary
                             )
@@ -606,7 +615,7 @@ private fun RegisterScreenContent(
                             contentAlignment = Alignment.Center
                         ) {
                             Icon(
-                                imageVector = Icons.Default.Person,
+                                imageVector = Symbols.Default.Person,
                                 contentDescription = stringResource(R.string.desc_add_photo),
                                 modifier = Modifier.size(56.dp),
                                 tint = Primary.copy(alpha = 0.5f)
@@ -627,7 +636,7 @@ private fun RegisterScreenContent(
                     contentAlignment = Alignment.Center
                 ) {
                     Icon(
-                        imageVector = Icons.Default.CameraAlt,
+                        imageVector = Symbols.Default.CameraAlt,
                         contentDescription = null,
                         modifier = Modifier.size(20.dp),
                         tint = MaterialTheme.colorScheme.onPrimary
@@ -689,7 +698,7 @@ private fun RegisterScreenContent(
                         },
                         trailingIcon = {
                             Icon(
-                                imageVector = Icons.Default.CalendarMonth,
+                                imageVector = Symbols.Default.CalendarMonth,
                                 contentDescription = stringResource(R.string.desc_select_date),
                                 tint = Primary
                             )

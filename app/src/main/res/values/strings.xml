@@ -31,6 +31,9 @@
     <string name="register_choose_photo">Choose Photo</string>
     <string name="register_camera">Camera</string>
     <string name="register_gallery">Gallery</string>
+    <string name="register_confirmation_title">Account created</string>
+    <string name="register_confirmation_message">Open your email and select the confirmation link. After confirmation, return to the app to continue.</string>
+    <string name="register_confirmation_login">Sign In</string>
 
     <!-- Validation Messages -->
     <string name="validator_fullName">Full name cannot be empty.</string>

@@ -13,9 +13,9 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.DarkMode
-import androidx.compose.material.icons.filled.LightMode
+import com.diajarkoding.imfit.presentation.components.common.DarkMode
+import com.diajarkoding.imfit.presentation.components.common.LightMode
+import com.diajarkoding.imfit.presentation.components.common.Symbols
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.Composable
@@ -26,7 +26,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
-import com.diajarkoding.imfit.theme.Primary
+import com.diajarkoding.imfit.theme.IMFITMotion
 
 @Composable
 fun IMFITThemeSwitch(
@@ -36,14 +36,12 @@ fun IMFITThemeSwitch(
 ) {
     val thumbOffset by animateDpAsState(
         targetValue = if (isDarkMode) 24.dp else 0.dp,
-        animationSpec = tween(durationMillis = 200),
+        animationSpec = tween(durationMillis = IMFITMotion.ThemeTransitionDurationMillis),
         label = "thumbOffset"
     )
 
-    val trackColor = if (isDarkMode) Primary.copy(alpha = 0.3f) 
-                     else MaterialTheme.colorScheme.surfaceVariant
-    val thumbColor = if (isDarkMode) Primary 
-                     else MaterialTheme.colorScheme.outline
+    val trackColor = MaterialTheme.colorScheme.surfaceVariant
+    val thumbColor = MaterialTheme.colorScheme.primary
 
     Box(
         modifier = modifier
@@ -67,7 +65,7 @@ fun IMFITThemeSwitch(
             contentAlignment = Alignment.Center
         ) {
             Icon(
-                imageVector = if (isDarkMode) Icons.Default.DarkMode else Icons.Default.LightMode,
+                imageVector = if (isDarkMode) Symbols.Default.DarkMode else Symbols.Default.LightMode,
                 contentDescription = if (isDarkMode) "Dark mode" else "Light mode",
                 tint = Color.White,
                 modifier = Modifier.size(14.dp)

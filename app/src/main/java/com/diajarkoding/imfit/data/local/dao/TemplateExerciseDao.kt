@@ -30,6 +30,12 @@ interface TemplateExerciseDao {
     @Query("DELETE FROM template_exercises WHERE template_id = :templateId")
     suspend fun deleteExercisesByTemplate(templateId: String)
 
+    @Query("DELETE FROM template_exercises WHERE template_id IN (SELECT id FROM workout_templates WHERE user_id = :userId)")
+    suspend fun deleteExercisesByUser(userId: String)
+
     @Query("DELETE FROM template_exercises")
     suspend fun deleteAllTemplateExercises()
+
+    @Query("UPDATE template_exercises SET sync_status = 'SYNCED', pending_operation = NULL WHERE template_id = :templateId")
+    suspend fun markTemplateExercisesAsSynced(templateId: String)
 }

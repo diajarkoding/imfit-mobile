@@ -59,8 +59,8 @@ interface WorkoutLogDao {
     suspend fun getWorkoutLogsBySyncStatus(syncStatus: String): List<WorkoutLogEntity>
 
     // Get all pending logs for sync (including soft deleted)
-    @Query("SELECT * FROM workout_logs WHERE sync_status = 'PENDING_SYNC'")
-    suspend fun getPendingLogs(): List<WorkoutLogEntity>
+    @Query("SELECT * FROM workout_logs WHERE user_id = :userId AND pending_operation IS NOT NULL")
+    suspend fun getPendingLogs(userId: String): List<WorkoutLogEntity>
 
     @Query("UPDATE workout_logs SET sync_status = :syncStatus WHERE id = :id")
     suspend fun updateSyncStatus(id: String, syncStatus: String)
@@ -68,6 +68,19 @@ interface WorkoutLogDao {
     // Mark as synced and clear pending operation
     @Query("UPDATE workout_logs SET sync_status = 'SYNCED', pending_operation = NULL WHERE id = :id")
     suspend fun markAsSynced(id: String)
+
+    @Query("""
+        UPDATE workout_logs
+        SET sync_status = 'SYNCED', pending_operation = NULL
+        WHERE id = :id
+          AND updated_at = :expectedUpdatedAt
+          AND pending_operation = :expectedOperation
+    """)
+    suspend fun markAsSyncedIfUnchanged(
+        id: String,
+        expectedUpdatedAt: Long,
+        expectedOperation: String
+    ): Int
 
     @Query("SELECT * FROM workout_logs WHERE user_id = :userId AND deleted_at IS NULL ORDER BY date DESC")
     suspend fun getWorkoutLogsByUserList(userId: String): List<WorkoutLogEntity>

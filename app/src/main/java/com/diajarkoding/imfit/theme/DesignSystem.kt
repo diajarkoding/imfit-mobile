@@ -11,6 +11,10 @@ import androidx.compose.ui.unit.dp
 
 val LocalIsDarkTheme = compositionLocalOf { false }
 
+object IMFITMotion {
+    const val ThemeTransitionDurationMillis = 300
+}
+
 object IMFITColors {
     val primary: Color get() = Primary
 

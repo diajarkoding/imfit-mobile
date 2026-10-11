@@ -28,7 +28,6 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
 import com.diajarkoding.imfit.theme.DeletePink
 import com.diajarkoding.imfit.theme.IMFITShapes
@@ -72,7 +71,7 @@ fun IMFITDialog(
         else -> Primary
     }
 
-    Dialog(
+    IMFITPlatformDialog(
         onDismissRequest = onDismissRequest,
         properties = DialogProperties(usePlatformDefaultWidth = false)
     ) {
@@ -182,7 +181,7 @@ fun IMFITInputDialog(
     onConfirm: () -> Unit,
     content: @Composable () -> Unit
 ) {
-    Dialog(
+    IMFITPlatformDialog(
         onDismissRequest = onDismissRequest,
         properties = DialogProperties(usePlatformDefaultWidth = false)
     ) {

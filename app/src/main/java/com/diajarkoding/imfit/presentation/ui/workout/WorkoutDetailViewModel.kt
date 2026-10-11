@@ -6,6 +6,7 @@ import androidx.lifecycle.viewModelScope
 import com.diajarkoding.imfit.domain.model.Exercise
 import com.diajarkoding.imfit.domain.model.TemplateExercise
 import com.diajarkoding.imfit.domain.model.WorkoutTemplate
+import com.diajarkoding.imfit.domain.repository.ExerciseRepository
 import com.diajarkoding.imfit.domain.repository.WorkoutRepository
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -27,19 +28,27 @@ data class WorkoutDetailState(
 @HiltViewModel
 class WorkoutDetailViewModel @Inject constructor(
     private val workoutRepository: WorkoutRepository,
-    savedStateHandle: SavedStateHandle
+    private val exerciseRepository: ExerciseRepository,
+    private val savedStateHandle: SavedStateHandle
 ) : ViewModel() {
 
-    private val workoutId: String = savedStateHandle.get<String>("workoutId") ?: ""
+    private var workoutId: String? = savedStateHandle["workoutId"]
+    private var initialized = false
     
     private val _state = MutableStateFlow(WorkoutDetailState())
     val state = _state.asStateFlow()
 
-    init {
+    fun initialize(workoutId: String) {
+        if (workoutId.isBlank() || (initialized && this.workoutId == workoutId)) return
+
+        this.workoutId = workoutId
+        savedStateHandle["workoutId"] = workoutId
+        initialized = true
         loadWorkout()
     }
 
     fun loadWorkout() {
+        val workoutId = workoutId ?: return
         viewModelScope.launch {
             _state.update { it.copy(isLoading = true) }
             try {
@@ -71,6 +80,7 @@ class WorkoutDetailViewModel @Inject constructor(
     }
 
     fun deleteWorkout() {
+        val workoutId = workoutId ?: return
         viewModelScope.launch {
             workoutRepository.deleteTemplate(workoutId)
             _state.update { it.copy(isDeleted = true) }
@@ -78,6 +88,7 @@ class WorkoutDetailViewModel @Inject constructor(
     }
 
     fun addExercises(exercises: List<Exercise>) {
+        val workoutId = workoutId ?: return
         viewModelScope.launch {
             val currentWorkout = _state.value.workout ?: return@launch
             
@@ -99,7 +110,18 @@ class WorkoutDetailViewModel @Inject constructor(
         }
     }
 
+    fun addExercisesByIds(exerciseIds: List<String>) {
+        viewModelScope.launch {
+            val exercises = mutableListOf<Exercise>()
+            for (id in exerciseIds.distinct()) {
+                exerciseRepository.getExerciseById(id)?.let(exercises::add)
+            }
+            addExercises(exercises)
+        }
+    }
+
     fun removeExercise(templateExercise: TemplateExercise) {
+        val workoutId = workoutId ?: return
         viewModelScope.launch {
             val currentWorkout = _state.value.workout ?: return@launch
             val updatedExercises = currentWorkout.exercises.filter { it.id != templateExercise.id }
@@ -110,6 +132,7 @@ class WorkoutDetailViewModel @Inject constructor(
     }
 
     fun updateExerciseConfig(exerciseId: String, sets: Int, reps: Int, restSeconds: Int) {
+        val workoutId = workoutId ?: return
         viewModelScope.launch {
             workoutRepository.updateTemplateExercise(workoutId, exerciseId, sets, reps, restSeconds)
             loadWorkout()

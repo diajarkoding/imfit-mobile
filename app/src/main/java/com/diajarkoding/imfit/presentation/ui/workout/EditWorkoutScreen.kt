@@ -1,5 +1,7 @@
 package com.diajarkoding.imfit.presentation.ui.workout
 
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
+
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
@@ -25,13 +27,13 @@ import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.text.KeyboardOptions
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.ArrowBack
-import androidx.compose.material.icons.filled.Add
-import androidx.compose.material.icons.filled.Check
-import androidx.compose.material.icons.filled.Close
-import androidx.compose.material.icons.filled.Delete
-import androidx.compose.material.icons.filled.FitnessCenter
+import com.diajarkoding.imfit.presentation.components.common.Add
+import com.diajarkoding.imfit.presentation.components.common.ArrowBack
+import com.diajarkoding.imfit.presentation.components.common.Check
+import com.diajarkoding.imfit.presentation.components.common.Close
+import com.diajarkoding.imfit.presentation.components.common.Delete
+import com.diajarkoding.imfit.presentation.components.common.FitnessCenter
+import com.diajarkoding.imfit.presentation.components.common.Symbols
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -49,7 +51,6 @@ import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.material3.rememberSwipeToDismissBoxState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -86,10 +87,10 @@ fun EditWorkoutScreen(
     onNavigateBack: () -> Unit,
     viewModel: EditWorkoutViewModel = hiltViewModel()
 ) {
-    val state by viewModel.state.collectAsState()
+    val state by viewModel.state.collectAsStateWithLifecycle()
 
-    LaunchedEffect(Unit) {
-        viewModel.loadWorkout()
+    LaunchedEffect(workoutId) {
+        viewModel.initialize(workoutId)
     }
 
     LaunchedEffect(state.isSaved) {
@@ -113,7 +114,7 @@ fun EditWorkoutScreen(
                 navigationIcon = {
                     IconButton(onClick = onNavigateBack) {
                         Icon(
-                            imageVector = Icons.AutoMirrored.Filled.ArrowBack,
+                            imageVector = Symbols.AutoMirrored.Filled.ArrowBack,
                             contentDescription = stringResource(R.string.action_back)
                         )
                     }
@@ -220,7 +221,7 @@ fun EditWorkoutScreen(
                     onClick = { viewModel.saveChanges() },
                     enabled = state.workoutName.isNotBlank() && !state.isLoading,
                     isLoading = state.isLoading,
-                    icon = Icons.Default.Check
+                    icon = Symbols.Default.Check
                 )
             }
         }
@@ -245,7 +246,7 @@ private fun EmptyExercisesPlaceholder() {
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
             Icon(
-                imageVector = Icons.Default.FitnessCenter,
+                imageVector = Symbols.Default.FitnessCenter,
                 contentDescription = null,
                 modifier = Modifier.size(48.dp),
                 tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f)
@@ -325,7 +326,7 @@ private fun EditableExerciseCard(
                 contentAlignment = Alignment.CenterEnd
             ) {
                 Icon(
-                    imageVector = Icons.Default.Delete,
+                    imageVector = Symbols.Default.Delete,
                     contentDescription = stringResource(R.string.action_delete),
                     tint = Color.White,
                     modifier = Modifier.size(IMFITSizes.iconMd)
@@ -360,7 +361,7 @@ private fun EditableExerciseCard(
                             contentAlignment = Alignment.Center
                         ) {
                             Icon(
-                                imageVector = Icons.Default.FitnessCenter,
+                                imageVector = Symbols.Default.FitnessCenter,
                                 contentDescription = null,
                                 tint = Color.White,
                                 modifier = Modifier.size(IMFITSizes.iconSm)
@@ -382,7 +383,7 @@ private fun EditableExerciseCard(
                     }
                     IconButton(onClick = { showDeleteConfirmation = true }) {
                         Icon(
-                            imageVector = Icons.Default.Close,
+                            imageVector = Symbols.Default.Close,
                             contentDescription = stringResource(R.string.action_remove),
                             tint = MaterialTheme.colorScheme.onSurfaceVariant
                         )
@@ -441,7 +442,7 @@ private fun EditableExerciseCard(
                                 modifier = Modifier.size(32.dp)
                             ) {
                                 Icon(
-                                    imageVector = Icons.Default.Delete,
+                                    imageVector = Symbols.Default.Delete,
                                     contentDescription = "Remove set",
                                     tint = DeletePink,
                                     modifier = Modifier.size(18.dp)
@@ -453,7 +454,7 @@ private fun EditableExerciseCard(
                             modifier = Modifier.size(32.dp)
                         ) {
                             Icon(
-                                imageVector = Icons.Default.Add,
+                                imageVector = Symbols.Default.Add,
                                 contentDescription = stringResource(R.string.action_add_set),
                                 tint = SetComplete,
                                 modifier = Modifier.size(18.dp)

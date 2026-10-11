@@ -1,7 +1,5 @@
 package com.diajarkoding.imfit.presentation.components.common
 
-import androidx.compose.animation.animateColorAsState
-import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.interaction.MutableInteractionSource
@@ -18,9 +16,9 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Visibility
-import androidx.compose.material.icons.filled.VisibilityOff
+import com.diajarkoding.imfit.presentation.components.common.Symbols
+import com.diajarkoding.imfit.presentation.components.common.Visibility
+import com.diajarkoding.imfit.presentation.components.common.VisibilityOff
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -70,25 +68,11 @@ fun IMFITTextField(
     val interactionSource = remember { MutableInteractionSource() }
     val isFocused by interactionSource.collectIsFocusedAsState()
     
-    val borderColor by animateColorAsState(
-        targetValue = when {
-            error != null -> MaterialTheme.colorScheme.error
-            isFocused -> Primary
-            else -> MaterialTheme.colorScheme.outline.copy(alpha = 0.5f)
-        },
-        animationSpec = tween(150),
-        label = "borderColor"
-    )
-    
-    val labelColor by animateColorAsState(
-        targetValue = when {
-            error != null -> MaterialTheme.colorScheme.error
-            isFocused -> Primary
-            else -> MaterialTheme.colorScheme.onSurfaceVariant
-        },
-        animationSpec = tween(150),
-        label = "labelColor"
-    )
+    val labelColor = when {
+        error != null -> MaterialTheme.colorScheme.error
+        isFocused -> Primary
+        else -> MaterialTheme.colorScheme.onSurfaceVariant
+    }
 
     Column(modifier = modifier.fillMaxWidth()) {
         Text(
@@ -142,13 +126,22 @@ fun IMFITTextField(
                 color = MaterialTheme.colorScheme.onSurface
             ),
             colors = OutlinedTextFieldDefaults.colors(
+                focusedTextColor = MaterialTheme.colorScheme.onSurface,
+                unfocusedTextColor = MaterialTheme.colorScheme.onSurface,
+                errorTextColor = MaterialTheme.colorScheme.onSurface,
                 focusedBorderColor = Primary,
                 unfocusedBorderColor = MaterialTheme.colorScheme.outline.copy(alpha = 0.5f),
                 errorBorderColor = MaterialTheme.colorScheme.error,
                 focusedContainerColor = MaterialTheme.colorScheme.surface,
                 unfocusedContainerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.3f),
                 errorContainerColor = MaterialTheme.colorScheme.errorContainer.copy(alpha = 0.1f),
-                cursorColor = Primary
+                cursorColor = Primary,
+                focusedPlaceholderColor = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f),
+                unfocusedPlaceholderColor = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f),
+                focusedLeadingIconColor = if (isFocused) Primary else MaterialTheme.colorScheme.onSurfaceVariant,
+                unfocusedLeadingIconColor = MaterialTheme.colorScheme.onSurfaceVariant,
+                focusedTrailingIconColor = MaterialTheme.colorScheme.onSurfaceVariant,
+                unfocusedTrailingIconColor = MaterialTheme.colorScheme.onSurfaceVariant
             )
         )
         
@@ -179,15 +172,11 @@ fun IMFITPasswordField(
     val interactionSource = remember { MutableInteractionSource() }
     val isFocused by interactionSource.collectIsFocusedAsState()
     
-    val labelColor by animateColorAsState(
-        targetValue = when {
-            error != null -> MaterialTheme.colorScheme.error
-            isFocused -> Primary
-            else -> MaterialTheme.colorScheme.onSurfaceVariant
-        },
-        animationSpec = tween(150),
-        label = "labelColor"
-    )
+    val labelColor = when {
+        error != null -> MaterialTheme.colorScheme.error
+        isFocused -> Primary
+        else -> MaterialTheme.colorScheme.onSurfaceVariant
+    }
 
     Column(modifier = modifier.fillMaxWidth()) {
         Text(
@@ -231,7 +220,7 @@ fun IMFITPasswordField(
                     modifier = Modifier.size(IMFITSizes.iconMd)
                 ) {
                     Icon(
-                        imageVector = if (passwordVisible) Icons.Default.Visibility else Icons.Default.VisibilityOff,
+                        imageVector = if (passwordVisible) Symbols.Default.Visibility else Symbols.Default.VisibilityOff,
                         contentDescription = if (passwordVisible) "Hide password" else "Show password",
                         tint = MaterialTheme.colorScheme.onSurfaceVariant,
                         modifier = Modifier.size(IMFITSizes.iconSm)
@@ -243,13 +232,20 @@ fun IMFITPasswordField(
                 color = MaterialTheme.colorScheme.onSurface
             ),
             colors = OutlinedTextFieldDefaults.colors(
+                focusedTextColor = MaterialTheme.colorScheme.onSurface,
+                unfocusedTextColor = MaterialTheme.colorScheme.onSurface,
+                errorTextColor = MaterialTheme.colorScheme.onSurface,
                 focusedBorderColor = Primary,
                 unfocusedBorderColor = MaterialTheme.colorScheme.outline.copy(alpha = 0.5f),
                 errorBorderColor = MaterialTheme.colorScheme.error,
                 focusedContainerColor = MaterialTheme.colorScheme.surface,
                 unfocusedContainerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.3f),
                 errorContainerColor = MaterialTheme.colorScheme.errorContainer.copy(alpha = 0.1f),
-                cursorColor = Primary
+                cursorColor = Primary,
+                focusedPlaceholderColor = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f),
+                unfocusedPlaceholderColor = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f),
+                focusedTrailingIconColor = MaterialTheme.colorScheme.onSurfaceVariant,
+                unfocusedTrailingIconColor = MaterialTheme.colorScheme.onSurfaceVariant
             )
         )
         
@@ -277,11 +273,7 @@ fun IMFITCompactTextField(
     val interactionSource = remember { MutableInteractionSource() }
     val isFocused by interactionSource.collectIsFocusedAsState()
     
-    val borderColor by animateColorAsState(
-        targetValue = if (isFocused) Primary else MaterialTheme.colorScheme.outline.copy(alpha = 0.3f),
-        animationSpec = tween(150),
-        label = "borderColor"
-    )
+    val borderColor = if (isFocused) Primary else MaterialTheme.colorScheme.outline.copy(alpha = 0.3f)
 
     BasicTextField(
         value = value,

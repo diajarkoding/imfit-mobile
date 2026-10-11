@@ -1,10 +1,9 @@
 package com.diajarkoding.imfit.data.local.database
 
-import android.content.Context
 import androidx.room.Database
-import androidx.room.Room
 import androidx.room.RoomDatabase
 import androidx.room.TypeConverters
+import androidx.room.withTransaction
 import androidx.room.migration.Migration
 import androidx.sqlite.db.SupportSQLiteDatabase
 import com.diajarkoding.imfit.data.local.dao.ActiveSessionDao
@@ -36,7 +35,7 @@ import com.diajarkoding.imfit.data.local.entity.WorkoutTemplateEntity
         ActiveSessionEntity::class
     ],
     version = 6,
-    exportSchema = false
+    exportSchema = true
 )
 @TypeConverters(Converters::class)
 abstract class IMFITDatabase : RoomDatabase() {
@@ -49,10 +48,17 @@ abstract class IMFITDatabase : RoomDatabase() {
     abstract fun workoutSetDao(): WorkoutSetDao
     abstract fun activeSessionDao(): ActiveSessionDao
 
-    companion object {
-        @Volatile
-        private var INSTANCE: IMFITDatabase? = null
+    suspend fun deleteUserData(userId: String) = withTransaction {
+        workoutSetDao().deleteSetsByUser(userId)
+        exerciseLogDao().deleteExerciseLogsByUser(userId)
+        workoutLogDao().deleteWorkoutLogsByUser(userId)
+        templateExerciseDao().deleteExercisesByUser(userId)
+        workoutTemplateDao().deleteTemplatesByUser(userId)
+        activeSessionDao().deleteSession(userId)
+        userDao().deleteUserById(userId)
+    }
 
+    companion object {
         val MIGRATION_4_5 = object : Migration(4, 5) {
             override fun migrate(database: SupportSQLiteDatabase) {
                 database.execSQL("ALTER TABLE active_sessions ADD COLUMN is_paused INTEGER NOT NULL DEFAULT 0")
@@ -66,21 +72,6 @@ abstract class IMFITDatabase : RoomDatabase() {
                 database.execSQL("ALTER TABLE active_sessions ADD COLUMN rest_timer_end_time INTEGER NOT NULL DEFAULT 0")
                 database.execSQL("ALTER TABLE active_sessions ADD COLUMN rest_timer_exercise_name TEXT")
                 database.execSQL("ALTER TABLE active_sessions ADD COLUMN session_rest_override INTEGER")
-            }
-        }
-
-        fun getDatabase(context: Context): IMFITDatabase {
-            return INSTANCE ?: synchronized(this) {
-                val instance = Room.databaseBuilder(
-                    context.applicationContext,
-                    IMFITDatabase::class.java,
-                    "imfit_database"
-                )
-                    .addMigrations(MIGRATION_4_5, MIGRATION_5_6)
-                    .fallbackToDestructiveMigration()
-                    .build()
-                INSTANCE = instance
-                instance
             }
         }
     }

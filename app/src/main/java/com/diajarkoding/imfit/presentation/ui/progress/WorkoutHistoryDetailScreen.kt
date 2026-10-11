@@ -1,5 +1,7 @@
 package com.diajarkoding.imfit.presentation.ui.progress
 
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
+
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
@@ -23,14 +25,14 @@ import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.ArrowBack
-import androidx.compose.material.icons.filled.AccessTime
-import androidx.compose.material.icons.filled.CalendarMonth
-import androidx.compose.material.icons.filled.CheckCircle
-import androidx.compose.material.icons.filled.FitnessCenter
-import androidx.compose.material.icons.filled.LocalFireDepartment
-import androidx.compose.material.icons.filled.Timer
+import com.diajarkoding.imfit.presentation.components.common.AccessTime
+import com.diajarkoding.imfit.presentation.components.common.ArrowBack
+import com.diajarkoding.imfit.presentation.components.common.CalendarMonth
+import com.diajarkoding.imfit.presentation.components.common.CheckCircle
+import com.diajarkoding.imfit.presentation.components.common.FitnessCenter
+import com.diajarkoding.imfit.presentation.components.common.LocalFireDepartment
+import com.diajarkoding.imfit.presentation.components.common.Symbols
+import com.diajarkoding.imfit.presentation.components.common.Timer
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -79,7 +81,7 @@ fun WorkoutHistoryDetailScreen(
     onNavigateBack: () -> Unit,
     viewModel: ProgressViewModel = hiltViewModel()
 ) {
-    val state by viewModel.state.collectAsState()
+    val state by viewModel.state.collectAsStateWithLifecycle()
     val localDate = try {
         LocalDate.parse(date)
     } catch (e: Exception) {
@@ -116,7 +118,7 @@ fun WorkoutHistoryDetailScreen(
                 navigationIcon = {
                     IconButton(onClick = onNavigateBack) {
                         Icon(
-                            Icons.AutoMirrored.Filled.ArrowBack,
+                            Symbols.AutoMirrored.Filled.ArrowBack,
                             contentDescription = stringResource(R.string.action_back)
                         )
                     }
@@ -193,7 +195,7 @@ private fun DaySummaryCard(workouts: List<WorkoutLog>) {
                         contentAlignment = Alignment.Center
                     ) {
                         Icon(
-                            imageVector = Icons.Default.LocalFireDepartment,
+                            imageVector = Symbols.Default.LocalFireDepartment,
                             contentDescription = null,
                             tint = Color.White,
                             modifier = Modifier.size(24.dp)
@@ -230,25 +232,25 @@ private fun DaySummaryCard(workouts: List<WorkoutLog>) {
                         value = "${totalDuration}",
                         unit = "min",
                         label = stringResource(R.string.label_duration),
-                        icon = Icons.Default.Timer
+                        icon = Symbols.Default.Timer
                     )
                     SummaryStatItem(
                         value = String.format("%.0f", totalVolume),
                         unit = "kg",
                         label = stringResource(R.string.label_volume),
-                        icon = Icons.Default.FitnessCenter
+                        icon = Symbols.Default.FitnessCenter
                     )
                     SummaryStatItem(
                         value = "$totalExercises",
                         unit = "",
                         label = stringResource(R.string.label_exercises),
-                        icon = Icons.Default.CheckCircle
+                        icon = Symbols.Default.CheckCircle
                     )
                     SummaryStatItem(
                         value = "$totalSets",
                         unit = "",
                         label = stringResource(R.string.label_sets),
-                        icon = Icons.Default.AccessTime
+                        icon = Symbols.Default.AccessTime
                     )
                 }
             }
@@ -337,7 +339,7 @@ private fun WorkoutLogCard(
                         contentAlignment = Alignment.Center
                     ) {
                         Icon(
-                            imageVector = Icons.Default.FitnessCenter,
+                            imageVector = Symbols.Default.FitnessCenter,
                             contentDescription = null,
                             tint = Color.White,
                             modifier = Modifier.size(IMFITSizes.iconSm)
@@ -385,21 +387,21 @@ private fun WorkoutLogCard(
             ) {
                 item {
                     StatChip(
-                        icon = Icons.Default.FitnessCenter,
+                        icon = Symbols.Default.FitnessCenter,
                         value = workoutLog.formattedVolume,
                         label = "Volume"
                     )
                 }
                 item {
                     StatChip(
-                        icon = Icons.Default.CheckCircle,
+                        icon = Symbols.Default.CheckCircle,
                         value = "${workoutLog.exerciseLogs.size}",
                         label = "Exercises"
                     )
                 }
                 item {
                     StatChip(
-                        icon = Icons.Default.AccessTime,
+                        icon = Symbols.Default.AccessTime,
                         value = "${workoutLog.exerciseLogs.sumOf { it.completedSets }}",
                         label = stringResource(R.string.label_total_sets)
                     )
@@ -554,7 +556,7 @@ private fun EmptyWorkoutCard() {
                 contentAlignment = Alignment.Center
             ) {
                 Icon(
-                    imageVector = Icons.Default.CalendarMonth,
+                    imageVector = Symbols.Default.CalendarMonth,
                     contentDescription = null,
                     tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f),
                     modifier = Modifier.size(36.dp)

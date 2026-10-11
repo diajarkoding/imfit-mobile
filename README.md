@@ -69,7 +69,7 @@
 ### Prerequisites
 
 - Android Studio Ladybug atau lebih baru
-- JDK 11 atau lebih baru
+- JDK 17 atau lebih baru
 - Android SDK 36
 - Gradle 8.x
 
@@ -747,7 +747,7 @@ fun LoginScreen(
 
 ### 10.2 Local Data Sources
 
-Saat ini menggunakan **Fake Data Sources** untuk development:
+Flavor `demo` menggunakan **Fake Data Sources** untuk development UI tanpa Room dan Supabase:
 
 | Data Source | Kegunaan |
 |-------------|----------|
@@ -898,6 +898,37 @@ BASE_URL=http://10.0.2.2:8000/api/
 
 ## 13. Panduan Pengembangan
 
+### Mode UI-Only
+
+Pilih build variant `demoDebug` untuk menjalankan seluruh aplikasi dengan data in-memory. Variant ini tidak menyediakan module Room, Supabase, atau proses sinkronisasi. Data kembali ke kondisi awal ketika proses aplikasi dimulai ulang.
+
+```powershell
+.\gradlew.bat assembleDemoDebug
+```
+
+User demo otomatis login agar aplikasi langsung membuka home. Setelah logout, halaman autentikasi dapat diuji dengan:
+
+```text
+Email: demo@imfit.com
+Password: password123
+```
+
+Gunakan variant `productionDebug` saat ingin menguji integrasi Room dan Supabase:
+
+```powershell
+.\gradlew.bat assembleProductionDebug
+```
+
+### Production Data Safety
+
+Data workout production menggunakan Room sebagai single source of truth. Penyelesaian workout, exercise logs, sets, dan penghapusan active session dilakukan dalam satu transaksi lokal. Perubahan kemudian disinkronkan secara durable melalui WorkManager ketika jaringan tersedia.
+
+- Room schema diekspor ke `app/schemas` dan destructive migration dinonaktifkan.
+- ID aggregate dibuat lokal dan digunakan kembali untuk upsert Supabase.
+- Queue dan metadata sync dipisahkan berdasarkan user.
+- Sync dan locale preferences menggunakan DataStore dengan migrasi dari SharedPreferences lama.
+- `collectAsStateWithLifecycle()` digunakan untuk observasi state Compose.
+
 ### 13.1 Menambahkan Screen Baru
 
 #### Step 1: Buat State dan Event
@@ -1044,14 +1075,21 @@ fun provideNewRepository(
 
 ## 14. Konfigurasi Build
 
-### 14.1 Build Types
+### 14.1 Product Flavors
 
-| Type | Minify | ProGuard | BASE_URL |
-|------|--------|----------|----------|
-| **debug** | No | No | From local.properties |
-| **release** | No | No | Hardcoded production URL |
+| Flavor | Data Source | Kegunaan |
+|--------|-------------|----------|
+| **demo** | In-memory fake data | Pengembangan UI tanpa Room dan Supabase |
+| **production** | Room dan Supabase | Pengujian integrasi dan build aplikasi sebenarnya |
 
-### 14.2 Build Features
+### 14.2 Build Types
+
+| Type | Minify | ProGuard | Supabase Config |
+|------|--------|----------|-----------------|
+| **debug** | No | No | Dari `local.properties` untuk flavor production |
+| **release** | Yes | Yes | Dari `local.properties` untuk flavor production |
+
+### 14.3 Build Features
 
 ```kotlin
 android {
@@ -1062,9 +1100,9 @@ android {
 }
 ```
 
-### 14.3 ProGuard Configuration
+### 14.4 ProGuard Configuration
 
-ProGuard saat ini dinonaktifkan. Untuk mengaktifkan:
+ProGuard dan resource shrinking aktif pada build `release`:
 
 ```kotlin
 release {
@@ -1077,14 +1115,15 @@ release {
 }
 ```
 
-### 14.4 Gradle Commands
+### 14.5 Gradle Commands
 
 | Command | Deskripsi |
 |---------|-----------|
 | `./gradlew build` | Build semua variants |
-| `./gradlew assembleDebug` | Build debug APK |
-| `./gradlew assembleRelease` | Build release APK |
-| `./gradlew installDebug` | Install ke device/emulator |
+| `./gradlew assembleDemoDebug` | Build APK UI-only |
+| `./gradlew assembleProductionDebug` | Build APK production debug |
+| `./gradlew assembleProductionRelease` | Build APK production release |
+| `./gradlew installDemoDebug` | Install APK UI-only ke device/emulator |
 | `./gradlew test` | Run unit tests |
 | `./gradlew connectedAndroidTest` | Run instrumented tests |
 | `./gradlew clean` | Clean build files |

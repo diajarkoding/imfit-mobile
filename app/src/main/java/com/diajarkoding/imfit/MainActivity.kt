@@ -6,61 +6,64 @@ import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
+import androidx.activity.viewModels
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.material3.Surface
 import androidx.compose.runtime.CompositionLocalProvider
-import androidx.compose.runtime.collectAsState
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Modifier
 import androidx.core.splashscreen.SplashScreen.Companion.installSplashScreen
 import com.diajarkoding.imfit.core.notification.WorkoutNotificationManager
+import com.diajarkoding.imfit.data.auth.AuthDeepLinkHandler
 import com.diajarkoding.imfit.presentation.navigation.NavGraph
 import com.diajarkoding.imfit.theme.IMFITTheme
 import com.diajarkoding.imfit.theme.LocaleManager
 import com.diajarkoding.imfit.theme.LocalIsDarkTheme
-import com.diajarkoding.imfit.theme.ThemeManager
+import com.diajarkoding.imfit.theme.ThemeViewModel
 import dagger.hilt.android.AndroidEntryPoint
-import kotlinx.coroutines.launch
 import javax.inject.Inject
 
 @AndroidEntryPoint
 class MainActivity : ComponentActivity() {
 
-    @Inject
-    lateinit var themeManager: ThemeManager
+    @Inject lateinit var authDeepLinkHandler: AuthDeepLinkHandler
+
+    private val themeViewModel: ThemeViewModel by viewModels()
 
     private var pendingWorkoutNavigation = mutableStateOf(false)
     private var pendingTemplateId = mutableStateOf<String?>(null)
+    private var pendingAuthenticatedNavigation = mutableStateOf(false)
 
     override fun attachBaseContext(newBase: Context) {
         super.attachBaseContext(LocaleManager.attachBaseContext(newBase))
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {
-        installSplashScreen()
+        val splashScreen = installSplashScreen()
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
+        splashScreen.setKeepOnScreenCondition {
+            !themeViewModel.uiState.value.isInitialized
+        }
 
         LocaleManager.init(this)
         
-        // Handle notification intent
-        handleNotificationIntent(intent)
+        handleIntent(intent)
 
         setContent {
-            val isDarkMode by themeManager.isDarkMode.collectAsState(initial = false)
+            val themeUiState by themeViewModel.uiState.collectAsStateWithLifecycle()
+            val isDarkMode = themeUiState.isDarkMode
             // Observe language state - this triggers recomposition when language changes
             val isIndonesian = LocaleManager.isIndonesian
             // Also observe configVersion to ensure recomposition happens
             // This is read but not used as key - just reading it creates a dependency
             @Suppress("UNUSED_VARIABLE")
             val configVersion = LocaleManager.configurationVersion
-            val scope = rememberCoroutineScope()
-
             val shouldNavigateToWorkout by pendingWorkoutNavigation
             val templateId by pendingTemplateId
+            val shouldNavigateToMain by pendingAuthenticatedNavigation
 
             CompositionLocalProvider(LocalIsDarkTheme provides isDarkMode) {
                 IMFITTheme(darkTheme = isDarkMode) {
@@ -69,11 +72,7 @@ class MainActivity : ComponentActivity() {
                         // Instead rely on state observation for recomposition
                         NavGraph(
                             isDarkMode = isDarkMode,
-                            onToggleTheme = {
-                                scope.launch {
-                                    themeManager.toggleTheme()
-                                }
-                            },
+                            onToggleTheme = themeViewModel::toggleTheme,
                             isIndonesian = isIndonesian,
                             onToggleLanguage = {
                                 LocaleManager.toggleLanguage(this@MainActivity)
@@ -83,7 +82,11 @@ class MainActivity : ComponentActivity() {
                             onActiveWorkoutOpened = {
                                 pendingWorkoutNavigation.value = false
                                 pendingTemplateId.value = null
-                            }                            
+                            },
+                            authenticatedFromDeepLink = shouldNavigateToMain,
+                            onAuthenticatedFromDeepLinkConsumed = {
+                                pendingAuthenticatedNavigation.value = false
+                            },
                         )
                     }
                 }
@@ -93,7 +96,15 @@ class MainActivity : ComponentActivity() {
     
     override fun onNewIntent(intent: Intent) {
         super.onNewIntent(intent)
+        setIntent(intent)
+        handleIntent(intent)
+    }
+
+    private fun handleIntent(intent: Intent?) {
         handleNotificationIntent(intent)
+        authDeepLinkHandler.handle(intent) {
+            runOnUiThread { pendingAuthenticatedNavigation.value = true }
+        }
     }
     
     private fun handleNotificationIntent(intent: Intent?) {
@@ -110,4 +121,3 @@ class MainActivity : ComponentActivity() {
         }
     }
 }
-

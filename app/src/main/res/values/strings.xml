@@ -7,6 +7,7 @@
     <string name="rest_alarm_settings">Alarm settings</string>
     <string name="rest_storage_error">Unable to save or restore rest timer. Please try again.</string>
     <string name="rest_extend">+30 seconds</string>
+    <string name="rest_duration_label">Rest duration</string>
     <string name="rest_sound_enabled">Rest alert sound</string>
     <string name="rest_vibration_enabled">Rest alert vibration</string>
     <string name="rest_full_screen_settings">Alarm banner settings</string>

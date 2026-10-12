@@ -14,6 +14,9 @@ import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
+import androidx.compose.foundation.selection.toggleable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -75,6 +78,7 @@ import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Brush
@@ -87,6 +91,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.TextRange
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import androidx.hilt.navigation.compose.hiltViewModel
 import com.diajarkoding.imfit.R
 import com.diajarkoding.imfit.domain.model.ExerciseLog
@@ -553,6 +558,8 @@ private fun RestTimerConfigSheet(
     var hours by remember { mutableIntStateOf(initialHours) }
     var minutes by remember { mutableIntStateOf(initialMinutes) }
     var seconds by remember { mutableIntStateOf(initialSeconds) }
+    var draftSoundEnabled by remember { mutableStateOf(soundEnabled) }
+    var draftVibrationEnabled by remember { mutableStateOf(vibrationEnabled) }
 
     IMFITPlatformDialog(onDismissRequest = onDismiss) {
         Card(
@@ -562,31 +569,25 @@ private fun RestTimerConfigSheet(
             Column(
                 modifier = Modifier
                     .padding(IMFITSpacing.xl)
-                    .fillMaxWidth(),
-                horizontalAlignment = Alignment.CenterHorizontally
+                    .fillMaxWidth()
+                    .verticalScroll(rememberScrollState()),
+                horizontalAlignment = Alignment.Start
             ) {
                 Text(
                     text = stringResource(R.string.active_workout_rest_timer),
                     style = MaterialTheme.typography.titleLarge,
-                    fontWeight = FontWeight.Bold
+                    fontSize = 20.sp,
+                    fontWeight = FontWeight.SemiBold
                 )
-                Spacer(modifier = Modifier.height(IMFITSpacing.xl))
+                Spacer(modifier = Modifier.height(IMFITSpacing.lg))
+                Text(
+                    text = stringResource(R.string.rest_duration_label),
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+                Spacer(modifier = Modifier.height(IMFITSpacing.md))
 
                 // Scrollable Time Picker
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Text(stringResource(R.string.rest_sound_enabled))
-                    androidx.compose.material3.Switch(checked = soundEnabled, onCheckedChange = onSoundChange)
-                }
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Text(stringResource(R.string.rest_vibration_enabled))
-                    androidx.compose.material3.Switch(checked = vibrationEnabled, onCheckedChange = onVibrationChange)
-                }
-                if (!fullScreenAllowed) {
-                    Text(stringResource(R.string.rest_full_screen_limited), style = MaterialTheme.typography.bodySmall)
-                }
-                androidx.compose.material3.TextButton(onClick = onAlarmSettings) {
-                    Text(stringResource(R.string.rest_full_screen_settings))
-                }
                 Row(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.Center,
@@ -633,8 +634,43 @@ private fun RestTimerConfigSheet(
                     )
                 }
 
-                Spacer(modifier = Modifier.height(IMFITSpacing.xl))
-
+                Spacer(modifier = Modifier.height(IMFITSpacing.lg))
+                androidx.compose.material3.HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
+                Spacer(modifier = Modifier.height(IMFITSpacing.md))
+                RestAlarmToggleRow(
+                    label = stringResource(R.string.rest_sound_enabled),
+                    checked = draftSoundEnabled,
+                    onCheckedChange = { draftSoundEnabled = it }
+                )
+                Spacer(modifier = Modifier.height(IMFITSpacing.sm))
+                RestAlarmToggleRow(
+                    label = stringResource(R.string.rest_vibration_enabled),
+                    checked = draftVibrationEnabled,
+                    onCheckedChange = { draftVibrationEnabled = it }
+                )
+                Spacer(modifier = Modifier.height(IMFITSpacing.md))
+                androidx.compose.material3.HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
+                Spacer(modifier = Modifier.height(IMFITSpacing.md))
+                androidx.compose.material3.TextButton(
+                    onClick = onAlarmSettings,
+                    modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp),
+                    contentPadding = PaddingValues(0.dp)
+                ) {
+                    Text(
+                        text = stringResource(R.string.rest_full_screen_settings),
+                        modifier = Modifier.fillMaxWidth(),
+                        fontSize = 14.sp,
+                        textAlign = TextAlign.Start
+                    )
+                }
+                if (!fullScreenAllowed) {
+                    Text(
+                        stringResource(R.string.rest_full_screen_limited),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+                Spacer(modifier = Modifier.height(IMFITSpacing.lg))
                 Row(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.spacedBy(IMFITSpacing.md)
@@ -642,14 +678,18 @@ private fun RestTimerConfigSheet(
                     Box(modifier = Modifier.weight(1f)) {
                         IMFITSecondaryButton(
                             text = stringResource(R.string.action_cancel),
+                            modifier = Modifier.height(48.dp),
                             onClick = onDismiss
                         )
                     }
                     Box(modifier = Modifier.weight(1f)) {
                         IMFITButton(
                             text = stringResource(R.string.action_save),
+                            height = 48.dp,
                             onClick = {
                                 val totalSeconds = hours * 3600 + minutes * 60 + seconds
+                                onSoundChange(draftSoundEnabled)
+                                onVibrationChange(draftVibrationEnabled)
                                 onConfirm(if (totalSeconds > 0) totalSeconds else 60)
                             }
                         )
@@ -657,6 +697,32 @@ private fun RestTimerConfigSheet(
                 }
             }
         }
+    }
+}
+
+@Composable
+private fun RestAlarmToggleRow(
+    label: String,
+    checked: Boolean,
+    onCheckedChange: (Boolean) -> Unit
+) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .heightIn(min = 48.dp)
+            .toggleable(value = checked, role = Role.Switch, onValueChange = onCheckedChange),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Text(
+            text = label,
+            modifier = Modifier.weight(1f).padding(end = IMFITSpacing.md),
+            style = MaterialTheme.typography.bodyMedium,
+            fontSize = 14.sp,
+            fontWeight = FontWeight.Normal,
+            color = MaterialTheme.colorScheme.onSurface,
+            textAlign = TextAlign.Start
+        )
+        androidx.compose.material3.Switch(checked = checked, onCheckedChange = null)
     }
 }
 

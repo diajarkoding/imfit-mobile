@@ -9,6 +9,7 @@
     <string name="rest_storage_error">Timer istirahat gagal disimpan atau dipulihkan. Coba lagi.</string>
     <string name="rest_extend">+30 detik</string>
     <string name="rest_sound_enabled">Bunyi selesai istirahat</string>
+    <string name="rest_duration_label">Durasi istirahat</string>
     <string name="rest_vibration_enabled">Getaran selesai istirahat</string>
     <string name="rest_full_screen_settings">Pengaturan banner alarm</string>
     <string name="rest_full_screen_limited">Alarm layar penuh belum diizinkan. Banner bisa hilang otomatis; kartu tetap tersedia di panel notifikasi.</string>

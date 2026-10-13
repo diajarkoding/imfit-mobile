@@ -6,11 +6,15 @@ import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.serialization.Serializable
 import java.util.UUID
+import com.diajarkoding.imfit.domain.model.WorkoutSession
 
 @Serializable
 enum class TimerStatus { RUNNING, EXPIRED, ACKNOWLEDGED, SKIPPED, CANCELLED }
 @Serializable
 enum class SchedulingMode { EXACT, BEST_EFFORT, UNAVAILABLE }
+
+data class PlaybackToken(val timerId: String, val generation: Long, val revision: Long)
+enum class PlaybackReadiness { WAITING, READY, FAILED_PERMANENT }
 
 @Serializable
 data class RestTimerState(
@@ -64,6 +68,15 @@ interface RestTimerEffects {
     fun startAudio(): Boolean
     fun stopAudio()
     fun clearOrphans() {}
+    fun renderWorkout(state: RestTimerState?, session: WorkoutSession? = null) {}
+    fun dismissWorkout() {}
+    suspend fun workoutSessionIsCurrent(session: WorkoutSession): Boolean = true
+    fun playbackReadiness(state: RestTimerState, token: PlaybackToken, alarmDelivery: Boolean): PlaybackReadiness =
+        if (controlsAvailable()) PlaybackReadiness.READY
+        else if (controlsPending()) PlaybackReadiness.WAITING else PlaybackReadiness.FAILED_PERMANENT
+    fun cancelPlaybackChecks() {}
+    fun enqueuePlaybackCheck(token: PlaybackToken) {}
+    fun trace(event: String, state: RestTimerState?, detail: String = "") {}
 }
 
 /** All mutations and effects are serialized. No tick counter is persisted. */
@@ -81,6 +94,19 @@ class RestTimerCoordinator(
     private var playingId: String? = null
     private var scheduledIdentity: Pair<String, Long>? = null
     private var pendingTerminal: RestTimerState? = null
+    private var revision = 0L
+    private var playbackToken: PlaybackToken? = null
+    private var playbackRequestedAtMs = 0L
+    private var playbackFromAlarm = false
+
+    private fun invalidatePlayback() {
+        revision++
+        playbackToken = null
+        playbackFromAlarm = false
+        effects.cancelPlaybackChecks()
+        effects.stopAudio()
+        playingId = null
+    }
 
     private suspend fun load() {
         if (!loaded) {
@@ -92,8 +118,12 @@ class RestTimerCoordinator(
 
     private suspend fun persist(next: RestTimerState) {
         store.write(next) // Never publish success or start effects before this succeeds.
+        val previous = state.value
+        if (previous == null || previous.timerId != next.timerId || previous.generation != next.generation ||
+            previous.status != next.status || previous.audioSuppressed != next.audioSuppressed) invalidatePlayback()
         mutableState.value = next
         mutableError.value = null
+        effects.trace("state_committed", next, "revision=$revision previous=${previous?.status}")
     }
 
     private suspend fun guarded(block: suspend () -> Unit) = mutex.withLock {
@@ -106,17 +136,22 @@ class RestTimerCoordinator(
             }
             block()
         } catch (e: kotlinx.coroutines.CancellationException) {
+            // A DataStore update can commit just before cancellation is observed. Reload its
+            // authority before any later alarm/extend uses the in-memory identity again.
+            loaded = false
+            invalidatePlayback()
             throw e
         } catch (e: Exception) {
             // Stop effects even if a terminal write failed. Keep durable state for retry.
-            effects.stopAudio()
-            playingId = null
+            invalidatePlayback()
             pendingTerminal?.let { cleanup(it) }
             mutableError.value = "TIMER_STORAGE_OR_RECOVERY_FAILED"
+            effects.trace("recovery_failed", state.value, "exception=${e.javaClass.simpleName} message=${e.message}")
         }
     }
 
     suspend fun start(request: RestTimerState) = guarded {
+        effects.trace("start_requested", request)
         val old = state.value
         if (old?.workoutId == request.workoutId && (old.setId == request.setId || request.setId in old.startedSetIds)) return@guarded
         if (!effects.validSession(request)) return@guarded
@@ -125,6 +160,11 @@ class RestTimerCoordinator(
             startedAtEpochMs = clock.epochMillis(),
             deadlineElapsedMs = clock.elapsedRealtime() + request.durationMs.coerceIn(0, 86_400_000),
             bootIdentity = clock.bootIdentity(),
+            status = TimerStatus.RUNNING,
+            generation = 0,
+            audioSuppressed = false,
+            reason = null,
+            schedulingMode = SchedulingMode.UNAVAILABLE,
             startedSetIds = (old?.takeIf { it.workoutId == request.workoutId }?.startedSetIds.orEmpty() + request.setId).distinct()
         )
         persist(next)
@@ -148,6 +188,8 @@ class RestTimerCoordinator(
             if (state.value?.status == TimerStatus.RUNNING) false
             else { block(); true }
         } catch (e: kotlinx.coroutines.CancellationException) {
+            loaded = false
+            invalidatePlayback()
             throw e
         } catch (_: Exception) {
             effects.stopAudio()
@@ -156,7 +198,8 @@ class RestTimerCoordinator(
         }
     }
 
-    private suspend fun reconcileLocked() {
+    private suspend fun reconcileLocked(alarmDelivery: Boolean = false) {
+        effects.trace("reconcile_enter", state.value, "source=${if (alarmDelivery) "alarm" else "reconcile"}")
         var current = state.value ?: run {
             effects.stopAudio()
             effects.dismissFinished()
@@ -176,9 +219,12 @@ class RestTimerCoordinator(
             }
         }
         if (current.status == TimerStatus.RUNNING && clock.elapsedRealtime() >= current.deadlineElapsedMs) {
+            effects.trace("expiry_decided", current)
             current = current.copy(status = TimerStatus.EXPIRED)
             persist(current)
+            effects.trace("expired_committed", current)
         }
+        renderLocked(current)
         when (current.status) {
             TimerStatus.RUNNING -> {
                 effects.stopAudio()
@@ -195,15 +241,15 @@ class RestTimerCoordinator(
             TimerStatus.EXPIRED -> {
                 effects.cancelAlarm(current)
                 scheduledIdentity = null
-                effects.showFinished(current)
-                if (!effects.controlsAvailable()) {
-                    effects.stopAudio()
-                    playingId = null
-                    if (!effects.controlsPending() && !current.audioSuppressed) persist(current.copy(audioSuppressed = true))
-                } else if (!current.audioSuppressed && playingId != current.timerId) {
-                    if (effects.startAudio()) playingId = current.timerId
-                    else persist(current.copy(audioSuppressed = true))
+                try {
+                    effects.showFinished(current)
+                } catch (e: Exception) {
+                    effects.trace("notify_failed", current, "exception=${e.javaClass.simpleName}")
                 }
+                if (alarmDelivery && !current.audioSuppressed) {
+                    playbackFromAlarm = true
+                    effects.enqueuePlaybackCheck(ensurePlaybackToken(current))
+                } else updatePlaybackLocked(current)
             }
             else -> cleanup(current)
         }
@@ -212,9 +258,90 @@ class RestTimerCoordinator(
     private fun cleanup(current: RestTimerState) {
         effects.cancelAlarm(current)
         scheduledIdentity = null
-        effects.stopAudio()
-        playingId = null
+        invalidatePlayback()
         effects.dismissFinished()
+        renderLocked(current)
+    }
+
+    private fun renderLocked(current: RestTimerState?, session: WorkoutSession? = null) {
+        try {
+            effects.renderWorkout(current, session)
+        } catch (e: Exception) {
+            effects.trace("render_failed", current, "exception=${e.javaClass.simpleName}")
+        }
+    }
+
+    /** Receiver and ticker use the same lock and latest rest state for notification decisions. */
+    suspend fun renderWorkout(session: WorkoutSession) = guarded {
+        if (state.value?.let { it.workoutId != session.id && it.status == TimerStatus.RUNNING } == true) return@guarded
+        // Session input was read outside this lock; verify it again rather than posting that snapshot.
+        if (effects.workoutSessionIsCurrent(session)) renderLocked(state.value)
+    }
+
+    private fun ensurePlaybackToken(current: RestTimerState): PlaybackToken =
+        playbackToken ?: PlaybackToken(current.timerId, current.generation, revision).also {
+            playbackToken = it
+            playbackRequestedAtMs = clock.elapsedRealtime()
+        }
+
+    private suspend fun updatePlaybackLocked(current: RestTimerState) {
+        if (current.audioSuppressed || pendingTerminal != null) return
+        val token = ensurePlaybackToken(current)
+        if (playingId == null && clock.elapsedRealtime() - playbackRequestedAtMs >= 5000) {
+            suppressPlayback(current, "READINESS_TIMEOUT")
+            return
+        }
+        when (effects.playbackReadiness(current, token, playbackFromAlarm)) {
+            PlaybackReadiness.WAITING -> effects.trace("playback_waiting", current, "revision=${token.revision}")
+            PlaybackReadiness.READY -> if (playingId != current.timerId) {
+                effects.trace("playback_ready", current, "revision=${token.revision}")
+                val started = try { effects.startAudio() } catch (e: Exception) {
+                    effects.trace("audio_start_failed", current, "exception=${e.javaClass.simpleName}")
+                    false
+                }
+                if (started) playingId = current.timerId
+                else suppressPlayback(current, "AUDIO_START_FAILED")
+            }
+            PlaybackReadiness.FAILED_PERMANENT -> suppressPlayback(current, "READINESS_FAILED")
+        }
+    }
+
+    private suspend fun suppressPlayback(current: RestTimerState, reason: String) {
+        invalidatePlayback() // Honor failure immediately, even when the suppression write fails.
+        effects.trace("playback_failed", current, "reason=$reason")
+        pendingTerminal = current.copy(audioSuppressed = true, reason = reason)
+        persist(pendingTerminal!!)
+        pendingTerminal = null
+    }
+
+    private fun matchesPlayback(token: PlaybackToken): Boolean = playbackToken == token && pendingTerminal == null &&
+        state.value?.let { it.matchesExpired(token.timerId, token.generation) && !it.audioSuppressed &&
+            it.bootIdentity != null && it.bootIdentity == clock.bootIdentity() } == true
+
+    /** Application-owned supervisor polls readiness; never prolongs a receiver's lifetime. */
+    suspend fun checkPlayback(token: PlaybackToken) = guarded {
+        if (!matchesPlayback(token)) return@guarded
+        val current = state.value ?: return@guarded
+        if (playingId == null && clock.elapsedRealtime() - playbackRequestedAtMs >= 5000) {
+            suppressPlayback(current, "READINESS_TIMEOUT")
+            return@guarded
+        }
+        if (effects.userStopped(current) || !effects.validSession(current)) {
+            terminal(current.copy(status = TimerStatus.CANCELLED, reason = "SESSION_INVALID"))
+        } else updatePlaybackLocked(current)
+    }
+
+    suspend fun playbackServiceResult(token: PlaybackToken, ready: Boolean) = guarded {
+        if (!matchesPlayback(token)) return@guarded
+        val current = state.value!!
+        if (!ready) suppressPlayback(current, "FGS_START_OR_PROMOTION_FAILED")
+        else if (effects.userStopped(current) || !effects.validSession(current)) {
+            terminal(current.copy(status = TimerStatus.CANCELLED, reason = "SESSION_INVALID"))
+        } else updatePlaybackLocked(current)
+    }
+
+    suspend fun interruptPlayback(token: PlaybackToken) = guarded {
+        if (matchesPlayback(token)) suppressPlayback(state.value!!, "PLAYBACK_INTERRUPTED")
     }
 
     suspend fun acknowledge(timerId: String, generation: Long? = null) = guarded {
@@ -223,6 +350,7 @@ class RestTimerCoordinator(
         if (generation != null && current.generation != generation) return@guarded
         // Mark first: a concurrent reconcile must never repost a card the user dismissed.
         effects.noteUserDismissed(timerId)
+        effects.trace("acknowledge", current)
         if (current.status == TimerStatus.EXPIRED) terminal(current.copy(status = TimerStatus.ACKNOWLEDGED))
         if (state.value?.status == TimerStatus.ACKNOWLEDGED) cleanup(current)
     }
@@ -237,8 +365,14 @@ class RestTimerCoordinator(
         reconcileLocked()
     }
 
-    suspend fun cancel(reason: String) = guarded {
-        val current = state.value ?: return@guarded
+    suspend fun cancel(reason: String, endWorkout: Boolean = false) = guarded {
+        if (endWorkout) effects.dismissWorkout()
+        val current = state.value ?: run {
+            invalidatePlayback()
+            effects.dismissFinished()
+            effects.clearOrphans()
+            return@guarded
+        }
         terminal(current.copy(status = TimerStatus.CANCELLED, reason = reason))
         cleanup(current)
     }
@@ -265,9 +399,28 @@ class RestTimerCoordinator(
         reconcileLocked()
     }
 
-    suspend fun expiry(timerId: String, generation: Long) = guarded {
-        val current = state.value ?: return@guarded
-        if (current.timerId == timerId && current.generation == generation) reconcileLocked()
+    suspend fun expiry(timerId: String, generation: Long, alarmDelivery: Boolean = false) = guarded {
+        val current = state.value ?: run { reconcileLocked(); return@guarded }
+        if (current.timerId == timerId && current.generation == generation) {
+            // A delivered early alarm is consumed by the system; re-arm instead of caching that schedule.
+            if (current.status == TimerStatus.RUNNING && clock.elapsedRealtime() < current.deadlineElapsedMs) scheduledIdentity = null
+            reconcileLocked(alarmDelivery)
+        }
+        else {
+            effects.trace("stale_alarm_ignored", current, "receivedTimer=$timerId receivedGeneration=$generation")
+            // A process/caller can die after an extend commit but before replacing its system
+            // alarm. Repair only the authoritative schedule; this event never expires it.
+            val identity = current.timerId to current.generation
+            if (current.timerId == timerId && current.generation > generation && current.status == TimerStatus.RUNNING &&
+                scheduledIdentity != identity && current.bootIdentity != null && current.bootIdentity == clock.bootIdentity() &&
+                effects.validSession(current)) {
+                effects.cancelAlarm(current.copy(generation = generation))
+                val mode = effects.schedule(current)
+                persist(current.copy(schedulingMode = mode))
+                scheduledIdentity = identity
+                effects.trace("alarm_schedule_recovered", state.value)
+            }
+        }
     }
 
     suspend fun capabilitiesChanged() = guarded {
@@ -278,14 +431,11 @@ class RestTimerCoordinator(
     suspend fun silence(timerId: String? = null) = guarded {
         val current = state.value ?: return@guarded
         if (timerId != null && timerId != current.timerId) return@guarded
-        effects.stopAudio()
-        playingId = null
-        if (current.status == TimerStatus.EXPIRED && !current.audioSuppressed) persist(current.copy(audioSuppressed = true))
+        if (current.status == TimerStatus.EXPIRED && !current.audioSuppressed) suppressPlayback(current, "USER_SILENCED")
     }
 
     /** Process-resource cleanup only: the system alarm and persisted timer survive. */
-    fun releasePlayback() {
-        effects.stopAudio()
-        playingId = null
+    suspend fun releasePlayback() = guarded {
+        invalidatePlayback()
     }
 }

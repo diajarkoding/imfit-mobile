@@ -17,16 +17,20 @@ import android.net.Uri
 import android.os.Build
 import android.os.Bundle
 import androidx.core.app.NotificationManagerCompat
+import androidx.core.content.ContextCompat
 import com.diajarkoding.imfit.R
 import com.diajarkoding.imfit.core.notification.NotificationChannels
 import com.diajarkoding.imfit.core.notification.WorkoutNotificationManager
 import com.diajarkoding.imfit.domain.repository.AuthRepository
 import com.diajarkoding.imfit.domain.repository.WorkoutRepository
+import com.diajarkoding.imfit.domain.model.WorkoutSession
+import com.diajarkoding.imfit.core.service.WorkoutService
+import com.diajarkoding.imfit.core.notification.WorkoutActions
 import dagger.hilt.android.qualifiers.ApplicationContext
 import javax.inject.Inject
 import javax.inject.Provider
 import javax.inject.Singleton
-import kotlinx.coroutines.launch
+import kotlinx.coroutines.*
 
 /** Android ports; repositories are lazy to keep cleanup independent of their construction. */
 @Singleton
@@ -48,17 +52,85 @@ class RestTimerAndroidRuntime @Inject constructor(
     var foregroundServiceActive = false
     private var posted = false
     private var shownTimerId: String? = null
+    private var shownGeneration: Long? = null
     private var cardPostElapsedMs: Long? = null
     private val userDismissed = mutableSetOf<String>()
     private var legacyListener: AudioManager.OnAudioFocusChangeListener? = null
     private val scope = kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.SupervisorJob() + kotlinx.coroutines.Dispatchers.Main)
     private val attributes = AudioAttributes.Builder()
         .setUsage(AudioAttributes.USAGE_ALARM).setContentType(AudioAttributes.CONTENT_TYPE_SONIFICATION).build()
+    private var session: WorkoutSession? = null
+    private var lastRender: List<Any?>? = null
+    private val renderRetry = RestTimerRetry()
+    private val finishedRetry = RestTimerRetry()
+    private var readinessJob: Job? = null
+    private var readinessToken: PlaybackToken? = null
+    private var readinessStartedMs = 0L
+    private var startupRequested = false
+    private var startupFailed = false
+    private var alarmStartupAllowed = false
+    private var alarmReceived = false
+    private var playbackWasReady = false
+    private var audioToken: PlaybackToken? = null
 
     fun register(application: Application) = application.registerActivityLifecycleCallbacks(this)
 
-    override suspend fun validSession(state: RestTimerState): Boolean =
-        auth.get().getLocalUserId() == state.userId && workouts.get().getActiveSession()?.id == state.workoutId
+    override suspend fun validSession(state: RestTimerState): Boolean = withTimeout(2500) {
+        if (auth.get().getLocalUserId() != state.userId) return@withTimeout false
+        val recovered = workouts.get().getActiveSessionForTimer()
+        session = recovered
+        recovered?.id == state.workoutId
+    }
+
+    override fun trace(event: String, state: RestTimerState?, detail: String) = RestTimerTrace.event(event, state, detail)
+
+    override suspend fun workoutSessionIsCurrent(session: WorkoutSession): Boolean = withTimeout(2500) {
+        val latest = workouts.get().getActiveSessionForTimer()
+        this@RestTimerAndroidRuntime.session = latest
+        latest?.id == session.id
+    }
+
+    /** Called only through the coordinator lock. No UI/ticker snapshot may post directly. */
+    override fun renderWorkout(state: RestTimerState?, session: WorkoutSession?) {
+        if (session != null) this.session = session
+        val currentSession = this.session ?: return
+        if (state != null && state.workoutId != currentSession.id &&
+            (state.status == TimerStatus.RUNNING || state.status == TimerStatus.EXPIRED)) return
+        val now = android.os.SystemClock.elapsedRealtime()
+        if (!renderRetry.available(now)) return
+        val rest = state?.takeIf { it.status == TimerStatus.RUNNING && it.deadlineElapsedMs > now }
+        val elapsed = currentSession.actualElapsedMs.coerceAtLeast(0) / 1000
+        // Include clock conversion so wall-clock changes rebuild the chronometer's calendar base.
+        val epochOffsetSeconds = (System.currentTimeMillis() - now) / 1000
+        val identity = listOf(currentSession, elapsed, state?.timerId, state?.generation, state?.status,
+            rest?.deadlineElapsedMs, epochOffsetSeconds)
+        if (lastRender == identity) return
+        try {
+            val posted = if (rest != null) notifications.showRestTimerNotification(rest, currentSession.templateId)
+            else notifications.showWorkoutNotification(currentSession.templateName, format(elapsed), currentSession.totalCompletedSets,
+                currentSession.totalSets, currentSession.totalVolume, currentSession.isPaused, currentSession.templateId)
+            if (!posted) throw IllegalStateException("Workout notification post failed")
+            lastRender = identity
+            renderRetry.reset()
+            trace("workout_rendered", state, "notificationId=1001 countdown=${rest != null}")
+        } catch (e: RuntimeException) {
+            val retry = renderRetry.failed(now)
+            trace("render_failed", state, "attempt=${renderRetry.failures} retryMs=$retry exception=${e.javaClass.simpleName}")
+        }
+    }
+
+    fun resetWorkoutRendering() {
+        lastRender = null
+        renderRetry.reset()
+    }
+
+    override fun dismissWorkout() {
+        notifications.dismissNotification()
+        session = null
+        resetWorkoutRendering()
+    }
+
+    private fun format(seconds: Long) = "%02d:%02d:%02d".format(seconds / 3600, seconds % 3600 / 60, seconds % 60)
 
     override fun userStopped(state: RestTimerState): Boolean {
         if (prefs.getString("stopped_session", null) == state.workoutId &&
@@ -91,7 +163,7 @@ class RestTimerAndroidRuntime @Inject constructor(
         val pending = pendingIntent(state)
         // Track identity independently so a corrupt DataStore can still clean the old alarm.
         prefs.edit().putString("alarm_uri", "imfit-rest://alarm/${state.timerId}/${state.generation}").apply()
-        return try {
+        val mode = try {
             if (Build.VERSION.SDK_INT < Build.VERSION_CODES.S || alarms.canScheduleExactAlarms()) {
                 alarms.setExactAndAllowWhileIdle(AlarmManager.ELAPSED_REALTIME_WAKEUP, state.deadlineElapsedMs, pending)
                 SchedulingMode.EXACT
@@ -105,10 +177,13 @@ class RestTimerAndroidRuntime @Inject constructor(
                 SchedulingMode.BEST_EFFORT
             } catch (_: RuntimeException) { SchedulingMode.UNAVAILABLE }
         } catch (_: RuntimeException) { SchedulingMode.UNAVAILABLE }
+        trace("alarm_scheduled", state, "mode=$mode")
+        return mode
     }
 
     override fun cancelAlarm(state: RestTimerState) {
         alarms.cancel(pendingIntent(state))
+        trace("alarm_cancelled", state)
         if (prefs.getString("alarm_uri", null) == "imfit-rest://alarm/${state.timerId}/${state.generation}") {
             prefs.edit().remove("alarm_uri").apply()
         }
@@ -137,6 +212,35 @@ class RestTimerAndroidRuntime @Inject constructor(
                 } == true
     }
 
+    fun headsUpAvailable(): Boolean = notificationsAvailable() && (Build.VERSION.SDK_INT < 26 ||
+        context.getSystemService(NotificationManager::class.java)
+            .getNotificationChannel(NotificationChannels.REST_FINISHED_CHANNEL_ID)?.importance?.let {
+                it >= NotificationManager.IMPORTANCE_HIGH
+            } == true)
+
+    enum class CapabilityIssue { NOTIFICATIONS, CHANNEL, EXACT_ALARM, FULL_SCREEN }
+    fun capabilityIssue(): CapabilityIssue? = when {
+        !NotificationManagerCompat.from(context).areNotificationsEnabled() -> CapabilityIssue.NOTIFICATIONS
+        !headsUpAvailable() -> CapabilityIssue.CHANNEL
+        !exactAlarmAvailable() -> CapabilityIssue.EXACT_ALARM
+        !fullScreenIntentAvailable() -> CapabilityIssue.FULL_SCREEN
+        else -> null
+    }
+
+    fun capabilitySettingsIntent(): Intent? = when (capabilityIssue()) {
+        CapabilityIssue.NOTIFICATIONS -> Intent(android.provider.Settings.ACTION_APPLICATION_DETAILS_SETTINGS,
+            Uri.parse("package:${context.packageName}"))
+        CapabilityIssue.CHANNEL -> if (Build.VERSION.SDK_INT >= 26) Intent(android.provider.Settings.ACTION_CHANNEL_NOTIFICATION_SETTINGS)
+            .putExtra(android.provider.Settings.EXTRA_APP_PACKAGE, context.packageName)
+            .putExtra(android.provider.Settings.EXTRA_CHANNEL_ID, NotificationChannels.REST_FINISHED_CHANNEL_ID)
+            else Intent(android.provider.Settings.ACTION_APPLICATION_DETAILS_SETTINGS, Uri.parse("package:${context.packageName}"))
+        CapabilityIssue.EXACT_ALARM -> if (Build.VERSION.SDK_INT >= 31) Intent(android.provider.Settings.ACTION_REQUEST_SCHEDULE_EXACT_ALARM,
+            Uri.parse("package:${context.packageName}")) else null
+        CapabilityIssue.FULL_SCREEN -> if (Build.VERSION.SDK_INT >= 34) Intent(android.provider.Settings.ACTION_MANAGE_APP_USE_FULL_SCREEN_INTENT,
+            Uri.parse("package:${context.packageName}")) else null
+        null -> null
+    }
+
     override fun showFinished(state: RestTimerState) {
         if (state.timerId in userDismissed) {
             // The user removed this card; never repost it, only ensure it stays gone.
@@ -145,46 +249,141 @@ class RestTimerAndroidRuntime @Inject constructor(
             if (shownTimerId == state.timerId) shownTimerId = null
             return
         }
-        if (shownTimerId == state.timerId && posted) {
+        if (shownTimerId == state.timerId && shownGeneration == state.generation && posted) {
             // Self-heal a system-removed card; user removal always carries a dismissal mark.
-            if (!isCardPresent()) {
+            if (!isCardPresent() && !controlsPending()) {
                 posted = false
                 shownTimerId = null
-                cardPostElapsedMs = null
             } else return
         }
-        posted = notificationsAvailable() && notifications.showRestFinished(state)
+        val now = android.os.SystemClock.elapsedRealtime()
+        if (!finishedRetry.available(now)) return
+        // Do not reset card grace by repeatedly reposting before activeNotifications catches up.
+        posted = notificationsAvailable() && notifications.showRestFinished(state, fullScreenIntentAvailable())
         if (posted) {
             shownTimerId = state.timerId
-            cardPostElapsedMs = android.os.SystemClock.elapsedRealtime()
+            shownGeneration = state.generation
+            if (cardPostElapsedMs == null) cardPostElapsedMs = now
+            finishedRetry.reset()
+        } else {
+            val retry = finishedRetry.failed(now)
+            trace("notify_failed", state, "notificationId=1002 attempt=${finishedRetry.failures} retryMs=$retry")
         }
     }
     private fun isCardPresent(): Boolean = context.getSystemService(NotificationManager::class.java)
-        .activeNotifications.any { it.id == NotificationChannels.REST_FINISHED_NOTIFICATION_ID }
+        .activeNotifications.any {
+            it.id == NotificationChannels.REST_FINISHED_NOTIFICATION_ID &&
+                it.notification.extras.getString(WorkoutNotificationManager.EXTRA_REST_TIMER_ID) == shownTimerId &&
+                it.notification.extras.getLong(WorkoutNotificationManager.EXTRA_REST_GENERATION, -1) == shownGeneration
+        }
     override fun noteUserDismissed(timerId: String) {
         userDismissed.add(timerId)
     }
     override fun clearDismissed() {
         userDismissed.clear()
+        finishedRetry.reset()
     }
     override fun dismissFinished() {
         notifications.dismissRestFinished()
         posted = false
         shownTimerId = null
+        shownGeneration = null
         cardPostElapsedMs = null
     }
     override fun controlsAvailable(): Boolean {
-        val cardPresent = posted && notificationsAvailable() && context.getSystemService(NotificationManager::class.java)
-            .activeNotifications.any { it.id == NotificationChannels.REST_FINISHED_NOTIFICATION_ID }
-        if (cardPresent) cardPostElapsedMs = null
+        val cardPresent = posted && notificationsAvailable() && isCardPresent()
         return cardPresent
     }
     override fun controlsPending(): Boolean = posted && notificationsAvailable() &&
         cardPostElapsedMs?.let { android.os.SystemClock.elapsedRealtime() - it < 1500 } == true
 
+    override fun playbackReadiness(state: RestTimerState, token: PlaybackToken, alarmDelivery: Boolean): PlaybackReadiness {
+        val now = android.os.SystemClock.elapsedRealtime()
+        if (readinessToken != token) {
+            cancelPlaybackChecks()
+            readinessToken = token
+            readinessStartedMs = now
+            alarmStartupAllowed = alarmDelivery && (Build.VERSION.SDK_INT < 31 || state.schedulingMode == SchedulingMode.EXACT)
+            alarmReceived = alarmDelivery
+            readinessJob = scope.launch {
+                while (isActive && readinessToken == token) {
+                    delay(250)
+                    // Sibling operation: invalidating this poller must not cancel its durable suppression/ACK write.
+                    scope.launch { coordinator.get().checkPlayback(token) }.join()
+                }
+            }
+        }
+        if (alarmDelivery) {
+            alarmReceived = true
+            alarmStartupAllowed = Build.VERSION.SDK_INT < 31 || state.schedulingMode == SchedulingMode.EXACT
+        }
+        if (startupFailed || !notificationsAvailable() || state.timerId in userDismissed) return PlaybackReadiness.FAILED_PERMANENT
+        if (!playbackWasReady && now - readinessStartedMs >= 5000) return PlaybackReadiness.FAILED_PERMANENT
+        if (context.getSystemService(NotificationManager::class.java).currentInterruptionFilter != NotificationManager.INTERRUPTION_FILTER_ALL)
+            return PlaybackReadiness.FAILED_PERMANENT
+        if (!controlsAvailable()) return if (!playbackWasReady && controlsPending() && now - readinessStartedMs < 5000)
+            PlaybackReadiness.WAITING else PlaybackReadiness.FAILED_PERMANENT
+        // Alarm recovery prefers a promoted service, even if FSI briefly resumes an Activity.
+        if (foregroundServiceActive || (resumedActivities > 0 && !alarmStartupAllowed)) {
+            playbackWasReady = true
+            return PlaybackReadiness.READY
+        }
+        if (playbackWasReady || now - readinessStartedMs >= 5000) return PlaybackReadiness.FAILED_PERMANENT
+        if (!startupRequested) {
+            // Inexact delivery is not the user-requested exact-alarm FGS exemption on Android 12+.
+            if (!alarmStartupAllowed)
+                return if (alarmReceived) PlaybackReadiness.FAILED_PERMANENT else PlaybackReadiness.WAITING
+            startupRequested = true
+            try {
+                trace("fgs_start_requested", state, "revision=${token.revision}")
+                ContextCompat.startForegroundService(context, Intent(context, WorkoutService::class.java).apply {
+                    action = WorkoutActions.EXPIRE
+                    putExtra("timer_id", token.timerId)
+                    putExtra("generation", token.generation)
+                    putExtra("revision", token.revision)
+                })
+            } catch (e: RuntimeException) {
+                startupFailed = true
+                trace("fgs_start_failed", state, "revision=${token.revision} exception=${e.javaClass.simpleName}")
+                return PlaybackReadiness.FAILED_PERMANENT
+            }
+        }
+        return PlaybackReadiness.WAITING
+    }
+
+    override fun cancelPlaybackChecks() {
+        readinessJob?.cancel()
+        readinessJob = null
+        readinessToken = null
+        startupRequested = false
+        startupFailed = false
+        alarmStartupAllowed = false
+        alarmReceived = false
+        playbackWasReady = false
+    }
+
+    fun reportServiceResult(token: PlaybackToken, ready: Boolean) {
+        scope.launch { coordinator.get().playbackServiceResult(token, ready) }
+    }
+
+    override fun enqueuePlaybackCheck(token: PlaybackToken) {
+        scope.launch { coordinator.get().checkPlayback(token) }
+    }
+
+    fun serviceStopped() {
+        foregroundServiceActive = false
+        val token = readinessToken
+        if (token != null) startupFailed = true // A queued READY cannot revive a stopped owner.
+        stopAudio()
+        if (token != null) scope.launch { coordinator.get().interruptPlayback(token) }
+        resetWorkoutRendering()
+    }
+
     override fun startAudio(): Boolean {
         if (player != null || vibrating) return true
         if (!controlsAvailable() || (!foregroundServiceActive && resumedActivities == 0)) return false
+        val token = readinessToken ?: return false
+        audioToken = token
         // The app preference owns audio; a null channel sound is intentional, not a mute signal.
         if (!notificationsAvailable()) return false
         val manager = context.getSystemService(NotificationManager::class.java)
@@ -198,10 +397,11 @@ class RestTimerAndroidRuntime @Inject constructor(
                 vibrator.vibrate(pattern, 0, attributes)
             }
             vibrating = true
+            trace("vibration_started", coordinator.get().state.value, "revision=${token.revision}")
         }
         if (!playSound) return vibrating
         val listener = AudioManager.OnAudioFocusChangeListener { change ->
-            if (change != AudioManager.AUDIOFOCUS_GAIN) interruptPlayback()
+            if (change != AudioManager.AUDIOFOCUS_GAIN) interruptPlayback(token)
         }
         legacyListener = listener
         val granted = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
@@ -212,6 +412,7 @@ class RestTimerAndroidRuntime @Inject constructor(
             @Suppress("DEPRECATION")
             audio.requestAudioFocus(listener, AudioManager.STREAM_ALARM, AudioManager.AUDIOFOCUS_GAIN_TRANSIENT)
         }
+        trace("audio_focus_result", coordinator.get().state.value, "revision=${token.revision} result=$granted")
         if (granted != AudioManager.AUDIOFOCUS_REQUEST_GRANTED) { stopAudio(); return false }
         return try {
             val next = MediaPlayer()
@@ -221,18 +422,19 @@ class RestTimerAndroidRuntime @Inject constructor(
                 next.setDataSource(descriptor.fileDescriptor, descriptor.startOffset, descriptor.length)
             }
             next.isLooping = true
-            next.setOnErrorListener { _, _, _ -> interruptPlayback(); true }
+            next.setOnErrorListener { _, _, _ -> interruptPlayback(token); true }
             next.prepare()
             next.start()
-            if (com.diajarkoding.imfit.BuildConfig.DEBUG) android.util.Log.d("IMFITRest", "audio started now=${android.os.SystemClock.elapsedRealtime()}")
+            trace("audio_started", coordinator.get().state.value, "revision=${token.revision}")
             true
         } catch (_: Exception) { stopAudio(); false }
     }
 
     override fun stopAudio() {
-        if ((player != null || vibrating) && com.diajarkoding.imfit.BuildConfig.DEBUG) android.util.Log.d("IMFITRest", "audio/vibration stopped now=${android.os.SystemClock.elapsedRealtime()}")
+        if (player != null || vibrating) trace("audio_stopped", coordinator.get().state.value, "revision=${audioToken?.revision} vibration=$vibrating")
         player?.release()
         player = null
+        audioToken = null
         if (vibrating) vibrator.cancel()
         vibrating = false
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) focusRequest?.let(audio::abandonAudioFocusRequest)
@@ -246,14 +448,15 @@ class RestTimerAndroidRuntime @Inject constructor(
 
     fun monitorPlayback() {
         if ((player != null || vibrating) && (!controlsAvailable() || !notificationsAvailable() ||
+                (!foregroundServiceActive && resumedActivities == 0) ||
                 context.getSystemService(NotificationManager::class.java).currentInterruptionFilter != NotificationManager.INTERRUPTION_FILTER_ALL)) {
             interruptPlayback()
         }
     }
-    private fun interruptPlayback() {
+    private fun interruptPlayback(token: PlaybackToken? = audioToken) {
+        if (token == null || token != readinessToken) return
         stopAudio()
-        val timerId = coordinator.get().state.value?.timerId
-        scope.launch { if (timerId != null) coordinator.get().silence(timerId) }
+        scope.launch { coordinator.get().interruptPlayback(token) }
     }
     fun exactAlarmAvailable() = Build.VERSION.SDK_INT < Build.VERSION_CODES.S || alarms.canScheduleExactAlarms()
     fun fullScreenIntentAvailable() = Build.VERSION.SDK_INT < 34 ||
@@ -269,9 +472,13 @@ class RestTimerAndroidRuntime @Inject constructor(
         prefs.edit().putBoolean("sound_enabled", enabled).apply()
         if (!enabled) interruptPlayback()
     }
-    override fun onActivityResumed(activity: Activity) { resumedActivities++ }
+    override fun onActivityResumed(activity: Activity) {
+        resumedActivities++
+        trace("activity_resumed", coordinator.get().state.value, "activity=${activity.javaClass.simpleName}")
+    }
     override fun onActivityPaused(activity: Activity) {
         resumedActivities = (resumedActivities - 1).coerceAtLeast(0)
+        trace("activity_paused", coordinator.get().state.value, "activity=${activity.javaClass.simpleName}")
         monitorPlayback()
     }
     override fun onActivityCreated(activity: Activity, savedInstanceState: Bundle?) = Unit

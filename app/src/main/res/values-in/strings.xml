@@ -4,7 +4,7 @@
     <string name="rest_finished">Istirahat selesai</string>
     <string name="rest_stop_alert">Hentikan</string>
     <string name="channel_rest_finished">Istirahat selesai</string>
-    <string name="rest_alert_limited">Alert istirahat di background mungkin terlambat. Aktifkan notifikasi serta Alarm dan pengingat di Pengaturan.</string>
+    <string name="rest_alert_limited">Kemampuan alert istirahat terbatas. Periksa notifikasi, channel alert istirahat, Alarm dan pengingat, serta alert layar penuh di Pengaturan.</string>
     <string name="rest_alarm_settings">Pengaturan alarm</string>
     <string name="rest_storage_error">Timer istirahat gagal disimpan atau dipulihkan. Coba lagi.</string>
     <string name="rest_extend">+30 detik</string>

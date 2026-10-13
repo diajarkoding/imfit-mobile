@@ -20,6 +20,9 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withTimeout
+import kotlinx.coroutines.TimeoutCancellationException
+import kotlinx.coroutines.CancellationException
 import javax.inject.Inject
 
 data class ActiveWorkoutState(
@@ -61,9 +64,11 @@ class ActiveWorkoutViewModel @Inject constructor(
 
     fun extendRest() { viewModelScope.launch { timer.extend() } }
     fun refreshTimerCapabilities() {
-        _state.update { it.copy(fullScreenAlarmAllowed = timerRuntime.fullScreenIntentAvailable()) }
+        _state.update { it.copy(fullScreenAlarmAllowed = timerRuntime.fullScreenIntentAvailable(),
+            restLimited = timerRuntime.capabilityIssue() != null) }
         viewModelScope.launch { timer.capabilitiesChanged() }
     }
+    fun timerSettingsIntent() = timerRuntime.capabilitySettingsIntent()
     fun setRestSoundEnabled(enabled: Boolean) {
         timerRuntime.setSoundEnabled(enabled)
         _state.update { it.copy(restSoundEnabled = enabled) }
@@ -89,7 +94,17 @@ class ActiveWorkoutViewModel @Inject constructor(
     fun startWorkout(templateId: String) {
         viewModelScope.launch {
             // First check for an existing active session
-            val existingSession = workoutRepository.getActiveSession()
+            val existingSession = try {
+                withTimeout(2500) { workoutRepository.getActiveSessionForTimer() }
+            } catch (e: TimeoutCancellationException) {
+                _state.update { it.copy(timerError = true) }
+                return@launch
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                _state.update { it.copy(timerError = true) }
+                return@launch
+            }
             timer.reconcile()
             
             if (existingSession != null) {
@@ -168,36 +183,44 @@ class ActiveWorkoutViewModel @Inject constructor(
         elapsedTimeJob?.cancel()
         elapsedTimeJob = viewModelScope.launch {
             while (true) {
-                val session = workoutRepository.getActiveSession()
-                if (session == null) {
-                    if (_state.value.session != null && !_state.value.isFinishing) {
-                        _state.update { it.copy(session = null, sessionEnded = true, isRestTimerActive = false) }
-                        return@launch
+                try {
+                    val session = withTimeout(2500) { workoutRepository.getActiveSessionForTimer() }
+                    if (session == null) {
+                        if (_state.value.session != null && !_state.value.isFinishing) {
+                            _state.update { it.copy(session = null, sessionEnded = true, isRestTimerActive = false) }
+                            return@launch
+                        }
+                        delay(1000)
+                        continue
                     }
-                    delay(1000)
-                    continue
-                }
-                // Use actualElapsedMs which excludes paused time
-                val elapsed = session.actualElapsedMs / 1000
-                timer.reconcile()
-                val rest = timer.state.value?.takeIf { it.workoutId == session.id }
-                _state.update { it.copy(elapsedSeconds = elapsed.coerceAtLeast(0), session = session, isPaused = session.isPaused,
-                    isRestTimerActive = rest?.status == TimerStatus.RUNNING,
-                    restTimerSeconds = rest?.remainingSeconds(android.os.SystemClock.elapsedRealtime()) ?: 0,
-                    restTimerExerciseName = rest?.exerciseName,
-                    restLimited = rest != null && rest.schedulingMode != com.diajarkoding.imfit.core.timer.SchedulingMode.EXACT,
-                    timerError = timer.error.value != null) }
-                _workoutTimerUpdates.emit(
-                    WorkoutTimerUpdate(
-                        workoutName = session.templateName,
-                        elapsedSeconds = elapsed,
-                        completedSets = session.totalCompletedSets,
-                        totalSets = session.totalSets,
-                        totalVolume = session.totalVolume,
-                        isPaused = _state.value.isPaused
+                    // Use actualElapsedMs which excludes paused time.
+                    val elapsed = session.actualElapsedMs / 1000
+                    timer.reconcile()
+                    val rest = timer.state.value?.takeIf { it.workoutId == session.id }
+                    _state.update { it.copy(elapsedSeconds = elapsed.coerceAtLeast(0), session = session, isPaused = session.isPaused,
+                        isRestTimerActive = rest?.status == TimerStatus.RUNNING,
+                        restTimerSeconds = rest?.remainingSeconds(android.os.SystemClock.elapsedRealtime()) ?: 0,
+                        restTimerExerciseName = rest?.exerciseName,
+                        restLimited = timerRuntime.capabilityIssue() != null ||
+                            (rest != null && rest.status == TimerStatus.RUNNING && rest.schedulingMode != com.diajarkoding.imfit.core.timer.SchedulingMode.EXACT),
+                        timerError = timer.error.value != null) }
+                    _workoutTimerUpdates.emit(
+                        WorkoutTimerUpdate(
+                            workoutName = session.templateName,
+                            elapsedSeconds = elapsed,
+                            completedSets = session.totalCompletedSets,
+                            totalSets = session.totalSets,
+                            totalVolume = session.totalVolume,
+                            isPaused = _state.value.isPaused
+                        )
                     )
-                )
-                
+                } catch (e: TimeoutCancellationException) {
+                    _state.update { it.copy(timerError = true) }
+                } catch (e: CancellationException) {
+                    throw e
+                } catch (e: Exception) {
+                    _state.update { it.copy(timerError = true) }
+                }
                 delay(1000)
             }
         }

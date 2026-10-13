@@ -255,6 +255,11 @@ fastlane/readme.md
 # ==========================================
 docs/
 **/docs/
+# Track the rest timer investigation and verified fix report.
+!/docs/
+/docs/*
+!/docs/IMFIT_REST_TIMER_FIX_PLAN.md
+!/docs/IMFIT_REST_TIMER_ISSUE_INVESTIGATION.md
 
 # ==========================================
 # Misc

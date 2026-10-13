@@ -325,13 +325,24 @@ class WorkoutRepositoryImpl @Inject constructor(
     }
 
     override suspend fun getActiveSession(): WorkoutSession? {
+        return try {
+            getActiveSessionForTimer()
+        } catch (e: kotlinx.coroutines.CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            Log.e("WorkoutRepository", "Failed to restore session from Room: ${e.message}", e)
+            null
+        }
+    }
+
+    override suspend fun getActiveSessionForTimer(): WorkoutSession? {
         val userId = authRepository.getLocalUserId() ?: return null
         if (activeSession != null && activeSessionUserId == userId) {
             return activeSession
         }
 
         // Try to restore from database
-        return try {
+        return run {
             val entity = activeSessionDao.getActiveSession(userId)
             
             if (entity != null) {
@@ -343,9 +354,6 @@ class WorkoutRepositoryImpl @Inject constructor(
             } else {
                 null
             }
-        } catch (e: Exception) {
-            Log.e("WorkoutRepository", "Failed to restore session from Room: ${e.message}", e)
-            null
         }
     }
 

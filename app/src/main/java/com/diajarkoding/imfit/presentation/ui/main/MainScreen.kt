@@ -22,6 +22,11 @@ import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.remember
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalConfiguration
+import androidx.compose.ui.platform.LocalResources
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontWeight
@@ -39,6 +44,7 @@ import com.diajarkoding.imfit.presentation.ui.home.HomeScreen
 import com.diajarkoding.imfit.presentation.ui.home.HomeViewModel
 import com.diajarkoding.imfit.presentation.ui.progress.ProgressScreen
 import com.diajarkoding.imfit.theme.Primary
+import com.diajarkoding.imfit.theme.LocaleManager
 import java.time.LocalDate
 import kotlinx.serialization.Serializable
 
@@ -79,6 +85,16 @@ fun MainScreen(
     // Get sync state from HomeViewModel
     val syncState by homeViewModel.syncState.collectAsStateWithLifecycle()
 
+    // Keep resource locale live without recreating the navigation backstack.
+    // LocalContext stays the Activity context required by the existing Hilt owners.
+    val context = LocalContext.current
+    val configuration = LocalConfiguration.current
+    val localeVersion = LocaleManager.configurationVersion
+    val localizedResources = remember(context, configuration, localeVersion) {
+        LocaleManager.getUpdatedContext(context).resources
+    }
+    CompositionLocalProvider(LocalResources provides localizedResources,
+        LocalConfiguration provides localizedResources.configuration) {
     // Wrap everything in Box for full-screen overlay capability
     Box(modifier = Modifier.fillMaxSize()) {
         Scaffold(
@@ -142,12 +158,15 @@ fun MainScreen(
                         HomeScreen(
                             onNavigateToWorkoutDetail = onNavigateToWorkoutDetail,
                             onNavigateToActiveWorkout = onNavigateToActiveWorkout,
+                            onNavigateToProfile = onNavigateToProfile,
                             viewModel = homeViewModel
                         )
                     }
                     entry<ExerciseTab> {
                         ExerciseBrowserScreen(
+                            refreshKey = syncState.lastSyncTime,
                             onNavigateBack = { },
+                            onNavigateToProfile = onNavigateToProfile,
                             onCategorySelected = { category ->
                                 onNavigateToExerciseList(category.name)
                             }
@@ -155,6 +174,7 @@ fun MainScreen(
                     }
                     entry<ProgressTab> {
                         ProgressScreen(
+                            refreshKey = syncState.lastSyncTime,
                             onNavigateToWorkoutHistory = onNavigateToWorkoutHistory,
                             onNavigateToYearlyCalendar = onNavigateToYearlyCalendar,
                             onNavigateToProfile = onNavigateToProfile
@@ -166,6 +186,7 @@ fun MainScreen(
         
         // Full-screen sync overlay - covers entire screen including bottom nav
         SyncProgressDialog(syncState = syncState)
+    }
     }
 }
 

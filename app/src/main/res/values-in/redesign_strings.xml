@@ -1,0 +1,37 @@
+<resources>
+    <string name="redesign_progress">Progress</string>
+    <string name="redesign_session_volume">Total Volume</string>
+    <string name="redesign_profile">Profil</string>
+    <string name="redesign_hello">Halo!</string>
+    <string name="redesign_greeting">Halo, %1$s!</string>
+    <string name="redesign_ready">Siap untuk latihan hari ini?</string>
+    <string name="redesign_latest">LATIHAN TERAKHIR</string>
+    <string name="redesign_no_workout">Perjalananmu dimulai di sini</string>
+    <string name="redesign_start_hint">Buat latihan untuk mulai berlatih.</string>
+    <string name="redesign_workout_meta">%1$s · %2$d gerakan</string>
+    <string name="redesign_exercise_count">%1$d gerakan</string>
+    <string name="redesign_no_templates">Belum ada latihan. Tambahkan latihan pertama di bawah.</string>
+    <string name="redesign_resume">Lanjutkan latihan</string>
+    <string name="redesign_volume">Volume Total · Sepanjang waktu</string>
+    <string name="redesign_explore_subtitle">Jelajahi gerakan latihan untuk membangun rutinitas terbaik Anda.</string>
+    <string name="redesign_search">Cari latihan</string>
+    <string name="redesign_categories">Kategori Otot</string>
+    <string name="redesign_explore">Jelajahi Latihan</string>
+    <string name="redesign_no_results">Tidak ada latihan yang cocok dengan pencarian.</string>
+    <string name="redesign_empty_catalog">Katalog lokal belum memiliki latihan.</string>
+    <string name="redesign_error">Tidak dapat memuat latihan.</string>
+    <string name="redesign_retry">Coba lagi</string>
+    <string name="redesign_month_summary">RINGKASAN BULAN INI</string>
+    <string name="redesign_month_count">%1$d latihan selesai bulan ini</string>
+    <string name="redesign_week_time">Waktu Minggu Ini</string>
+    <string name="redesign_month_workouts">Workout Bulan Ini</string>
+    <string name="redesign_month_sets">Set Selesai Bulan Ini</string>
+    <string name="redesign_calendar">Lihat Kalender</string>
+    <string name="redesign_today">Hari Ini</string>
+    <string name="redesign_previous">Bulan sebelumnya</string>
+    <string name="redesign_next">Bulan berikutnya</string>
+    <string name="redesign_day_description">%1$s. %2$d latihan. %3$s</string>
+    <string name="redesign_hours_minutes">%1$dj %2$dm</string>
+    <string name="redesign_kg">%1$s kg</string>
+    <string name="redesign_history">Latihan Terakhir</string>
+</resources>

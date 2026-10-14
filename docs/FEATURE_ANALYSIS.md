@@ -1072,9 +1072,9 @@ aplikasi fitness terdepan di Indonesia.
 
 ## 12. 🔗 Link Terkait
 
-- **[← Kembali ke README.md](../README.md)** - Dokumentasi utama
-- **[Backend Planning](planning_db.md)** - Perencanaan backend
-- **[Database Schema](schema_db.md)** - Schema database lengkap
+- **[← Kembali ke README.md](./README.md)** - Dokumentasi utama
+- **[Backend Planning](./planning_db.md)** - Perencanaan backend
+- **[Database Schema](./schema_db.md)** - Schema database lengkap
 
 ---
 

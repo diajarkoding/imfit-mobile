@@ -234,27 +234,24 @@ fun ActiveWorkoutScreen(
                 putExtra(WorkoutService.EXTRA_START_TIME, session.startTime)
                 putExtra(WorkoutService.EXTRA_TOTAL_PAUSED_TIME, session.totalPausedTimeMs)
             }
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-                context.startForegroundService(intent)
-            } else {
-                context.startService(intent)
+            try {
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                    context.startForegroundService(intent)
+                } else {
+                    context.startService(intent)
+                }
+            } catch (e: RuntimeException) {
+                com.diajarkoding.imfit.core.timer.RestTimerTrace.event("ui_fgs_start_failed", detail = "exception=${e.javaClass.simpleName}")
+                snackbarHostState.showSnackbar(timerLimitedMessage)
             }
         }
     }
     
     // Send workout timer updates to service
-    LaunchedEffect(Unit) {
+    LaunchedEffect(workoutService) {
         viewModel.workoutTimerUpdates.collect { update ->
-            val intent = Intent(context, WorkoutService::class.java).apply {
-                action = WorkoutService.ACTION_UPDATE_WORKOUT
-                putExtra(WorkoutService.EXTRA_WORKOUT_NAME, update.workoutName)
-                putExtra(WorkoutService.EXTRA_ELAPSED_SECONDS, update.elapsedSeconds)
-                putExtra(WorkoutService.EXTRA_COMPLETED_SETS, update.completedSets)
-                putExtra(WorkoutService.EXTRA_TOTAL_SETS, update.totalSets)
-                putExtra(WorkoutService.EXTRA_TOTAL_VOLUME, update.totalVolume)
-                putExtra(WorkoutService.EXTRA_IS_PAUSED, update.isPaused)
-            }
-            context.startService(intent)
+            // Updates must not try to restart a service from a background UI collector.
+            workoutService?.updateWorkoutNotification(update)
         }
     }
     
@@ -278,12 +275,9 @@ fun ActiveWorkoutScreen(
     LaunchedEffect(state.restLimited) {
         if (state.restLimited && state.session != null) {
             val result = snackbarHostState.showSnackbar(timerLimitedMessage, timerSettingsLabel)
-            if (result == androidx.compose.material3.SnackbarResult.ActionPerformed && Build.VERSION.SDK_INT >= 31) {
-                val settingsAction = if (androidx.core.app.NotificationManagerCompat.from(context).areNotificationsEnabled()) {
-                    android.provider.Settings.ACTION_REQUEST_SCHEDULE_EXACT_ALARM
-                } else android.provider.Settings.ACTION_APPLICATION_DETAILS_SETTINGS
+            if (result == androidx.compose.material3.SnackbarResult.ActionPerformed) {
                 try {
-                    context.startActivity(Intent(settingsAction, android.net.Uri.parse("package:${context.packageName}")))
+                    viewModel.timerSettingsIntent()?.let(context::startActivity)
                 } catch (_: android.content.ActivityNotFoundException) {
                     snackbarHostState.showSnackbar(timerLimitedMessage)
                 }

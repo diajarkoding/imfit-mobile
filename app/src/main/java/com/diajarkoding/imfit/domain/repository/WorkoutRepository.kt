@@ -19,6 +19,8 @@ interface WorkoutRepository {
     // Active session operations
     suspend fun startWorkout(template: WorkoutTemplate): WorkoutSession
     suspend fun getActiveSession(): WorkoutSession?
+    /** Null means absent; recovery/read failures must propagate to background callers. */
+    suspend fun getActiveSessionForTimer(): WorkoutSession? = getActiveSession()
     suspend fun updateActiveSession(session: WorkoutSession)
     suspend fun finishWorkout(): WorkoutLog?
     suspend fun cancelWorkout()

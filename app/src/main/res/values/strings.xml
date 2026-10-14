@@ -3,7 +3,7 @@
     <string name="rest_finished">Rest finished</string>
     <string name="rest_stop_alert">Stop alert</string>
     <string name="channel_rest_finished">Rest completion</string>
-    <string name="rest_alert_limited">Background rest alerts may be delayed. Enable notifications and Alarms &amp; reminders in Settings.</string>
+    <string name="rest_alert_limited">Rest alert capabilities are limited. Check notifications, the rest alert channel, Alarms &amp; reminders, and full-screen alerts in Settings.</string>
     <string name="rest_alarm_settings">Alarm settings</string>
     <string name="rest_storage_error">Unable to save or restore rest timer. Please try again.</string>
     <string name="rest_extend">+30 seconds</string>

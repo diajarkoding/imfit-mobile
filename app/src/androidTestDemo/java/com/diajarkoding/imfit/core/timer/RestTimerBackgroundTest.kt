@@ -15,6 +15,8 @@ import dagger.hilt.android.EntryPointAccessors
 import kotlinx.coroutines.*
 import org.junit.Assert.*
 import org.junit.Test
+import org.junit.Assume.assumeTrue
+import android.os.Build
 import org.junit.runner.RunWith
 
 /** Real AlarmManager/service/notification integration; Settings substitutes another app,
@@ -27,11 +29,22 @@ class RestTimerBackgroundTest {
         }
     }
 
+    private fun configureCapabilities(context: Context, fullScreen: String = "allow") {
+        if (Build.VERSION.SDK_INT >= 33) shell("pm grant ${context.packageName} android.permission.POST_NOTIFICATIONS")
+        if (Build.VERSION.SDK_INT >= 31) shell("appops set ${context.packageName} SCHEDULE_EXACT_ALARM allow")
+        if (Build.VERSION.SDK_INT >= 34) shell("appops set ${context.packageName} USE_FULL_SCREEN_INTENT $fullScreen")
+    }
+
+    private suspend fun awaitPlayback(runtime: RestTimerAndroidRuntime) {
+        withTimeout(5000) {
+            while (!withContext(Dispatchers.Main) { runtime.isAlertPlaying() }) delay(50)
+        }
+    }
+
     @Test fun deniedFsiFallsBackAndBlockedNotificationsStaySilentWithoutReplay() = runBlocking {
+        assumeTrue("Channel removal needs API 26+", Build.VERSION.SDK_INT >= 26)
         val context = InstrumentationRegistry.getInstrumentation().targetContext
-        shell("pm grant ${context.packageName} android.permission.POST_NOTIFICATIONS")
-        shell("appops set ${context.packageName} SCHEDULE_EXACT_ALARM allow")
-        shell("appops set ${context.packageName} USE_FULL_SCREEN_INTENT deny")
+        configureCapabilities(context, "deny")
         context.startActivity(Intent(context, MainActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
         val ports = EntryPointAccessors.fromApplication(context, RestTimerEntryPoint::class.java)
         val timer = ports.timer()
@@ -55,7 +68,10 @@ class RestTimerBackgroundTest {
                 while (manager.activeNotifications.none { it.id == NotificationChannels.REST_FINISHED_NOTIFICATION_ID }) delay(50)
             }
             assertEquals(TimerStatus.EXPIRED, timer.state.value?.status)
-            withContext(Dispatchers.Main) { timer.reconcile(); assertTrue(ports.runtime().isAlertPlaying()) }
+            awaitPlayback(ports.runtime())
+            if (Build.VERSION.SDK_INT >= 34) assertNull(manager.activeNotifications.first {
+                it.id == NotificationChannels.REST_FINISHED_NOTIFICATION_ID
+            }.notification.fullScreenIntent)
             // Removing the channel is a real capability loss without killing the test process
             // (pm revoke POST_NOTIFICATIONS may kill the app and its instrumentation).
             manager.deleteNotificationChannel(NotificationChannels.REST_FINISHED_CHANNEL_ID)
@@ -70,7 +86,7 @@ class RestTimerBackgroundTest {
             withContext(Dispatchers.Main) { assertFalse(ports.runtime().isAlertPlaying()) }
         } finally {
             NotificationChannels.createNotificationChannels(context)
-            shell("appops set ${context.packageName} USE_FULL_SCREEN_INTENT allow")
+            if (Build.VERSION.SDK_INT >= 34) shell("appops set ${context.packageName} USE_FULL_SCREEN_INTENT allow")
             withContext(Dispatchers.Main) { timer.cancel("CAPABILITY_TEST_FINISHED") }
             repository.cancelWorkout()
             context.stopService(Intent(context, WorkoutService::class.java))
@@ -79,9 +95,7 @@ class RestTimerBackgroundTest {
 
     @Test fun repeatedTwoMinuteRestsWithScreenOffKeepDeadlineAndStopCorrectly() = runBlocking {
         val context = InstrumentationRegistry.getInstrumentation().targetContext
-        shell("pm grant ${context.packageName} android.permission.POST_NOTIFICATIONS")
-        shell("appops set ${context.packageName} SCHEDULE_EXACT_ALARM allow")
-        shell("appops set ${context.packageName} USE_FULL_SCREEN_INTENT allow")
+        configureCapabilities(context)
         context.startActivity(Intent(context, MainActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
         val ports = EntryPointAccessors.fromApplication(context, RestTimerEntryPoint::class.java)
         val timer = ports.timer()
@@ -111,7 +125,7 @@ class RestTimerBackgroundTest {
                 withTimeout(5000) {
                     while (manager.activeNotifications.none { it.id == NotificationChannels.REST_FINISHED_NOTIFICATION_ID }) delay(50)
                 }
-                withContext(Dispatchers.Main) { timer.reconcile(); assertTrue(ports.runtime().isAlertPlaying()) }
+                awaitPlayback(ports.runtime())
                 manager.activeNotifications.first { it.id == NotificationChannels.REST_FINISHED_NOTIFICATION_ID }
                     .notification.actions.first().actionIntent.send()
                 withTimeout(5000) { while (timer.state.value?.status != TimerStatus.ACKNOWLEDGED) delay(50) }
@@ -129,16 +143,7 @@ class RestTimerBackgroundTest {
     @Test fun twoMinuteRestInAnotherAppDismissAndStopDoNotReplay() = runBlocking {
         val context = InstrumentationRegistry.getInstrumentation().targetContext
         // Connected tests reinstall the APK; configure capability on that installed package.
-        val automation = InstrumentationRegistry.getInstrumentation().uiAutomation
-        for (command in listOf(
-            "pm grant ${context.packageName} android.permission.POST_NOTIFICATIONS",
-            "appops set ${context.packageName} SCHEDULE_EXACT_ALARM allow",
-            "appops set ${context.packageName} USE_FULL_SCREEN_INTENT allow"
-        )) {
-            automation.executeShellCommand(command).use { descriptor ->
-                java.io.FileInputStream(descriptor.fileDescriptor).use { it.readBytes() }
-            }
-        }
+        configureCapabilities(context)
         val ports = EntryPointAccessors.fromApplication(context, RestTimerEntryPoint::class.java)
         val timer = ports.timer()
         val repository = ports.workouts()
@@ -171,11 +176,21 @@ class RestTimerBackgroundTest {
             withTimeout(5000) {
                 while (manager.activeNotifications.none { it.id == NotificationChannels.REST_FINISHED_NOTIFICATION_ID }) delay(50)
             }
-            withContext(Dispatchers.Main) { timer.reconcile() }
+            awaitPlayback(ports.runtime())
             val finished = manager.activeNotifications.first { it.id == NotificationChannels.REST_FINISHED_NOTIFICATION_ID }
-            assertNotNull(finished.notification.fullScreenIntent)
+            if (ports.runtime().fullScreenIntentAvailable()) assertNotNull(finished.notification.fullScreenIntent)
+            else assertNull(finished.notification.fullScreenIntent)
+            assertFalse(finished.notification.extras.getBoolean(android.app.Notification.EXTRA_SHOW_CHRONOMETER))
+            assertEquals(timer.state.value!!.timerId, finished.notification.extras.getString(
+                com.diajarkoding.imfit.core.notification.WorkoutNotificationManager.EXTRA_REST_TIMER_ID))
+            withTimeout(5000) {
+                while (manager.activeNotifications.none {
+                    it.id == NotificationChannels.WORKOUT_NOTIFICATION_ID &&
+                        !it.notification.extras.getBoolean(android.app.Notification.EXTRA_SHOW_CHRONOMETER)
+                }) delay(50)
+            }
             assertEquals(0, finished.notification.flags and android.app.Notification.FLAG_ONGOING_EVENT)
-            assertEquals(0L, finished.notification.timeoutAfter)
+            if (Build.VERSION.SDK_INT >= 26) assertEquals(0L, finished.notification.timeoutAfter)
             assertNotEquals(finished.notification.deleteIntent, finished.notification.actions.first().actionIntent)
             assertFalse("Expected controlled audio instead of silent recovery", timer.state.value!!.audioSuppressed)
             withContext(Dispatchers.Main) { assertTrue(ports.runtime().isAlertPlaying()) }
@@ -203,7 +218,8 @@ class RestTimerBackgroundTest {
                 while (manager.activeNotifications.none { it.id == NotificationChannels.REST_FINISHED_NOTIFICATION_ID }) delay(50)
             }
             val nextNotification = manager.activeNotifications.first { it.id == NotificationChannels.REST_FINISHED_NOTIFICATION_ID }.notification
-            assertNotEquals(finished.notification.fullScreenIntent, nextNotification.fullScreenIntent)
+            if (finished.notification.fullScreenIntent != null && nextNotification.fullScreenIntent != null)
+                assertNotEquals(finished.notification.fullScreenIntent, nextNotification.fullScreenIntent)
             assertNotEquals(finished.notification.contentIntent, nextNotification.contentIntent)
             assertNotEquals(finished.notification.actions.first().actionIntent, nextNotification.actions.first().actionIntent)
             assertNotEquals(finished.notification.deleteIntent, nextNotification.deleteIntent)

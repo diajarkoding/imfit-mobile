@@ -4,6 +4,7 @@ import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.launch
 import org.junit.Assert.*
 import org.junit.Test
+import com.diajarkoding.imfit.domain.model.WorkoutSession
 
 class RestTimerCoordinatorTest {
     private class Clock : MonotonicClock {
@@ -17,6 +18,7 @@ class RestTimerCoordinatorTest {
         var saved: RestTimerState? = null
         var fail = false
         var failRead = false
+        var cancelAfterWrite = false
         override suspend fun read(): RestTimerState? {
             if (failRead) throw java.io.IOException("read failed")
             return saved
@@ -24,6 +26,10 @@ class RestTimerCoordinatorTest {
         override suspend fun write(state: RestTimerState) {
             if (fail) throw java.io.IOException("disk full")
             saved = state
+            if (cancelAfterWrite) {
+                cancelAfterWrite = false
+                throw kotlinx.coroutines.CancellationException("cancelled after durable commit")
+            }
         }
     }
     private class Effects : RestTimerEffects {
@@ -40,6 +46,11 @@ class RestTimerCoordinatorTest {
         var cleanupCount = 0
         val dismissed = mutableSetOf<String>()
         var clearedDismissed = 0
+        var readiness: PlaybackReadiness? = null
+        var token: PlaybackToken? = null
+        var queuedToken: PlaybackToken? = null
+        var failRender = false
+        var renderedStatus: TimerStatus? = null
         override suspend fun validSession(state: RestTimerState) = valid
         override fun userStopped(state: RestTimerState) = stopped
         override fun schedule(state: RestTimerState): SchedulingMode {
@@ -57,6 +68,15 @@ class RestTimerCoordinatorTest {
         override fun clearOrphans() { scheduled = false; cleanupCount++ }
         override fun noteUserDismissed(timerId: String) { dismissed.add(timerId) }
         override fun clearDismissed() { dismissed.clear(); clearedDismissed++ }
+        override fun playbackReadiness(state: RestTimerState, token: PlaybackToken, alarmDelivery: Boolean): PlaybackReadiness {
+            this.token = token
+            return readiness ?: super<RestTimerEffects>.playbackReadiness(state, token, alarmDelivery)
+        }
+        override fun enqueuePlaybackCheck(token: PlaybackToken) { queuedToken = token }
+        override fun renderWorkout(state: RestTimerState?, session: WorkoutSession?) {
+            if (failRender) throw IllegalStateException("notification renderer failed")
+            renderedStatus = state?.status
+        }
     }
     private class Fixture {
         val clock = Clock()
@@ -301,5 +321,106 @@ class RestTimerCoordinatorTest {
         assertEquals(2, f.effects.clearedDismissed)
         assertTrue(f.effects.dismissed.isEmpty())
         assertEquals(TimerStatus.RUNNING, f.timer.state.value!!.status)
+    }
+
+    @Test fun alarmCommitsAndPostsBeforeHandingPlaybackToSupervisor() = runBlocking {
+        val f = Fixture(); f.start()
+        val state = f.timer.state.value!!
+        f.clock.now = state.deadlineElapsedMs
+        f.timer.expiry(state.timerId, state.generation, alarmDelivery = true)
+        assertEquals(TimerStatus.EXPIRED, f.store.saved!!.status)
+        assertTrue(f.effects.posted)
+        assertEquals(TimerStatus.EXPIRED, f.effects.renderedStatus)
+        assertEquals(0, f.effects.plays)
+        f.timer.checkPlayback(requireNotNull(f.effects.queuedToken))
+        assertEquals(1, f.effects.plays)
+    }
+
+    @Test fun stopDuringStartupRejectsLateReadyFailureAndPolling() = runBlocking {
+        val f = Fixture(); f.start()
+        f.effects.readiness = PlaybackReadiness.WAITING
+        f.expire()
+        val token = requireNotNull(f.effects.token)
+        f.timer.acknowledge(token.timerId, token.generation)
+        f.effects.readiness = PlaybackReadiness.READY
+        f.timer.playbackServiceResult(token, true)
+        f.timer.playbackServiceResult(token, false)
+        f.timer.checkPlayback(token)
+        assertEquals(TimerStatus.ACKNOWLEDGED, f.store.saved!!.status)
+        assertFalse(f.effects.posted)
+        assertEquals(0, f.effects.plays)
+    }
+
+    @Test fun readinessTimeoutIsNotExtendedByReconcileOrLateReady() = runBlocking {
+        val f = Fixture(); f.start()
+        f.effects.readiness = PlaybackReadiness.WAITING
+        f.expire()
+        val token = requireNotNull(f.effects.token)
+        repeat(4) { f.clock.now += 1000; f.timer.reconcile() }
+        assertFalse(f.store.saved!!.audioSuppressed)
+        f.clock.now += 1000
+        f.timer.checkPlayback(token)
+        f.effects.readiness = PlaybackReadiness.READY
+        f.timer.playbackServiceResult(token, true)
+        f.timer.reconcile()
+        assertTrue(f.store.saved!!.audioSuppressed)
+        assertEquals(TimerStatus.EXPIRED, f.store.saved!!.status)
+        assertEquals(0, f.effects.plays)
+    }
+
+    @Test fun replacementInvalidatesReadinessAndRenderFailureDoesNotCancelExpiry() = runBlocking {
+        val f = Fixture(); f.start()
+        f.effects.readiness = PlaybackReadiness.WAITING
+        f.expire()
+        val old = requireNotNull(f.effects.token)
+        f.timer.start(f.request("set-2"))
+        val replacement = f.timer.state.value!!
+        f.effects.readiness = PlaybackReadiness.READY
+        f.timer.playbackServiceResult(old, true)
+        assertEquals(replacement, f.timer.state.value)
+        assertEquals(0, f.effects.plays)
+        f.effects.failRender = true
+        f.clock.now = replacement.deadlineElapsedMs
+        f.timer.expiry(replacement.timerId, replacement.generation)
+        assertEquals(TimerStatus.EXPIRED, f.store.saved!!.status)
+        assertTrue(f.effects.posted)
+        assertEquals(1, f.effects.plays)
+    }
+
+    @Test fun failedStopWriteStillInvalidatesStartupUntilTerminalRetryCommits() = runBlocking {
+        val f = Fixture(); f.start()
+        f.effects.readiness = PlaybackReadiness.WAITING
+        f.expire()
+        val token = requireNotNull(f.effects.token)
+        f.store.fail = true
+        f.timer.acknowledge(token.timerId, token.generation)
+        f.effects.readiness = PlaybackReadiness.READY
+        f.timer.playbackServiceResult(token, true)
+        assertEquals(0, f.effects.plays)
+        assertFalse(f.effects.posted)
+        f.store.fail = false
+        f.timer.checkPlayback(token)
+        assertEquals(TimerStatus.ACKNOWLEDGED, f.store.saved!!.status)
+        assertEquals(0, f.effects.plays)
+    }
+
+    @Test fun cancellationAfterExtensionCommitReloadsGenerationBeforeOldAlarm() = runBlocking {
+        val f = Fixture(); f.start()
+        val old = f.timer.state.value!!
+        f.store.cancelAfterWrite = true
+        try {
+            f.timer.extend()
+            fail("Cancellation must propagate")
+        } catch (_: kotlinx.coroutines.CancellationException) {
+            // The durable update succeeded, even though the caller did not observe success.
+        }
+        f.clock.now = old.deadlineElapsedMs + 1
+        f.timer.expiry(old.timerId, old.generation)
+        assertEquals(old.generation + 1, f.timer.state.value!!.generation)
+        assertEquals(old.deadlineElapsedMs + 30_000, f.timer.state.value!!.deadlineElapsedMs)
+        assertEquals(TimerStatus.RUNNING, f.store.saved!!.status)
+        assertEquals(2, f.effects.schedules)
+        assertTrue(f.effects.scheduled)
+        assertEquals(0, f.effects.plays)
     }
 }

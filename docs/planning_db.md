@@ -4,7 +4,7 @@
 
 | Dokumen                              | Deskripsi                                  |
 |--------------------------------------|--------------------------------------------|
-| **[README.md](../README.md)**        | Dokumentasi utama aplikasi mobile          |
+| **[README.md](README.md)**           | Dokumentasi utama aplikasi mobile          |
 | **[planning_db.md](planning_db.md)** | Perencanaan Backend Supabase (dokumen ini) |
 | **[schema_db.md](schema_db.md)**     | Database Schema & SQL Migration Scripts    |
 
@@ -838,7 +838,7 @@ supabase functions logs complete-workout
 
 ## Lihat Juga
 
-- **[README.md](../README.md)** - Dokumentasi aplikasi mobile Android (Kotlin/Jetpack Compose)
+- **[README.md](README.md)** - Dokumentasi aplikasi mobile Android (Kotlin/Jetpack Compose)
 - **[Database Schema](schema_db.md)** - Detail ERD, definisi tabel, SQL migrations untuk Supabase
 
 ---

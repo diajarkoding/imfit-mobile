@@ -4,7 +4,7 @@
 
 | Dokumen                              | Deskripsi                              |
 |--------------------------------------|----------------------------------------|
-| **[README.md](../README.md)**        | Dokumentasi utama aplikasi mobile      |
+| **[README.md](README.md)**           | Dokumentasi utama aplikasi mobile      |
 | **[planning_db.md](planning_db.md)** | Perencanaan Backend Supabase           |
 | **[schema_db.md](schema_db.md)**     | Database Schema Supabase (dokumen ini) |
 
@@ -949,7 +949,7 @@ GROUP BY user_id, date;
 
 ## Lihat Juga
 
-- **[README.md](../README.md)** - Dokumentasi aplikasi mobile Android
+- **[README.md](README.md)** - Dokumentasi aplikasi mobile Android
 - **[Backend Planning](planning_db.md)** - Arsitektur backend Supabase, API client, dan roadmap
 
 ---

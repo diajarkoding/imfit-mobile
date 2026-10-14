@@ -6,6 +6,7 @@ import android.content.pm.ServiceInfo
 import android.os.Binder
 import android.os.Build
 import android.os.IBinder
+import android.os.SystemClock
 import androidx.core.app.ServiceCompat
 import com.diajarkoding.imfit.core.model.WorkoutTimerUpdate
 import com.diajarkoding.imfit.core.notification.NotificationChannels
@@ -32,38 +33,41 @@ class WorkoutService : Service() {
     private var update = WorkoutTimerUpdate("Workout", 0, 0, 0, 0f, false)
     private var templateId: String? = null
     private var ticker: Job? = null
-    private var lastNotification: Pair<WorkoutTimerUpdate, Int?>? = null
+    private val sessionRetry = RestTimerRetry()
 
     inner class WorkoutBinder : Binder() { fun getService() = this@WorkoutService }
     override fun onBind(intent: Intent?): IBinder = WorkoutBinder()
 
+    override fun onCreate() {
+        super.onCreate()
+        RestTimerTrace.event("service_created")
+    }
+
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
+        val playback = intent?.takeIf { it.action == WorkoutActions.EXPIRE }?.let {
+            val id = it.getStringExtra("timer_id") ?: return@let null
+            PlaybackToken(id, it.getLongExtra("generation", -1), it.getLongExtra("revision", -1))
+        }
+        RestTimerTrace.event("service_start", timer.state.value, "action=${intent?.action} revision=${playback?.revision}")
         if (!running.value) {
             update = update.copy(workoutName = intent?.getStringExtra(EXTRA_WORKOUT_NAME) ?: "Workout")
             templateId = intent?.getStringExtra(EXTRA_TEMPLATE_ID)
-            val notification = notificationManager.buildWorkoutNotification(update.workoutName, "00:00:00", 0, 0, 0f, templateId = templateId)
             try {
+                val notification = notificationManager.buildWorkoutNotification(update.workoutName, "00:00:00", 0, 0, 0f, templateId = templateId)
                 ServiceCompat.startForeground(this, NotificationChannels.WORKOUT_NOTIFICATION_ID, notification,
                     if (Build.VERSION.SDK_INT >= 34) ServiceInfo.FOREGROUND_SERVICE_TYPE_SPECIAL_USE else 0)
                 running.value = true
                 runtime.foregroundServiceActive = true
-                ticker = scope.launch {
-                    timer.reconcile()
-                    var exactAvailable = runtime.exactAlarmAvailable()
-                    while (isActive) {
-                        runtime.monitorPlayback()
-                        val available = runtime.exactAlarmAvailable()
-                        if (available != exactAvailable) {
-                            exactAvailable = available
-                            timer.capabilitiesChanged()
-                        }
-                        timer.reconcile()
-                        renderNotification()
-                        delay(1000)
-                    }
-                }
-            } catch (_: RuntimeException) { stopSelf(); return START_NOT_STICKY }
+                runtime.resetWorkoutRendering()
+                RestTimerTrace.event("fgs_promoted", timer.state.value, "type=${if (Build.VERSION.SDK_INT >= 34) "specialUse" else "legacy"}")
+            } catch (e: RuntimeException) {
+                playback?.let { runtime.reportServiceResult(it, false) }
+                RestTimerTrace.event("fgs_promotion_failed", timer.state.value, "exception=${e.javaClass.simpleName}")
+                stopSelf()
+                return START_NOT_STICKY
+            }
         }
+        ensureTicker()
         when (intent?.action) {
             ACTION_UPDATE_WORKOUT -> updateWorkoutNotification(WorkoutTimerUpdate(
                 intent.getStringExtra(EXTRA_WORKOUT_NAME) ?: update.workoutName,
@@ -77,14 +81,54 @@ class WorkoutService : Service() {
             ACTION_PAUSE_WORKOUT -> scope.launch { setPaused(true) }
             ACTION_RESUME_WORKOUT -> scope.launch { setPaused(false) }
             ACTION_STOP_WORKOUT -> scope.launch { workouts.cancelWorkout(); stopWorkout() }
-            WorkoutActions.EXPIRE -> scope.launch {
-                timer.expiry(intent.getStringExtra("timer_id") ?: "", intent.getLongExtra("generation", -1))
-                val state = timer.state.value
-                if (state == null || state.status == TimerStatus.CANCELLED) stopWorkout()
-                else templateId = state.templateId
-            }
+            WorkoutActions.EXPIRE -> playback?.let { runtime.reportServiceResult(it, true) }
         }
         return START_STICKY
+    }
+
+    /** Main-thread starts are serialized; an active ticker is never replaced. */
+    private fun ensureTicker() {
+        if (ticker?.isActive == true || !running.value) return
+        val previous = ticker
+        ticker = scope.launch {
+            previous?.join() // A cancelled predecessor must finish before the new loop starts.
+            var exactAvailable = runtime.exactAlarmAvailable()
+            while (isActive && running.value) {
+                try {
+                    runtime.monitorPlayback()
+                    val available = runtime.exactAlarmAvailable()
+                    if (available != exactAvailable) {
+                        timer.capabilitiesChanged()
+                        exactAvailable = available
+                    }
+                    if (sessionRetry.available(SystemClock.elapsedRealtime())) {
+                        val session = withTimeout(2500) { workouts.getActiveSessionForTimer() }
+                        if (session == null) {
+                            timer.cancel("SESSION_ABSENT")
+                            stopWorkout()
+                            return@launch
+                        }
+                        timer.reconcile()
+                        timer.renderWorkout(session)
+                        if (sessionRetry.failures > 0) RestTimerTrace.event("session_read_recovered", timer.state.value)
+                        sessionRetry.reset()
+                    }
+                } catch (e: TimeoutCancellationException) {
+                    recordReadFailure(e)
+                } catch (e: CancellationException) {
+                    throw e
+                } catch (e: Exception) {
+                    recordReadFailure(e)
+                }
+                delay(1000)
+            }
+        }
+    }
+
+    private fun recordReadFailure(error: Exception) {
+        val retryMs = sessionRetry.failed(SystemClock.elapsedRealtime())
+        RestTimerTrace.event("ticker_recovery_failed", timer.state.value,
+            "attempt=${sessionRetry.failures} retryMs=$retryMs exception=${error.javaClass.simpleName}")
     }
 
     private suspend fun setPaused(paused: Boolean) {
@@ -93,7 +137,7 @@ class WorkoutService : Service() {
         } else persistPause(false)
     }
     private suspend fun persistPause(paused: Boolean) {
-        val session = workouts.getActiveSession() ?: return
+        val session = workouts.getActiveSessionForTimer() ?: return
         if (session.isPaused == paused) return
         val now = System.currentTimeMillis()
         workouts.updateActiveSession(session.copy(
@@ -104,28 +148,11 @@ class WorkoutService : Service() {
         update = update.copy(isPaused = paused)
     }
 
-    private suspend fun renderNotification() {
-        val session = workouts.getActiveSession() ?: run { stopWorkout(); return }
-        // Same session-derived elapsed source as the ViewModel; ticks never accumulate time.
-        update = update.copy(workoutName = session.templateName, elapsedSeconds = session.actualElapsedMs.coerceAtLeast(0) / 1000,
-            completedSets = session.totalCompletedSets, totalSets = session.totalSets, totalVolume = session.totalVolume, isPaused = session.isPaused)
-        templateId = session.templateId
-        val rest = timer.state.value?.takeIf { it.status == TimerStatus.RUNNING && it.workoutId == session.id }
-        val remaining = rest?.remainingSeconds(android.os.SystemClock.elapsedRealtime())
-        val identity = update to remaining
-        if (lastNotification == identity) return
-        lastNotification = identity
-        if (remaining != null) notificationManager.showRestTimerNotification(remaining, rest.exerciseName, rest.timerId, rest.generation)
-        else notificationManager.showWorkoutNotification(update.workoutName, format(update.elapsedSeconds), update.completedSets,
-            update.totalSets, update.totalVolume, update.isPaused, templateId)
-    }
-
     fun updateWorkoutNotification(next: WorkoutTimerUpdate) { update = next }
     fun stopWorkout() {
         running.value = false
         ticker?.cancel()
-        timer.releasePlayback()
-        runtime.foregroundServiceActive = false
+        runtime.serviceStopped()
         notificationManager.dismissNotification()
         stopForeground(STOP_FOREGROUND_REMOVE)
         stopSelf()
@@ -133,11 +160,10 @@ class WorkoutService : Service() {
     override fun onDestroy() {
         scope.cancel()
         running.value = false
-        runtime.foregroundServiceActive = false
-        timer.releasePlayback() // Never cancel the persisted RUNNING timer's system alarm here.
+        runtime.serviceStopped() // Never cancel the persisted RUNNING timer's system alarm here.
+        RestTimerTrace.event("service_destroyed", timer.state.value)
         super.onDestroy()
     }
-    private fun format(seconds: Long) = "%02d:%02d:%02d".format(seconds / 3600, seconds % 3600 / 60, seconds % 60)
 
     companion object {
         const val ACTION_START_WORKOUT = WorkoutActions.START

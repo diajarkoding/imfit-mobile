@@ -12,7 +12,7 @@ class TimerSessionCleanup @Inject constructor(
     @ApplicationContext private val context: Context
 ) {
     suspend fun stop(reason: String) {
-        timer.get().cancel(reason)
+        timer.get().cancel(reason, endWorkout = true)
         // stopService works even when no Activity is collecting commands.
         context.stopService(Intent(context, WorkoutService::class.java))
     }

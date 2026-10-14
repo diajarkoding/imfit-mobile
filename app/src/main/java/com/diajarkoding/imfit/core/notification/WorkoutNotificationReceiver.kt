@@ -20,13 +20,16 @@ class WorkoutNotificationReceiver : BroadcastReceiver() {
                 try {
                     when (intent.action) {
                         WorkoutActions.ACKNOWLEDGE -> intent.getStringExtra("timer_id")?.let {
-                            // Mark dismissal before acknowledging so no reconcile reposts the card.
-                            timer.noteDismissed(it)
+                            // Identity validation and dismissal mark are atomic inside acknowledge.
                             timer.acknowledge(it, intent.getLongExtra("generation", -1))
                         }
                         WorkoutActions.SKIP -> intent.getStringExtra("timer_id")?.let { timer.skip(it) }
                         WorkoutActions.EXTEND -> intent.getStringExtra("timer_id")?.let { timer.extend(it, intent.getLongExtra("generation", -1)) }
                     }
+                } catch (e: CancellationException) {
+                    throw e
+                } catch (e: Exception) {
+                    com.diajarkoding.imfit.core.timer.RestTimerTrace.event("notification_action_failed", detail = "action=${intent.action} exception=${e.javaClass.simpleName}")
                 } finally { result.finish() }
             }
         } else if (intent.action in listOf(WorkoutActions.PAUSE, WorkoutActions.RESUME, WorkoutActions.STOP)) {

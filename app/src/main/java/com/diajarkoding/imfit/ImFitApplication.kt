@@ -3,6 +3,7 @@ package com.diajarkoding.imfit
 import android.app.Application
 import coil3.ImageLoader
 import coil3.SingletonImageLoader
+import coil3.svg.SvgDecoder
 import coil3.disk.DiskCache
 import coil3.memory.MemoryCache
 import coil3.request.CachePolicy
@@ -35,6 +36,7 @@ class ImFitApplication : Application(), SingletonImageLoader.Factory, Configurat
 
     override fun newImageLoader(context: android.content.Context): ImageLoader {
         return ImageLoader.Builder(context)
+            .components { add(SvgDecoder.Factory()) }
             // Memory cache - 25% of available memory
             .memoryCache {
                 MemoryCache.Builder()

@@ -21,6 +21,9 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.TextButton
 import com.diajarkoding.imfit.presentation.components.common.ArrowBack
 import com.diajarkoding.imfit.presentation.components.common.FitnessCenter
 import com.diajarkoding.imfit.presentation.components.common.Symbols
@@ -42,12 +45,16 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import com.diajarkoding.imfit.R
 import com.diajarkoding.imfit.domain.model.Exercise
 import com.diajarkoding.imfit.domain.model.MuscleCategory
 import com.diajarkoding.imfit.presentation.components.common.ShimmerExerciseCard
+import com.diajarkoding.imfit.presentation.components.common.Search
+import com.diajarkoding.imfit.presentation.components.common.MuscleCategoryArtwork
+import com.diajarkoding.imfit.presentation.components.common.categoryArtAsset
 import com.diajarkoding.imfit.theme.IMFITShapes
 import com.diajarkoding.imfit.theme.IMFITSizes
 import com.diajarkoding.imfit.theme.IMFITSpacing
@@ -60,8 +67,8 @@ fun ExerciseListScreen(
     viewModel: ExerciseBrowserViewModel = hiltViewModel()
 ) {
     val state by viewModel.state.collectAsStateWithLifecycle()
-    val category = MuscleCategory.entries.find { it.name == categoryName } ?: MuscleCategory.CHEST
-    val exercises = (state.exercisesByCategory[category] ?: emptyList()).distinctBy { it.id }
+    val category = ExerciseCategory.fromRoute(categoryName)
+    val exercises = state.results.filter(category::includes).distinctBy { it.id }
 
     Scaffold(
         contentWindowInsets = WindowInsets(0),
@@ -70,7 +77,7 @@ fun ExerciseListScreen(
                 modifier = Modifier.windowInsetsPadding(WindowInsets.statusBars),
                 title = {
                     Text(
-                        text = stringResource(id = category.stringResourceId),
+                        text = stringResource(id = category.labelRes),
                         style = MaterialTheme.typography.titleLarge,
                         fontWeight = FontWeight.Bold
                     )
@@ -97,10 +104,31 @@ fun ExerciseListScreen(
             contentPadding = PaddingValues(IMFITSpacing.screenHorizontal),
             verticalArrangement = Arrangement.spacedBy(IMFITSpacing.md)
         ) {
+            item(key = "search") {
+                OutlinedTextField(
+                    value = state.query,
+                    onValueChange = viewModel::setQuery,
+                    modifier = Modifier.fillMaxWidth(),
+                    singleLine = true,
+                    shape = IMFITShapes.Card,
+                    leadingIcon = { Icon(Symbols.Default.Search, null) },
+                    label = { Text(stringResource(R.string.redesign_search)) },
+                    keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search)
+                )
+            }
             if (state.isLoading) {
                 // Show shimmer loading cards
                 items(6, key = { it }) {
                     ShimmerExerciseCard()
+                }
+            } else if (state.hasError) {
+                item(key = "error") {
+                    Column {
+                        Text(stringResource(R.string.redesign_error), color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        TextButton(onClick = viewModel::refresh) {
+                            Text(stringResource(R.string.redesign_retry))
+                        }
+                    }
                 }
             } else if (exercises.isEmpty()) {
                 item {
@@ -111,16 +139,20 @@ fun ExerciseListScreen(
                         contentAlignment = Alignment.Center
                     ) {
                         Text(
-                            text = stringResource(R.string.exercise_no_results),
+                            text = stringResource(
+                                when {
+                                    state.query.isNotBlank() -> R.string.redesign_no_results
+                                    category in setOf(ExerciseCategory.FOREARMS, ExerciseCategory.GLUTES, ExerciseCategory.CALVES) -> R.string.exercise_subgroup_empty
+                                    else -> R.string.exercise_no_results
+                                }
+                            ),
                             style = MaterialTheme.typography.bodyMedium,
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
                     }
                 }
             } else {
-                items(exercises.distinctBy { it.id }.mapIndexed { index, exercise ->
-        exercise to "ex_${exercise.id}_${index}"
-    }, key = { it.second }) { (exercise, _) ->
+                items(exercises, key = { "exercise_${it.id}" }) { exercise ->
                     ExerciseCard(exercise = exercise)
                 }
             }
@@ -151,12 +183,7 @@ private fun ExerciseCard(exercise: Exercise) {
                     .background(MaterialTheme.colorScheme.primaryContainer),
                 contentAlignment = Alignment.Center
             ) {
-                Icon(
-                    imageVector = Symbols.Default.FitnessCenter,
-                    contentDescription = null,
-                    tint = MaterialTheme.colorScheme.onPrimaryContainer,
-                    modifier = Modifier.size(IMFITSizes.iconMd)
-                )
+                MuscleCategoryArtwork(categoryArtAsset(exercise.muscleCategory), Modifier.size(48.dp))
             }
 
             Spacer(modifier = Modifier.width(IMFITSpacing.lg))

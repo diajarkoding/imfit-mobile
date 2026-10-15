@@ -66,6 +66,7 @@ android {
                 .trim().removeSurrounding("\"")
             buildConfigField("String", "SUPABASE_URL", "\"$supabaseUrl\"")
             buildConfigField("String", "SUPABASE_ANON_KEY", "\"$supabaseKey\"")
+            signingConfig = signingConfigs.getByName("debug")
         }
     }
 
@@ -115,6 +116,7 @@ dependencies {
 
     // --- IMAGE LOADING ---
     implementation(libs.coil.compose)
+    implementation(libs.coil.svg)
     implementation(libs.coil.network.okhttp)
 
     // --- LOCAL STORAGE ---

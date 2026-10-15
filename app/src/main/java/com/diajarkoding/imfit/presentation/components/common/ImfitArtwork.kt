@@ -1,17 +1,17 @@
 package com.diajarkoding.imfit.presentation.components.common
 
-import androidx.annotation.DrawableRes
 import androidx.compose.foundation.Image
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.res.painterResource
+import coil3.compose.AsyncImage
 import com.diajarkoding.imfit.R
 import com.diajarkoding.imfit.domain.model.MuscleCategory
 
 /**
  * Phase 1 — Assets Foundation (PRD v1.2.2 baseline).
- * Hero + category illustration resolvers backed by local WebP in drawable-nodpi.
+ * Hero illustrations use local WebP; muscle artwork uses local SVG assets.
  * Illustrations are purely decorative; readable content stays in Compose text.
  */
 enum class ImfitHeroKind { HOME, PROGRESS }
@@ -30,24 +30,24 @@ fun ImfitHeroIllustration(kind: ImfitHeroKind, modifier: Modifier = Modifier) {
     )
 }
 
-/**
- * Typed adapter from the domain [MuscleCategory] enum to local artwork.
- * Null (unknown/unmapped category at the presentation boundary) resolves to the
- * neutral generic fallback so no card ever renders without an icon.
- *
- * Known limitation (Phase 1): unknown remote categories coerced to CHEST upstream
- * in the repositories render the Chest artwork, not generic. Full unknown-category
- * handling is deferred to the data-integration stage.
- */
-@DrawableRes
-fun categoryArtRes(category: MuscleCategory?): Int = when (category) {
-    MuscleCategory.CHEST -> R.drawable.imfit_muscle_dada
-    MuscleCategory.BACK -> R.drawable.imfit_muscle_punggung
-    MuscleCategory.SHOULDERS -> R.drawable.imfit_muscle_bahu
-    MuscleCategory.BICEPS -> R.drawable.imfit_muscle_biceps
-    MuscleCategory.TRICEPS -> R.drawable.imfit_muscle_triceps
-    MuscleCategory.LEGS -> R.drawable.imfit_muscle_kaki
-    MuscleCategory.CORE -> R.drawable.imfit_muscle_inti
-    MuscleCategory.CARDIO -> R.drawable.imfit_muscle_kardio
-    null -> R.drawable.imfit_muscle_generic
+fun categoryArtAsset(category: MuscleCategory?): String = when (category) {
+    MuscleCategory.CHEST -> "chest.svg"
+    MuscleCategory.BACK -> "back.svg"
+    MuscleCategory.SHOULDERS -> "shoulders.svg"
+    MuscleCategory.BICEPS -> "biceps.svg"
+    MuscleCategory.TRICEPS -> "triceps.svg"
+    MuscleCategory.LEGS -> "upper-legs.svg"
+    MuscleCategory.CORE -> "core.svg"
+    MuscleCategory.CARDIO -> "cardio.svg"
+    null -> "all-muscles.svg"
+}
+
+@Composable
+fun MuscleCategoryArtwork(asset: String, modifier: Modifier = Modifier) {
+    AsyncImage(
+        model = "file:///android_asset/muscle-categories/$asset",
+        contentDescription = null,
+        contentScale = ContentScale.Fit,
+        modifier = modifier
+    )
 }

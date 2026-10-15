@@ -1,6 +1,5 @@
 package com.diajarkoding.imfit.presentation.components.common
 
-import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.CircleShape
@@ -9,7 +8,6 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -94,7 +92,7 @@ fun ImfitWorkoutRow(title: String, subtitle: String, category: MuscleCategory?, 
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
         elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)) {
         Row(Modifier.padding(IMFITSpacing.lg), verticalAlignment = Alignment.CenterVertically) {
-            Image(painterResource(categoryArtRes(category)), null, Modifier.size(56.dp).clip(IMFITShapes.IconContainer).background(MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.4f)))
+            MuscleCategoryArtwork(categoryArtAsset(category), Modifier.size(56.dp).clip(IMFITShapes.IconContainer).background(MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.4f)))
             Spacer(Modifier.width(IMFITSpacing.md))
             Column(Modifier.weight(1f)) {
                 Text(title, style = MaterialTheme.typography.titleMedium)

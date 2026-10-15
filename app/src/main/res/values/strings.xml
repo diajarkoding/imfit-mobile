@@ -66,7 +66,7 @@
     <!-- Navigation -->
     <string name="nav_home">Home</string>
     <string name="nav_workout">Workout</string>
-    <string name="nav_exercises">Muscles</string>
+    <string name="nav_exercises">Exercises</string>
     <string name="nav_progress">Progress</string>
 
     <!-- Profile -->
@@ -125,7 +125,7 @@
     <string name="home_greeting">Hello, %s!</string>
     <string name="home_subtitle">Ready to crush your workout?</string>
     <string name="home_last_workout">Last Workout</string>
-    <string name="home_my_workouts">My Workouts</string>
+    <string name="home_my_workouts">My Routines</string>
     <string name="home_no_workouts">No workouts yet</string>
     <string name="home_no_workouts_yet">No workouts yet</string>
     <string name="home_create_first">Create your first workout to get started</string>
@@ -195,17 +195,17 @@
     <string name="action_add_set">Add Set</string>
     <string name="action_remove_set">Remove set</string>
     <string name="action_finish_workout">Finish Workout</string>
-    <string name="action_save_changes">Save Changes</string>
-    <string name="action_save_template">Save Template</string>
+    <string name="action_save_changes">Save Routine</string>
+    <string name="action_save_template">Save Routine</string>
     <string name="action_add_workout">Add Workout</string>
 
     <!-- Home Screen -->
     <string name="home_hello">Hello, %1$s!</string>
     <string name="home_title_my_workouts">My Workouts</string>
     <string name="home_active">ACTIVE</string>
-    <string name="home_create_workout_title">Create Workout</string>
-    <string name="home_create_workout_message">Give your workout a name</string>
-    <string name="home_workout_placeholder">e.g., Push Day, Leg Day</string>
+    <string name="home_create_workout_title">Create Routine</string>
+    <string name="home_create_workout_message">Give your routine a name</string>
+    <string name="home_workout_placeholder">Name your routine</string>
     <string name="home_exercises_count">%1$d exercises</string>
     <string name="home_minutes_estimate">~%1$d min</string>
     <string name="desc_view_details">View details</string>
@@ -217,9 +217,12 @@
     <string name="workout_add_exercises_hint">Add exercises to get started</string>
     <string name="workout_sets_reps_format">%1$d x %2$d reps</string>
     <string name="workout_est_minutes">Est. minutes</string>
-    <string name="workout_edit_title">Edit Workout</string>
-    <string name="workout_name_label">Workout Name</string>
-    <string name="workout_sets_configured">%1$d sets configured</string>
+    <string name="workout_edit_title">Edit Routine</string>
+    <string name="workout_name_label">Routine Name</string>
+    <plurals name="workout_sets_configured">
+        <item quantity="one">%1$d set configured</item>
+        <item quantity="other">%1$d sets configured</item>
+    </plurals>
     <string name="workout_label_sets">Sets</string>
     <string name="workout_label_reps">Reps</string>
     <string name="workout_label_rest">Rest (seconds)</string>
@@ -229,22 +232,25 @@
     <string name="active_workout_elapsed">%1$dm elapsed</string>
     <string name="active_workout_rest_timer">Rest Timer</string>
     <string name="active_workout_set_number">Set %1$d</string>
-    <string name="active_workout_cancel_title">Cancel Workout?</string>
+    <string name="active_workout_cancel_title">Discard Workout?</string>
     <string name="active_workout_cancel_message">Your workout progress will be lost. Are you sure you want to cancel?</string>
 
     <!-- Workout Summary -->
     <string name="summary_great_work">Great Work!</string>
-    <string name="summary_sets_count">%1$d sets</string>
+    <plurals name="summary_sets_count">
+        <item quantity="one">%1$d set</item>
+        <item quantity="other">%1$d sets</item>
+    </plurals>
     <string name="summary_volume_kg">%1$s kg</string>
     <string name="summary_set_details">%1$d kg x %2$d reps</string>
 
     <!-- Create Template -->
-    <string name="template_create_title">Create Template</string>
-    <string name="template_name_label">Template Name</string>
-    <string name="template_name_placeholder">e.g., Push Day, Leg Day</string>
+    <string name="template_create_title">Create Routine</string>
+    <string name="template_name_label">Routine Name</string>
+    <string name="template_name_placeholder">Name your routine</string>
     <string name="template_exercises_count">Exercises (%1$d)</string>
     <string name="template_no_exercises">No exercises added yet</string>
-    <string name="template_add_exercises_hint">Add exercises to your template</string>
+    <string name="template_add_exercises_hint">Add exercises to your routine</string>
     <string name="template_exercise_sets">• %1$d x %2$d reps</string>
 
     <!-- Yearly Calendar -->
@@ -252,7 +258,7 @@
     <string name="calendar_next_year">Next year</string>
 
     <!-- Exercise Selection -->
-    <string name="exercise_search_hint">Search exercises</string>
+    <string name="exercise_search_hint">Search Exercises</string>
 
     <!-- Workout Summary -->
     <string name="workout_number_of_total">Workout %1$d of %2$d</string>
@@ -277,19 +283,19 @@
     <string name="action_add_exercise">Add Exercise</string>
     <string name="action_start_workout">Start Workout</string>
     <string name="action_end_workout">End Workout</string>
-    <string name="action_cancel_workout">Cancel Workout</string>
-    <string name="action_pause">Pause</string>
-    <string name="action_resume">Resume</string>
+    <string name="action_cancel_workout">Discard Workout</string>
+    <string name="action_pause">Pause Workout</string>
+    <string name="action_resume">Resume Workout</string>
 
     <!-- Warnings -->
-    <string name="warning_workout_active">Cannot modify while workout is in progress</string>
+    <string name="warning_workout_active">Cannot edit a routine while a workout is in progress</string>
     <string name="warning_cannot_start_workout">Cannot start new workout while another workout is active</string>
 
     <!-- Dialog Messages -->
-    <string name="dialog_delete_workout">Delete Workout</string>
+    <string name="dialog_delete_workout">Delete Routine?</string>
     <string name="dialog_delete_workout_message">Are you sure you want to delete \"%1$s\"? This action cannot be undone.</string>
-    <string name="dialog_remove_exercise">Remove Exercise</string>
-    <string name="dialog_remove_exercise_message">Remove %1$s from this workout?</string>
+    <string name="dialog_remove_exercise">Remove Exercise?</string>
+    <string name="dialog_remove_exercise_message">Remove %1$s from this routine?</string>
 
     <!-- Labels -->
     <string name="label_volume">Volume</string>
@@ -300,18 +306,25 @@
 
     <!-- Workout History Additional -->
     <string name="summary_day">Day Summary</string>
-    <string name="summary_workouts_completed">%1$d workout completed</string>
+    <plurals name="summary_workouts_completed">
+        <item quantity="one">%1$d workout completed</item>
+        <item quantity="other">%1$d workouts completed</item>
+    </plurals>
+    <!-- Legacy string retained; active history uses the quantity resource above. -->
     <string name="summary_workouts_completed_plural">%1$d workouts completed</string>
     <string name="summary_exercise_breakdown">Exercise Breakdown</string>
-    <string name="summary_rest_day">Rest Day</string>
-    <string name="summary_no_workouts">No workouts recorded on this day</string>
+    <string name="summary_rest_day">No workouts logged</string>
+    <string name="summary_no_workouts">No workouts logged on this day</string>
 
     <!-- Input Placeholders -->
     <string name="placeholder_name">Enter your name</string>
 
     <!-- Exercise Selection Screen -->
-    <string name="exercise_select_title">Select Exercises</string>
-    <string name="exercise_add_count">Add %1$d Exercise(s)</string>
+    <string name="exercise_select_title">Select Exercise</string>
+    <plurals name="exercise_add_count">
+        <item quantity="one">Add %1$d Exercise</item>
+        <item quantity="other">Add %1$d Exercises</item>
+    </plurals>
     <string name="exercise_filter_all">All</string>
     <string name="exercise_no_results">No exercises found for this category.</string>
     <string name="nav_exercises_title">Exercises</string>
@@ -336,7 +349,7 @@
     <string name="error_birthdate_required">Birth date is required</string>
     <string name="error_login_failed">Login failed</string>
     <string name="error_registration_failed">Registration failed</string>
-    <string name="error_template_name_required">Template name is required</string>
+    <string name="error_template_name_required">Routine name is required</string>
 
     <!-- Demo User Data -->
     <string name="label_demo_user_name">Demo User</string>
@@ -429,4 +442,19 @@
     <string name="channel_workout_active">Active Workout</string>
     <string name="channel_workout_rest">Rest Timer</string>
     <string name="channel_workout_desc">Shows your active workout progress</string>
+
+    <!-- Routine and Session Titles -->
+    <string name="routine_default_title">Routine</string>
+    <string name="active_session_default_title">Workout Session</string>
+    <string name="active_session_paused_title">Workout paused</string>
+
+    <!-- User-Facing Operation Errors -->
+    <string name="error_session_save">Unable to save session</string>
+    <string name="error_set_complete">Unable to complete set</string>
+    <string name="error_exercise_remove">Unable to remove exercise</string>
+    <string name="error_exercise_add">Unable to add exercises</string>
+    <string name="error_session_finish">Unable to finish workout</string>
+    <string name="error_rest_pause">Skip the rest timer before pausing</string>
+    <string name="error_routine_save">Unable to save routine</string>
+    <string name="error_routine_not_found">Routine not found</string>
 </resources>

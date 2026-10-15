@@ -57,6 +57,7 @@ import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
@@ -176,9 +177,7 @@ private fun DaySummaryCard(workouts: List<WorkoutLog>) {
             modifier = Modifier
                 .fillMaxWidth()
                 .background(
-                    Brush.verticalGradient(
-                        listOf(Primary.copy(alpha = 0.1f), Primary.copy(alpha = 0.02f))
-                    )
+                    com.diajarkoding.imfit.theme.IMFITGradients.surfaceWash
                 )
         ) {
             Column(
@@ -191,7 +190,7 @@ private fun DaySummaryCard(workouts: List<WorkoutLog>) {
                         modifier = Modifier
                             .size(48.dp)
                             .clip(CircleShape)
-                            .background(Brush.linearGradient(listOf(Primary, PrimaryLight))),
+                            .background(com.diajarkoding.imfit.theme.IMFITGradients.brandLinear),
                         contentAlignment = Alignment.Center
                     ) {
                         Icon(
@@ -209,11 +208,9 @@ private fun DaySummaryCard(workouts: List<WorkoutLog>) {
                             fontWeight = FontWeight.Bold
                         )
                         Text(
-                            text = if (workouts.size > 1) stringResource(
-                                R.string.summary_workouts_completed_plural,
-                                workouts.size
-                            ) else stringResource(
-                                R.string.summary_workouts_completed,
+                            text = pluralStringResource(
+                                R.plurals.summary_workouts_completed,
+                                workouts.size,
                                 workouts.size
                             ),
                             style = MaterialTheme.typography.bodySmall,
@@ -230,7 +227,7 @@ private fun DaySummaryCard(workouts: List<WorkoutLog>) {
                 ) {
                     SummaryStatItem(
                         value = "${totalDuration}",
-                        unit = "min",
+                        unit = stringResource(R.string.unit_min),
                         label = stringResource(R.string.label_duration),
                         icon = Symbols.Default.Timer
                     )
@@ -335,7 +332,7 @@ private fun WorkoutLogCard(
                         modifier = Modifier
                             .size(44.dp)
                             .clip(IMFITShapes.IconContainer)
-                            .background(Brush.linearGradient(listOf(Primary, PrimaryLight))),
+                            .background(com.diajarkoding.imfit.theme.IMFITGradients.brandLinear),
                         contentAlignment = Alignment.Center
                     ) {
                         Icon(
@@ -389,14 +386,14 @@ private fun WorkoutLogCard(
                     StatChip(
                         icon = Symbols.Default.FitnessCenter,
                         value = workoutLog.formattedVolume,
-                        label = "Volume"
+                        label = stringResource(R.string.label_volume)
                     )
                 }
                 item {
                     StatChip(
                         icon = Symbols.Default.CheckCircle,
                         value = "${workoutLog.exerciseLogs.size}",
-                        label = "Exercises"
+                        label = stringResource(R.string.label_exercises)
                     )
                 }
                 item {
@@ -498,7 +495,7 @@ private fun ExerciseProgressRow(exerciseLog: ExerciseLog) {
                     modifier = Modifier.weight(1f)
                 )
                 Text(
-                    text = "${exerciseLog.completedSets} sets",
+                    text = pluralStringResource(R.plurals.summary_sets_count, exerciseLog.completedSets, exerciseLog.completedSets),
                     style = MaterialTheme.typography.labelMedium,
                     color = Primary,
                     fontWeight = FontWeight.Bold

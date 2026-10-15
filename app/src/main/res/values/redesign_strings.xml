@@ -7,14 +7,17 @@
     <string name="redesign_ready">Ready for today’s workout?</string>
     <string name="redesign_latest">LATEST WORKOUT</string>
     <string name="redesign_no_workout">Your journey starts here</string>
-    <string name="redesign_start_hint">Create a workout to get started.</string>
+    <string name="redesign_start_hint">Create a routine to get started.</string>
     <string name="redesign_workout_meta">%1$s · %2$d exercises</string>
-    <string name="redesign_exercise_count">%1$d exercises</string>
+    <plurals name="redesign_exercise_count">
+        <item quantity="one">%1$d exercise</item>
+        <item quantity="other">%1$d exercises</item>
+    </plurals>
     <string name="redesign_no_templates">No workouts yet. Add your first workout below.</string>
     <string name="redesign_resume">Resume workout</string>
     <string name="redesign_volume">Total Volume · All time</string>
     <string name="redesign_explore_subtitle">Explore exercises to build your best routine.</string>
-    <string name="redesign_search">Search exercises</string>
+    <string name="redesign_search">Search Exercises</string>
     <string name="redesign_categories">Muscle Categories</string>
     <string name="redesign_explore">Explore Exercises</string>
     <string name="redesign_no_results">No exercises match your search.</string>

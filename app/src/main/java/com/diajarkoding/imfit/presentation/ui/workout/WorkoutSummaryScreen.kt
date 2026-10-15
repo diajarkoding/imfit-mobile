@@ -53,6 +53,7 @@ import com.diajarkoding.imfit.theme.Primary
 import com.diajarkoding.imfit.theme.SetComplete
 import com.diajarkoding.imfit.R
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.res.pluralStringResource
 
 import com.diajarkoding.imfit.presentation.components.common.ShimmerSummaryHeader
 import com.diajarkoding.imfit.presentation.components.common.ShimmerSummaryStatCard
@@ -113,9 +114,7 @@ fun WorkoutSummaryScreen(
                                 .shadow(12.dp, CircleShape, spotColor = SetComplete.copy(alpha = 0.4f))
                                 .clip(CircleShape)
                                 .background(
-                                    Brush.linearGradient(
-                                        listOf(SetComplete, SetComplete.copy(alpha = 0.8f))
-                                    )
+                                    com.diajarkoding.imfit.theme.IMFITGradients.completed
                                 ),
                             contentAlignment = Alignment.Center
                         ) {
@@ -227,9 +226,7 @@ private fun SummaryStatCard(
             modifier = Modifier
                 .fillMaxWidth()
                 .background(
-                    Brush.verticalGradient(
-                        listOf(Primary.copy(alpha = 0.1f), Primary.copy(alpha = 0.03f))
-                    )
+                    com.diajarkoding.imfit.theme.IMFITGradients.metricWash
                 )
         ) {
             Column(
@@ -325,7 +322,7 @@ private fun ExerciseSummaryCard(exerciseLog: ExerciseLog) {
 
                 Column(horizontalAlignment = Alignment.End) {
                     Text(
-                        text = stringResource(R.string.summary_sets_count, exerciseLog.completedSets),
+                        text = pluralStringResource(R.plurals.summary_sets_count, exerciseLog.completedSets, exerciseLog.completedSets),
                         style = MaterialTheme.typography.labelLarge,
                         fontWeight = FontWeight.Bold,
                         color = Primary

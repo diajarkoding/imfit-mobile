@@ -145,7 +145,7 @@ fun WorkoutDetailScreen(
                 R.string.dialog_delete_workout_message,
                 state.workout?.name ?: ""
             ),
-            confirmText = stringResource(R.string.action_delete),
+            confirmText = stringResource(R.string.routine_delete_action),
             dismissText = stringResource(R.string.action_cancel),
             onConfirm = {
                 viewModel.deleteWorkout()
@@ -162,7 +162,7 @@ fun WorkoutDetailScreen(
                 modifier = Modifier.windowInsetsPadding(WindowInsets.statusBars),
                 title = {
                     Text(
-                        text = state.workout?.name ?: "Workout",
+                        text = state.workout?.name ?: stringResource(R.string.routine_default_title),
                         style = MaterialTheme.typography.titleLarge,
                         fontWeight = FontWeight.Bold
                     )
@@ -537,7 +537,7 @@ private fun ExerciseItemCard(
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
                     Text(
-                        text = "${templateExercise.sets} x ${templateExercise.reps} reps",
+                        text = stringResource(R.string.workout_sets_reps_format, templateExercise.sets, templateExercise.reps),
                         style = MaterialTheme.typography.bodySmall,
                         color = Primary,
                         fontWeight = FontWeight.SemiBold
@@ -593,9 +593,7 @@ private fun WorkoutInfoCard(
             modifier = Modifier
                 .fillMaxWidth()
                 .background(
-                    Brush.horizontalGradient(
-                        listOf(Primary.copy(alpha = 0.1f), PrimaryLight.copy(alpha = 0.05f))
-                    )
+                    com.diajarkoding.imfit.theme.IMFITGradients.workoutWash
                 )
         ) {
             Row(

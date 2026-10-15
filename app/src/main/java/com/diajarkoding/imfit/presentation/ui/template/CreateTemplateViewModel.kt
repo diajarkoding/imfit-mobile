@@ -19,7 +19,7 @@ data class CreateTemplateState(
     val tempTemplateId: String = "temp_${System.currentTimeMillis()}",
     val templateName: String = "",
     val selectedExercises: List<TemplateExercise> = emptyList(),
-    val nameError: String? = null,
+    @androidx.annotation.StringRes val nameErrorRes: Int? = null,
     val isLoading: Boolean = false,
     val isSaved: Boolean = false
 )
@@ -53,7 +53,7 @@ class CreateTemplateViewModel @Inject constructor(
     }
 
     fun onNameChange(name: String) {
-        _state.update { it.copy(templateName = name, nameError = null) }
+        _state.update { it.copy(templateName = name, nameErrorRes = null) }
     }
 
     fun addExercises(exercises: List<Exercise>) {
@@ -76,7 +76,7 @@ class CreateTemplateViewModel @Inject constructor(
         val currentState = _state.value
 
         if (currentState.templateName.isBlank()) {
-            _state.update { it.copy(nameError = "Template name is required") }
+            _state.update { it.copy(nameErrorRes = com.diajarkoding.imfit.R.string.error_template_name_required) }
             return
         }
 

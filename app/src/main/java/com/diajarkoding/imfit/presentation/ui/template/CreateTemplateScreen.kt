@@ -129,7 +129,7 @@ fun CreateTemplateScreen(
                         onValueChange = { viewModel.onNameChange(it) },
                         label = stringResource(R.string.template_name_label),
                         placeholder = stringResource(R.string.template_name_placeholder),
-                        error = state.nameError
+                        error = state.nameErrorRes?.let { stringResource(it) }
                     )
                 }
 
@@ -298,7 +298,7 @@ private fun ExerciseItem(
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
                         Text(
-                            text = " • ${templateExercise.sets} x ${templateExercise.reps} reps",
+                            text = stringResource(R.string.template_exercise_sets, templateExercise.sets, templateExercise.reps),
                             style = MaterialTheme.typography.bodySmall,
                             color = Primary,
                             fontWeight = FontWeight.SemiBold

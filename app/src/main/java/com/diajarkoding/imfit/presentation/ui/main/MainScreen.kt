@@ -38,19 +38,23 @@ import androidx.navigation3.runtime.entryProvider
 import androidx.navigation3.runtime.rememberNavBackStack
 import androidx.navigation3.runtime.rememberSaveableStateHolderNavEntryDecorator
 import androidx.navigation3.ui.NavDisplay
+import com.diajarkoding.imfit.R
+import com.diajarkoding.imfit.presentation.components.common.ImfitMainAppBar
 import com.diajarkoding.imfit.presentation.components.common.SyncProgressDialog
 import com.diajarkoding.imfit.presentation.ui.exercise.ExerciseBrowserScreen
 import com.diajarkoding.imfit.presentation.ui.home.HomeScreen
 import com.diajarkoding.imfit.presentation.ui.home.HomeViewModel
 import com.diajarkoding.imfit.presentation.ui.progress.ProgressScreen
 import com.diajarkoding.imfit.theme.Primary
+import com.diajarkoding.imfit.theme.IMFITColors
+import com.diajarkoding.imfit.theme.IMFITBottomNavDimensions
 import com.diajarkoding.imfit.theme.LocaleManager
 import java.time.LocalDate
 import kotlinx.serialization.Serializable
 
 private data class BottomNavItem(
     val key: NavKey,
-    val title: String, 
+    @androidx.annotation.StringRes val titleRes: Int,
     val selectedIcon: ImageVector,
     val unselectedIcon: ImageVector
 )
@@ -70,20 +74,27 @@ fun MainScreen(
     onNavigateToActiveWorkout: (String) -> Unit = {},
     onNavigateToExerciseList: (String) -> Unit,
     onNavigateToWorkoutHistory: (LocalDate) -> Unit = {},
-    onNavigateToYearlyCalendar: () -> Unit = {},
+    onNavigateToYearlyCalendar: (java.time.YearMonth) -> Unit = {},
     onNavigateToProfile: () -> Unit = {},
     homeViewModel: HomeViewModel = hiltViewModel()
 ) {
     val items = listOf(
-        BottomNavItem(HomeTab, "Home", Symbols.Filled.Home, Symbols.Outlined.Home),
-        BottomNavItem(ExerciseTab, "Exercise", Symbols.Filled.FitnessCenter, Symbols.Outlined.FitnessCenter),
-        BottomNavItem(ProgressTab, "Progress", Symbols.Filled.CalendarMonth, Symbols.Outlined.CalendarMonth)
+        BottomNavItem(HomeTab, com.diajarkoding.imfit.R.string.nav_home, Symbols.Filled.Home, Symbols.Outlined.Home),
+        BottomNavItem(ExerciseTab, com.diajarkoding.imfit.R.string.nav_exercises, Symbols.Filled.FitnessCenter, Symbols.Outlined.FitnessCenter),
+        BottomNavItem(ProgressTab, com.diajarkoding.imfit.R.string.nav_progress, Symbols.Filled.CalendarMonth, Symbols.Outlined.CalendarMonth)
     )
     val bottomBackStack = rememberNavBackStack(HomeTab)
     val currentTab = bottomBackStack.lastOrNull()
     
     // Get sync state from HomeViewModel
     val syncState by homeViewModel.syncState.collectAsStateWithLifecycle()
+    val homeState by homeViewModel.state.collectAsStateWithLifecycle()
+    val appBarTitleRes = when (currentTab) {
+        is ExerciseTab -> R.string.nav_exercises
+        is ProgressTab -> R.string.nav_progress
+        else -> R.string.app_name
+    }
+    val showProfileAction = currentTab !is ProgressTab
 
     // Keep resource locale live without recreating the navigation backstack.
     // LocalContext stays the Activity context required by the existing Hilt owners.
@@ -98,36 +109,43 @@ fun MainScreen(
     // Wrap everything in Box for full-screen overlay capability
     Box(modifier = Modifier.fillMaxSize()) {
         Scaffold(
+            topBar = {
+                ImfitMainAppBar(
+                    title = androidx.compose.ui.res.stringResource(appBarTitleRes),
+                    profilePhotoUri = if (showProfileAction) homeState.userProfilePhotoUri else null,
+                    onProfileClick = if (showProfileAction) onNavigateToProfile else null
+                )
+            },
             bottomBar = {
                 NavigationBar(
                     modifier = Modifier.windowInsetsPadding(WindowInsets.navigationBars),
                     containerColor = MaterialTheme.colorScheme.surface,
-                    contentColor = Primary,
+                    contentColor = IMFITColors.navActive(),
                     tonalElevation = 0.dp
                 ) {
                     items.forEach { item ->
                         val selected = currentTab == item.key
                         
                         NavigationBarItem(
-                            icon = { 
+                            icon = {
                                 Icon(
-                                    if (selected) item.selectedIcon else item.unselectedIcon, 
-                                    contentDescription = item.title
-                                ) 
+                                    if (selected) item.selectedIcon else item.unselectedIcon,
+                                    contentDescription = androidx.compose.ui.res.stringResource(item.titleRes)
+                                )
                             },
-                            label = { 
+                            label = {
                                 Text(
-                                    item.title,
+                                    androidx.compose.ui.res.stringResource(item.titleRes),
                                     fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Normal
-                                ) 
+                                )
                             },
                             selected = selected,
                             colors = NavigationBarItemDefaults.colors(
-                                selectedIconColor = Primary,
-                                selectedTextColor = Primary,
+                                 selectedIconColor = IMFITColors.navActive(),
+                                 selectedTextColor = IMFITColors.navActive(),
                                 indicatorColor = Primary.copy(alpha = 0.12f),
-                                unselectedIconColor = MaterialTheme.colorScheme.onSurfaceVariant,
-                                unselectedTextColor = MaterialTheme.colorScheme.onSurfaceVariant
+                                 unselectedIconColor = IMFITColors.navInactive(),
+                                 unselectedTextColor = IMFITColors.navInactive()
                             ),
                             onClick = {
                                 bottomBackStack.clear()
@@ -164,9 +182,6 @@ fun MainScreen(
                     }
                     entry<ExerciseTab> {
                         ExerciseBrowserScreen(
-                            refreshKey = syncState.lastSyncTime,
-                            onNavigateBack = { },
-                            onNavigateToProfile = onNavigateToProfile,
                             onCategorySelected = { category ->
                                 onNavigateToExerciseList(category.name)
                             }

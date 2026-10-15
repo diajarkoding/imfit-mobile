@@ -12,7 +12,10 @@ import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
+import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.CancellationException
 import javax.inject.Inject
 
 data class HomeState(
@@ -37,63 +40,54 @@ class HomeViewModel @Inject constructor(
     
     // Expose sync state for UI
     val syncState = syncStateProvider.syncState
+    private var loadJob: Job? = null
 
     init {
         loadData()
     }
 
     private fun loadData() {
-        viewModelScope.launch {
+        loadJob?.cancel()
+        loadJob = viewModelScope.launch {
             _state.update { it.copy(isLoading = true) }
 
-            val user = authRepository.getCurrentUser()
-
-            if (user == null) {
-                _state.update {
-                    it.copy(
-                        userName = "Guest",
-                        userProfilePhotoUri = null,
-                        templates = emptyList(),
-                        lastWorkout = null,
-                        isLoading = false,
-                        activeWorkoutTemplateId = null
-                    )
-                }
-                return@launch
-            }
-
-            val userId = user.id
-            val userName = user.name
-            
-            // Get signed URL for profile photo (private bucket)
-            val signedAvatarUrl = authRepository.getSignedAvatarUrl(user.profilePhotoUri)
-
             try {
-                val templates = workoutRepository.getTemplates(userId)
-                val lastWorkout = workoutRepository.getLastWorkoutLog(userId)
+                val user = authRepository.getCurrentUser()
+                if (user == null) {
+                    _state.update { it.copy(
+                        userName = "Guest", userProfilePhotoUri = null, templates = emptyList(),
+                        lastWorkout = null, isLoading = false, activeWorkoutTemplateId = null
+                    ) }
+                    return@launch
+                }
+
+                val userId = user.id
+                val userName = user.name
+                // Avatar failures must not hide locally saved workout history.
+                val signedAvatarUrl = try {
+                    authRepository.getSignedAvatarUrl(user.profilePhotoUri)
+                } catch (e: CancellationException) { throw e }
+                catch (_: Exception) { null }
+
                 val activeSession = workoutRepository.getActiveSession()
 
                 _state.update {
                     it.copy(
                         userName = userName,
                         userProfilePhotoUri = signedAvatarUrl,
-                        templates = templates,
-                        lastWorkout = lastWorkout,
-                        isLoading = false,
                         activeWorkoutTemplateId = activeSession?.templateId
                     )
                 }
-            } catch (e: Exception) {
-                _state.update {
-                    it.copy(
-                        userName = userName,
-                        userProfilePhotoUri = signedAvatarUrl,
-                        templates = emptyList(),
-                        lastWorkout = null,
-                        isLoading = false,
-                        activeWorkoutTemplateId = null
-                    )
+                combine(workoutRepository.observeTemplates(userId), workoutRepository.observeLastWorkoutLog(userId)) { templates, last ->
+                    templates to last
+                }.collect { (templates, last) ->
+                    _state.update { it.copy(templates = templates, lastWorkout = last, isLoading = false) }
                 }
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                Log.e("HomeViewModel", "Unable to observe local Home data", e)
+                _state.update { it.copy(isLoading = false) }
             }
         }
     }

@@ -1,0 +1,25 @@
+<resources>
+    <string name="progress_overview_title">Progres</string>
+    <string name="progress_overview_volume">Volume latihan</string>
+    <!-- Legacy key retained; the metric now uses the displayed calendar month. -->
+    <string name="progress_overview_weekly_time">Durasi latihan</string>
+    <string name="progress_overview_all_history">Semua riwayat</string>
+    <string name="progress_overview_this_week">Minggu ini</string>
+    <string name="progress_overview_has_workout">Ada sesi tercatat</string>
+    <string name="progress_overview_selected">Tanggal dipilih</string>
+    <string name="progress_overview_empty_day">Belum ada sesi tercatat pada tanggal ini.</string>
+    <string name="progress_overview_load_error">Tidak dapat memuat riwayat latihan.</string>
+    <string name="progress_overview_guest">Tamu</string>
+    <plurals name="progress_overview_day_description">
+        <item quantity="other">%1$s. %2$d sesi tercatat. %3$s</item>
+    </plurals>
+    <plurals name="progress_overview_minutes">
+        <item quantity="other">%1$d menit</item>
+    </plurals>
+    <plurals name="progress_overview_day_workouts">
+        <item quantity="other">%1$d sesi tercatat · %2$s · %3$s</item>
+    </plurals>
+    <string-array name="progress_overview_weekdays">
+        <item>Sn</item><item>Sl</item><item>Rb</item><item>Km</item><item>Jm</item><item>Sb</item><item>Mg</item>
+    </string-array>
+</resources>

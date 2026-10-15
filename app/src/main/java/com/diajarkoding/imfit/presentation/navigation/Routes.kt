@@ -31,6 +31,9 @@ data class ExerciseList(val categoryName: String) : NavKey
 data class ExerciseSelection(val templateId: String) : NavKey
 
 @Serializable
+data class ActiveExerciseSelection(val sessionId: String, val excludedIds: List<String>) : NavKey
+
+@Serializable
 data class ActiveWorkout(val templateId: String) : NavKey
 
 @Serializable
@@ -40,7 +43,7 @@ data class WorkoutSummary(val workoutLogId: String) : NavKey
 data class WorkoutHistory(val date: String) : NavKey
 
 @Serializable
-data object YearlyCalendar : NavKey
+data class YearlyCalendar(val year: Int, val month: Int) : NavKey
 
 @Serializable
 data object Profile : NavKey

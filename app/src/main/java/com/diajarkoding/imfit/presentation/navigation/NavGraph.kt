@@ -43,6 +43,8 @@ fun NavGraph(
     var exerciseSelectionResult by rememberSaveable {
         mutableStateOf<ArrayList<String>?>(null)
     }
+    var activeSelectionSessionId by rememberSaveable { mutableStateOf<String?>(null) }
+    var activeSelectionResult by rememberSaveable { mutableStateOf<ArrayList<String>?>(null) }
 
     LaunchedEffect(
         openActiveWorkout,
@@ -124,8 +126,8 @@ fun NavGraph(
                     onNavigateToWorkoutHistory = { date ->
                         backStack.add(WorkoutHistory(date.toString()))
                     },
-                    onNavigateToYearlyCalendar = {
-                        backStack.add(YearlyCalendar)
+                    onNavigateToYearlyCalendar = { month ->
+                        backStack.add(YearlyCalendar(month.year, month.monthValue))
                     },
                     onNavigateToProfile = {
                         backStack.add(Profile)
@@ -177,10 +179,31 @@ fun NavGraph(
                 )
             }
 
+            entry<ActiveExerciseSelection> { key ->
+                ExerciseSelectionScreen(
+                    templateId = "",
+                    excludedExerciseIds = key.excludedIds.toSet(),
+                    onNavigateBack = { backStack.removeLastOrNull() },
+                    onExercisesSelected = { selected ->
+                        activeSelectionSessionId = key.sessionId
+                        activeSelectionResult = ArrayList(selected.map { it.id })
+                        backStack.removeLastOrNull()
+                    }
+                )
+            }
+
             entry<ActiveWorkout> { key ->
                 ActiveWorkoutScreen(
                     templateId = key.templateId,
                     onNavigateBack = { backStack.removeLastOrNull() },
+                    selectionSessionId = activeSelectionSessionId,
+                    selectedExerciseIds = activeSelectionResult,
+                    onSelectedExercisesConsumed = { activeSelectionResult = null; activeSelectionSessionId = null },
+                    onAddExercises = { sessionId, existingIds ->
+                        activeSelectionSessionId = sessionId
+                        activeSelectionResult = null
+                        backStack.add(ActiveExerciseSelection(sessionId, existingIds))
+                    },
                     onWorkoutFinished = { workoutLogId ->
                         backStack.trimToMain()
                         backStack.add(WorkoutSummary(workoutLogId))
@@ -202,8 +225,10 @@ fun NavGraph(
                 )
             }
 
-            entry<YearlyCalendar> {
+            entry<YearlyCalendar> { key ->
                 YearlyCalendarScreen(
+                    initialYear = key.year,
+                    initialMonth = key.month,
                     onNavigateBack = { backStack.removeLastOrNull() },
                     onDateSelected = { date ->
                         backStack.add(WorkoutHistory(date.toString()))

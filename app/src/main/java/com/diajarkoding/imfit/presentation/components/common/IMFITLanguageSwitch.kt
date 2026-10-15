@@ -27,6 +27,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.diajarkoding.imfit.theme.Primary
+import com.diajarkoding.imfit.theme.IMFITTypography
 
 @Composable
 fun IMFITLanguageSwitch(
@@ -60,18 +61,12 @@ fun IMFITLanguageSwitch(
         ) {
             Text(
                 text = "ID",
-                style = MaterialTheme.typography.labelSmall.copy(
-                    fontSize = 10.sp,
-                    fontWeight = FontWeight.Bold
-                ),
+                style = IMFITTypography.switchLabel,
                 color = if (isIndonesian) Color.White else MaterialTheme.colorScheme.onSurfaceVariant
             )
             Text(
                 text = "EN",
-                style = MaterialTheme.typography.labelSmall.copy(
-                    fontSize = 10.sp,
-                    fontWeight = FontWeight.Bold
-                ),
+                style = IMFITTypography.switchLabel,
                 color = if (!isIndonesian) Color.White else MaterialTheme.colorScheme.onSurfaceVariant
             )
         }
@@ -88,10 +83,7 @@ fun IMFITLanguageSwitch(
         ) {
             Text(
                 text = if (isIndonesian) "ID" else "EN",
-                style = MaterialTheme.typography.labelSmall.copy(
-                    fontSize = 9.sp,
-                    fontWeight = FontWeight.Bold
-                ),
+                style = IMFITTypography.switchThumb,
                 color = Color.White
             )
         }

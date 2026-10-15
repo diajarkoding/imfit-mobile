@@ -291,12 +291,7 @@ fun RegisterScreen(
                             modifier = Modifier
                                 .size(120.dp)
                                 .background(
-                                    brush = androidx.compose.ui.graphics.Brush.linearGradient(
-                                        listOf(
-                                            Primary.copy(alpha = 0.1f),
-                                            PrimaryLight.copy(alpha = 0.1f)
-                                        )
-                                    )
+                                    brush = com.diajarkoding.imfit.theme.IMFITGradients.avatarWash
                                 ),
                             contentAlignment = Alignment.Center
                         ) {
@@ -605,12 +600,7 @@ private fun RegisterScreenContent(
                             modifier = Modifier
                                 .size(120.dp)
                                 .background(
-                                    brush = androidx.compose.ui.graphics.Brush.linearGradient(
-                                        listOf(
-                                            Primary.copy(alpha = 0.1f),
-                                            PrimaryLight.copy(alpha = 0.1f)
-                                        )
-                                    )
+                                    brush = com.diajarkoding.imfit.theme.IMFITGradients.avatarWash
                                 ),
                             contentAlignment = Alignment.Center
                         ) {

@@ -446,9 +446,7 @@ private fun ProfileHeaderCard(
             modifier = Modifier
                 .fillMaxWidth()
                 .background(
-                    Brush.verticalGradient(
-                        listOf(Primary.copy(alpha = 0.1f), Primary.copy(alpha = 0.02f))
-                    )
+                    com.diajarkoding.imfit.theme.IMFITGradients.surfaceWash
                 )
         ) {
             Column(

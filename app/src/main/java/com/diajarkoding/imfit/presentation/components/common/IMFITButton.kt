@@ -14,7 +14,7 @@ import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -44,6 +44,10 @@ import com.diajarkoding.imfit.theme.IMFITSizes
 import com.diajarkoding.imfit.theme.IMFITSpacing
 import com.diajarkoding.imfit.theme.Primary
 import com.diajarkoding.imfit.theme.PrimaryLight
+import com.diajarkoding.imfit.theme.IMFITOpacity
+import com.diajarkoding.imfit.theme.IMFITColors
+import com.diajarkoding.imfit.theme.IMFITGradients
+import com.diajarkoding.imfit.theme.OnPrimary
 
 @Composable
 fun IMFITButton(
@@ -67,17 +71,17 @@ fun IMFITButton(
         onClick = onClick,
         modifier = modifier
             .fillMaxWidth()
-            .height(height)
+            .heightIn(min = height.coerceAtLeast(IMFITSizes.minimumInteractiveTarget))
             .scale(scale),
         enabled = enabled && !isLoading,
         shape = IMFITShapes.Button,
         interactionSource = interactionSource,
-        contentPadding = PaddingValues(horizontal = IMFITSpacing.xxl, vertical = IMFITSpacing.lg),
+        contentPadding = PaddingValues(horizontal = IMFITSpacing.xxl, vertical = IMFITSpacing.md),
         colors = ButtonDefaults.buttonColors(
             containerColor = Primary,
-            contentColor = Color.White,
-            disabledContainerColor = Primary.copy(alpha = 0.4f),
-            disabledContentColor = Color.White.copy(alpha = 0.6f)
+            contentColor = OnPrimary,
+            disabledContainerColor = Primary.copy(alpha = IMFITOpacity.disabled),
+            disabledContentColor = OnPrimary.copy(alpha = IMFITOpacity.disabledContent)
         ),
         elevation = ButtonDefaults.buttonElevation(
             defaultElevation = 2.dp,
@@ -87,9 +91,9 @@ fun IMFITButton(
     ) {
         if (isLoading) {
             CircularProgressIndicator(
-                color = Color.White,
-                strokeWidth = 2.5.dp,
-                modifier = Modifier.size(22.dp)
+                color = OnPrimary,
+                strokeWidth = IMFITSizes.buttonLoadingStroke,
+                modifier = Modifier.size(IMFITSizes.buttonLoadingIcon)
             )
         } else {
             Row(
@@ -121,7 +125,8 @@ fun IMFITGradientButton(
     modifier: Modifier = Modifier,
     enabled: Boolean = true,
     isLoading: Boolean = false,
-    icon: ImageVector? = null
+    icon: ImageVector? = null,
+    height: Dp = IMFITSizes.buttonHeight
 ) {
     val interactionSource = remember { MutableInteractionSource() }
     val isPressed by interactionSource.collectIsPressedAsState()
@@ -134,30 +139,27 @@ fun IMFITGradientButton(
     Box(
         modifier = modifier
             .fillMaxWidth()
-            .height(IMFITSizes.buttonHeight)
+            .heightIn(min = height.coerceAtLeast(IMFITSizes.minimumInteractiveTarget))
             .scale(scale)
             .shadow(if (enabled) 4.dp else 0.dp, IMFITShapes.Button)
             .clip(IMFITShapes.Button)
             .background(
-                brush = if (enabled) Brush.horizontalGradient(
-                    colors = listOf(Primary, PrimaryLight)
-                ) else Brush.horizontalGradient(
-                    colors = listOf(Primary.copy(alpha = 0.4f), PrimaryLight.copy(alpha = 0.4f))
-                )
+                brush = if (enabled) IMFITColors.gradientBrush else IMFITGradients.disabledBrand
             )
             .clickable(
                 interactionSource = interactionSource,
                 indication = null,
                 enabled = enabled && !isLoading,
                 onClick = onClick
-            ),
+            )
+            .padding(horizontal = IMFITSpacing.xxl, vertical = IMFITSpacing.md),
         contentAlignment = Alignment.Center
     ) {
         if (isLoading) {
             CircularProgressIndicator(
-                color = Color.White,
-                strokeWidth = 2.5.dp,
-                modifier = Modifier.size(22.dp)
+                color = OnPrimary,
+                strokeWidth = IMFITSizes.buttonLoadingStroke,
+                modifier = Modifier.size(IMFITSizes.buttonLoadingIcon)
             )
         } else {
             Row(
@@ -168,7 +170,7 @@ fun IMFITGradientButton(
                     Icon(
                         imageVector = icon,
                         contentDescription = null,
-                        tint = Color.White,
+                        tint = OnPrimary,
                         modifier = Modifier.size(IMFITSizes.iconSm)
                     )
                     Spacer(modifier = Modifier.width(IMFITSpacing.sm))
@@ -177,7 +179,7 @@ fun IMFITGradientButton(
                     text = text,
                     style = MaterialTheme.typography.titleSmall,
                     fontWeight = FontWeight.SemiBold,
-                    color = if (enabled) Color.White else Color.White.copy(alpha = 0.6f)
+                    color = if (enabled) OnPrimary else OnPrimary.copy(alpha = IMFITOpacity.disabledContent)
                 )
             }
         }
@@ -191,7 +193,8 @@ fun IMFITOutlinedButton(
     modifier: Modifier = Modifier,
     enabled: Boolean = true,
     isLoading: Boolean = false,
-    icon: ImageVector? = null
+    icon: ImageVector? = null,
+    height: Dp = IMFITSizes.buttonHeight
 ) {
     val interactionSource = remember { MutableInteractionSource() }
     val isPressed by interactionSource.collectIsPressedAsState()
@@ -202,7 +205,7 @@ fun IMFITOutlinedButton(
     )
     
     val backgroundColor by animateColorAsState(
-        targetValue = if (isPressed) Primary.copy(alpha = 0.08f) else Color.Transparent,
+        targetValue = if (isPressed) Primary.copy(alpha = IMFITOpacity.pressed) else Color.Transparent,
         animationSpec = tween(100),
         label = "backgroundColor"
     )
@@ -210,12 +213,12 @@ fun IMFITOutlinedButton(
     Box(
         modifier = modifier
             .fillMaxWidth()
-            .height(IMFITSizes.buttonHeight)
+            .heightIn(min = height.coerceAtLeast(IMFITSizes.minimumInteractiveTarget))
             .scale(scale)
             .clip(IMFITShapes.Button)
             .background(backgroundColor)
             .border(
-                width = 1.5.dp,
+                width = IMFITSizes.outlinedButtonStroke,
                 color = if (enabled) Primary else Primary.copy(alpha = 0.4f),
                 shape = IMFITShapes.Button
             )
@@ -224,14 +227,15 @@ fun IMFITOutlinedButton(
                 indication = null,
                 enabled = enabled && !isLoading,
                 onClick = onClick
-            ),
+            )
+            .padding(horizontal = IMFITSpacing.xxl, vertical = IMFITSpacing.md),
         contentAlignment = Alignment.Center
     ) {
         if (isLoading) {
             CircularProgressIndicator(
                 color = Primary,
-                strokeWidth = 2.5.dp,
-                modifier = Modifier.size(22.dp)
+                strokeWidth = IMFITSizes.buttonLoadingStroke,
+                modifier = Modifier.size(IMFITSizes.buttonLoadingIcon)
             )
         } else {
             Row(
@@ -267,7 +271,8 @@ fun IMFITSecondaryButton(
     isLoading: Boolean = false,
     containerColor: Color = MaterialTheme.colorScheme.surfaceVariant,
     contentColor: Color = MaterialTheme.colorScheme.onSurfaceVariant,
-    icon: ImageVector? = null
+    icon: ImageVector? = null,
+    height: Dp = IMFITSizes.buttonHeight
 ) {
     val interactionSource = remember { MutableInteractionSource() }
     val isPressed by interactionSource.collectIsPressedAsState()
@@ -280,7 +285,7 @@ fun IMFITSecondaryButton(
     Box(
         modifier = modifier
             .fillMaxWidth()
-            .height(IMFITSizes.buttonHeight)
+            .heightIn(min = height.coerceAtLeast(IMFITSizes.minimumInteractiveTarget))
             .scale(scale)
             .clip(IMFITShapes.Button)
             .background(if (enabled) containerColor else containerColor.copy(alpha = 0.5f))
@@ -289,14 +294,15 @@ fun IMFITSecondaryButton(
                 indication = null,
                 enabled = enabled && !isLoading,
                 onClick = onClick
-            ),
+            )
+            .padding(horizontal = IMFITSpacing.xxl, vertical = IMFITSpacing.md),
         contentAlignment = Alignment.Center
     ) {
         if (isLoading) {
             CircularProgressIndicator(
                 color = contentColor,
-                strokeWidth = 2.5.dp,
-                modifier = Modifier.size(22.dp)
+                strokeWidth = IMFITSizes.buttonLoadingStroke,
+                modifier = Modifier.size(IMFITSizes.buttonLoadingIcon)
             )
         } else {
             Row(
@@ -331,15 +337,15 @@ fun IMFITSmallButton(
     enabled: Boolean = true,
     icon: ImageVector? = null,
     containerColor: Color = Primary,
-    contentColor: Color = Color.White
+    contentColor: Color = OnPrimary
 ) {
     Box(
         modifier = modifier
-            .height(IMFITSizes.buttonHeightSmall)
+            .heightIn(min = IMFITSizes.buttonHeightSmall)
             .clip(IMFITShapes.ButtonSmall)
             .background(if (enabled) containerColor else containerColor.copy(alpha = 0.5f))
             .clickable(enabled = enabled, onClick = onClick)
-            .padding(horizontal = IMFITSpacing.lg),
+            .padding(horizontal = IMFITSpacing.lg, vertical = IMFITSpacing.sm),
         contentAlignment = Alignment.Center
     ) {
         Row(

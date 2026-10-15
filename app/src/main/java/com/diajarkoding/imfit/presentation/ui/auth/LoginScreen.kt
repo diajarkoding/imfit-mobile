@@ -122,7 +122,7 @@ fun LoginScreen(
                     .size(80.dp)
                     .clip(IMFITShapes.Card)
                     .background(
-                        Brush.linearGradient(listOf(Primary, PrimaryLight))
+                        com.diajarkoding.imfit.theme.IMFITGradients.brandLinear
                     ),
                 contentAlignment = Alignment.Center
             ) {
@@ -307,7 +307,7 @@ private fun LoginScreenContent(
                     .size(80.dp)
                     .clip(IMFITShapes.Card)
                     .background(
-                        Brush.linearGradient(listOf(Primary, PrimaryLight))
+                        com.diajarkoding.imfit.theme.IMFITGradients.brandLinear
                     ),
                 contentAlignment = Alignment.Center
             ) {

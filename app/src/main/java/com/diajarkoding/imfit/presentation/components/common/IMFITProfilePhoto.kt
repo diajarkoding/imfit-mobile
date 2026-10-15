@@ -82,7 +82,7 @@ fun IMFITProfilePhoto(
             .clip(CircleShape)
             .background(
                 if (showPlaceholder || isLoading) {
-                    Brush.linearGradient(listOf(Primary, PrimaryLight))
+                    com.diajarkoding.imfit.theme.IMFITGradients.brandLinear
                 } else {
                     Brush.linearGradient(listOf(Color.Transparent, Color.Transparent))
                 }

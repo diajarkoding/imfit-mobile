@@ -49,6 +49,10 @@ import com.diajarkoding.imfit.R
 import com.diajarkoding.imfit.core.notification.WorkoutNotificationManager
 import com.diajarkoding.imfit.theme.IMFITTheme
 import com.diajarkoding.imfit.theme.ThemeViewModel
+import com.diajarkoding.imfit.theme.IMFITColors
+import com.diajarkoding.imfit.theme.IMFITTypography
+import com.diajarkoding.imfit.theme.IMFITSizes
+import com.diajarkoding.imfit.theme.IMFITCornerRadius
 import dagger.hilt.android.AndroidEntryPoint
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
@@ -132,7 +136,7 @@ private fun RestAlarmScreen(exerciseName: String, darkTheme: Boolean, onOpenWork
             ) {
                 Box(
                     modifier = Modifier.size(64.dp).background(
-                        if (darkTheme) Color(0xFF182D47) else Color(0xFFEDF5FF), CircleShape
+                        IMFITColors.alarmIllustration, CircleShape
                     ),
                     contentAlignment = Alignment.Center
                 ) {
@@ -141,7 +145,7 @@ private fun RestAlarmScreen(exerciseName: String, darkTheme: Boolean, onOpenWork
                 Spacer(Modifier.height(12.dp))
                 Text(
                     stringResource(R.string.rest_finished),
-                    fontSize = 22.sp, lineHeight = 28.sp, fontWeight = FontWeight.SemiBold,
+                    style = IMFITTypography.titleLarge,
                     textAlign = TextAlign.Center
                 )
                 Spacer(Modifier.height(24.dp))
@@ -151,10 +155,10 @@ private fun RestAlarmScreen(exerciseName: String, darkTheme: Boolean, onOpenWork
                 ) {
                     Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
                         Text(
-                            stringResource(R.string.rest_alarm_exercise_label), fontSize = 11.sp, lineHeight = 16.sp,
+                            stringResource(R.string.rest_alarm_exercise_label), style = IMFITTypography.labelSmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
-                        Text(exerciseName, fontSize = 16.sp, lineHeight = 23.sp, fontWeight = FontWeight.Medium)
+                        Text(exerciseName, style = IMFITTypography.alarmExercise)
                     }
                 }
                 Spacer(Modifier.height(16.dp))
@@ -165,11 +169,11 @@ private fun RestAlarmScreen(exerciseName: String, darkTheme: Boolean, onOpenWork
                     Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
                         Text(
                             stringResource(R.string.rest_alarm_notification_title),
-                            fontSize = 14.sp, lineHeight = 20.sp, fontWeight = FontWeight.Medium
+                            style = IMFITTypography.bodyMedium
                         )
                         Text(
                             stringResource(R.string.rest_alarm_notification_stop),
-                            fontSize = 13.sp, lineHeight = 19.sp, fontWeight = FontWeight.Normal,
+                            style = IMFITTypography.alarmBody,
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
                     }
@@ -177,14 +181,14 @@ private fun RestAlarmScreen(exerciseName: String, darkTheme: Boolean, onOpenWork
             }
             Button(
                 onClick = onOpenWorkout,
-                modifier = Modifier.fillMaxWidth().heightIn(min = 50.dp),
-                shape = RoundedCornerShape(12.dp)
+                modifier = Modifier.fillMaxWidth().heightIn(min = IMFITSizes.buttonHeight),
+                shape = RoundedCornerShape(IMFITCornerRadius.template)
             ) {
-                Text(stringResource(R.string.rest_open_workout), fontSize = 15.sp, lineHeight = 21.sp, textAlign = TextAlign.Center)
+                Text(stringResource(R.string.rest_open_workout), style = IMFITTypography.alarmAction, textAlign = TextAlign.Center)
             }
             Spacer(Modifier.height(8.dp))
             Text(
-                stringResource(R.string.rest_open_workout_hint), fontSize = 12.sp, lineHeight = 18.sp,
+                stringResource(R.string.rest_open_workout_hint), style = IMFITTypography.alarmHint,
                 color = MaterialTheme.colorScheme.onSurfaceVariant, textAlign = TextAlign.Center
             )
         }

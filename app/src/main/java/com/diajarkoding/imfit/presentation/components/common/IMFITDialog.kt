@@ -8,6 +8,7 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -63,7 +64,7 @@ fun IMFITDialog(
 
     val iconBackground = when (type) {
         IMFITDialogType.DESTRUCTIVE -> DeletePink.copy(alpha = 0.12f)
-        else -> Brush.linearGradient(listOf(Primary.copy(alpha = 0.15f), PrimaryLight.copy(alpha = 0.1f)))
+        else -> com.diajarkoding.imfit.theme.IMFITGradients.dialogWash
     }
 
     val confirmColor = when (type) {
@@ -147,7 +148,8 @@ fun IMFITDialog(
                     horizontalArrangement = Arrangement.End
                 ) {
                     TextButton(
-                        onClick = { onDismiss?.invoke() ?: onDismissRequest() }
+                        onClick = { onDismiss?.invoke() ?: onDismissRequest() },
+                        modifier = Modifier.heightIn(min = IMFITSizes.buttonHeight)
                     ) {
                         Text(
                             text = dismissText,
@@ -156,7 +158,7 @@ fun IMFITDialog(
                         )
                     }
                     Spacer(modifier = Modifier.width(IMFITSpacing.sm))
-                    TextButton(onClick = onConfirm) {
+                    TextButton(onClick = onConfirm, modifier = Modifier.heightIn(min = IMFITSizes.buttonHeight)) {
                         Text(
                             text = confirmText,
                             fontWeight = FontWeight.SemiBold,
@@ -257,7 +259,7 @@ fun IMFITInputDialog(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.End
                 ) {
-                    TextButton(onClick = onDismissRequest) {
+                    TextButton(onClick = onDismissRequest, modifier = Modifier.heightIn(min = IMFITSizes.buttonHeight)) {
                         Text(
                             text = dismissText,
                             fontWeight = FontWeight.Medium,
@@ -267,7 +269,8 @@ fun IMFITInputDialog(
                     Spacer(modifier = Modifier.width(IMFITSpacing.sm))
                     TextButton(
                         onClick = onConfirm,
-                        enabled = confirmEnabled
+                        enabled = confirmEnabled,
+                        modifier = Modifier.heightIn(min = IMFITSizes.buttonHeight)
                     ) {
                         Text(
                             text = confirmText,

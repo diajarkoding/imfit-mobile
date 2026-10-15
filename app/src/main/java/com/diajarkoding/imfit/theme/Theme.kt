@@ -9,6 +9,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.darkColorScheme
 import androidx.compose.material3.lightColorScheme
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.graphics.lerp
@@ -19,12 +20,12 @@ private val LightColorScheme = lightColorScheme(
     primary = Primary,
     onPrimary = OnPrimary,
     primaryContainer = PrimaryContainer,
-    onPrimaryContainer = PrimaryDark,
+    onPrimaryContainer = OnPrimaryContainerLight,
 
     secondary = Primary,
     onSecondary = OnPrimary,
     secondaryContainer = PrimaryContainer,
-    onSecondaryContainer = PrimaryDark,
+    onSecondaryContainer = OnPrimaryContainerLight,
 
     tertiary = Success,
     onTertiary = OnSuccess,
@@ -46,24 +47,35 @@ private val LightColorScheme = lightColorScheme(
     onErrorContainer = Error,
 
     outline = OutlineLight,
-    outlineVariant = OutlineVariantLight
+    outlineVariant = OutlineVariantLight,
+    surfaceDim = BackgroundSecondaryLight,
+    surfaceBright = SurfaceLight,
+    surfaceContainerLowest = SurfaceLight,
+    surfaceContainerLow = BackgroundLight,
+    surfaceContainer = SurfaceVariantLight,
+    surfaceContainerHigh = BackgroundSecondaryLight,
+    surfaceContainerHighest = OutlineLight,
+    inverseSurface = SurfaceDark,
+    inverseOnSurface = OnSurfaceDark,
+    inversePrimary = PrimaryLight,
+    scrim = Scrim
 )
 
 private val DarkColorScheme = darkColorScheme(
     primary = Primary,
     onPrimary = OnPrimary,
-    primaryContainer = PrimaryDark,
-    onPrimaryContainer = OnPrimary,
+    primaryContainer = PrimaryContainerDark,
+    onPrimaryContainer = OnPrimaryContainerDark,
 
     secondary = Primary,
     onSecondary = OnPrimary,
-    secondaryContainer = PrimaryDark,
-    onSecondaryContainer = OnPrimary,
+    secondaryContainer = PrimaryContainerDark,
+    onSecondaryContainer = OnPrimaryContainerDark,
 
     tertiary = Success,
     onTertiary = OnSuccess,
-    tertiaryContainer = Success,
-    onTertiaryContainer = SuccessContainer,
+    tertiaryContainer = SuccessContainerDark,
+    onTertiaryContainer = SuccessForegroundDark,
 
     background = BackgroundDark,
     onBackground = OnBackgroundDark,
@@ -76,26 +88,25 @@ private val DarkColorScheme = darkColorScheme(
 
     error = Error,
     onError = OnError,
-    errorContainer = Error,
-    onErrorContainer = ErrorContainer,
+    errorContainer = ErrorContainerDark,
+    onErrorContainer = ErrorForegroundDark,
 
     outline = OutlineDark,
-    outlineVariant = OutlineVariantDark
+    outlineVariant = OutlineVariantDark,
+    surfaceDim = BackgroundDark,
+    surfaceBright = SurfaceVariantDark,
+    surfaceContainerLowest = BackgroundDark,
+    surfaceContainerLow = SurfaceDark,
+    surfaceContainer = SurfaceDark,
+    surfaceContainerHigh = SurfaceVariantDark,
+    surfaceContainerHighest = OutlineDark,
+    inverseSurface = SurfaceLight,
+    inverseOnSurface = OnSurfaceLight,
+    inversePrimary = PrimaryDark,
+    scrim = Scrim
 )
 
-@Composable
-private fun animatedColorScheme(darkTheme: Boolean): ColorScheme {
-    val transition = updateTransition(
-        targetState = darkTheme,
-        label = "themeTransition"
-    )
-    val darkThemeFraction by transition.animateFloat(
-        transitionSpec = { tween(IMFITMotion.ThemeTransitionDurationMillis) },
-        label = "darkThemeFraction"
-    ) { isDark ->
-        if (isDark) 1f else 0f
-    }
-
+private fun animatedColorScheme(darkTheme: Boolean, darkThemeFraction: Float): ColorScheme {
     val targetColorScheme = if (darkTheme) DarkColorScheme else LightColorScheme
     return targetColorScheme.copy(
         primaryContainer = lerp(LightColorScheme.primaryContainer, DarkColorScheme.primaryContainer, darkThemeFraction),
@@ -127,12 +138,31 @@ private fun animatedColorScheme(darkTheme: Boolean): ColorScheme {
     )
 }
 
+private fun animatedTrainingPalette(fraction: Float): IMFITPalette {
+    val light = TrainingLightPalette
+    val dark = TrainingDarkPalette
+    return IMFITPalette(
+        lerp(light.background, dark.background, fraction), lerp(light.surface, dark.surface, fraction),
+        lerp(light.raised, dark.raised, fraction), lerp(light.text, dark.text, fraction),
+        lerp(light.muted, dark.muted, fraction), lerp(light.border, dark.border, fraction),
+        lerp(light.primary, dark.primary, fraction), lerp(light.onPrimary, dark.onPrimary, fraction),
+        lerp(light.primaryContainer, dark.primaryContainer, fraction), lerp(light.onPrimaryContainer, dark.onPrimaryContainer, fraction),
+        lerp(light.success, dark.success, fraction), lerp(light.successContainer, dark.successContainer, fraction),
+        lerp(light.warning, dark.warning, fraction), lerp(light.warningContainer, dark.warningContainer, fraction),
+        lerp(light.error, dark.error, fraction), lerp(light.errorContainer, dark.errorContainer, fraction)
+    )
+}
+
 @Composable
 fun IMFITTheme(
     darkTheme: Boolean = false,
     content: @Composable () -> Unit
 ) {
-    val colorScheme = animatedColorScheme(darkTheme)
+    val transition = updateTransition(darkTheme, label = "themeTransition")
+    val fraction by transition.animateFloat(
+        transitionSpec = { tween(IMFITMotion.ThemeTransitionDurationMillis) }, label = "darkThemeFraction"
+    ) { if (it) 1f else 0f }
+    val colorScheme = animatedColorScheme(darkTheme, fraction)
     val view = LocalView.current
 
     if (!view.isInEditMode) {
@@ -146,10 +176,13 @@ fun IMFITTheme(
         }
     }
 
+    CompositionLocalProvider(LocalIsDarkTheme provides darkTheme,
+        LocalTrainingPalette provides animatedTrainingPalette(fraction)) {
     MaterialTheme(
         colorScheme = colorScheme,
         typography = Typography,
         shapes = Shapes,
         content = content
     )
+    }
 }

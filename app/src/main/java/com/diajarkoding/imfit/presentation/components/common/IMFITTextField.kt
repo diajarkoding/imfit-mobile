@@ -217,7 +217,7 @@ fun IMFITPasswordField(
             trailingIcon = {
                 IconButton(
                     onClick = { passwordVisible = !passwordVisible },
-                    modifier = Modifier.size(IMFITSizes.iconMd)
+                    modifier = Modifier.size(IMFITSizes.minimumInteractiveTarget)
                 ) {
                     Icon(
                         imageVector = if (passwordVisible) Symbols.Default.Visibility else Symbols.Default.VisibilityOff,

@@ -160,9 +160,7 @@ fun SplashScreen(
         modifier = Modifier
             .fillMaxSize()
             .background(
-                Brush.verticalGradient(
-                    listOf(Primary, PrimaryLight)
-                )
+                com.diajarkoding.imfit.theme.IMFITGradients.brandVertical
             )
     ) {
         Column(
@@ -197,11 +195,7 @@ fun SplashScreen(
             ) {
                 Text(
                     text = stringResource(R.string.app_name),
-                    style = MaterialTheme.typography.headlineLarge.copy(
-                        fontWeight = FontWeight.Bold,
-                        fontSize = 42.sp,
-                        letterSpacing = 4.sp
-                    ),
+                    style = com.diajarkoding.imfit.theme.IMFITTypography.splashBrand,
                     color = MaterialTheme.colorScheme.onPrimary
                 )
                 Spacer(modifier = Modifier.height(IMFITSpacing.sm))
@@ -253,9 +247,7 @@ private fun SplashScreenContent() {
         modifier = Modifier
             .fillMaxSize()
             .background(
-                Brush.verticalGradient(
-                    listOf(Primary, PrimaryLight)
-                )
+                com.diajarkoding.imfit.theme.IMFITGradients.brandVertical
             )
     ) {
         Column(
@@ -286,11 +278,7 @@ private fun SplashScreenContent() {
             ) {
                 Text(
                     text = stringResource(R.string.app_name),
-                    style = MaterialTheme.typography.headlineLarge.copy(
-                        fontWeight = FontWeight.Bold,
-                        fontSize = 42.sp,
-                        letterSpacing = 4.sp
-                    ),
+                    style = com.diajarkoding.imfit.theme.IMFITTypography.splashBrand,
                     color = MaterialTheme.colorScheme.onPrimary
                 )
                 Spacer(modifier = Modifier.height(IMFITSpacing.sm))

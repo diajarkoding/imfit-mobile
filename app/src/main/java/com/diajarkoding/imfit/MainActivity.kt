@@ -12,7 +12,6 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.material3.Surface
-import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.ui.Modifier
 import androidx.core.splashscreen.SplashScreen.Companion.installSplashScreen
 import com.diajarkoding.imfit.core.notification.WorkoutNotificationManager
@@ -20,7 +19,6 @@ import com.diajarkoding.imfit.data.auth.AuthDeepLinkHandler
 import com.diajarkoding.imfit.presentation.navigation.NavGraph
 import com.diajarkoding.imfit.theme.IMFITTheme
 import com.diajarkoding.imfit.theme.LocaleManager
-import com.diajarkoding.imfit.theme.LocalIsDarkTheme
 import com.diajarkoding.imfit.theme.ThemeViewModel
 import dagger.hilt.android.AndroidEntryPoint
 import javax.inject.Inject
@@ -65,7 +63,6 @@ class MainActivity : ComponentActivity() {
             val templateId by pendingTemplateId
             val shouldNavigateToMain by pendingAuthenticatedNavigation
 
-            CompositionLocalProvider(LocalIsDarkTheme provides isDarkMode) {
                 IMFITTheme(darkTheme = isDarkMode) {
                     Surface(modifier = Modifier.fillMaxSize()) {
                         // Don't use key() here as it resets navigation to splash screen
@@ -90,7 +87,6 @@ class MainActivity : ComponentActivity() {
                         )
                     }
                 }
-            }
         }
     }
     

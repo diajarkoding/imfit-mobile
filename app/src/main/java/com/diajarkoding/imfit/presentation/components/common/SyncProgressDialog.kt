@@ -31,6 +31,9 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.diajarkoding.imfit.data.sync.SyncState
 import com.diajarkoding.imfit.theme.Primary
+import com.diajarkoding.imfit.theme.IMFITOpacity
+import com.diajarkoding.imfit.theme.Scrim
+import com.diajarkoding.imfit.theme.OverlayForeground
 
 /**
  * Full-screen sync overlay with semi-transparent background.
@@ -47,7 +50,7 @@ fun SyncProgressDialog(
     Box(
         modifier = Modifier
             .fillMaxSize()
-            .background(Color.Black.copy(alpha = 0.6f)),
+            .background(Scrim.copy(alpha = IMFITOpacity.scrim)),
         contentAlignment = Alignment.Center
     ) {
         Column(
@@ -72,7 +75,7 @@ fun SyncProgressDialog(
                 text = "Syncing",
                 style = MaterialTheme.typography.headlineMedium,
                 fontWeight = FontWeight.Bold,
-                color = Color.White,
+                color = OverlayForeground,
                 letterSpacing = 1.sp
             )
             
@@ -82,7 +85,7 @@ fun SyncProgressDialog(
             Text(
                 text = syncState.progressMessage ?: "Please wait...",
                 style = MaterialTheme.typography.bodyLarge,
-                color = Color.White.copy(alpha = 0.8f),
+                color = OverlayForeground.copy(alpha = IMFITOpacity.overlaySecondary),
                 textAlign = TextAlign.Center,
                 fontWeight = FontWeight.Medium
             )
@@ -103,7 +106,7 @@ fun SyncProgressDialog(
                     .height(6.dp)
                     .clip(RoundedCornerShape(3.dp)),
                 color = Primary,
-                trackColor = Color.White.copy(alpha = 0.2f),
+                trackColor = OverlayForeground.copy(alpha = IMFITOpacity.overlayTrack),
                 strokeCap = StrokeCap.Round
             )
             

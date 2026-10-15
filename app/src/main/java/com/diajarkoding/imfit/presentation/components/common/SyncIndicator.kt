@@ -25,6 +25,7 @@ import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
 import com.diajarkoding.imfit.data.sync.SyncState
+import com.diajarkoding.imfit.theme.IMFITColors
 
 /**
  * Compact sync status indicator that shows current sync state.
@@ -42,19 +43,19 @@ fun SyncIndicator(
             "Syncing..."
         )
         SyncState.SyncStatus.SYNCED -> Pair(
-            Color(0xFF4CAF50), // Green
+            IMFITColors.statusSuccess,
             "Synced"
         )
         SyncState.SyncStatus.FAILED -> Pair(
-            MaterialTheme.colorScheme.error,
+            IMFITColors.statusError,
             "Sync failed"
         )
         SyncState.SyncStatus.OFFLINE -> Pair(
-            Color(0xFFFF9800), // Orange
+            IMFITColors.statusWarning,
             "Offline"
         )
         SyncState.SyncStatus.IDLE -> Pair(
-            Color(0xFF9E9E9E), // Gray
+            MaterialTheme.colorScheme.onSurfaceVariant,
             ""
         )
     }
@@ -127,9 +128,9 @@ fun SyncDot(
 ) {
     val color = when (syncState.status) {
         SyncState.SyncStatus.SYNCING -> MaterialTheme.colorScheme.primary
-        SyncState.SyncStatus.SYNCED -> Color(0xFF4CAF50)
-        SyncState.SyncStatus.FAILED -> MaterialTheme.colorScheme.error
-        SyncState.SyncStatus.OFFLINE -> Color(0xFFFF9800)
+        SyncState.SyncStatus.SYNCED -> IMFITColors.statusSuccess
+        SyncState.SyncStatus.FAILED -> IMFITColors.statusError
+        SyncState.SyncStatus.OFFLINE -> IMFITColors.statusWarning
         SyncState.SyncStatus.IDLE -> Color.Transparent
     }
 

@@ -5,8 +5,12 @@ import com.diajarkoding.imfit.domain.model.TemplateExercise
 import com.diajarkoding.imfit.domain.model.WorkoutLog
 import com.diajarkoding.imfit.domain.model.WorkoutSession
 import com.diajarkoding.imfit.domain.model.WorkoutTemplate
+import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.flow
 
 interface WorkoutRepository {
+    fun observeTemplates(userId: String): Flow<List<WorkoutTemplate>> = flow { emit(getTemplates(userId)) }
+    fun observeTemplate(templateId: String): Flow<WorkoutTemplate?> = flow { emit(getTemplateById(templateId)) }
     // Template operations
     suspend fun getTemplates(userId: String): List<WorkoutTemplate>
     suspend fun getTemplateById(templateId: String): WorkoutTemplate?
@@ -22,12 +26,19 @@ interface WorkoutRepository {
     /** Null means absent; recovery/read failures must propagate to background callers. */
     suspend fun getActiveSessionForTimer(): WorkoutSession? = getActiveSession()
     suspend fun updateActiveSession(session: WorkoutSession)
+    suspend fun mutateActiveSession(sessionId: String, transform: (WorkoutSession) -> WorkoutSession): WorkoutSession? {
+        val current = getActiveSession()?.takeIf { it.id == sessionId } ?: return null
+        return transform(current).also { updateActiveSession(it) }
+    }
+    fun requestCancelSession(sessionId: String) { error("Asynchronous session cancellation is not implemented") }
     suspend fun finishWorkout(): WorkoutLog?
     suspend fun cancelWorkout()
     suspend fun updateSessionRestOverride(seconds: Int)
     suspend fun getSessionRestOverride(): Int?
 
     // Workout log operations
+    fun observeWorkoutLogs(userId: String): Flow<List<WorkoutLog>> = flow { emit(getWorkoutLogs(userId)) }
+    fun observeLastWorkoutLog(userId: String): Flow<WorkoutLog?> = flow { emit(getLastWorkoutLog(userId)) }
     suspend fun getWorkoutLogs(userId: String): List<WorkoutLog>
     suspend fun getWorkoutLogById(logId: String): WorkoutLog?
     suspend fun getLastWorkoutLog(userId: String): WorkoutLog?

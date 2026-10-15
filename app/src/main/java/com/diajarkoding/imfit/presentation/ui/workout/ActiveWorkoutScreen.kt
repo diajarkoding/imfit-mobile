@@ -104,6 +104,7 @@ import com.diajarkoding.imfit.presentation.components.common.IMFITSecondaryButto
 import com.diajarkoding.imfit.theme.DeletePink
 import com.diajarkoding.imfit.theme.IMFITShapes
 import com.diajarkoding.imfit.theme.IMFITSizes
+import com.diajarkoding.imfit.theme.WorkoutTypography
 import com.diajarkoding.imfit.theme.IMFITSpacing
 import com.diajarkoding.imfit.theme.Primary
 import com.diajarkoding.imfit.theme.PrimaryLight
@@ -118,7 +119,11 @@ fun ActiveWorkoutScreen(
     templateId: String,
     onNavigateBack: () -> Unit,
     onWorkoutFinished: (String) -> Unit,
-    viewModel: ActiveWorkoutViewModel = hiltViewModel()
+    viewModel: ActiveWorkoutViewModel = hiltViewModel(),
+    onAddExercises: (String, List<String>) -> Unit = { _, _ -> },
+    selectionSessionId: String? = null,
+    selectedExerciseIds: List<String>? = null,
+    onSelectedExercisesConsumed: () -> Unit = {}
 ) {
     val state by viewModel.state.collectAsStateWithLifecycle()
     var showRestConfigSheet by remember { mutableStateOf(false) }
@@ -201,8 +206,9 @@ fun ActiveWorkoutScreen(
     
     
     // Show pause error via snackbar
-    LaunchedEffect(state.pauseError) {
-        state.pauseError?.let { error ->
+    val pauseErrorMessage = state.pauseErrorRes?.let { stringResource(it) }
+    LaunchedEffect(pauseErrorMessage) {
+        pauseErrorMessage?.let { error ->
             coroutineScope.launch {
                 snackbarHostState.showSnackbar(error)
                 viewModel.clearPauseError()
@@ -211,7 +217,17 @@ fun ActiveWorkoutScreen(
     }
 
     LaunchedEffect(templateId) {
-        viewModel.startWorkout(templateId)
+        viewModel.startWorkout(templateId, selectionSessionId)
+    }
+    LaunchedEffect(state.session?.id, selectedExerciseIds, selectionSessionId) {
+        val ids = selectedExerciseIds ?: return@LaunchedEffect
+        val session = state.session ?: return@LaunchedEffect
+        if (session.id == selectionSessionId) viewModel.addExercisesByIds(session.id, ids, onSelectedExercisesConsumed)
+        else onSelectedExercisesConsumed()
+    }
+    val mutationErrorMessage = state.mutationErrorRes?.let { stringResource(it) }
+    LaunchedEffect(mutationErrorMessage) {
+        mutationErrorMessage?.let { snackbarHostState.showSnackbar(it); viewModel.clearMutationError() }
     }
     LaunchedEffect(state.sessionEnded) {
         if (state.sessionEnded) onNavigateBack()
@@ -220,6 +236,7 @@ fun ActiveWorkoutScreen(
     // Start foreground service when workout session is available
     // Only start if service is not already bound/running
     LaunchedEffect(state.session?.id, isBound) {
+        if (state.isCancelling || state.isFinishing) return@LaunchedEffect
         state.session?.let { session ->
             // Skip if service is already running (bound means it's running)
             if (isBound && workoutService?.isRunning?.value == true) {
@@ -324,8 +341,7 @@ fun ActiveWorkoutScreen(
             confirmText = stringResource(R.string.action_cancel_workout),
             dismissText = stringResource(R.string.action_continue),
             onConfirm = {
-                viewModel.cancelWorkout()
-                onNavigateBack()
+                if (viewModel.cancelWorkout()) onNavigateBack()
             },
             onDismiss = { viewModel.dismissCancelDialog() }
         )
@@ -342,7 +358,8 @@ fun ActiveWorkoutScreen(
                     title = {
                         Column {
                             Text(
-                                text = if (state.isPaused) "PAUSED" else (state.session?.templateName ?: "Workout"),
+                                text = if (state.isPaused) stringResource(R.string.active_session_paused_title)
+                                    else (state.session?.templateName ?: stringResource(R.string.active_session_default_title)),
                                 style = MaterialTheme.typography.titleMedium,
                                 fontWeight = FontWeight.Bold,
                                 color = if (state.isPaused) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurface
@@ -441,7 +458,7 @@ fun ActiveWorkoutScreen(
                         IMFITButton(
                             text = stringResource(R.string.action_finish_workout),
                             onClick = { viewModel.finishWorkout() },
-                            enabled = (state.session?.totalCompletedSets ?: 0) > 0 && !state.isFinishing,
+                            enabled = (state.session?.totalCompletedSets ?: 0) > 0 && !state.isFinishing && !state.isCancelling && !state.isAddingExercises,
                             isLoading = state.isFinishing,
                             icon = Symbols.Default.Check
                         )
@@ -471,10 +488,12 @@ fun ActiveWorkoutScreen(
                 verticalArrangement = Arrangement.spacedBy(IMFITSpacing.lg)
             ) {
                 state.session?.exerciseLogs?.forEachIndexed { exerciseIndex, exerciseLog ->
-                    item(key = "exercise_${exerciseIndex}_${exerciseLog.exercise.id}") {
+                    item(key = "exercise_${exerciseLog.exercise.id}") {
                         ExerciseSection(
                             exerciseLog = exerciseLog,
                             exerciseIndex = exerciseIndex,
+                            onRemoveExercise = { viewModel.removeExercise(exerciseLog.exercise.id) },
+                            mutationEnabled = !state.isFinishing && !state.isCancelling,
                             onSetUpdate = { setIndex, weight, reps ->
                                 viewModel.updateSet(exerciseIndex, setIndex, weight, reps)
                             },
@@ -492,6 +511,19 @@ fun ActiveWorkoutScreen(
                     }
                 }
 
+                item(key = "add_exercises") {
+                    if (state.session?.exerciseLogs.isNullOrEmpty()) {
+                        Text(stringResource(R.string.active_session_empty), style = MaterialTheme.typography.bodyMedium)
+                        Spacer(Modifier.height(IMFITSpacing.md))
+                    }
+                    IMFITButton(
+                        text = stringResource(R.string.active_session_add_exercises),
+                        enabled = !state.isFinishing && !state.isCancelling && !state.isAddingExercises,
+                        isLoading = state.isAddingExercises,
+                        icon = Symbols.Default.Add,
+                        onClick = { state.session?.let { onAddExercises(it.id, it.exerciseLogs.map { log -> log.exercise.id }) } }
+                    )
+                }
                 item(key = "spacer_bottom") { Spacer(modifier = Modifier.height(IMFITSpacing.huge)) }
             }
         }
@@ -514,7 +546,7 @@ private fun RestTimerDialogPreview() {
 private fun ProgressChipPreview() {
     com.diajarkoding.imfit.theme.IMFITTheme(darkTheme = false) {
         ProgressChip(
-            label = "Sets",
+            label = stringResource(R.string.label_sets),
             value = "5/12"
         )
     }
@@ -525,7 +557,7 @@ private fun ProgressChipPreview() {
 private fun ProgressChipPrimaryPreview() {
     com.diajarkoding.imfit.theme.IMFITTheme(darkTheme = false) {
         ProgressChip(
-            label = "Volume",
+            label = stringResource(R.string.label_volume),
             value = "1250 kg",
             isPrimary = true
         )
@@ -569,8 +601,7 @@ private fun RestTimerConfigSheet(
             ) {
                 Text(
                     text = stringResource(R.string.active_workout_rest_timer),
-                    style = MaterialTheme.typography.titleLarge,
-                    fontSize = 20.sp,
+                    style = WorkoutTypography.exerciseName,
                     fontWeight = FontWeight.SemiBold
                 )
                 Spacer(modifier = Modifier.height(IMFITSpacing.lg))
@@ -592,7 +623,7 @@ private fun RestTimerConfigSheet(
                         value = hours,
                         onValueChange = { hours = it },
                         range = 0..23,
-                        label = "hours"
+                        label = stringResource(R.string.unit_hours_short)
                     )
                     
                     Text(
@@ -608,7 +639,7 @@ private fun RestTimerConfigSheet(
                         value = minutes,
                         onValueChange = { minutes = it },
                         range = 0..59,
-                        label = "min"
+                        label = stringResource(R.string.unit_min)
                     )
                     
                     Text(
@@ -624,7 +655,7 @@ private fun RestTimerConfigSheet(
                         value = seconds,
                         onValueChange = { seconds = it },
                         range = 0..59,
-                        label = "sec"
+                        label = stringResource(R.string.unit_seconds_short)
                     )
                 }
 
@@ -647,13 +678,13 @@ private fun RestTimerConfigSheet(
                 Spacer(modifier = Modifier.height(IMFITSpacing.md))
                 androidx.compose.material3.TextButton(
                     onClick = onAlarmSettings,
-                    modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp),
+                    modifier = Modifier.fillMaxWidth().heightIn(min = IMFITSizes.buttonHeight),
                     contentPadding = PaddingValues(0.dp)
                 ) {
                     Text(
                         text = stringResource(R.string.rest_full_screen_settings),
                         modifier = Modifier.fillMaxWidth(),
-                        fontSize = 14.sp,
+                        style = MaterialTheme.typography.bodyMedium,
                         textAlign = TextAlign.Start
                     )
                 }
@@ -672,14 +703,14 @@ private fun RestTimerConfigSheet(
                     Box(modifier = Modifier.weight(1f)) {
                         IMFITSecondaryButton(
                             text = stringResource(R.string.action_cancel),
-                            modifier = Modifier.height(48.dp),
+                            height = IMFITSizes.buttonHeight,
                             onClick = onDismiss
                         )
                     }
                     Box(modifier = Modifier.weight(1f)) {
                         IMFITButton(
                             text = stringResource(R.string.action_save),
-                            height = 48.dp,
+                            height = IMFITSizes.buttonHeight,
                             onClick = {
                                 val totalSeconds = hours * 3600 + minutes * 60 + seconds
                                 onSoundChange(draftSoundEnabled)
@@ -703,7 +734,7 @@ private fun RestAlarmToggleRow(
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .heightIn(min = 48.dp)
+            .heightIn(min = IMFITSizes.minimumInteractiveTarget)
             .toggleable(value = checked, role = Role.Switch, onValueChange = onCheckedChange),
         verticalAlignment = Alignment.CenterVertically
     ) {
@@ -711,7 +742,6 @@ private fun RestAlarmToggleRow(
             text = label,
             modifier = Modifier.weight(1f).padding(end = IMFITSpacing.md),
             style = MaterialTheme.typography.bodyMedium,
-            fontSize = 14.sp,
             fontWeight = FontWeight.Normal,
             color = MaterialTheme.colorScheme.onSurface,
             textAlign = TextAlign.Start
@@ -868,7 +898,9 @@ private fun ExerciseSection(
     onSetUpdate: (Int, Float, Int) -> Unit,
     onSetComplete: (Int) -> Unit,
     onAddSet: () -> Unit,
-    onRemoveSet: (Int) -> Unit
+    onRemoveSet: (Int) -> Unit,
+    onRemoveExercise: () -> Unit,
+    mutationEnabled: Boolean
 ) {
     Card(
         modifier = Modifier.fillMaxWidth(),
@@ -901,7 +933,7 @@ private fun ExerciseSection(
                     )
                 }
                 Spacer(modifier = Modifier.width(IMFITSpacing.md))
-                Column {
+                Column(Modifier.weight(1f)) {
                     Text(
                         text = exerciseLog.exercise.name,
                         style = MaterialTheme.typography.titleSmall,
@@ -912,6 +944,14 @@ private fun ExerciseSection(
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
+                }
+                if (exerciseLog.sets.none { it.isCompleted }) {
+                    IconButton(onClick = onRemoveExercise, enabled = mutationEnabled,
+                        modifier = Modifier.size(IMFITSizes.minimumInteractiveTarget)) {
+                        Icon(Symbols.Default.Delete,
+                            stringResource(R.string.active_session_remove_exercise, exerciseLog.exercise.name),
+                            tint = MaterialTheme.colorScheme.error)
+                    }
                 }
             }
 
@@ -1215,7 +1255,7 @@ private fun RestTimerDialog(
                         .size(64.dp)
                         .clip(CircleShape)
                         .background(
-                            Brush.linearGradient(listOf(Primary, PrimaryLight))
+                            com.diajarkoding.imfit.theme.IMFITGradients.brandLinear
                         ),
                     contentAlignment = Alignment.Center
                 ) {

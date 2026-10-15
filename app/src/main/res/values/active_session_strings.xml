@@ -1,0 +1,5 @@
+<resources>
+    <string name="active_session_add_exercises">Add Exercise</string>
+    <string name="active_session_remove_exercise">Remove %1$s from this session</string>
+    <string name="active_session_empty">No exercises in this session. Add exercises to continue, or discard the workout.</string>
+</resources>

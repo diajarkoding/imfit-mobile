@@ -140,11 +140,11 @@ class WorkoutService : Service() {
         val session = workouts.getActiveSessionForTimer() ?: return
         if (session.isPaused == paused) return
         val now = System.currentTimeMillis()
-        workouts.updateActiveSession(session.copy(
+        workouts.mutateActiveSession(session.id) { current -> if (current.isPaused == paused) current else current.copy(
             isPaused = paused,
             lastPauseTime = if (paused) now else null,
-            totalPausedTimeMs = session.totalPausedTimeMs + if (!paused) (now - (session.lastPauseTime ?: now)).coerceAtLeast(0) else 0
-        ))
+            totalPausedTimeMs = current.totalPausedTimeMs + if (!paused) (now - (current.lastPauseTime ?: now)).coerceAtLeast(0) else 0
+        ) }
         update = update.copy(isPaused = paused)
     }
 

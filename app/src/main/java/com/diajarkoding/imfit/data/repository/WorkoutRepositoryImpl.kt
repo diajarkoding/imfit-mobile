@@ -21,12 +21,26 @@ import com.diajarkoding.imfit.domain.model.WorkoutLog
 import com.diajarkoding.imfit.domain.model.WorkoutSession
 import com.diajarkoding.imfit.domain.model.WorkoutSet
 import com.diajarkoding.imfit.domain.model.WorkoutTemplate
+import com.diajarkoding.imfit.domain.model.validateActiveSessionEdit
 import com.diajarkoding.imfit.domain.repository.AuthRepository
 import com.diajarkoding.imfit.domain.repository.WorkoutRepository
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.flowOn
+import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
+import java.util.concurrent.ConcurrentHashMap
 import java.nio.charset.StandardCharsets
 import java.util.UUID
 import javax.inject.Inject
@@ -49,11 +63,35 @@ class WorkoutRepositoryImpl @Inject constructor(
 
     private var activeSession: WorkoutSession? = null
     private var activeSessionUserId: String? = null
+    private val sessionMutex = Mutex()
+    private val lifecycleMutex = Mutex()
+    private val terminalSessions = ConcurrentHashMap.newKeySet<String>()
+    private val cleanupScope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
     
-    private val json = Json { 
+    private val json = Json {
         ignoreUnknownKeys = true 
         encodeDefaults = true
     }
+
+    override fun observeTemplates(userId: String): Flow<List<WorkoutTemplate>> =
+        database.invalidationTracker.createFlow("workout_templates", "template_exercises", "exercises")
+            .map { database.withTransaction { getTemplates(userId) } }.distinctUntilChanged().flowOn(Dispatchers.IO)
+
+    override fun observeTemplate(templateId: String): Flow<WorkoutTemplate?> =
+        database.invalidationTracker.createFlow("workout_templates", "template_exercises", "exercises")
+            .map { database.withTransaction { getTemplateById(templateId) } }.distinctUntilChanged().flowOn(Dispatchers.IO)
+
+    override fun observeWorkoutLogs(userId: String): Flow<List<WorkoutLog>> =
+        database.invalidationTracker.createFlow("workout_logs", "exercise_logs", "workout_sets", "exercises")
+            .map { database.withTransaction {
+                workoutLogDao.getWorkoutLogsByUserList(userId).map { mapWorkoutLogEntityToDomain(it) }
+            } }.distinctUntilChanged().flowOn(Dispatchers.IO)
+
+    override fun observeLastWorkoutLog(userId: String): Flow<WorkoutLog?> =
+        database.invalidationTracker.createFlow("workout_logs", "exercise_logs", "workout_sets", "exercises")
+            .map { database.withTransaction {
+                workoutLogDao.getLastWorkoutLog(userId)?.let { mapWorkoutLogEntityToDomain(it) }
+            } }.distinctUntilChanged().flowOn(Dispatchers.IO)
 
     override suspend fun getTemplates(userId: String): List<WorkoutTemplate> {
         return try {
@@ -275,7 +313,7 @@ class WorkoutRepositoryImpl @Inject constructor(
         return true
     }
 
-    override suspend fun startWorkout(template: WorkoutTemplate): WorkoutSession {
+    override suspend fun startWorkout(template: WorkoutTemplate): WorkoutSession = lifecycleMutex.withLock {
         timerCleanup?.stop("SESSION_REPLACED")
         val exerciseLogs = template.exercises.map { templateExercise ->
             ExerciseLog(
@@ -300,7 +338,7 @@ class WorkoutRepositoryImpl @Inject constructor(
             exerciseLogs = exerciseLogs
         )
         
-        val userId = authRepository.getCurrentUser()?.id ?: template.userId
+        val userId = authRepository.getLocalUserId() ?: template.userId
         val sessionDataJson = json.encodeToString(session.toSerializable())
             
         val entity = ActiveSessionEntity(
@@ -315,13 +353,13 @@ class WorkoutRepositoryImpl @Inject constructor(
             totalPausedTimeMs = session.totalPausedTimeMs,
             lastPauseTime = session.lastPauseTime
         )
-        database.withTransaction {
+        withContext(Dispatchers.IO) { sessionMutex.withLock { database.withTransaction {
             activeSessionDao.deleteSession(userId)
             activeSessionDao.insertSession(entity)
-        }
+        } } }
         activeSession = session
         activeSessionUserId = userId
-        return session
+        session
     }
 
     override suspend fun getActiveSession(): WorkoutSession? {
@@ -335,17 +373,11 @@ class WorkoutRepositoryImpl @Inject constructor(
         }
     }
 
-    override suspend fun getActiveSessionForTimer(): WorkoutSession? {
-        val userId = authRepository.getLocalUserId() ?: return null
-        if (activeSession != null && activeSessionUserId == userId) {
-            return activeSession
-        }
-
-        // Try to restore from database
-        return run {
+    override suspend fun getActiveSessionForTimer(): WorkoutSession? = withContext(Dispatchers.IO) {
+        val userId = authRepository.getLocalUserId() ?: return@withContext null
             val entity = activeSessionDao.getActiveSession(userId)
             
-            if (entity != null) {
+            if (entity != null && entity.id !in terminalSessions) {
                 val sessionData = json.decodeFromString<SerializableSession>(entity.sessionDataJson)
                 activeSession = sessionData.toDomain()
                 activeSessionUserId = userId
@@ -354,49 +386,42 @@ class WorkoutRepositoryImpl @Inject constructor(
             } else {
                 null
             }
-        }
     }
 
     override suspend fun updateActiveSession(session: WorkoutSession) {
-        val sessionDataJson = json.encodeToString(session.toSerializable())
-        val userId = authRepository.getCurrentUser()?.id ?: return
-        database.withTransaction {
-            val existing = activeSessionDao.getSessionById(session.id)
-            val entity = existing?.copy(
-                templateId = session.templateId,
-                templateName = session.templateName,
-                startTime = session.startTime,
-                currentExerciseIndex = session.currentExerciseIndex,
-                sessionDataJson = sessionDataJson,
-                isPaused = session.isPaused,
-                totalPausedTimeMs = session.totalPausedTimeMs,
-                lastPauseTime = session.lastPauseTime,
-                updatedAt = System.currentTimeMillis()
-            ) ?: ActiveSessionEntity(
-                id = session.id,
-                userId = userId,
-                templateId = session.templateId,
-                templateName = session.templateName,
-                startTime = session.startTime,
-                currentExerciseIndex = session.currentExerciseIndex,
-                sessionDataJson = sessionDataJson,
-                isPaused = session.isPaused,
-                totalPausedTimeMs = session.totalPausedTimeMs,
-                lastPauseTime = session.lastPauseTime
-            )
-            activeSessionDao.insertSession(entity)
-        }
-        activeSession = session
-        activeSessionUserId = userId
+        mutateActiveSession(session.id) { session }
     }
 
-    override suspend fun finishWorkout(): WorkoutLog? {
+    override suspend fun mutateActiveSession(sessionId: String, transform: (WorkoutSession) -> WorkoutSession): WorkoutSession? =
+        withContext(Dispatchers.IO) { sessionMutex.withLock {
+            if (sessionId in terminalSessions) return@withLock null
+            val userId = authRepository.getLocalUserId() ?: return@withLock null
+            database.withTransaction {
+                val existing = activeSessionDao.getActiveSession(userId)?.takeIf { it.id == sessionId } ?: return@withTransaction null
+                val current = json.decodeFromString<SerializableSession>(existing.sessionDataJson).toDomain()
+                val next = transform(current)
+                validateActiveSessionEdit(current, next)
+                if (sessionId in terminalSessions) return@withTransaction null
+                activeSessionDao.updateSession(existing.copy(
+                    sessionDataJson = json.encodeToString(next.toSerializable()),
+                    currentExerciseIndex = next.currentExerciseIndex,
+                    isPaused = next.isPaused, lastPauseTime = next.lastPauseTime,
+                    totalPausedTimeMs = next.totalPausedTimeMs, updatedAt = System.currentTimeMillis()))
+                activeSession = next
+                activeSessionUserId = userId
+                next
+            }
+        } }
+
+    override suspend fun finishWorkout(): WorkoutLog? = lifecycleMutex.withLock lifecycle@{
         timerCleanup?.stop("WORKOUT_FINISHED")
-        val session = activeSession ?: getActiveSession() ?: return null
+        val session = sessionMutex.withLock {
+            getActiveSessionForTimer()?.also { terminalSessions.add(it.id) }
+        } ?: return@lifecycle null
         val endTime = System.currentTimeMillis()
 
-        return try {
-            val result = database.withTransaction {
+        try {
+            val result = withContext(Dispatchers.IO) { database.withTransaction {
                 val persistedSession = activeSessionDao.getSessionById(session.id)
                     ?: return@withTransaction null
                 val workoutLogId = session.id
@@ -473,7 +498,7 @@ class WorkoutRepositoryImpl @Inject constructor(
                     totalVolume = session.totalVolume,
                     exerciseLogs = session.exerciseLogs
                 )
-            }
+            } }
 
             if (result != null) {
                 activeSession = null
@@ -484,40 +509,54 @@ class WorkoutRepositoryImpl @Inject constructor(
         } catch (e: CancellationException) {
             throw e
         } catch (e: Exception) {
+            terminalSessions.remove(session.id)
             Log.e("WorkoutRepository", "Failed to persist finished workout", e)
             null
         }
     }
 
     override suspend fun cancelWorkout() {
-        timerCleanup?.stop("WORKOUT_CANCELLED")
-        val session = activeSession ?: getActiveSession()
-        if (session != null) activeSessionDao.deleteSessionById(session.id)
-        activeSession = null
-        activeSessionUserId = null
+        val session = getActiveSessionForTimer() ?: return
+        terminalSessions.add(session.id)
+        cancelSession(session.id)
+    }
+
+    override fun requestCancelSession(sessionId: String) {
+        if (!terminalSessions.add(sessionId)) return
+        cleanupScope.launch {
+            repeat(3) { attempt ->
+                try { cancelSession(sessionId); return@launch }
+                catch (e: CancellationException) { throw e }
+                catch (e: Exception) { Log.e("WorkoutRepository", "Cancel session cleanup failed", e); delay(250L * (attempt + 1)) }
+            }
+        }
+    }
+
+    private suspend fun cancelSession(sessionId: String) = lifecycleMutex.withLock {
+        val owned = withContext(Dispatchers.IO) { sessionMutex.withLock {
+            val userId = authRepository.getLocalUserId()
+            val current = userId?.let { activeSessionDao.getActiveSession(it) }
+            val belongs = current?.id == sessionId
+            activeSessionDao.deleteSessionById(sessionId)
+            if (activeSession?.id == sessionId) { activeSession = null; activeSessionUserId = null }
+            belongs || current == null
+        } }
+        if (owned) withContext(Dispatchers.Main.immediate) { timerCleanup?.stop("WORKOUT_CANCELLED") }
     }
 
     override suspend fun updateSessionRestOverride(seconds: Int) {
-        try {
-            val userId = authRepository.getCurrentUser()?.id ?: return
-            val entity = activeSession?.takeIf { activeSessionUserId == userId }
-                ?.let { activeSessionDao.getSessionById(it.id) }
-                ?: activeSessionDao.getActiveSession(userId)
-                ?: return
-            val updatedEntity = entity.copy(
-                sessionRestOverride = seconds,
-                updatedAt = System.currentTimeMillis()
-            )
-            activeSessionDao.updateSession(updatedEntity)
-            Log.d("WorkoutRepository", "Updated session rest override: $seconds")
-        } catch (e: Exception) {
-            Log.e("WorkoutRepository", "Failed to update session rest override: ${e.message}", e)
-        }
+        withContext(Dispatchers.IO) { sessionMutex.withLock {
+            val userId = authRepository.getLocalUserId() ?: return@withLock
+            database.withTransaction {
+                val entity = activeSessionDao.getActiveSession(userId)?.takeUnless { it.id in terminalSessions } ?: return@withTransaction
+                activeSessionDao.updateSession(entity.copy(sessionRestOverride = seconds, updatedAt = System.currentTimeMillis()))
+            }
+        } }
     }
     
     override suspend fun getSessionRestOverride(): Int? {
         return try {
-            val userId = authRepository.getCurrentUser()?.id ?: return null
+            val userId = authRepository.getLocalUserId() ?: return null
             activeSession?.takeIf { activeSessionUserId == userId }
                 ?.let { activeSessionDao.getSessionById(it.id) }?.sessionRestOverride
                 ?: activeSessionDao.getActiveSession(userId)?.sessionRestOverride

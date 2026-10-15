@@ -278,7 +278,10 @@ import com.diajarkoding.imfit.core.timer.RestTimerTrace
                notificationManager.notify(NotificationChannels.REST_FINISHED_NOTIFICATION_ID, notification)
                RestTimerTrace.event("notify_result", state, "notificationId=1002 success=true")
                true
-           } catch (e: RuntimeException) {
+            } catch (e: SecurityException) {
+                RestTimerTrace.event("notify_result", state, "notificationId=1002 success=false exception=${e.javaClass.simpleName}")
+                false
+            } catch (e: RuntimeException) {
                RestTimerTrace.event("notify_result", state, "notificationId=1002 success=false exception=${e.javaClass.simpleName}")
                false
            }

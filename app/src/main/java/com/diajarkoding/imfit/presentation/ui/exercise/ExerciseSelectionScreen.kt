@@ -54,6 +54,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -74,7 +75,8 @@ fun ExerciseSelectionScreen(
     templateId: String,
     onNavigateBack: () -> Unit,
     onExercisesSelected: (List<Exercise>) -> Unit,
-    viewModel: ExerciseSelectionViewModel = hiltViewModel()
+    viewModel: ExerciseSelectionViewModel = hiltViewModel(),
+    excludedExerciseIds: Set<String> = emptySet()
 ) {
     val state by viewModel.state.collectAsStateWithLifecycle()
 
@@ -116,8 +118,9 @@ fun ExerciseSelectionScreen(
                         .padding(vertical = IMFITSpacing.xs)
                 ) {
                     IMFITButton(
-                        text = stringResource(
-                            R.string.exercise_add_count,
+                        text = pluralStringResource(
+                            R.plurals.exercise_add_count,
+                            state.selectedExercises.size,
                             state.selectedExercises.size
                         ),
                         onClick = { onExercisesSelected(state.selectedExercises) },
@@ -227,7 +230,7 @@ fun ExerciseSelectionScreen(
                     // Shimmer loading state
                     items(8, key = { it }) { ShimmerExerciseCard() }
                 } else {
-                    items(state.filteredExercises.distinctBy { it.id }.mapIndexed { index, exercise ->
+                    items(state.filteredExercises.filterNot { it.id in excludedExerciseIds }.distinctBy { it.id }.mapIndexed { index, exercise ->
         exercise to "ex_${exercise.id}_${index}"
     }, key = { it.second }) { (exercise, _) ->
                         SelectableExerciseCard(

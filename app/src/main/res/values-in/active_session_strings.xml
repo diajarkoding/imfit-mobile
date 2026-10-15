@@ -1,0 +1,5 @@
+<resources>
+    <string name="active_session_add_exercises">Tambah gerakan</string>
+    <string name="active_session_remove_exercise">Hapus %1$s dari sesi ini</string>
+    <string name="active_session_empty">Belum ada gerakan di sesi ini. Tambahkan gerakan untuk melanjutkan, atau batalkan sesi.</string>
+</resources>

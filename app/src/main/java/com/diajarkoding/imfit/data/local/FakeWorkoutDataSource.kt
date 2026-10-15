@@ -234,13 +234,14 @@ object FakeWorkoutDataSource {
             ExerciseLog(
                 exercise = templateExercise.exercise,
                 sets = (1..templateExercise.sets).map { setNum ->
-                    WorkoutSet(setNumber = setNum)
-                }
+                    WorkoutSet(setNumber = setNum, reps = templateExercise.reps)
+                },
+                restSeconds = templateExercise.restSeconds
             )
         }
 
         val session = WorkoutSession(
-            id = "session_${System.currentTimeMillis()}",
+            id = java.util.UUID.randomUUID().toString(),
             templateId = template.id,
             templateName = template.name,
             startTime = System.currentTimeMillis(),
@@ -289,6 +290,7 @@ object FakeWorkoutDataSource {
     }
 
     fun getLastWorkoutLog(userId: String): WorkoutLog? {
-        return workoutLogs.filter { it.userId == userId }.maxByOrNull { it.date }
+        return workoutLogs.filter { it.userId == userId }
+            .maxWithOrNull(compareBy<WorkoutLog> { it.endTime }.thenBy { it.startTime }.thenBy { it.id })
     }
 }

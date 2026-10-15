@@ -15,7 +15,7 @@ interface WorkoutLogDao {
     fun getActiveWorkoutLogsByUser(userId: String): Flow<List<WorkoutLogEntity>>
 
     // Get last active workout log
-    @Query("SELECT * FROM workout_logs WHERE user_id = :userId AND deleted_at IS NULL ORDER BY date DESC LIMIT 1")
+    @Query("SELECT * FROM workout_logs WHERE user_id = :userId AND deleted_at IS NULL ORDER BY end_time DESC, start_time DESC, id DESC LIMIT 1")
     suspend fun getLastWorkoutLog(userId: String): WorkoutLogEntity?
 
     @Query("SELECT * FROM workout_logs WHERE id = :id")

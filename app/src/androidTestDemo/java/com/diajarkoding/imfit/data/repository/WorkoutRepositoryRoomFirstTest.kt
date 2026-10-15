@@ -16,6 +16,13 @@ import com.diajarkoding.imfit.domain.model.RegisterResult
 import com.diajarkoding.imfit.domain.model.WorkoutTemplate
 import com.diajarkoding.imfit.domain.repository.AuthRepository
 import kotlinx.coroutines.runBlocking
+import kotlinx.coroutines.*
+import kotlinx.coroutines.flow.first
+import com.diajarkoding.imfit.domain.model.appendExercises
+import com.diajarkoding.imfit.domain.model.removeIncompleteExercise
+import com.diajarkoding.imfit.domain.model.ExerciseLog
+import com.diajarkoding.imfit.domain.model.WorkoutSet
+import com.diajarkoding.imfit.data.local.entity.WorkoutLogEntity
 import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNotNull
@@ -103,6 +110,63 @@ class WorkoutRepositoryRoomFirstTest {
         assertEquals("Edited", entity?.name)
         assertEquals(PendingOperation.CREATE.name, entity?.pendingOperation)
         assertEquals(2, scheduler.enqueuedUsers.size)
+    }
+
+    @Test fun observerSeesCommittedRenameWhileSyncRemainsPending() = runBlocking {
+        val template = repository.createTemplate(user.id, "Before", emptyList())
+        val observed = async(start = CoroutineStart.UNDISPATCHED) {
+            repository.observeTemplate(template.id).first { it?.name == "After" }
+        }
+        repository.updateTemplate(template.id, "After", emptyList())
+        assertEquals("After", withTimeout(5000) { observed.await() }?.name)
+        assertEquals(SyncStatus.PENDING_SYNC.name, database.workoutTemplateDao().getTemplateById(template.id)?.syncStatus)
+    }
+
+    @Test fun sessionExerciseChangesPersistAndFinishedAggregateContainsOnlyRemainingExercises() = runBlocking {
+        val template = sampleTemplate()
+        val original = repository.startWorkout(template)
+        val added = ExerciseLog(Exercise(UUID.randomUUID().toString(), "Added", MuscleCategory.BACK, ""),
+            listOf(WorkoutSet(1, 25f, 8, true)))
+        repository.mutateActiveSession(original.id) { it.appendExercises(listOf(added)).removeIncompleteExercise(template.exercises.first().exercise.id) }
+        assertEquals(listOf(added), repository.getActiveSessionForTimer()?.exerciseLogs)
+        assertEquals(listOf(added), requireNotNull(repository.finishWorkout()).exerciseLogs)
+        val rows = database.exerciseLogDao().getExerciseLogsByWorkoutLogId(original.id)
+        assertEquals(listOf(added.exercise.id), rows.map { it.exerciseId })
+        assertTrue(rows.all { it.pendingOperation == PendingOperation.CREATE.name })
+        repository.updateActiveSession(original)
+        assertNull(database.activeSessionDao().getSessionById(original.id))
+    }
+
+    @Test fun asynchronousCancelDeletesPersistedRowAndRejectsLateWrites() = runBlocking {
+        val session = repository.startWorkout(sampleTemplate())
+        repository.requestCancelSession(session.id)
+        assertNull(repository.getActiveSessionForTimer())
+        repository.updateActiveSession(session)
+        withTimeout(5000) { while (database.activeSessionDao().getSessionById(session.id) != null) delay(20) }
+        assertNull(repository.getActiveSessionForTimer())
+    }
+
+    @Test fun latestHistoryUsesFinishTimeExcludesDeletedAndOtherUsersAndRefreshesFromRoom() = runBlocking {
+        fun row(id: String, start: Long, end: Long, volume: Float) = WorkoutLogEntity(
+            id = id, userId = user.id, templateId = null, templateName = id,
+            date = start, startTime = start, endTime = end, totalVolume = volume)
+        val latestFinished = row("long-session", 1000L, 5000L, 50f)
+        val laterStarted = row("later-started", 2000L, 4000L, 10f)
+        database.workoutLogDao().insertWorkoutLogs(listOf(latestFinished, laterStarted,
+            row("deleted", 3000L, 6000L, 100f).copy(deletedAt = 1L),
+            row("other-user", 3000L, 7000L, 200f).copy(userId = "other-user")))
+        assertEquals(latestFinished.id, repository.getLastWorkoutLog(user.id)?.id)
+        val observed = async(start = CoroutineStart.UNDISPATCHED) {
+            repository.observeLastWorkoutLog(user.id).first { it?.id == "new-session" }
+        }
+        database.workoutLogDao().insertWorkoutLog(row("new-session", 6000L, 8000L, 75f))
+        val latest = withTimeout(5000) { observed.await() }
+        assertEquals(75f, requireNotNull(latest).totalVolume)
+        assertEquals(3, repository.observeWorkoutLogs(user.id).first().size)
+        database.workoutLogDao().insertWorkoutLog(row("new-session", 6000L, 8000L, 75f).copy(deletedAt = 2L))
+        assertEquals(latestFinished.id, withTimeout(5000) {
+            repository.observeLastWorkoutLog(user.id).first { it?.id == latestFinished.id }
+        }?.id)
     }
 
     private fun sampleTemplate() = WorkoutTemplate(

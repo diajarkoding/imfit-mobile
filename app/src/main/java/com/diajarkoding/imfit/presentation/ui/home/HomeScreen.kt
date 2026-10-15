@@ -1,12 +1,14 @@
 package com.diajarkoding.imfit.presentation.ui.home
 
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.background
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.diajarkoding.imfit.R
@@ -46,51 +48,58 @@ fun HomeScreen(
         title = stringResource(R.string.home_create_workout_title),
         message = stringResource(R.string.home_create_workout_message),
         icon = Symbols.Default.Add,
-        confirmText = stringResource(R.string.action_create),
+        confirmText = stringResource(R.string.routine_create_action),
         dismissText = stringResource(R.string.action_cancel),
         confirmEnabled = name.isNotBlank(),
         onConfirm = { if (name.isNotBlank()) { viewModel.createWorkout(name); showDialog = false; name = "" } }
     ) {
         OutlinedTextField(name, { name = it }, singleLine = true, modifier = Modifier.fillMaxWidth(), placeholder = { Text(stringResource(R.string.home_workout_placeholder)) })
     }
-    LazyColumn(contentPadding = PaddingValues(IMFITSpacing.screenHorizontal), verticalArrangement = Arrangement.spacedBy(IMFITSpacing.lg), modifier = Modifier.fillMaxSize()) {
-        item { ImfitPageHeader(stringResource(R.string.app_name), onNavigateToProfile, brand = true, profilePhoto = state.userProfilePhotoUri) }
-        item { SyncIndicator(syncState = syncState, showText = false) }
-        if (state.isLoading) {
-            item { ShimmerWelcomeSection() }
-            item { ShimmerStatCard() }
-            items(3) { ShimmerWorkoutCard() }
-        } else {
-            item {
-                Column {
-                    Text(if (state.userName.isBlank()) stringResource(R.string.redesign_hello) else stringResource(R.string.redesign_greeting, state.userName), style = MaterialTheme.typography.headlineMedium)
-                    Text(stringResource(R.string.redesign_ready), style = MaterialTheme.typography.bodyLarge, color = MaterialTheme.colorScheme.onSurfaceVariant)
+    Column(Modifier.fillMaxSize().background(homePalette().background)) {
+        LazyColumn(
+            modifier = Modifier.fillMaxWidth().weight(1f),
+            contentPadding = PaddingValues(start = IMFITSpacing.screenHorizontal, top = IMFITSpacing.md,
+                end = IMFITSpacing.screenHorizontal, bottom = IMFITSpacing.screenVertical),
+            verticalArrangement = Arrangement.spacedBy(IMFITSpacing.itemSpacing)
+        ) {
+            item(key = "greeting") {
+                Box(Modifier.padding(bottom = IMFITSpacing.sm)) {
+                    if (state.isLoading) ShimmerWelcomeSection() else HomeGreeting(state.userName)
                 }
             }
-            item {
-                val log = state.lastWorkout
-                ImfitHeroSummaryCard(ImfitHeroKind.HOME, stringResource(R.string.redesign_latest), log?.templateName ?: stringResource(R.string.redesign_no_workout),
-                    log?.let { stringResource(R.string.redesign_workout_meta, redesignDate(it.startTime), it.exerciseLogs.size) } ?: stringResource(R.string.redesign_start_hint)) {
-                    if (log != null) {
-                        Spacer(Modifier.height(IMFITSpacing.lg))
-                        Row(horizontalArrangement = Arrangement.spacedBy(IMFITSpacing.md)) {
-                            ImfitStatTile(log.formattedDuration, stringResource(R.string.label_duration), Modifier.weight(1f), Symbols.Default.Schedule, compact = true)
-                            ImfitStatTile(log.formattedVolume, stringResource(R.string.redesign_session_volume), Modifier.weight(1f), compact = true)
-                        }
+            item(key = "strength_banner") {
+                Box(Modifier.padding(bottom = IMFITSpacing.sm)) { HomeStrengthBanner() }
+            }
+            item(key = "last_workout") {
+                Box(Modifier.padding(bottom = IMFITSpacing.sm)) {
+                    if (state.isLoading) ShimmerStatCard() else HomeLastWorkout(state.lastWorkout)
+                }
+            }
+            if (syncState.pendingCount > 0 ||
+                syncState.status == SyncState.SyncStatus.SYNCING ||
+                syncState.status == SyncState.SyncStatus.FAILED
+            ) {
+                item(key = "sync_status") {
+                    HomeSyncStatusCard(syncState, Modifier.padding(bottom = IMFITSpacing.sm))
+                }
+            }
+            item(key = "workout_section") {
+                HomeWorkoutSectionHeader(enabled = !state.isLoading, onAdd = { showDialog = true })
+            }
+            if (state.isLoading) {
+                items(3, key = { "loading_$it" }) { ShimmerWorkoutCard() }
+            } else {
+                if (state.templates.isEmpty()) {
+                    item(key = "empty_templates") { ImfitEmptyMessage(stringResource(R.string.home_empty_templates)) }
+                }
+                items(state.templates, key = { "template_${it.id}" }) { template ->
+                    val active = state.activeWorkoutTemplateId == template.id
+                    HomeWorkoutCard(template, active) {
+                        if (active) onNavigateToActiveWorkout(template.id) else onNavigateToWorkoutDetail(template.id)
                     }
                 }
             }
-            item { ImfitSectionHeader(stringResource(R.string.home_title_my_workouts)) }
-            if (state.templates.isEmpty()) item { ImfitEmptyMessage(stringResource(R.string.redesign_no_templates)) }
-            items(state.templates, key = { it.id }) { template ->
-                val active = state.activeWorkoutTemplateId == template.id
-                ImfitWorkoutRow(template.name, stringResource(R.string.redesign_exercise_count, template.exercises.size) + if (active) " · " + stringResource(R.string.redesign_resume) else "", template.exercises.firstOrNull()?.exercise?.muscleCategory) {
-                    if (active) onNavigateToActiveWorkout(template.id) else onNavigateToWorkoutDetail(template.id)
-                }
-            }
-            item { IMFITButton(text = stringResource(R.string.action_add_workout), onClick = { showDialog = true }, icon = Symbols.Default.Add) }
         }
-        item { Spacer(Modifier.height(IMFITSpacing.lg)) }
     }
 }
 

@@ -1,0 +1,24 @@
+<resources>
+    <string name="home_demo_badge">DEMO</string>
+    <string name="home_strength_headline">Build your strength.\nSet by set.</string>
+    <string name="home_strength_caption">Start with your chosen workout.</string>
+    <string name="home_summary_heading">LATEST · %1$s</string>
+    <string name="home_summary_empty">No completed sessions yet</string>
+    <string name="home_total_duration">Total duration</string>
+    <string name="home_total_volume">Total volume</string>
+    <string name="home_add_day">Add Routine</string>
+    <string name="home_resume">Resume Workout</string>
+    <string name="home_empty_templates">No routines yet. Tap “Add Routine” to create your first routine.</string>
+    <string name="home_sync_idle">Ready</string>
+    <string name="home_sync_idle_description">No synchronization in progress.</string>
+    <string name="home_sync_pending">%1$d changes pending</string>
+    <string name="home_sync_syncing">Syncing</string>
+    <string name="home_sync_syncing_description">Local data remains available.</string>
+    <string name="home_sync_synced">Everything synced</string>
+    <string name="home_sync_synced_description">Your changes have reached the cloud.</string>
+    <string name="home_sync_offline">Offline</string>
+    <string name="home_sync_offline_pending">Offline · %1$d changes pending</string>
+    <string name="home_sync_local">Saved on this device.</string>
+    <string name="home_sync_failed">Sync failed</string>
+    <string name="home_sync_failed_description">Local data is still saved. Try again when online.</string>
+</resources>

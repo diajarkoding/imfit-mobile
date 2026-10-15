@@ -13,6 +13,8 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.CancellationException
 import javax.inject.Inject
 
 data class WorkoutDetailState(
@@ -34,12 +36,20 @@ class WorkoutDetailViewModel @Inject constructor(
 
     private var workoutId: String? = savedStateHandle["workoutId"]
     private var initialized = false
+    private var observeJob: Job? = null
     
     private val _state = MutableStateFlow(WorkoutDetailState())
     val state = _state.asStateFlow()
 
     fun initialize(workoutId: String) {
-        if (workoutId.isBlank() || (initialized && this.workoutId == workoutId)) return
+        if (workoutId.isBlank()) return
+        if (initialized && this.workoutId == workoutId) {
+            viewModelScope.launch {
+                val active = workoutRepository.getActiveSession()
+                _state.update { it.copy(isWorkoutActive = active != null, isCurrentWorkoutActive = active?.templateId == workoutId) }
+            }
+            return
+        }
 
         this.workoutId = workoutId
         savedStateHandle["workoutId"] = workoutId
@@ -49,10 +59,11 @@ class WorkoutDetailViewModel @Inject constructor(
 
     fun loadWorkout() {
         val workoutId = workoutId ?: return
-        viewModelScope.launch {
-            _state.update { it.copy(isLoading = true) }
+        observeJob?.cancel()
+        observeJob = viewModelScope.launch {
+            _state.update { it.copy(isLoading = it.workout == null) }
             try {
-                val workout = workoutRepository.getTemplateById(workoutId)
+                workoutRepository.observeTemplate(workoutId).collect { workout ->
                 val activeSession = workoutRepository.getActiveSession()
                 val isCurrentActive = activeSession?.templateId == workoutId
                 val hasAnyActiveSession = activeSession != null
@@ -62,6 +73,9 @@ class WorkoutDetailViewModel @Inject constructor(
                     isWorkoutActive = hasAnyActiveSession,
                     isCurrentWorkoutActive = isCurrentActive
                 ) }
+                }
+            } catch (e: CancellationException) {
+                throw e
             } catch (e: Exception) {
                 _state.update { it.copy(error = e.message, isLoading = false) }
             }
@@ -90,7 +104,7 @@ class WorkoutDetailViewModel @Inject constructor(
     fun addExercises(exercises: List<Exercise>) {
         val workoutId = workoutId ?: return
         viewModelScope.launch {
-            val currentWorkout = _state.value.workout ?: return@launch
+            val currentWorkout = workoutRepository.getTemplateById(workoutId) ?: return@launch
             
             // Get IDs of exercises already in the template
             val existingExerciseIds = currentWorkout.exercises.map { it.exercise.id }.toSet()
@@ -123,7 +137,7 @@ class WorkoutDetailViewModel @Inject constructor(
     fun removeExercise(templateExercise: TemplateExercise) {
         val workoutId = workoutId ?: return
         viewModelScope.launch {
-            val currentWorkout = _state.value.workout ?: return@launch
+            val currentWorkout = workoutRepository.getTemplateById(workoutId) ?: return@launch
             val updatedExercises = currentWorkout.exercises.filter { it.id != templateExercise.id }
             
             workoutRepository.updateTemplateExercises(workoutId, updatedExercises)

@@ -63,6 +63,7 @@ import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
@@ -88,6 +89,7 @@ fun EditWorkoutScreen(
     viewModel: EditWorkoutViewModel = hiltViewModel()
 ) {
     val state by viewModel.state.collectAsStateWithLifecycle()
+    androidx.activity.compose.BackHandler(enabled = state.isLoading) { }
 
     LaunchedEffect(workoutId) {
         viewModel.initialize(workoutId)
@@ -112,7 +114,7 @@ fun EditWorkoutScreen(
                     )
                 },
                 navigationIcon = {
-                    IconButton(onClick = onNavigateBack) {
+                    IconButton(onClick = onNavigateBack, enabled = !state.isLoading) {
                         Icon(
                             imageVector = Symbols.AutoMirrored.Filled.ArrowBack,
                             contentDescription = stringResource(R.string.action_back)
@@ -138,6 +140,9 @@ fun EditWorkoutScreen(
                 contentPadding = PaddingValues(IMFITSpacing.screenHorizontal),
                 verticalArrangement = Arrangement.spacedBy(IMFITSpacing.lg)
             ) {
+                state.errorRes?.let { message -> item {
+                    Text(stringResource(message), color = MaterialTheme.colorScheme.error)
+                } }
                 item {
                     Text(
                         text = stringResource(R.string.workout_name_label),
@@ -152,6 +157,7 @@ fun EditWorkoutScreen(
                         modifier = Modifier.fillMaxWidth(),
                         placeholder = { Text(stringResource(R.string.home_workout_placeholder)) },
                         singleLine = true,
+                        enabled = !state.isLoading,
                         shape = IMFITShapes.TextField,
                         colors = OutlinedTextFieldDefaults.colors(
                             focusedBorderColor = Primary,
@@ -356,7 +362,7 @@ private fun EditableExerciseCard(
                                 .size(40.dp)
                                 .clip(IMFITShapes.IconContainer)
                                 .background(
-                                    Brush.linearGradient(listOf(Primary, PrimaryLight))
+                                    com.diajarkoding.imfit.theme.IMFITGradients.brandLinear
                                 ),
                             contentAlignment = Alignment.Center
                         ) {
@@ -431,7 +437,7 @@ private fun EditableExerciseCard(
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     Text(
-                        text = stringResource(R.string.workout_sets_configured, exercise.sets),
+                        text = pluralStringResource(R.plurals.workout_sets_configured, exercise.sets, exercise.sets),
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
@@ -443,7 +449,7 @@ private fun EditableExerciseCard(
                             ) {
                                 Icon(
                                     imageVector = Symbols.Default.Delete,
-                                    contentDescription = "Remove set",
+                                    contentDescription = stringResource(R.string.action_remove_set),
                                     tint = DeletePink,
                                     modifier = Modifier.size(18.dp)
                                 )

@@ -16,6 +16,9 @@ enum class SchedulingMode { EXACT, BEST_EFFORT, UNAVAILABLE }
 data class PlaybackToken(val timerId: String, val generation: Long, val revision: Long)
 enum class PlaybackReadiness { WAITING, READY, FAILED_PERMANENT }
 
+enum class AlarmDeliveryResult { HANDLED, RETRY }
+enum class FinishedPresentation { POSTED, BLOCKED, RETRY }
+
 @Serializable
 data class RestTimerState(
     val timerId: String,
@@ -59,7 +62,7 @@ interface RestTimerEffects {
     fun userStopped(state: RestTimerState): Boolean
     fun schedule(state: RestTimerState): SchedulingMode
     fun cancelAlarm(state: RestTimerState)
-    fun showFinished(state: RestTimerState)
+    fun showFinished(state: RestTimerState): FinishedPresentation
     fun dismissFinished()
     fun controlsAvailable(): Boolean
     fun controlsPending(): Boolean = false
@@ -146,7 +149,7 @@ class RestTimerCoordinator(
             invalidatePlayback()
             pendingTerminal?.let { cleanup(it) }
             mutableError.value = "TIMER_STORAGE_OR_RECOVERY_FAILED"
-            effects.trace("recovery_failed", state.value, "exception=${e.javaClass.simpleName} message=${e.message}")
+            effects.trace("recovery_failed", state.value, "exception=${e.javaClass.simpleName}")
         }
     }
 
@@ -198,13 +201,13 @@ class RestTimerCoordinator(
         }
     }
 
-    private suspend fun reconcileLocked(alarmDelivery: Boolean = false) {
+    private suspend fun reconcileLocked(alarmDelivery: Boolean = false): Boolean {
         effects.trace("reconcile_enter", state.value, "source=${if (alarmDelivery) "alarm" else "reconcile"}")
         var current = state.value ?: run {
             effects.stopAudio()
             effects.dismissFinished()
             effects.clearOrphans()
-            return
+            return true
         }
         if (current.status == TimerStatus.RUNNING || current.status == TimerStatus.EXPIRED) {
             val reason = when {
@@ -225,7 +228,7 @@ class RestTimerCoordinator(
             effects.trace("expired_committed", current)
         }
         renderLocked(current)
-        when (current.status) {
+        return when (current.status) {
             TimerStatus.RUNNING -> {
                 effects.stopAudio()
                 playingId = null
@@ -237,21 +240,26 @@ class RestTimerCoordinator(
                     // UNAVAILABLE is retried only after an explicit capability refresh.
                     scheduledIdentity = identity
                 }
+                true
             }
             TimerStatus.EXPIRED -> {
                 effects.cancelAlarm(current)
                 scheduledIdentity = null
-                try {
+                val presentation = try {
                     effects.showFinished(current)
                 } catch (e: Exception) {
                     effects.trace("notify_failed", current, "exception=${e.javaClass.simpleName}")
+                    FinishedPresentation.RETRY
                 }
+                // A transient post failure must not durably suppress playback before recovery.
+                if (presentation == FinishedPresentation.RETRY) return false
                 if (alarmDelivery && !current.audioSuppressed) {
                     playbackFromAlarm = true
                     effects.enqueuePlaybackCheck(ensurePlaybackToken(current))
                 } else updatePlaybackLocked(current)
+                true
             }
-            else -> cleanup(current)
+            else -> { cleanup(current); true }
         }
     }
 
@@ -399,28 +407,38 @@ class RestTimerCoordinator(
         reconcileLocked()
     }
 
-    suspend fun expiry(timerId: String, generation: Long, alarmDelivery: Boolean = false) = guarded {
-        val current = state.value ?: run { reconcileLocked(); return@guarded }
-        if (current.timerId == timerId && current.generation == generation) {
-            // A delivered early alarm is consumed by the system; re-arm instead of caching that schedule.
-            if (current.status == TimerStatus.RUNNING && clock.elapsedRealtime() < current.deadlineElapsedMs) scheduledIdentity = null
-            reconcileLocked(alarmDelivery)
-        }
-        else {
-            effects.trace("stale_alarm_ignored", current, "receivedTimer=$timerId receivedGeneration=$generation")
-            // A process/caller can die after an extend commit but before replacing its system
-            // alarm. Repair only the authoritative schedule; this event never expires it.
-            val identity = current.timerId to current.generation
-            if (current.timerId == timerId && current.generation > generation && current.status == TimerStatus.RUNNING &&
-                scheduledIdentity != identity && current.bootIdentity != null && current.bootIdentity == clock.bootIdentity() &&
-                effects.validSession(current)) {
-                effects.cancelAlarm(current.copy(generation = generation))
-                val mode = effects.schedule(current)
-                persist(current.copy(schedulingMode = mode))
-                scheduledIdentity = identity
-                effects.trace("alarm_schedule_recovered", state.value)
+    suspend fun expiry(timerId: String, generation: Long, alarmDelivery: Boolean = false): AlarmDeliveryResult {
+        // guarded records ordinary read/write failures rather than throwing them. Do not
+        // mistake that for a successful delivery and discard the durable recovery work.
+        var result = AlarmDeliveryResult.RETRY
+        guarded {
+            val current = state.value ?: run {
+                reconcileLocked()
+                result = AlarmDeliveryResult.HANDLED
+                return@guarded
+            }
+            if (current.timerId == timerId && current.generation == generation) {
+                // A delivered early alarm is consumed by the system; re-arm instead of caching that schedule.
+                if (current.status == TimerStatus.RUNNING && clock.elapsedRealtime() < current.deadlineElapsedMs) scheduledIdentity = null
+                result = if (reconcileLocked(alarmDelivery)) AlarmDeliveryResult.HANDLED else AlarmDeliveryResult.RETRY
+            } else {
+                effects.trace("stale_alarm_ignored", current, "receivedTimer=$timerId receivedGeneration=$generation")
+                // A process/caller can die after an extend commit but before replacing its system
+                // alarm. Repair only the authoritative schedule; this event never expires it.
+                val identity = current.timerId to current.generation
+                if (current.timerId == timerId && current.generation > generation && current.status == TimerStatus.RUNNING &&
+                    scheduledIdentity != identity && current.bootIdentity != null && current.bootIdentity == clock.bootIdentity() &&
+                    effects.validSession(current)) {
+                    effects.cancelAlarm(current.copy(generation = generation))
+                    val mode = effects.schedule(current)
+                    persist(current.copy(schedulingMode = mode))
+                    scheduledIdentity = identity
+                    effects.trace("alarm_schedule_recovered", state.value)
+                }
+                result = AlarmDeliveryResult.HANDLED
             }
         }
+        return result
     }
 
     suspend fun capabilitiesChanged() = guarded {

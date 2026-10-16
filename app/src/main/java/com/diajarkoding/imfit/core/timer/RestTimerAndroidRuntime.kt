@@ -241,25 +241,29 @@ class RestTimerAndroidRuntime @Inject constructor(
         null -> null
     }
 
-    override fun showFinished(state: RestTimerState) {
+    override fun showFinished(state: RestTimerState): FinishedPresentation {
         if (state.timerId in userDismissed) {
             // The user removed this card; never repost it, only ensure it stays gone.
             notifications.dismissRestFinished()
             posted = false
             if (shownTimerId == state.timerId) shownTimerId = null
-            return
+            return FinishedPresentation.BLOCKED
         }
         if (shownTimerId == state.timerId && shownGeneration == state.generation && posted) {
             // Self-heal a system-removed card; user removal always carries a dismissal mark.
             if (!isCardPresent() && !controlsPending()) {
                 posted = false
                 shownTimerId = null
-            } else return
+            } else return FinishedPresentation.POSTED
+        }
+        if (!notificationsAvailable()) {
+            trace("notify_blocked", state, "notificationId=1002 notificationsEnabled=${NotificationManagerCompat.from(context).areNotificationsEnabled()}")
+            return FinishedPresentation.BLOCKED
         }
         val now = android.os.SystemClock.elapsedRealtime()
-        if (!finishedRetry.available(now)) return
+        if (!finishedRetry.available(now)) return FinishedPresentation.RETRY
         // Do not reset card grace by repeatedly reposting before activeNotifications catches up.
-        posted = notificationsAvailable() && notifications.showRestFinished(state, fullScreenIntentAvailable())
+        posted = notifications.showRestFinished(state, fullScreenIntentAvailable())
         if (posted) {
             shownTimerId = state.timerId
             shownGeneration = state.generation
@@ -269,6 +273,7 @@ class RestTimerAndroidRuntime @Inject constructor(
             val retry = finishedRetry.failed(now)
             trace("notify_failed", state, "notificationId=1002 attempt=${finishedRetry.failures} retryMs=$retry")
         }
+        return if (posted) FinishedPresentation.POSTED else FinishedPresentation.RETRY
     }
     private fun isCardPresent(): Boolean = context.getSystemService(NotificationManager::class.java)
         .activeNotifications.any {

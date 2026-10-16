@@ -2,6 +2,8 @@ package com.diajarkoding.imfit.core.timer
 
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.CompletableDeferred
+import kotlinx.coroutines.awaitCancellation
 import org.junit.Assert.*
 import org.junit.Test
 import com.diajarkoding.imfit.domain.model.WorkoutSession
@@ -19,7 +21,9 @@ class RestTimerCoordinatorTest {
         var fail = false
         var failRead = false
         var cancelAfterWrite = false
+        var beforeRead: (() -> Unit)? = null
         override suspend fun read(): RestTimerState? {
+            beforeRead?.invoke()
             if (failRead) throw java.io.IOException("read failed")
             return saved
         }
@@ -51,7 +55,11 @@ class RestTimerCoordinatorTest {
         var queuedToken: PlaybackToken? = null
         var failRender = false
         var renderedStatus: TimerStatus? = null
-        override suspend fun validSession(state: RestTimerState) = valid
+        var validate: (suspend () -> Boolean)? = null
+        var failShow = false
+        var presentation = FinishedPresentation.POSTED
+        var observedAlarmDelivery: Boolean? = null
+        override suspend fun validSession(state: RestTimerState) = validate?.invoke() ?: valid
         override fun userStopped(state: RestTimerState) = stopped
         override fun schedule(state: RestTimerState): SchedulingMode {
             schedules++
@@ -59,7 +67,11 @@ class RestTimerCoordinatorTest {
             return mode
         }
         override fun cancelAlarm(state: RestTimerState) { scheduled = false; cleanupCount++ }
-        override fun showFinished(state: RestTimerState) { posted = true }
+        override fun showFinished(state: RestTimerState): FinishedPresentation {
+            if (failShow) throw IllegalStateException("notification service unavailable")
+            posted = presentation == FinishedPresentation.POSTED
+            return presentation
+        }
         override fun dismissFinished() { posted = false }
         override fun controlsAvailable() = controls
         override fun controlsPending() = pendingControls
@@ -69,6 +81,7 @@ class RestTimerCoordinatorTest {
         override fun noteUserDismissed(timerId: String) { dismissed.add(timerId) }
         override fun clearDismissed() { dismissed.clear(); clearedDismissed++ }
         override fun playbackReadiness(state: RestTimerState, token: PlaybackToken, alarmDelivery: Boolean): PlaybackReadiness {
+            observedAlarmDelivery = alarmDelivery
             this.token = token
             return readiness ?: super<RestTimerEffects>.playbackReadiness(state, token, alarmDelivery)
         }
@@ -76,6 +89,19 @@ class RestTimerCoordinatorTest {
         override fun renderWorkout(state: RestTimerState?, session: WorkoutSession?) {
             if (failRender) throw IllegalStateException("notification renderer failed")
             renderedStatus = state?.status
+        }
+    }
+    private class RecoveryQueue : RestTimerRecoveryQueue {
+        var queued: Pair<String, Long>? = null
+        var failEnqueue = false
+        var cancels = 0
+        override suspend fun enqueue(timerId: String, generation: Long) {
+            if (failEnqueue) throw IllegalStateException("work database unavailable")
+            queued = timerId to generation
+        }
+        override fun cancel(timerId: String, generation: Long) {
+            cancels++
+            if (queued == timerId to generation) queued = null
         }
     }
     private class Fixture {

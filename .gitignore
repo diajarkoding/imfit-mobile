@@ -16,6 +16,7 @@
 # Build Files (Gradle)
 # ==========================================
 .gradle/
+.kotlin/
 build/
 **/build/
 app/build/

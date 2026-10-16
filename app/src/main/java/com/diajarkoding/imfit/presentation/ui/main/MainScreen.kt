@@ -4,9 +4,13 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.WindowInsetsSides
+import androidx.compose.foundation.layout.consumeWindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.navigationBars
+import androidx.compose.foundation.layout.only
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.safeDrawing
 import androidx.compose.foundation.layout.windowInsetsPadding
 import com.diajarkoding.imfit.presentation.components.common.CalendarMonth
 import com.diajarkoding.imfit.presentation.components.common.FitnessCenter
@@ -112,6 +116,9 @@ fun MainScreen(
             topBar = {
                 ImfitMainAppBar(
                     title = androidx.compose.ui.res.stringResource(appBarTitleRes),
+                    modifier = Modifier.windowInsetsPadding(
+                        WindowInsets.safeDrawing.only(WindowInsetsSides.Top + WindowInsetsSides.Horizontal)
+                    ),
                     profilePhotoUri = if (showProfileAction) homeState.userProfilePhotoUri else null,
                     onProfileClick = if (showProfileAction) onNavigateToProfile else null
                 )
@@ -166,7 +173,9 @@ fun MainScreen(
                         bottomBackStack.removeLastOrNull()
                     }
                 },
-                modifier = Modifier.padding(innerPadding),
+                modifier = Modifier
+                    .padding(innerPadding)
+                    .consumeWindowInsets(innerPadding),
                 entryDecorators = listOf(
                     rememberSaveableStateHolderNavEntryDecorator(),
                     rememberViewModelStoreNavEntryDecorator()

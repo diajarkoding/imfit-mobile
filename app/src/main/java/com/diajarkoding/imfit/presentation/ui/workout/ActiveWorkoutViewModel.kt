@@ -320,8 +320,7 @@ class ActiveWorkoutViewModel @Inject constructor(
                 exerciseName = exerciseName.orEmpty(), durationMs = restSeconds.toLong() * 1000,
                 deadlineElapsedMs = 0, bootIdentity = null, startedAtEpochMs = 0
             ))
-            _state.update { it.copy(isRestTimerActive = timer.state.value?.status == TimerStatus.RUNNING,
-                restTimerSeconds = restSeconds, restTimerExerciseName = exerciseName) }
+            // The coordinator collector owns the displayed deadline, including rejected starts.
         }
     }
 

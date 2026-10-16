@@ -1,0 +1,35 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="auth_login_failure_title">Belum berhasil masuk</string>
+    <string name="auth_register_failure_title">Pendaftaran belum selesai</string>
+    <string name="auth_photo_failure_title">Foto belum diperbarui</string>
+    <string name="auth_back_to_login">Kembali ke login</string>
+    <string name="auth_submitting">Mengirim…</string>
+    <string name="auth_logging_in">Sedang masuk…</string>
+    <string name="auth_registering">Membuat akun…</string>
+    <string name="auth_password_strength">Gunakan minimal 8 karakter dengan huruf besar, huruf kecil, dan angka.</string>
+    <string name="auth_network_error">Periksa koneksi internet, lalu coba lagi. Isian Anda tetap tersimpan di form.</string>
+    <string name="auth_rate_limited">Terlalu banyak percobaan. Tunggu sebelum mencoba lagi.</string>
+    <string name="auth_verify_email">Silakan verifikasi alamat email Anda.</string>
+    <string name="auth_registration_failed">Akun belum dibuat. Isian tetap ada; silakan coba lagi.</string>
+    <string name="auth_camera_permission_denied">Izin kamera diperlukan untuk mengambil foto. Anda tetap dapat memilih dari galeri.</string>
+    <string name="auth_photo_unavailable">Sumber foto tidak dapat dibuka. Coba lagi atau pilih sumber lain.</string>
+    <string name="auth_create_password">Buat kata sandi</string>
+    <string name="auth_repeat_password">Ulangi kata sandi</string>
+    <string name="auth_show_password">Tampilkan kata sandi</string>
+    <string name="auth_hide_password">Sembunyikan kata sandi</string>
+    <string name="auth_toggle_theme">Ubah tema</string>
+    <string name="auth_profile_photo">Foto profil</string>
+    <string name="auth_optional">Opsional</string>
+    <string name="auth_add_photo">Tambahkan foto</string>
+    <string name="auth_photo_helper">Ambil foto atau pilih dari galeri</string>
+    <string name="auth_change_photo">Ubah foto</string>
+    <string name="auth_photo_selected">Foto dipilih · Ketuk untuk mengganti</string>
+    <string name="auth_photo_source_description">Gunakan kamera atau pilih foto dari galeri.</string>
+    <string name="auth_camera_description">Ambil foto baru</string>
+    <string name="auth_gallery_description">Pilih foto dari perangkat</string>
+    <string name="auth_birth_date_description">Pilih tahun, bulan, lalu tanggal lahir Anda.</string>
+    <string name="auth_previous_month">Bulan sebelumnya</string>
+    <string name="auth_next_month">Bulan berikutnya</string>
+    <string name="auth_select_date">Pilih tanggal</string>
+</resources>

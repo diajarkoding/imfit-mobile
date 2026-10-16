@@ -38,14 +38,14 @@
     <string name="login_redirect_action">Sign Up</string>
 
     <!-- Register Screen -->
-    <string name="register_title">Create Account</string>
-    <string name="register_subtitle">Start your fitness journey today</string>
+    <string name="register_title">Create your IMFIT account</string>
+    <string name="register_subtitle">Your first step toward getting stronger.</string>
     <string name="register_profile_picture_placeholder">Upload Profile Photo</string>
     <string name="register_button">Create Account</string>
     <string name="register_redirect_prompt">Already have an account?</string>
     <string name="register_redirect_action">Sign In</string>
     <string name="register_select_birth_date">Select your birth date</string>
-    <string name="register_choose_photo">Choose Photo</string>
+    <string name="register_choose_photo">Choose profile photo</string>
     <string name="register_camera">Camera</string>
     <string name="register_gallery">Gallery</string>
     <string name="register_confirmation_title">Account created</string>
@@ -166,8 +166,8 @@
     <string name="unit_reps">reps</string>
 
     <!-- Login Screen Additional -->
-    <string name="login_welcome_title">Welcome Back!</string>
-    <string name="login_welcome_subtitle">Sign in to continue your fitness journey</string>
+    <string name="login_welcome_title">Welcome back</string>
+    <string name="login_welcome_subtitle">Sign in to continue your fitness journey.</string>
     <string name="login_demo_hint">Demo: demo@imfit.com / password123</string>
     <string name="placeholder_email">Enter your email</string>
     <string name="placeholder_password">Enter your password</string>
@@ -203,8 +203,8 @@
     <string name="home_hello">Hello, %1$s!</string>
     <string name="home_title_my_workouts">My Workouts</string>
     <string name="home_active">ACTIVE</string>
-    <string name="home_create_workout_title">Create Routine</string>
-    <string name="home_create_workout_message">Give your routine a name</string>
+    <string name="home_create_workout_title">Add routine</string>
+    <string name="home_create_workout_message">Name your routine. Add exercises after creating it.</string>
     <string name="home_workout_placeholder">Name your routine</string>
     <string name="home_exercises_count">%1$d exercises</string>
     <string name="home_minutes_estimate">~%1$d min</string>

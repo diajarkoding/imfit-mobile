@@ -1,0 +1,35 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="auth_login_failure_title">Sign-in unsuccessful</string>
+    <string name="auth_register_failure_title">Registration incomplete</string>
+    <string name="auth_photo_failure_title">Photo not updated</string>
+    <string name="auth_back_to_login">Back to login</string>
+    <string name="auth_submitting">Submitting…</string>
+    <string name="auth_logging_in">Signing in…</string>
+    <string name="auth_registering">Creating account…</string>
+    <string name="auth_password_strength">Use 8+ characters with uppercase, lowercase, and a number.</string>
+    <string name="auth_network_error">Check your internet connection, then try again. Your form has been kept.</string>
+    <string name="auth_rate_limited">Too many attempts. Please wait before trying again.</string>
+    <string name="auth_verify_email">Please verify your email address.</string>
+    <string name="auth_registration_failed">Account not created. Your form has been kept; please try again.</string>
+    <string name="auth_camera_permission_denied">Camera permission is required to take a photo. You can still choose from the gallery.</string>
+    <string name="auth_photo_unavailable">Cannot open the photo source. Please try again or choose another source.</string>
+    <string name="auth_create_password">Create a password</string>
+    <string name="auth_repeat_password">Repeat your password</string>
+    <string name="auth_show_password">Show password</string>
+    <string name="auth_hide_password">Hide password</string>
+    <string name="auth_toggle_theme">Toggle appearance</string>
+    <string name="auth_profile_photo">Profile photo</string>
+    <string name="auth_optional">Optional</string>
+    <string name="auth_add_photo">Add photo</string>
+    <string name="auth_photo_helper">Take a photo or choose from gallery</string>
+    <string name="auth_change_photo">Change photo</string>
+    <string name="auth_photo_selected">Photo selected · Tap to replace</string>
+    <string name="auth_photo_source_description">Use the camera or choose a photo from your gallery.</string>
+    <string name="auth_camera_description">Take a new photo</string>
+    <string name="auth_gallery_description">Choose a photo from your device</string>
+    <string name="auth_birth_date_description">Choose your birth year, month, then day.</string>
+    <string name="auth_previous_month">Previous month</string>
+    <string name="auth_next_month">Next month</string>
+    <string name="auth_select_date">Select date</string>
+</resources>

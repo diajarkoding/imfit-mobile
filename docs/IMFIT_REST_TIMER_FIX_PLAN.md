@@ -208,3 +208,42 @@ Cakupan lanjutan yang belum dilaporkan: layar terkunci/screen-off/Doze, process 
 | `3476874` | Source test | Coverage race/timeout/cancellation serta guard API dan expiry tanpa reconcile bantuan. |
 
 Commit ini mencatat implementasi dan source test; identitas APK yang digunakan dalam laporan manual belum diberikan. Kedua dokumen timer kini dilacak melalui pengecualian `.gitignore` yang spesifik.
+
+## 11. Follow-up recovery alarm — 16 Oktober 2026, branch `timer`
+
+**Status: celah recovery diperbaiki pada source; reproduksi rekaman dan penerimaan perangkat masih perlu uji manual.** Branch `redisgn` sudah memuat hardening sebelumnya melalui merge `2694e0b`. Patch follow-up ini dibuat di `timer`, belum di-merge ke `redisgn`. Timeout receiver merupakan defect yang terverifikasi dari source, bukan root cause rekaman yang sudah dikonfirmasi log.
+
+### Perubahan
+
+- `RestTimerAlarmDelivery` mendaftarkan recovery durable **sebelum** receiver menunggu DataStore, mutex, atau validasi auth/sesi. Receiver tetap bounded 4.000 ms dan selalu menyelesaikan `PendingResult`.
+- `RestTimerRecoveryScheduler` memakai WorkManager existing, unique per `timerId/generation` dengan kebijakan KEEP. Initial delay 10 detik, backoff exponential mulai 10 detik, maksimal tiga eksekusi worker. Ini batas minimum penundaan, **bukan SLA delivery**; Android/Doze/OEM dapat menundanya lebih lama. AlarmManager tetap pemicu deadline utama, WorkManager hanya fallback kegagalan recovery receiver.
+- `expiry()` mengembalikan `HANDLED/RETRY`. Error baca/tulis yang ditangkap coordinator tidak lagi dianggap delivery sukses. Timeout, cancellation, dan transient notification-post failure tidak membatalkan recovery. Delivery sukses, event stale, terminal state, atau notifikasi diblokir pengguna menyelesaikan recovery tanpa retry berulang.
+- Worker memvalidasi ulang timer/generation, boot, owner/sesi, status dan deadline melalui coordinator yang sama. Deadline tidak digeser, dan stale generation tidak menyelesaikan timer baru. Request lama yang masih antre menjadi no-op/repair jadwal otoritatif sesuai aturan existing, bukan sumber expiry palsu.
+- Worker menggunakan `alarmDelivery=false`: bukan exact-alarm FGS-start exemption. Tanpa Activity/FGS yang sah, kartu selesai tetap dapat dipost tetapi audio boleh suppressed. Tidak ada replay audio yang sudah suppressed/acknowledged.
+- `showFinished()` membedakan POSTED, BLOCKED, dan RETRY; kegagalan post sementara tidak langsung mengunci suppression audio sebelum retry. POSTED berarti panggilan notify diterima, **bukan bukti heads-up terlihat**.
+- ViewModel branch `timer` tidak lagi menimpa countdown dengan durasi request setelah start ditolak. UI mengikuti state coordinator. Penghapusan optimistic update ini sudah ada secara terpisah pada `redisgn`; pertahankan refactor session `redisgn` ketika merge, jangan menimpanya dengan ViewModel lama.
+- Trace debug menambahkan wall timestamp, API, lateness, `receiver_result`, `recovery_enqueued`, `recovery_worker_result`, `recovery_exhausted`, dan `notify_blocked`. Tidak ada permission, dependency, migrasi DataStore/Room, channel ID, atau PendingIntent identity baru untuk alarm utama.
+
+### Verifikasi source
+
+Satu proses verifikasi telah dimulai sebelum pengguna meminta seluruh build/test berikutnya dijalankan manual. Proses awal tersebut selesai **BUILD SUCCESSFUL**:
+
+```bash
+./gradlew :app:testDemoDebugUnitTest :app:testProductionDebugUnitTest :app:assembleDemoDebug :app:assembleProductionDebug :app:compileDemoDebugAndroidTestKotlin --console=plain
+```
+
+`RestTimerCoordinatorTest`: **38 tests, 0 failures, 0 errors** pada masing-masing flavor. Coverage tambahan: cold recovery timeout lalu retry tanpa resume, storage/session failure, expiry-write failure, post failure sesudah EXPIRED, cancellation, successful recovery cancellation, stale/replacement/extend, skip/finish/logout/reboot/user stop, notification denied, enqueue failure, dan early alarm saat 115 detik tersisa. Source instrumentation hanya dikompilasi; tidak ada connected/device test yang dijalankan dalam follow-up ini. Tidak ada build/test lanjutan sesudah arahan pengguna.
+
+### Checklist manual sebelum merge
+
+1. Pasang APK branch `timer` yang baru, catat flavor/API/OEM, notification/channel/FSI/exact capability, DND dan battery mode. Pastikan tidak tertukar dengan APK demo/production atau build `redisgn` lama.
+2. Rest 120 detik → aplikasi lain → tetap di luar IMFIT melewati deadline → lihat shade **sebelum** membuka IMFIT. Cocokkan `alarm_scheduled`, `receiver_received`, `expired_committed`, `notify_result`, dan `activity_resumed` untuk timer/generation yang sama.
+3. Recovery sementara gagal: harapkan `recovery_enqueued → receiver_timeout/receiver_result RETRY → recovery_worker_result HANDLED`. Notifikasi tidak harus menunggu resume. Ukur lateness asli; jangan menganggap delay worker pasti 10 detik.
+4. Uji proses dingin pada productionDebug dan sesi Room persisten. Test demo tidak membuktikan recovery lintas process. Jangan menyamakan force-stop dengan low-memory process death; WorkManager juga tunduk pada force-stop dan kebijakan OS.
+5. Ulangi extend, skip, finish, logout/account switch dan intent lama sebelum recovery berjalan. Tidak boleh ada completion atau audio sesi lama. Setelah ACK, retry tidak boleh repost/memutar ulang alert.
+6. Notification/channel blocked: tidak crash, tidak retry tanpa batas, tidak ada looping tanpa kontrol. FSI denied: kartu completion tetap menjadi fallback; heads-up tetap keputusan sistem. WorkManager tidak memulihkan delivery receiver yang sama sekali tidak pernah dipanggil; kasus itu tetap membutuhkan audit AlarmManager/OS.
+7. Pisahkan angka `1:55` pada task snapshot dari UI live dengan timestamp resume. Jangan menetapkan false expiry hanya dari frame pembukaan task; validasi deadline dan identitas dari trace.
+
+### Integrasi ke `redisgn` — 16 Oktober 2026
+
+Update `timer` sampai `92d9ce5` diintegrasikan setelah push ke remote timer. Konflik `ActiveWorkoutViewModel.completeSet()` diselesaikan dengan mempertahankan mutasi sesi, identitas set, local-auth lookup, serta error handling versi `redisgn`; countdown tetap mengikuti collector coordinator. Bagian di atas mencatat status historis saat patch masih berada di `timer`. Build/test ulang hasil integrasi dan penerimaan perangkat dilakukan manual oleh pengguna; merge tidak menandakan issue rekaman telah terverifikasi selesai.

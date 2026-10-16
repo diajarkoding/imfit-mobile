@@ -330,6 +330,7 @@ class ActiveWorkoutViewModel @Inject constructor(
                     exerciseId = exercise.exercise.id, setId = "${session.id}:${exercise.exercise.id}:${set.setNumber}",
                     exerciseName = exercise.exercise.name, durationMs = restSeconds.toLong() * 1000,
                     deadlineElapsedMs = 0, bootIdentity = null, startedAtEpochMs = 0))
+                // The coordinator collector owns the displayed deadline, including rejected starts.
             } catch (e: CancellationException) { throw e }
             catch (e: Exception) { android.util.Log.e("ActiveWorkoutVM", "Set completion failed", e); _state.update { it.copy(mutationErrorRes = R.string.error_set_complete) } }
         }

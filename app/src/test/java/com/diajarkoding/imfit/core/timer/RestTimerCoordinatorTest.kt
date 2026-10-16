@@ -449,4 +449,198 @@ class RestTimerCoordinatorTest {
         assertTrue(f.effects.scheduled)
         assertEquals(0, f.effects.plays)
     }
+
+    @Test fun coldAlarmTimeoutKeepsDurableRecoveryAndExpiresWithoutForegroundOnRetry() = runBlocking {
+        val f = Fixture(); f.start()
+        val state = f.store.saved!!
+        f.clock.now = state.deadlineElapsedMs
+        val queue = RecoveryQueue()
+        val events = mutableListOf<String>()
+        val cold = RestTimerCoordinator(f.store, f.clock, f.effects)
+        f.store.beforeRead = { assertEquals(state.timerId to state.generation, queue.queued) }
+        f.effects.validate = { awaitCancellation() } // auth/session initialization not ready
+        val delivery = RestTimerAlarmDelivery(cold, queue, timeoutMs = 50, trace = { event, _ -> events.add(event) })
+        assertEquals(AlarmDeliveryResult.RETRY, delivery.receive(state.timerId, state.generation))
+        assertTrue(events.contains("receiver_timeout"))
+        assertEquals(TimerStatus.RUNNING, f.store.saved!!.status)
+        assertEquals(state.timerId to state.generation, queue.queued)
+        assertFalse(f.effects.posted)
+
+        // A new process/worker, no resume/reconcile/ticker; the original deadline is retained.
+        f.effects.validate = null
+        f.store.beforeRead = null
+        val recovered = RestTimerCoordinator(f.store, f.clock, f.effects)
+        assertEquals(AlarmDeliveryResult.HANDLED, recovered.expiry(state.timerId, state.generation))
+        assertEquals(TimerStatus.EXPIRED, f.store.saved!!.status)
+        assertEquals(state.deadlineElapsedMs, f.store.saved!!.deadlineElapsedMs)
+        assertTrue(f.effects.posted)
+        assertEquals(false, f.effects.observedAlarmDelivery) // worker has no exact-alarm FGS exemption
+    }
+
+    @Test fun ordinaryStoreFailureIsRetryNotSuccessfulAlarmDelivery() = runBlocking {
+        val f = Fixture(); f.start()
+        val state = f.store.saved!!
+        f.clock.now = state.deadlineElapsedMs
+        f.store.failRead = true
+        val queue = RecoveryQueue()
+        val cold = RestTimerCoordinator(f.store, f.clock, f.effects)
+        assertEquals(AlarmDeliveryResult.RETRY, RestTimerAlarmDelivery(cold, queue).receive(state.timerId, state.generation))
+        assertNotNull(queue.queued)
+        assertEquals(0, queue.cancels)
+        f.store.failRead = false
+        assertEquals(AlarmDeliveryResult.HANDLED, cold.expiry(state.timerId, state.generation))
+        assertEquals(TimerStatus.EXPIRED, f.store.saved!!.status)
+        assertTrue(f.effects.posted)
+    }
+
+    @Test fun sessionReadErrorDoesNotCancelRestOrDiscardRecovery() = runBlocking {
+        val f = Fixture(); f.start()
+        val state = f.store.saved!!
+        f.clock.now = state.deadlineElapsedMs
+        val queue = RecoveryQueue()
+        f.effects.validate = { throw java.io.IOException("Room busy") }
+        assertEquals(AlarmDeliveryResult.RETRY, RestTimerAlarmDelivery(f.timer, queue).receive(state.timerId, state.generation))
+        assertEquals(TimerStatus.RUNNING, f.store.saved!!.status)
+        assertNotNull(queue.queued)
+        f.effects.validate = null
+        assertEquals(AlarmDeliveryResult.HANDLED, f.timer.expiry(state.timerId, state.generation))
+        assertTrue(f.effects.posted)
+    }
+
+    @Test fun failedExpiryWriteCanRetryWithoutChangingDeadline() = runBlocking {
+        val f = Fixture(); f.start()
+        val state = f.store.saved!!
+        f.clock.now = state.deadlineElapsedMs
+        f.store.fail = true
+        val queue = RecoveryQueue()
+        assertEquals(AlarmDeliveryResult.RETRY, RestTimerAlarmDelivery(f.timer, queue).receive(state.timerId, state.generation))
+        assertEquals(TimerStatus.RUNNING, f.store.saved!!.status)
+        assertFalse(f.effects.posted)
+        assertNotNull(queue.queued)
+        f.store.fail = false
+        assertEquals(AlarmDeliveryResult.HANDLED, f.timer.expiry(state.timerId, state.generation))
+        assertEquals(state.deadlineElapsedMs, f.store.saved!!.deadlineElapsedMs)
+    }
+
+    @Test fun postFailureAfterExpiredCommitRetriesWithoutSuppressingAudioOrRestartingTimer() = runBlocking {
+        for (throws in listOf(false, true)) {
+            val f = Fixture(); f.start()
+            val state = f.store.saved!!
+            f.clock.now = state.deadlineElapsedMs
+            f.effects.failShow = throws
+            f.effects.presentation = FinishedPresentation.RETRY
+            val queue = RecoveryQueue()
+            assertEquals(AlarmDeliveryResult.RETRY, RestTimerAlarmDelivery(f.timer, queue).receive(state.timerId, state.generation))
+            assertEquals(TimerStatus.EXPIRED, f.store.saved!!.status)
+            assertFalse(f.store.saved!!.audioSuppressed)
+            assertNotNull(queue.queued)
+            assertEquals(0, f.effects.plays)
+            f.effects.failShow = false
+            f.effects.presentation = FinishedPresentation.POSTED
+            assertEquals(AlarmDeliveryResult.HANDLED, f.timer.expiry(state.timerId, state.generation))
+            assertEquals(state.deadlineElapsedMs, f.store.saved!!.deadlineElapsedMs)
+            assertTrue(f.effects.posted)
+            assertEquals(1, f.effects.plays)
+        }
+    }
+
+    @Test fun successfulAlarmCancelsOnlyItsRecovery() = runBlocking {
+        val f = Fixture(); f.start()
+        val state = f.store.saved!!
+        f.clock.now = state.deadlineElapsedMs
+        val queue = RecoveryQueue()
+        assertEquals(AlarmDeliveryResult.HANDLED, RestTimerAlarmDelivery(f.timer, queue).receive(state.timerId, state.generation))
+        assertNull(queue.queued)
+        assertEquals(1, queue.cancels)
+        assertTrue(f.effects.posted)
+        assertNotNull(f.effects.queuedToken)
+    }
+
+    @Test fun cancelledReceiverLeavesRecoveryArmed() = runBlocking {
+        val f = Fixture(); f.start()
+        val state = f.store.saved!!
+        f.clock.now = state.deadlineElapsedMs
+        val entered = CompletableDeferred<Unit>()
+        val queue = RecoveryQueue()
+        f.effects.validate = { entered.complete(Unit); awaitCancellation() }
+        val job = launch { RestTimerAlarmDelivery(f.timer, queue).receive(state.timerId, state.generation) }
+        entered.await()
+        job.cancel(); job.join()
+        assertEquals(state.timerId to state.generation, queue.queued)
+        assertEquals(TimerStatus.RUNNING, f.store.saved!!.status)
+        assertFalse(f.effects.posted)
+    }
+
+    @Test fun staleRecoveryCannotCompleteExtendedOrReplacementTimer() = runBlocking {
+        for (replacement in listOf(false, true)) {
+            val f = Fixture(); f.start()
+            val state = f.store.saved!!
+            if (replacement) f.timer.start(f.request("set-2")) else f.timer.extend()
+            val authoritative = f.store.saved
+            f.clock.now = state.deadlineElapsedMs
+            val cold = RestTimerCoordinator(f.store, f.clock, f.effects)
+            assertEquals(AlarmDeliveryResult.HANDLED, cold.expiry(state.timerId, state.generation))
+            assertEquals(authoritative, f.store.saved)
+            assertFalse(f.effects.posted)
+            assertEquals(0, f.effects.plays)
+        }
+    }
+
+    @Test fun recoveryAfterSkipCancelAcknowledgeRebootOrLogoutNeverAlerts() = runBlocking {
+        for (case in 0..5) {
+            val f = Fixture(); f.start()
+            val state = f.store.saved!!
+            when (case) {
+                0 -> f.timer.skip()
+                1 -> f.timer.cancel("WORKOUT_FINISHED")
+                2 -> { f.expire(); f.timer.acknowledge(state.timerId, state.generation) }
+                3 -> f.clock.boot = 5
+                4 -> f.effects.valid = false // logout/account switch
+                5 -> f.effects.stopped = true
+            }
+            f.clock.now = state.deadlineElapsedMs + 1000
+            val cold = RestTimerCoordinator(f.store, f.clock, f.effects)
+            val starts = f.effects.plays
+            assertEquals(AlarmDeliveryResult.HANDLED, cold.expiry(state.timerId, state.generation))
+            assertFalse(f.effects.posted)
+            assertEquals(starts, f.effects.plays)
+        }
+    }
+
+    @Test fun deniedNotificationsAreHandledNotRetriedAndRemainSilent() = runBlocking {
+        val f = Fixture(); f.start()
+        val state = f.store.saved!!
+        f.clock.now = state.deadlineElapsedMs
+        f.effects.presentation = FinishedPresentation.BLOCKED
+        f.effects.controls = false
+        val queue = RecoveryQueue()
+        assertEquals(AlarmDeliveryResult.HANDLED, RestTimerAlarmDelivery(f.timer, queue).receive(state.timerId, state.generation))
+        assertNull(queue.queued)
+        f.timer.checkPlayback(requireNotNull(f.effects.queuedToken))
+        assertTrue(f.store.saved!!.audioSuppressed)
+        assertFalse(f.effects.posted)
+        assertEquals(0, f.effects.plays)
+    }
+
+    @Test fun recoveryEnqueueFailureStillAttemptsPrimaryAlarm() = runBlocking {
+        val f = Fixture(); f.start()
+        val state = f.store.saved!!
+        f.clock.now = state.deadlineElapsedMs
+        val queue = RecoveryQueue().apply { failEnqueue = true }
+        assertEquals(AlarmDeliveryResult.HANDLED, RestTimerAlarmDelivery(f.timer, queue).receive(state.timerId, state.generation))
+        assertTrue(f.effects.posted)
+    }
+
+    @Test fun earlyAlarmWith115SecondsRemainingOnlyRearmsNeverCompletes() = runBlocking {
+        val f = Fixture(); f.start()
+        val state = f.store.saved!!
+        f.clock.now += 5000
+        assertEquals(115, state.remainingSeconds(f.clock.now))
+        assertEquals(AlarmDeliveryResult.HANDLED, f.timer.expiry(state.timerId, state.generation, alarmDelivery = true))
+        assertEquals(TimerStatus.RUNNING, f.store.saved!!.status)
+        assertEquals(state.deadlineElapsedMs, f.store.saved!!.deadlineElapsedMs)
+        assertEquals(2, f.effects.schedules)
+        assertFalse(f.effects.posted)
+        assertEquals(0, f.effects.plays)
+    }
 }

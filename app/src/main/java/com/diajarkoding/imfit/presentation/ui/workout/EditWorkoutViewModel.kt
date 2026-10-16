@@ -7,6 +7,7 @@ import androidx.lifecycle.viewModelScope
 import com.diajarkoding.imfit.R
 import com.diajarkoding.imfit.domain.model.TemplateExercise
 import com.diajarkoding.imfit.domain.repository.WorkoutRepository
+import com.diajarkoding.imfit.domain.repository.ExerciseRepository
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -20,17 +21,24 @@ data class EditWorkoutState(
     val exercises: List<TemplateExercise> = emptyList(),
     val isLoading: Boolean = false,
     val isSaved: Boolean = false,
+    val isSaving: Boolean = false,
+    val isAdding: Boolean = false,
+    val hasLoaded: Boolean = false,
+    val invalidConfigIds: Set<String> = emptySet(),
+    @StringRes val nameErrorRes: Int? = null,
     @StringRes val errorRes: Int? = null
 )
 
 @HiltViewModel
 class EditWorkoutViewModel @Inject constructor(
     private val workoutRepository: WorkoutRepository,
+    private val exerciseRepository: ExerciseRepository,
     private val savedStateHandle: SavedStateHandle
 ) : ViewModel() {
 
     private var workoutId: String? = savedStateHandle["workoutId"]
     private var initialized = false
+    private var pendingExerciseIds: List<String> = emptyList()
 
     private val _state = MutableStateFlow(EditWorkoutState())
     val state = _state.asStateFlow()
@@ -47,7 +55,7 @@ class EditWorkoutViewModel @Inject constructor(
     fun loadWorkout() {
         val workoutId = workoutId ?: return
         viewModelScope.launch {
-            _state.update { it.copy(isLoading = true) }
+            _state.update { it.copy(isLoading = true, errorRes = null) }
             try {
                 val workout = workoutRepository.getTemplateById(workoutId)
                 if (workout != null) {
@@ -55,7 +63,7 @@ class EditWorkoutViewModel @Inject constructor(
                         it.copy(
                             workoutName = workout.name,
                             exercises = workout.exercises,
-                            isLoading = false
+                            isLoading = false, hasLoaded = true
                         )
                     }
                 } else _state.update { it.copy(errorRes = R.string.error_routine_not_found, isLoading = false) }
@@ -69,8 +77,8 @@ class EditWorkoutViewModel @Inject constructor(
     }
 
     fun updateWorkoutName(name: String) {
-        if (_state.value.isLoading) return
-        _state.update { it.copy(workoutName = name) }
+        if (_state.value.isLoading || _state.value.isSaving) return
+        _state.update { it.copy(workoutName = name, nameErrorRes = null) }
     }
 
     fun updateExerciseSets(exerciseIndex: Int, sets: Int) {
@@ -107,13 +115,13 @@ class EditWorkoutViewModel @Inject constructor(
     }
 
     fun removeExercise(exerciseIndex: Int) {
-        if (_state.value.isLoading) return
+        if (_state.value.isLoading || _state.value.isSaving) return
         _state.update { state ->
             val updatedExercises = state.exercises.toMutableList()
             if (exerciseIndex in updatedExercises.indices) {
                 updatedExercises.removeAt(exerciseIndex)
             }
-            state.copy(exercises = updatedExercises)
+            state.copy(exercises = updatedExercises, invalidConfigIds = state.invalidConfigIds.intersect(updatedExercises.map { it.id }.toSet()))
         }
     }
 
@@ -144,10 +152,15 @@ class EditWorkoutViewModel @Inject constructor(
     }
 
     fun saveChanges() {
-        if (_state.value.isLoading || _state.value.isSaved || _state.value.workoutName.isBlank()) return
+        if (_state.value.isLoading || _state.value.isSaving || _state.value.isAdding || _state.value.isSaved || !_state.value.hasLoaded) return
+        if (_state.value.workoutName.isBlank()) {
+            _state.update { it.copy(nameErrorRes = R.string.error_template_name_required) }
+            return
+        }
+        if (_state.value.invalidConfigIds.isNotEmpty()) return
         val workoutId = workoutId ?: return
         val draft = _state.value
-        _state.update { it.copy(isLoading = true, errorRes = null) }
+        _state.update { it.copy(isSaving = true, errorRes = null) }
         viewModelScope.launch {
             try {
                 val saved = workoutRepository.updateTemplate(
@@ -156,16 +169,43 @@ class EditWorkoutViewModel @Inject constructor(
                     exercises = draft.exercises
                 )
                 if (saved == null) {
-                    _state.update { it.copy(errorRes = R.string.error_routine_not_found, isLoading = false) }
+                    _state.update { it.copy(errorRes = R.string.error_routine_not_found, isSaving = false) }
                 } else {
-                    _state.update { it.copy(isSaved = true, isLoading = false) }
+                    _state.update { it.copy(isSaved = true, isSaving = false) }
                 }
             } catch (e: CancellationException) {
                 throw e
             } catch (e: Exception) {
                 android.util.Log.e("EditWorkoutVM", "Routine save failed", e)
-                _state.update { it.copy(errorRes = R.string.error_routine_save, isLoading = false) }
+                _state.update { it.copy(errorRes = R.string.error_routine_save, isSaving = false) }
             }
         }
     }
+
+    fun updateExerciseConfig(id: String, sets: Int, reps: Int, rest: Int) {
+        if (_state.value.isLoading || _state.value.isSaving || sets < 1 || reps < 1 || rest < 0) return
+        _state.update { state -> state.copy(exercises = state.exercises.map {
+            if (it.id == id) it.copy(sets = sets, reps = reps, restSeconds = rest) else it
+        }) }
+    }
+
+    fun setConfigValidity(id: String, valid: Boolean) {
+        _state.update { it.copy(invalidConfigIds = if (valid) it.invalidConfigIds - id else it.invalidConfigIds + id) }
+    }
+
+    fun addExercisesByIds(ids: List<String>) {
+        if (_state.value.isAdding || _state.value.isSaving) return
+        pendingExerciseIds = ids.distinct()
+        _state.update { it.copy(isAdding = true, errorRes = null) }
+        viewModelScope.launch {
+            try {
+                val additions = pendingExerciseIds.map { id -> TemplateExercise(exerciseRepository.getExerciseById(id) ?: error("Exercise not found")) }
+                _state.update { state -> state.copy(exercises = (state.exercises + additions).distinctBy { it.id }, isAdding = false) }
+                pendingExerciseIds = emptyList()
+            } catch (e: CancellationException) { throw e }
+            catch (_: Exception) { _state.update { it.copy(isAdding = false, errorRes = R.string.routine_add_failed) } }
+        }
+    }
+
+    fun retryAddExercises() { addExercisesByIds(pendingExerciseIds) }
 }

@@ -1,6 +1,8 @@
 package com.diajarkoding.imfit.presentation.ui.home
 
 import android.util.Log
+import androidx.annotation.StringRes
+import com.diajarkoding.imfit.R
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.diajarkoding.imfit.domain.model.WorkoutLog
@@ -25,7 +27,10 @@ data class HomeState(
     val lastWorkout: WorkoutLog? = null,
     val isLoading: Boolean = true,
     val newlyCreatedWorkoutId: String? = null,
-    val activeWorkoutTemplateId: String? = null
+    val activeWorkoutTemplateId: String? = null,
+    val isCreating: Boolean = false,
+    @StringRes val createErrorRes: Int? = null,
+    @StringRes val createNameErrorRes: Int? = null
 )
 
 @HiltViewModel
@@ -103,27 +108,33 @@ class HomeViewModel @Inject constructor(
     }
 
     fun createWorkout(name: String) {
+        if (_state.value.isCreating || _state.value.newlyCreatedWorkoutId != null) return
+        if (name.isBlank()) { _state.update { it.copy(createNameErrorRes = R.string.error_template_name_required) }; return }
+        _state.update { it.copy(isCreating = true, createErrorRes = null, createNameErrorRes = null) }
         viewModelScope.launch {
+            try {
             val user = authRepository.getCurrentUser()
             if (user == null) {
-                // User is not authenticated, cannot create workout
+                _state.update { it.copy(isCreating = false, createErrorRes = R.string.routine_create_failed) }
                 return@launch
             }
 
-            try {
                 val newWorkout = workoutRepository.createTemplate(
                     userId = user.id,
-                    name = name,
+                    name = name.trim(),
                     exercises = emptyList()
                 )
-                _state.update { it.copy(newlyCreatedWorkoutId = newWorkout.id) }
+                _state.update { it.copy(newlyCreatedWorkoutId = newWorkout.id, isCreating = false) }
                 refresh()
-            } catch (e: Exception) {
-                // Handle error silently or show error state
+            } catch (e: CancellationException) { throw e }
+            catch (e: Exception) {
+                _state.update { it.copy(isCreating = false, createErrorRes = R.string.routine_create_failed) }
                 Log.e("HomeViewModel", "Failed to create workout: ${e.message}", e)
             }
         }
     }
+
+    fun clearCreateError() { _state.update { it.copy(createErrorRes = null, createNameErrorRes = null) } }
 
     fun clearNewlyCreatedWorkoutId() {
         _state.update { it.copy(newlyCreatedWorkoutId = null) }

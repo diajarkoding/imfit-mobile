@@ -6,6 +6,7 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
@@ -29,8 +30,8 @@ fun HomeScreen(
 ) {
     val state by viewModel.state.collectAsStateWithLifecycle()
     val syncState by viewModel.syncState.collectAsStateWithLifecycle()
-    var showDialog by remember { mutableStateOf(false) }
-    var name by remember { mutableStateOf("") }
+    var showDialog by rememberSaveable { mutableStateOf(false) }
+    var name by rememberSaveable { mutableStateOf("") }
     var previousSync by remember { mutableStateOf(syncState.status) }
     LaunchedEffect(Unit) { viewModel.refresh() }
     LaunchedEffect(syncState.status) {
@@ -39,21 +40,24 @@ fun HomeScreen(
     }
     LaunchedEffect(state.newlyCreatedWorkoutId) {
         state.newlyCreatedWorkoutId?.let {
+            showDialog = false
+            name = ""
             viewModel.clearNewlyCreatedWorkoutId()
             onNavigateToWorkoutDetail(it)
         }
     }
-    if (showDialog) IMFITInputDialog(
-        onDismissRequest = { showDialog = false; name = "" },
+    if (showDialog) RoutineDialog(
+        onDismiss = { showDialog = false; name = ""; viewModel.clearCreateError() },
         title = stringResource(R.string.home_create_workout_title),
         message = stringResource(R.string.home_create_workout_message),
         icon = Symbols.Default.Add,
-        confirmText = stringResource(R.string.routine_create_action),
-        dismissText = stringResource(R.string.action_cancel),
-        confirmEnabled = name.isNotBlank(),
-        onConfirm = { if (name.isNotBlank()) { viewModel.createWorkout(name); showDialog = false; name = "" } }
+        confirmText = stringResource(if (state.isCreating) R.string.routine_creating else R.string.routine_create_action),
+        processing = state.isCreating,
+        errorMessage = state.createErrorRes?.let { stringResource(it) },
+        onConfirm = { viewModel.createWorkout(name) }
     ) {
-        OutlinedTextField(name, { name = it }, singleLine = true, modifier = Modifier.fillMaxWidth(), placeholder = { Text(stringResource(R.string.home_workout_placeholder)) })
+        RoutineNameField(name, { name = it; viewModel.clearCreateError() }, enabled = !state.isCreating,
+            errorMessage = state.createNameErrorRes?.let { stringResource(it) }, onDone = { viewModel.createWorkout(name) }, requestFocus = true)
     }
     Column(Modifier.fillMaxSize().background(homePalette().background)) {
         LazyColumn(
@@ -84,7 +88,7 @@ fun HomeScreen(
                 }
             }
             item(key = "workout_section") {
-                HomeWorkoutSectionHeader(enabled = !state.isLoading, onAdd = { showDialog = true })
+                HomeWorkoutSectionHeader(enabled = !state.isLoading && !state.isCreating, onAdd = { viewModel.clearCreateError(); showDialog = true })
             }
             if (state.isLoading) {
                 items(3, key = { "loading_$it" }) { ShimmerWorkoutCard() }

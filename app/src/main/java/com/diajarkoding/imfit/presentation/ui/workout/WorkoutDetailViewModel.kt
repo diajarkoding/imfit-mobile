@@ -1,6 +1,8 @@
 package com.diajarkoding.imfit.presentation.ui.workout
 
 import androidx.lifecycle.SavedStateHandle
+import androidx.annotation.StringRes
+import com.diajarkoding.imfit.R
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.diajarkoding.imfit.domain.model.Exercise
@@ -21,6 +23,11 @@ data class WorkoutDetailState(
     val workout: WorkoutTemplate? = null,
     val isLoading: Boolean = true,
     val error: String? = null,
+    @StringRes val errorRes: Int? = null,
+    @StringRes val operationErrorRes: Int? = null,
+    @StringRes val deleteErrorRes: Int? = null,
+    val isDeleting: Boolean = false,
+    val isUpdating: Boolean = false,
     val isWorkoutActive: Boolean = false,       // True if ANY active session exists
     val isCurrentWorkoutActive: Boolean = false, // True if this specific template has active session
     val workoutFinished: Boolean = false,
@@ -37,6 +44,7 @@ class WorkoutDetailViewModel @Inject constructor(
     private var workoutId: String? = savedStateHandle["workoutId"]
     private var initialized = false
     private var observeJob: Job? = null
+    private var pendingExerciseIds: List<String> = emptyList()
     
     private val _state = MutableStateFlow(WorkoutDetailState())
     val state = _state.asStateFlow()
@@ -61,7 +69,7 @@ class WorkoutDetailViewModel @Inject constructor(
         val workoutId = workoutId ?: return
         observeJob?.cancel()
         observeJob = viewModelScope.launch {
-            _state.update { it.copy(isLoading = it.workout == null) }
+            _state.update { it.copy(isLoading = it.workout == null, errorRes = null) }
             try {
                 workoutRepository.observeTemplate(workoutId).collect { workout ->
                 val activeSession = workoutRepository.getActiveSession()
@@ -71,13 +79,14 @@ class WorkoutDetailViewModel @Inject constructor(
                     workout = workout, 
                     isLoading = false, 
                     isWorkoutActive = hasAnyActiveSession,
-                    isCurrentWorkoutActive = isCurrentActive
+                    isCurrentWorkoutActive = isCurrentActive,
+                    errorRes = if (workout == null && !it.isDeleted && !it.isDeleting) R.string.error_routine_not_found else null
                 ) }
                 }
             } catch (e: CancellationException) {
                 throw e
             } catch (e: Exception) {
-                _state.update { it.copy(error = e.message, isLoading = false) }
+                _state.update { it.copy(errorRes = R.string.error_routine_load, isLoading = false) }
             }
         }
     }
@@ -95,44 +104,52 @@ class WorkoutDetailViewModel @Inject constructor(
 
     fun deleteWorkout() {
         val workoutId = workoutId ?: return
+        if (_state.value.isDeleting || _state.value.isDeleted || _state.value.isWorkoutActive) return
+        _state.update { it.copy(isDeleting = true, deleteErrorRes = null) }
         viewModelScope.launch {
-            workoutRepository.deleteTemplate(workoutId)
-            _state.update { it.copy(isDeleted = true) }
+            try {
+                if (workoutRepository.getActiveSession() != null) {
+                    _state.update { it.copy(isDeleting = false, deleteErrorRes = R.string.warning_workout_active) }
+                    return@launch
+                }
+                check(workoutRepository.deleteTemplate(workoutId)) { "Routine was not deleted" }
+                _state.update { it.copy(isDeleted = true, isDeleting = false) }
+            } catch (e: CancellationException) { throw e }
+            catch (_: Exception) { _state.update { it.copy(isDeleting = false, deleteErrorRes = R.string.routine_delete_failed) } }
         }
     }
 
+    fun clearDeleteError() { _state.update { it.copy(deleteErrorRes = null) } }
+
     fun addExercises(exercises: List<Exercise>) {
-        val workoutId = workoutId ?: return
-        viewModelScope.launch {
-            val currentWorkout = workoutRepository.getTemplateById(workoutId) ?: return@launch
-            
-            // Get IDs of exercises already in the template
-            val existingExerciseIds = currentWorkout.exercises.map { it.exercise.id }.toSet()
-            
-            // Filter out exercises that are already in the template
-            val newExercises = exercises.filter { it.id !in existingExerciseIds }
-            
-            if (newExercises.isEmpty()) return@launch
-            
-            val templateExercises = newExercises.map { exercise ->
-                TemplateExercise(exercise = exercise)
-            }
-            val updatedExercises = currentWorkout.exercises + templateExercises
-            
-            workoutRepository.updateTemplateExercises(workoutId, updatedExercises)
-            loadWorkout()
-        }
+        addExercisesByIds(exercises.map { it.id })
     }
 
     fun addExercisesByIds(exerciseIds: List<String>) {
+        val id = workoutId ?: return
+        if (_state.value.isUpdating || _state.value.isDeleting || exerciseIds.isEmpty()) return
+        pendingExerciseIds = exerciseIds.distinct()
+        _state.update { it.copy(isUpdating = true, operationErrorRes = null) }
         viewModelScope.launch {
-            val exercises = mutableListOf<Exercise>()
-            for (id in exerciseIds.distinct()) {
-                exerciseRepository.getExerciseById(id)?.let(exercises::add)
-            }
-            addExercises(exercises)
+            try {
+                if (workoutRepository.getActiveSession() != null) {
+                    _state.update { it.copy(operationErrorRes = R.string.warning_workout_active) }
+                    return@launch
+                }
+                val current = workoutRepository.getTemplateById(id) ?: error("Routine not found")
+                val existing = current.exercises.map { it.id }.toSet()
+                val additions = pendingExerciseIds.filterNot { it in existing }.map { exerciseId ->
+                    TemplateExercise(exerciseRepository.getExerciseById(exerciseId) ?: error("Exercise not found"))
+                }
+                if (additions.isNotEmpty()) checkNotNull(workoutRepository.updateTemplateExercises(id, current.exercises + additions))
+                pendingExerciseIds = emptyList()
+            } catch (e: CancellationException) { throw e }
+            catch (_: Exception) { _state.update { it.copy(operationErrorRes = R.string.routine_add_failed) } }
+            finally { _state.update { it.copy(isUpdating = false) } }
         }
     }
+
+    fun retryAddExercises() { addExercisesByIds(pendingExerciseIds) }
 
     fun removeExercise(templateExercise: TemplateExercise) {
         val workoutId = workoutId ?: return

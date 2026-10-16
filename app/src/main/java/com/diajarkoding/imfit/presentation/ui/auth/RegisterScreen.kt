@@ -1,92 +1,48 @@
 package com.diajarkoding.imfit.presentation.ui.auth
 
-import androidx.lifecycle.compose.collectAsStateWithLifecycle
-
 import android.Manifest
 import android.net.Uri
 import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.compose.BackHandler
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
-import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.WindowInsets
-import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.imePadding
-import androidx.compose.foundation.layout.navigationBars
-import androidx.compose.foundation.layout.offset
-import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.statusBars
-import androidx.compose.foundation.layout.windowInsetsPadding
+import androidx.compose.foundation.focusable
+import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
-import androidx.compose.ui.zIndex
-import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
-import com.diajarkoding.imfit.presentation.components.common.CalendarMonth
-import com.diajarkoding.imfit.presentation.components.common.CameraAlt
-import com.diajarkoding.imfit.presentation.components.common.Person
-import com.diajarkoding.imfit.presentation.components.common.PhotoLibrary
-import com.diajarkoding.imfit.presentation.components.common.Symbols
-import androidx.compose.material3.DatePicker
-import androidx.compose.material3.DatePickerDialog
-import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.Icon
-import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.ModalBottomSheet
-import androidx.compose.material3.OutlinedTextField
-import androidx.compose.material3.OutlinedTextFieldDefaults
-import androidx.compose.material3.SnackbarHost
-import androidx.compose.material3.SnackbarHostState
-import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
-import androidx.compose.material3.rememberDatePickerState
-import androidx.compose.material3.rememberModalBottomSheetState
-import androidx.compose.runtime.Composable
-import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.collectAsState
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.remember
-import androidx.compose.runtime.setValue
+import androidx.compose.material3.*
+import androidx.compose.runtime.*
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.draw.shadow
-import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardType
-import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import androidx.core.content.FileProvider
 import androidx.hilt.navigation.compose.hiltViewModel
-import coil3.compose.AsyncImage
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.diajarkoding.imfit.R
 import com.diajarkoding.imfit.domain.model.RegisterResult
-import androidx.compose.ui.res.stringResource
-import com.diajarkoding.imfit.presentation.components.common.IMFITButton
-import com.diajarkoding.imfit.presentation.components.common.IMFITPasswordField
-import com.diajarkoding.imfit.presentation.components.common.IMFITTextField
-import com.diajarkoding.imfit.presentation.components.common.IMFITDialogBackdrop
-import com.diajarkoding.imfit.theme.IMFITShapes
-import com.diajarkoding.imfit.theme.IMFITSpacing
-import com.diajarkoding.imfit.theme.IMFITSizes
-import com.diajarkoding.imfit.theme.Primary
-import com.diajarkoding.imfit.theme.PrimaryLight
+import com.diajarkoding.imfit.presentation.components.common.*
+import com.diajarkoding.imfit.theme.IMFITColors
 import com.diajarkoding.imfit.theme.IMFITTheme
 import java.io.File
-import java.text.SimpleDateFormat
-import java.util.Date
+import java.time.LocalDate
+import java.time.format.DateTimeFormatter
+import java.time.format.FormatStyle
 import java.util.Locale
+
+private enum class RegisterOverlay { None, PhotoSource, BirthDate }
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -97,45 +53,31 @@ fun RegisterScreen(
     viewModel: RegisterViewModel = hiltViewModel()
 ) {
     val state by viewModel.state.collectAsStateWithLifecycle()
-    val snackbarHostState = remember { SnackbarHostState() }
+    val snackbar = remember { SnackbarHostState() }
     val context = LocalContext.current
-
-    var showPhotoSheet by remember { mutableStateOf(false) }
-    var showDatePicker by remember { mutableStateOf(false) }
-    var tempCameraUri by remember { mutableStateOf<Uri?>(null) }
-
-    val galleryLauncher = rememberLauncherForActivityResult(
-        contract = ActivityResultContracts.GetContent()
-    ) { uri: Uri? ->
-        uri?.let { viewModel.onProfilePhotoSelected(it) }
+    var overlay by rememberSaveable { mutableStateOf(RegisterOverlay.None) }
+    var photoError by rememberSaveable { mutableStateOf<Int?>(null) }
+    var cameraUri by rememberSaveable { mutableStateOf<String?>(null) }
+    val gallery = rememberLauncherForActivityResult(ActivityResultContracts.GetContent()) { uri ->
+        uri?.let { photoError = null; viewModel.onProfilePhotoSelected(it) }
     }
-
-    val cameraLauncher = rememberLauncherForActivityResult(
-        contract = ActivityResultContracts.TakePicture()
-    ) { success ->
-        if (success) {
-            tempCameraUri?.let { viewModel.onProfilePhotoSelected(it) }
+    val camera = rememberLauncherForActivityResult(ActivityResultContracts.TakePicture()) { success ->
+        if (success) cameraUri?.let { photoError = null; viewModel.onProfilePhotoSelected(Uri.parse(it)) }
+    }
+    val permission = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
+        if (granted) {
+            try {
+                val file = File(context.cacheDir, "photo_${System.currentTimeMillis()}.jpg")
+                val uri = FileProvider.getUriForFile(context, "${context.packageName}.provider", file)
+                cameraUri = uri.toString()
+                camera.launch(uri)
+            } catch (_: Exception) {
+                photoError = R.string.auth_photo_unavailable
+            }
+        } else {
+            photoError = R.string.auth_camera_permission_denied
         }
     }
-
-    val cameraPermissionLauncher = rememberLauncherForActivityResult(
-        contract = ActivityResultContracts.RequestPermission()
-    ) { isGranted ->
-        if (isGranted) {
-            val photoFile = File(
-                context.cacheDir,
-                "photo_${System.currentTimeMillis()}.jpg"
-            )
-            val uri = FileProvider.getUriForFile(
-                context,
-                "${context.packageName}.provider",
-                photoFile
-            )
-            tempCameraUri = uri
-            cameraLauncher.launch(uri)
-        }
-    }
-
     LaunchedEffect(state.registerResult) {
         when (state.registerResult) {
             is RegisterResult.Authenticated -> onAuthenticated()
@@ -144,702 +86,170 @@ fun RegisterScreen(
         }
         if (state.registerResult != null) viewModel.consumeRegisterResult()
     }
-
-    LaunchedEffect(state.errorMessage) {
-        state.errorMessage?.let { message ->
-            snackbarHostState.showSnackbar(message)
-            viewModel.clearError()
-        }
+    BackHandler(enabled = overlay == RegisterOverlay.None) {
+        if (!state.isLoading) onNavigateToLogin()
     }
-
-    if (showDatePicker) {
-        val datePickerState = rememberDatePickerState()
-        DatePickerDialog(
-            onDismissRequest = { showDatePicker = false },
-            confirmButton = {
-                TextButton(
-                    onClick = {
-                        datePickerState.selectedDateMillis?.let { millis ->
-                            // Use ISO format for database (yyyy-MM-dd)
-                            val isoFormatter = SimpleDateFormat("yyyy-MM-dd", Locale.US)
-                            val date = isoFormatter.format(Date(millis))
-                            viewModel.onBirthDateChange(date)
-                        }
-                        showDatePicker = false
-                    }
-                ) {
-                    Text(stringResource(R.string.action_ok), color = Primary)
-                }
+    if (overlay == RegisterOverlay.BirthDate) AuthBirthDatePicker(state.birthDate,
+        onDismiss = { overlay = RegisterOverlay.None },
+        onSelect = { viewModel.onBirthDateChange(it); overlay = RegisterOverlay.None })
+    if (overlay == RegisterOverlay.PhotoSource) {
+        PhotoSourceSheet(onDismiss = { overlay = RegisterOverlay.None },
+            onCamera = {
+                overlay = RegisterOverlay.None
+                try { permission.launch(Manifest.permission.CAMERA) }
+                catch (_: Exception) { photoError = R.string.auth_photo_unavailable }
             },
-            dismissButton = {
-                TextButton(onClick = { showDatePicker = false }) {
-                    Text(stringResource(R.string.action_cancel))
-                }
+            onGallery = {
+                overlay = RegisterOverlay.None
+                try { gallery.launch("image/*") }
+                catch (_: Exception) { photoError = R.string.auth_photo_unavailable }
+            })
+    }
+    RegisterScreenContent(state, viewModel::onNameChange, viewModel::onEmailChange,
+        viewModel::onPasswordChange, viewModel::onConfirmPasswordChange,
+        { overlay = RegisterOverlay.PhotoSource }, { overlay = RegisterOverlay.BirthDate }, viewModel::register,
+        onNavigateToLogin, snackbar, photoError?.let { stringResource(it) }, overlay != RegisterOverlay.None)
+}
+
+@Composable
+private fun RegisterScreenContent(
+    state: RegisterState = RegisterState(),
+    onNameChange: (String) -> Unit = {}, onEmailChange: (String) -> Unit = {},
+    onPasswordChange: (String) -> Unit = {}, onConfirmPasswordChange: (String) -> Unit = {},
+    onPhotoClick: () -> Unit = {}, onDateClick: () -> Unit = {}, onRegister: () -> Unit = {},
+    onNavigateToLogin: () -> Unit = {}, snackbar: SnackbarHostState = remember { SnackbarHostState() },
+    photoError: String? = null,
+    pickerOpen: Boolean = false
+) {
+    val colors = IMFITColors.training
+    val enabled = !state.isLoading
+    val dateFocus = remember { FocusRequester() }
+    val photoFocus = remember { FocusRequester() }
+    var lastPicker by remember { mutableStateOf(RegisterOverlay.None) }
+    LaunchedEffect(pickerOpen) {
+        if (!pickerOpen) {
+            when (lastPicker) {
+                RegisterOverlay.BirthDate -> dateFocus.requestFocus()
+                RegisterOverlay.PhotoSource -> photoFocus.requestFocus()
+                RegisterOverlay.None -> Unit
             }
-        ) {
-            IMFITDialogBackdrop()
-            DatePicker(state = datePickerState)
+            lastPicker = RegisterOverlay.None
         }
     }
-
-    if (showPhotoSheet) {
-        ModalBottomSheet(
-            onDismissRequest = { showPhotoSheet = false },
-            sheetState = rememberModalBottomSheetState()
-        ) {
-            Column(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(IMFITSpacing.lg)
-                    .padding(bottom = IMFITSpacing.xxl)
-            ) {
-                Text(
-                    text = stringResource(R.string.register_choose_photo),
-                    style = MaterialTheme.typography.titleLarge,
-                    fontWeight = FontWeight.Bold,
-                    modifier = Modifier.padding(bottom = IMFITSpacing.lg)
-                )
-
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceEvenly
-                ) {
-                    PhotoOptionButton(
-                        icon = Symbols.Default.CameraAlt,
-                        label = stringResource(R.string.register_camera),
-                        onClick = {
-                            showPhotoSheet = false
-                            cameraPermissionLauncher.launch(Manifest.permission.CAMERA)
-                        }
-                    )
-                    PhotoOptionButton(
-                        icon = Symbols.Default.PhotoLibrary,
-                        label = stringResource(R.string.register_gallery),
-                        onClick = {
-                            showPhotoSheet = false
-                            galleryLauncher.launch("image/*")
-                        }
-                    )
-                }
-            }
-        }
-    }
-
-    Box(
-        modifier = Modifier
-            .fillMaxSize()
-            .background(MaterialTheme.colorScheme.background)
-            .windowInsetsPadding(WindowInsets.statusBars)
-            .imePadding()
-    ) {
-        Column(
-            modifier = Modifier
-                .fillMaxSize()
-                .verticalScroll(rememberScrollState())
-                .padding(horizontal = IMFITSpacing.screenHorizontal),
-            horizontalAlignment = Alignment.CenterHorizontally
-        ) {
-            Spacer(modifier = Modifier.height(IMFITSpacing.xl))
-
-            // Title at the top
-            Text(
-                text = stringResource(R.string.register_title),
-                style = MaterialTheme.typography.headlineMedium,
-                fontWeight = FontWeight.Bold,
-                color = MaterialTheme.colorScheme.onBackground
-            )
-
-            Spacer(modifier = Modifier.height(IMFITSpacing.xs))
-
-            Text(
-                text = stringResource(R.string.register_subtitle),
-                style = MaterialTheme.typography.bodyLarge,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                textAlign = TextAlign.Center
-            )
-
-            Spacer(modifier = Modifier.height(IMFITSpacing.xl))
-
-            // Profile Photo Picker - Camera badge on top layer with zIndex
-            Box(
-                modifier = Modifier
-                    .size(140.dp)
-                    .clickable { showPhotoSheet = true },
-                contentAlignment = Alignment.Center
-            ) {
-                // Main photo circle
-                Box(
-                    modifier = Modifier
-                        .size(120.dp)
-                        .shadow(8.dp, CircleShape)
-                        .clip(CircleShape)
-                        .background(MaterialTheme.colorScheme.surface)
-                        .border(3.dp, Primary, CircleShape),
-                    contentAlignment = Alignment.Center
-                ) {
-                    if (state.profilePhotoUri != null) {
-                        AsyncImage(
-                            model = state.profilePhotoUri,
-                            contentDescription = "Profile Photo",
-                            modifier = Modifier
-                                .size(120.dp)
-                                .clip(CircleShape),
-                            contentScale = ContentScale.Crop
-                        )
-                    } else {
-                        Box(
-                            modifier = Modifier
-                                .size(120.dp)
-                                .background(
-                                    brush = com.diajarkoding.imfit.theme.IMFITGradients.avatarWash
-                                ),
-                            contentAlignment = Alignment.Center
-                        ) {
-                            Icon(
-                                imageVector = Symbols.Default.Person,
-                                contentDescription = stringResource(R.string.desc_add_photo),
-                                modifier = Modifier.size(56.dp),
-                                tint = Primary.copy(alpha = 0.5f)
-                            )
-                        }
+    Box(Modifier.fillMaxSize().background(colors.background).windowInsetsPadding(WindowInsets.statusBars)
+        .windowInsetsPadding(WindowInsets.navigationBars).imePadding()) {
+        Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(horizontal = 20.dp)
+            .padding(top = 12.dp, bottom = 20.dp), verticalArrangement = Arrangement.spacedBy(20.dp)) {
+            AuthRegisterHeading(onNavigateToLogin, enabled)
+            Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                AuthTextField(state.name, onNameChange, stringResource(R.string.label_fullname), stringResource(R.string.placeholder_name),
+                    error = state.nameError?.let { stringResource(it) }, enabled = enabled)
+                AuthTextField(state.email, onEmailChange, stringResource(R.string.label_email), stringResource(R.string.placeholder_email),
+                    error = state.emailError?.let { stringResource(it) }, keyboardType = KeyboardType.Email, enabled = enabled)
+                Column {
+                    AuthFieldLabel(stringResource(R.string.label_date_of_birth), state.birthDateError?.let { stringResource(it) })
+                    Spacer(Modifier.height(8.dp))
+                    AuthBorderedRow(Modifier.focusRequester(dateFocus).focusable(enabled),
+                        enabled = enabled, isError = state.birthDateError != null,
+                        onClick = { lastPicker = RegisterOverlay.BirthDate; onDateClick() }) {
+                        val date = runCatching { LocalDate.parse(state.birthDate).format(
+                            DateTimeFormatter.ofLocalizedDate(FormatStyle.LONG).withLocale(Locale.getDefault())) }.getOrDefault(state.birthDate)
+                        Text(date.ifBlank { stringResource(R.string.register_select_birth_date) }, Modifier.weight(1f),
+                            color = if (date.isBlank()) colors.muted else colors.text, style = MaterialTheme.typography.bodyLarge)
+                        Icon(Symbols.Default.CalendarMonth, null, tint = colors.primary, modifier = Modifier.size(20.dp))
                     }
+                    AuthFieldError(state.birthDateError?.let { stringResource(it) })
                 }
-
-                // Camera badge - Positioned at bottom-end with zIndex for topmost layer
-                Box(
-                    modifier = Modifier
-                        .align(Alignment.BottomEnd)
-                        .offset(x = (-5).dp, y = (-5).dp)
-                        .zIndex(1f)
-                        .size(40.dp)
-                        .shadow(6.dp, CircleShape)
-                        .clip(CircleShape)
-                        .background(Primary),
-                    contentAlignment = Alignment.Center
-                ) {
-                    Icon(
-                        imageVector = Symbols.Default.CameraAlt,
-                        contentDescription = null,
-                        modifier = Modifier.size(20.dp),
-                        tint = MaterialTheme.colorScheme.onPrimary
-                    )
-                }
+                AuthTextField(state.password, onPasswordChange, stringResource(R.string.label_password), stringResource(R.string.auth_create_password),
+                    error = state.passwordError?.let { stringResource(it) }, password = true, enabled = enabled)
+                AuthTextField(state.confirmPassword, onConfirmPasswordChange, stringResource(R.string.label_confirm_password), stringResource(R.string.auth_repeat_password),
+                    error = state.confirmPasswordError?.let { stringResource(it) }, password = true, imeAction = ImeAction.Done, enabled = enabled, onDone = onRegister)
             }
-
-            Spacer(modifier = Modifier.height(IMFITSpacing.xl))
-
-            // Form Fields
-            IMFITTextField(
-                value = state.name,
-                onValueChange = { viewModel.onNameChange(it) },
-                label = stringResource(R.string.label_fullname),
-                placeholder = stringResource(R.string.placeholder_email).replace("email", "name"),
-                error = state.nameError,
-                imeAction = ImeAction.Next
-            )
-
-            Spacer(modifier = Modifier.height(IMFITSpacing.md))
-
-            IMFITTextField(
-                value = state.email,
-                onValueChange = { viewModel.onEmailChange(it) },
-                label = stringResource(R.string.label_email),
-                placeholder = stringResource(R.string.placeholder_email),
-                error = state.emailError,
-                keyboardType = KeyboardType.Email,
-                imeAction = ImeAction.Next
-            )
-
-            Spacer(modifier = Modifier.height(IMFITSpacing.md))
-
-            // Birth Date Field - Same style as other inputs
-            Column(modifier = Modifier.fillMaxWidth()) {
-                Text(
-                    text = stringResource(R.string.label_date_of_birth),
-                    style = MaterialTheme.typography.labelLarge,
-                    fontWeight = FontWeight.Medium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    modifier = Modifier.padding(bottom = IMFITSpacing.sm)
-                )
-                Box(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .clickable { showDatePicker = true }
-                ) {
-                    OutlinedTextField(
-                        value = state.birthDate,
-                        onValueChange = {},
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .height(IMFITSizes.textFieldHeight),
-                        enabled = false,
-                        placeholder = {
-                            Text(
-                                stringResource(R.string.register_select_birth_date),
-                                style = MaterialTheme.typography.bodyLarge,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f)
-                            )
-                        },
-                        trailingIcon = {
-                            Icon(
-                                imageVector = Symbols.Default.CalendarMonth,
-                                contentDescription = stringResource(R.string.desc_select_date),
-                                tint = Primary
-                            )
-                        },
-                        isError = state.birthDateError != null,
-                        shape = IMFITShapes.TextField,
-                        textStyle = MaterialTheme.typography.bodyLarge.copy(
-                            color = MaterialTheme.colorScheme.onSurface
-                        ),
-                        colors = OutlinedTextFieldDefaults.colors(
-                            disabledTextColor = MaterialTheme.colorScheme.onSurface,
-                            disabledBorderColor = if (state.birthDateError != null)
-                                MaterialTheme.colorScheme.error
-                            else MaterialTheme.colorScheme.outline.copy(alpha = 0.5f),
-                            disabledContainerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.3f),
-                            disabledPlaceholderColor = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f),
-                            disabledTrailingIconColor = Primary
-                        )
-                    )
-                }
-                if (state.birthDateError != null) {
-                    Text(
-                        text = state.birthDateError!!,
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.error,
-                        modifier = Modifier.padding(start = IMFITSpacing.xs, top = IMFITSpacing.xs)
-                    )
-                }
+            AuthProfilePhotoField(state.profilePhotoUri, enabled,
+                onClick = { lastPicker = RegisterOverlay.PhotoSource; onPhotoClick() },
+                modifier = Modifier.focusRequester(photoFocus).focusable(enabled))
+            AuthOperationError(photoError, stringResource(R.string.auth_photo_failure_title))
+            Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                AuthOperationError(state.errorMessage?.let { stringResource(it) }, stringResource(R.string.auth_register_failure_title))
+                AuthPrimaryButton(stringResource(R.string.register_button), onRegister, state.isLoading,
+                    loadingText = stringResource(R.string.auth_registering))
+                AuthRedirect(stringResource(R.string.register_redirect_prompt), stringResource(R.string.register_redirect_action), onNavigateToLogin, enabled)
             }
-
-            Spacer(modifier = Modifier.height(IMFITSpacing.md))
-
-            IMFITPasswordField(
-                value = state.password,
-                onValueChange = { viewModel.onPasswordChange(it) },
-                label = stringResource(R.string.label_password),
-                error = state.passwordError,
-                imeAction = ImeAction.Next
-            )
-
-            Spacer(modifier = Modifier.height(IMFITSpacing.md))
-
-            IMFITPasswordField(
-                value = state.confirmPassword,
-                onValueChange = { viewModel.onConfirmPasswordChange(it) },
-                label = stringResource(R.string.label_confirm_password),
-                error = state.confirmPasswordError,
-                imeAction = ImeAction.Done,
-                onImeAction = { viewModel.register() }
-            )
-
-            Spacer(modifier = Modifier.height(IMFITSpacing.xl))
-
-            IMFITButton(
-                text = stringResource(R.string.register_button),
-                onClick = { viewModel.register() },
-                isLoading = state.isLoading
-            )
-
-            Spacer(modifier = Modifier.height(IMFITSpacing.xl))
-
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.Center
-            ) {
-                Text(
-                    text = stringResource(R.string.register_redirect_prompt),
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-                Text(
-                    text = stringResource(R.string.register_redirect_action),
-                    style = MaterialTheme.typography.bodyMedium,
-                    fontWeight = FontWeight.Bold,
-                    color = Primary,
-                    modifier = Modifier.clickable { onNavigateToLogin() }
-                )
-            }
-
-            Spacer(modifier = Modifier.height(IMFITSpacing.huge))
         }
-
-        SnackbarHost(
-            hostState = snackbarHostState,
-            modifier = Modifier
-                .align(Alignment.BottomCenter)
-                .windowInsetsPadding(WindowInsets.navigationBars)
-        )
+        SnackbarHost(snackbar, Modifier.align(Alignment.BottomCenter))
     }
 }
 
 @Composable
-private fun PhotoOptionButton(
-    icon: androidx.compose.ui.graphics.vector.ImageVector,
-    label: String,
-    onClick: () -> Unit
-) {
-    Column(
-        horizontalAlignment = Alignment.CenterHorizontally,
-        modifier = Modifier
-            .clip(IMFITShapes.Card)
-            .clickable { onClick() }
-            .padding(IMFITSpacing.lg)
-    ) {
-        Box(
-            modifier = Modifier
-                .size(64.dp)
-                .clip(CircleShape)
-                .background(MaterialTheme.colorScheme.primaryContainer),
-            contentAlignment = Alignment.Center
-        ) {
-            Icon(
-                imageVector = icon,
-                contentDescription = label,
-                modifier = Modifier.size(28.dp),
-                tint = MaterialTheme.colorScheme.onPrimaryContainer
-            )
-        }
-        Spacer(modifier = Modifier.height(IMFITSpacing.sm))
-        Text(
-            text = label,
-            style = MaterialTheme.typography.bodyMedium,
-            fontWeight = FontWeight.Medium
-        )
+private fun PhotoIcon(icon: androidx.compose.ui.graphics.vector.ImageVector, size: Int = 48) {
+    val colors = IMFITColors.training
+    Box(Modifier.size(size.dp).background(colors.primaryContainer, RoundedCornerShape(10.dp)), contentAlignment = Alignment.Center) {
+        Icon(icon, null, tint = colors.onPrimaryContainer, modifier = Modifier.size(24.dp))
     }
 }
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-private fun RegisterScreenContent(
-    name: String = "",
-    email: String = "",
-    birthDate: String = "",
-    password: String = "",
-    confirmPassword: String = "",
-    profilePhotoUri: Uri? = null,
-    nameError: String? = null,
-    emailError: String? = null,
-    birthDateError: String? = null,
-    passwordError: String? = null,
-    confirmPasswordError: String? = null,
-    isLoading: Boolean = false,
-    onNameChange: (String) -> Unit = {},
-    onEmailChange: (String) -> Unit = {},
-    onBirthDateChange: (String) -> Unit = {},
-    onPasswordChange: (String) -> Unit = {},
-    onConfirmPasswordChange: (String) -> Unit = {},
-    onProfilePhotoClick: () -> Unit = {},
-    onDatePickerClick: () -> Unit = {},
-    onRegister: () -> Unit = {},
-    onNavigateToLogin: () -> Unit = {}
-) {
-    val snackbarHostState = remember { SnackbarHostState() }
-
-    Box(
-        modifier = Modifier
-            .fillMaxSize()
-            .background(MaterialTheme.colorScheme.background)
-            .windowInsetsPadding(WindowInsets.statusBars)
-            .imePadding()
-    ) {
-        Column(
-            modifier = Modifier
-                .fillMaxSize()
-                .verticalScroll(rememberScrollState())
-                .padding(horizontal = IMFITSpacing.screenHorizontal),
-            horizontalAlignment = Alignment.CenterHorizontally
-        ) {
-            Spacer(modifier = Modifier.height(IMFITSpacing.xl))
-
-            Text(
-                text = stringResource(R.string.register_title),
-                style = MaterialTheme.typography.headlineMedium,
-                fontWeight = FontWeight.Bold,
-                color = MaterialTheme.colorScheme.onBackground
-            )
-
-            Spacer(modifier = Modifier.height(IMFITSpacing.xs))
-
-            Text(
-                text = stringResource(R.string.register_subtitle),
-                style = MaterialTheme.typography.bodyLarge,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                textAlign = TextAlign.Center
-            )
-
-            Spacer(modifier = Modifier.height(IMFITSpacing.xl))
-
-            Box(
-                modifier = Modifier
-                    .size(140.dp)
-                    .clickable { onProfilePhotoClick() },
-                contentAlignment = Alignment.Center
-            ) {
-                Box(
-                    modifier = Modifier
-                        .size(120.dp)
-                        .shadow(8.dp, CircleShape)
-                        .clip(CircleShape)
-                        .background(MaterialTheme.colorScheme.surface)
-                        .border(3.dp, Primary, CircleShape),
-                    contentAlignment = Alignment.Center
-                ) {
-                    if (profilePhotoUri != null) {
-                        AsyncImage(
-                            model = profilePhotoUri,
-                            contentDescription = "Profile Photo",
-                            modifier = Modifier
-                                .size(120.dp)
-                                .clip(CircleShape),
-                            contentScale = ContentScale.Crop
-                        )
-                    } else {
-                        Box(
-                            modifier = Modifier
-                                .size(120.dp)
-                                .background(
-                                    brush = com.diajarkoding.imfit.theme.IMFITGradients.avatarWash
-                                ),
-                            contentAlignment = Alignment.Center
-                        ) {
-                            Icon(
-                                imageVector = Symbols.Default.Person,
-                                contentDescription = stringResource(R.string.desc_add_photo),
-                                modifier = Modifier.size(56.dp),
-                                tint = Primary.copy(alpha = 0.5f)
-                            )
-                        }
-                    }
-                }
-
-                Box(
-                    modifier = Modifier
-                        .align(Alignment.BottomEnd)
-                        .offset(x = (-5).dp, y = (-5).dp)
-                        .zIndex(1f)
-                        .size(40.dp)
-                        .shadow(6.dp, CircleShape)
-                        .clip(CircleShape)
-                        .background(Primary),
-                    contentAlignment = Alignment.Center
-                ) {
-                    Icon(
-                        imageVector = Symbols.Default.CameraAlt,
-                        contentDescription = null,
-                        modifier = Modifier.size(20.dp),
-                        tint = MaterialTheme.colorScheme.onPrimary
-                    )
-                }
+internal fun PhotoSourceSheet(onDismiss: () -> Unit, onCamera: () -> Unit, onGallery: () -> Unit) {
+    val colors = IMFITColors.training
+    ModalBottomSheet(onDismiss, sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true),
+        containerColor = colors.surface, shape = RoundedCornerShape(topStart = 24.dp, topEnd = 24.dp)) {
+        Column(Modifier.fillMaxWidth().verticalScroll(rememberScrollState()).padding(horizontal = 20.dp).padding(bottom = 20.dp), verticalArrangement = Arrangement.spacedBy(20.dp)) {
+            Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                Text(stringResource(R.string.register_choose_photo), color = colors.text, fontSize = 24.sp, fontWeight = FontWeight.Bold)
+                Text(stringResource(R.string.auth_photo_source_description), color = colors.muted, style = MaterialTheme.typography.bodyMedium)
             }
-
-            Spacer(modifier = Modifier.height(IMFITSpacing.xl))
-
-            IMFITTextField(
-                value = name,
-                onValueChange = onNameChange,
-                label = stringResource(R.string.label_fullname),
-                placeholder = stringResource(R.string.placeholder_name),
-                error = nameError,
-                imeAction = ImeAction.Next
-            )
-
-            Spacer(modifier = Modifier.height(IMFITSpacing.md))
-
-            IMFITTextField(
-                value = email,
-                onValueChange = onEmailChange,
-                label = stringResource(R.string.label_email),
-                placeholder = stringResource(R.string.placeholder_email),
-                error = emailError,
-                keyboardType = KeyboardType.Email,
-                imeAction = ImeAction.Next
-            )
-
-            Spacer(modifier = Modifier.height(IMFITSpacing.md))
-
-            Column(modifier = Modifier.fillMaxWidth()) {
-                Text(
-                    text = stringResource(R.string.label_date_of_birth),
-                    style = MaterialTheme.typography.labelLarge,
-                    fontWeight = FontWeight.Medium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    modifier = Modifier.padding(bottom = IMFITSpacing.sm)
-                )
-                Box(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .clickable { onDatePickerClick() }
-                ) {
-                    OutlinedTextField(
-                        value = birthDate,
-                        onValueChange = {},
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .height(IMFITSizes.textFieldHeight),
-                        enabled = false,
-                        placeholder = {
-                            Text(
-                                stringResource(R.string.register_select_birth_date),
-                                style = MaterialTheme.typography.bodyLarge,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f)
-                            )
-                        },
-                        trailingIcon = {
-                            Icon(
-                                imageVector = Symbols.Default.CalendarMonth,
-                                contentDescription = stringResource(R.string.desc_select_date),
-                                tint = Primary
-                            )
-                        },
-                        isError = birthDateError != null,
-                        shape = IMFITShapes.TextField,
-                        textStyle = MaterialTheme.typography.bodyLarge.copy(
-                            color = MaterialTheme.colorScheme.onSurface
-                        ),
-                        colors = OutlinedTextFieldDefaults.colors(
-                            disabledTextColor = MaterialTheme.colorScheme.onSurface,
-                            disabledBorderColor = if (birthDateError != null)
-                                MaterialTheme.colorScheme.error
-                            else MaterialTheme.colorScheme.outline.copy(alpha = 0.5f),
-                            disabledContainerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.3f),
-                            disabledPlaceholderColor = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f),
-                            disabledTrailingIconColor = Primary
-                        )
-                    )
-                }
-                if (birthDateError != null) {
-                    Text(
-                        text = birthDateError,
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.error,
-                        modifier = Modifier.padding(start = IMFITSpacing.xs, top = IMFITSpacing.xs)
-                    )
-                }
+            Column {
+                PhotoSourceRow(Symbols.Default.CameraAlt, stringResource(R.string.register_camera), stringResource(R.string.auth_camera_description), onCamera)
+                PhotoSourceRow(Symbols.Default.PhotoLibrary, stringResource(R.string.register_gallery), stringResource(R.string.auth_gallery_description), onGallery)
             }
-
-            Spacer(modifier = Modifier.height(IMFITSpacing.md))
-
-            IMFITPasswordField(
-                value = password,
-                onValueChange = onPasswordChange,
-                label = stringResource(R.string.label_password),
-                error = passwordError,
-                imeAction = ImeAction.Next
-            )
-
-            Spacer(modifier = Modifier.height(IMFITSpacing.md))
-
-            IMFITPasswordField(
-                value = confirmPassword,
-                onValueChange = onConfirmPasswordChange,
-                label = stringResource(R.string.label_confirm_password),
-                error = confirmPasswordError,
-                imeAction = ImeAction.Done,
-                onImeAction = onRegister
-            )
-
-            Spacer(modifier = Modifier.height(IMFITSpacing.xl))
-
-            IMFITButton(
-                text = stringResource(R.string.register_button),
-                onClick = onRegister,
-                isLoading = isLoading
-            )
-
-            Spacer(modifier = Modifier.height(IMFITSpacing.xl))
-
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.Center
-            ) {
-                Text(
-                    text = stringResource(R.string.register_redirect_prompt),
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-                Text(
-                    text = stringResource(R.string.register_redirect_action),
-                    style = MaterialTheme.typography.bodyMedium,
-                    fontWeight = FontWeight.Bold,
-                    color = Primary,
-                    modifier = Modifier.clickable { onNavigateToLogin() }
-                )
+            TextButton(onDismiss, Modifier.fillMaxWidth().heightIn(min = 54.dp)) {
+                Text(stringResource(R.string.action_cancel), color = colors.primary, fontWeight = FontWeight.SemiBold)
             }
-
-            Spacer(modifier = Modifier.height(IMFITSpacing.huge))
         }
-
-        SnackbarHost(
-            hostState = snackbarHostState,
-            modifier = Modifier
-                .align(Alignment.BottomCenter)
-                .windowInsetsPadding(WindowInsets.navigationBars)
-        )
     }
 }
 
-@Preview(showBackground = true, showSystemUi = true)
 @Composable
-private fun RegisterScreenPreviewLight() {
-    IMFITTheme(darkTheme = false) {
-        RegisterScreenContent()
+private fun PhotoSourceRow(icon: androidx.compose.ui.graphics.vector.ImageVector, title: String, description: String, onClick: () -> Unit) {
+    val colors = IMFITColors.training
+    Row(Modifier.fillMaxWidth().clip(AuthControlShape).clickable(onClick = onClick).heightIn(min = 76.dp),
+        verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(16.dp)) {
+        PhotoIcon(icon)
+        Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+            Text(title, color = colors.text, fontSize = 16.sp, fontWeight = FontWeight.SemiBold)
+            Text(description, color = colors.muted, style = MaterialTheme.typography.bodySmall)
+        }
+        Icon(Symbols.AutoMirrored.Filled.KeyboardArrowRight, null, tint = colors.muted, modifier = Modifier.size(20.dp))
     }
 }
 
-@Preview(showBackground = true, showSystemUi = true)
+@Preview(showBackground = true, widthDp = 412, heightDp = 956)
 @Composable
-private fun RegisterScreenPreviewDark() {
+private fun RegisterPreviewLight() { IMFITTheme { RegisterScreenContent() } }
+
+@Preview(showBackground = true, widthDp = 412, heightDp = 956)
+@Composable
+private fun RegisterPreviewDark() { IMFITTheme(darkTheme = true) { RegisterScreenContent() } }
+
+@Preview(showBackground = true, widthDp = 412, heightDp = 956)
+@Composable
+private fun RegisterPreviewValidation() {
+    IMFITTheme { RegisterScreenContent(RegisterState(email = "invalid", emailError = R.string.error_email_invalid)) }
+}
+
+@Preview(showBackground = true, widthDp = 412, heightDp = 1100)
+@Composable
+private fun RegisterPreviewFailure() {
+    IMFITTheme {
+        RegisterScreenContent(RegisterState(name = "Raka", email = "raka@email.com", errorMessage = R.string.auth_network_error))
+    }
+}
+
+@Preview(showBackground = true, widthDp = 412, heightDp = 1100)
+@Composable
+private fun RegisterPreviewPhotoFailureDark() {
     IMFITTheme(darkTheme = true) {
-        RegisterScreenContent()
-    }
-}
-
-@Preview(showBackground = true, showSystemUi = true)
-@Composable
-private fun RegisterScreenPreviewWithData() {
-    IMFITTheme(darkTheme = false) {
-        RegisterScreenContent(
-            name = "John Doe",
-            email = "john@example.com",
-            birthDate = "1990-01-15",
-            password = "password123",
-            confirmPassword = "password123"
-        )
-    }
-}
-
-@Preview(showBackground = true, showSystemUi = true)
-@Composable
-private fun RegisterScreenPreviewWithErrors() {
-    IMFITTheme(darkTheme = false) {
-        RegisterScreenContent(
-            name = "",
-            email = "invalid-email",
-            birthDate = "",
-            password = "123",
-            confirmPassword = "456",
-            nameError = "Name is required",
-            emailError = "Invalid email format",
-            birthDateError = "Birth date is required",
-            passwordError = "Password must be at least 6 characters",
-            confirmPasswordError = "Passwords do not match"
-        )
-    }
-}
-
-@Preview(showBackground = true, showSystemUi = true)
-@Composable
-private fun RegisterScreenPreviewLoading() {
-    IMFITTheme(darkTheme = false) {
-        RegisterScreenContent(
-            name = "John Doe",
-            email = "john@example.com",
-            birthDate = "1990-01-15",
-            password = "password123",
-            confirmPassword = "password123",
-            isLoading = true
-        )
+        RegisterScreenContent(RegisterState(name = "Raka"), photoError = stringResource(R.string.auth_camera_permission_denied))
     }
 }

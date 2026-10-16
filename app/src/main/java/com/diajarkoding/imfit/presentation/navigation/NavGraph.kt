@@ -44,6 +44,7 @@ fun NavGraph(
         mutableStateOf<ArrayList<String>?>(null)
     }
     var activeSelectionSessionId by rememberSaveable { mutableStateOf<String?>(null) }
+    var editExerciseSelectionResult by rememberSaveable { mutableStateOf<ArrayList<String>?>(null) }
     var activeSelectionResult by rememberSaveable { mutableStateOf<ArrayList<String>?>(null) }
 
     LaunchedEffect(
@@ -157,7 +158,13 @@ fun NavGraph(
             entry<EditWorkout> { key ->
                 EditWorkoutScreen(
                     workoutId = key.workoutId,
-                    onNavigateBack = { backStack.removeLastOrNull() }
+                    onNavigateBack = { backStack.removeLastOrNull() },
+                    onAddExercises = { id, excludedIds, name ->
+                        editExerciseSelectionResult = null
+                        backStack.add(ExerciseSelection(id, excludedIds, name, forEdit = true))
+                    },
+                    selectedExerciseIds = editExerciseSelectionResult,
+                    onSelectedExercisesConsumed = { editExerciseSelectionResult = null }
                 )
             }
 
@@ -171,9 +178,12 @@ fun NavGraph(
             entry<ExerciseSelection> { key ->
                 ExerciseSelectionScreen(
                     templateId = key.templateId,
+                    excludedExerciseIds = key.excludedIds?.toSet(),
+                    routineName = key.routineName,
                     onNavigateBack = { backStack.removeLastOrNull() },
                     onExercisesSelected = { selectedExercises ->
-                        exerciseSelectionResult = ArrayList(selectedExercises.map { it.id })
+                        if (key.forEdit) editExerciseSelectionResult = ArrayList(selectedExercises.map { it.id })
+                        else exerciseSelectionResult = ArrayList(selectedExercises.map { it.id })
                         backStack.removeLastOrNull()
                     }
                 )

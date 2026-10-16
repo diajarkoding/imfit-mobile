@@ -1,329 +1,184 @@
 package com.diajarkoding.imfit.presentation.ui.exercise
 
-import androidx.lifecycle.compose.collectAsStateWithLifecycle
-
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
-import androidx.compose.foundation.clickable
-import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.PaddingValues
-import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.WindowInsets
-import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.navigationBars
-import androidx.compose.ui.tooling.preview.Preview
-import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.statusBars
-import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.layout.windowInsetsPadding
+import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
-import com.diajarkoding.imfit.presentation.components.common.ArrowBack
-import com.diajarkoding.imfit.presentation.components.common.Check
-import com.diajarkoding.imfit.presentation.components.common.Clear
-import com.diajarkoding.imfit.presentation.components.common.FitnessCenter
-import com.diajarkoding.imfit.presentation.components.common.Search
-import com.diajarkoding.imfit.presentation.components.common.Symbols
-import androidx.compose.material3.Card
-import androidx.compose.material3.CardDefaults
-import androidx.compose.material3.Checkbox
-import androidx.compose.material3.CheckboxDefaults
-import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.FilterChip
-import androidx.compose.material3.FilterChipDefaults
-import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
-import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedTextField
-import androidx.compose.material3.OutlinedTextFieldDefaults
-import androidx.compose.material3.Scaffold
-import androidx.compose.material3.Text
-import androidx.compose.material3.TopAppBar
-import androidx.compose.material3.TopAppBarDefaults
-import androidx.compose.runtime.Composable
-import androidx.compose.runtime.collectAsState
-import androidx.compose.runtime.getValue
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.selection.selectable
+import androidx.compose.foundation.selection.selectableGroup
+import androidx.compose.foundation.selection.toggleable
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.verticalScroll
+import androidx.compose.material3.*
+import androidx.compose.runtime.*
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
-import androidx.compose.ui.draw.shadow
-import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import androidx.hilt.navigation.compose.hiltViewModel
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.diajarkoding.imfit.R
 import com.diajarkoding.imfit.domain.model.Exercise
-import com.diajarkoding.imfit.domain.model.MuscleCategory
-import com.diajarkoding.imfit.presentation.components.common.IMFITButton
-import com.diajarkoding.imfit.presentation.components.common.ShimmerExerciseCard
-import com.diajarkoding.imfit.theme.IMFITShapes
-import com.diajarkoding.imfit.theme.IMFITSizes
-import com.diajarkoding.imfit.theme.IMFITSpacing
-import com.diajarkoding.imfit.theme.Primary
+import com.diajarkoding.imfit.presentation.components.common.*
+import com.diajarkoding.imfit.theme.IMFITColors
 
-@OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun ExerciseSelectionScreen(
-    templateId: String,
-    onNavigateBack: () -> Unit,
-    onExercisesSelected: (List<Exercise>) -> Unit,
-    viewModel: ExerciseSelectionViewModel = hiltViewModel(),
-    excludedExerciseIds: Set<String> = emptySet()
-) {
+fun ExerciseSelectionScreen(templateId: String, onNavigateBack: () -> Unit, onExercisesSelected: (List<Exercise>) -> Unit,
+    viewModel: ExerciseSelectionViewModel = hiltViewModel(), excludedExerciseIds: Set<String>? = null,
+    routineName: String? = null) {
     val state by viewModel.state.collectAsStateWithLifecycle()
+    var filterSheet by rememberSaveable { mutableStateOf(false) }
+    var confirmed by rememberSaveable { mutableStateOf(false) }
+    LaunchedEffect(templateId, excludedExerciseIds, routineName) { viewModel.initialize(templateId, excludedExerciseIds, routineName) }
+    if (filterSheet) MuscleFilterSheet(state.selectedCategory, onDismiss = { filterSheet = false },
+        onApply = { viewModel.selectCategory(it); filterSheet = false })
+    ExercisePickerContent(state, onNavigateBack, viewModel::onSearchQueryChange, viewModel::selectCategory,
+        viewModel::toggleExercise, viewModel::resetSelection, viewModel::clearFilters, viewModel::retry,
+        onFilter = { filterSheet = true }, onConfirm = {
+            if (!confirmed && state.selectedExercises.isNotEmpty()) { confirmed = true; onExercisesSelected(state.selectedExercises) }
+        }, enabled = !confirmed)
+}
 
-    Scaffold(
-        contentWindowInsets = WindowInsets(0),
-        topBar = {
-            TopAppBar(
-                modifier = Modifier.windowInsetsPadding(WindowInsets.statusBars),
-                title = {
-                    Text(
-                        text = stringResource(R.string.exercise_select_title),
-                        style = MaterialTheme.typography.titleLarge,
-                        fontWeight = FontWeight.Bold
-                    )
-                },
-                navigationIcon = {
-                    IconButton(onClick = onNavigateBack) {
-                        Icon(
-                            Symbols.AutoMirrored.Filled.ArrowBack,
-                            contentDescription = stringResource(R.string.action_back)
-                        )
-                    }
-                },
-                colors = TopAppBarDefaults.topAppBarColors(
-                    containerColor = MaterialTheme.colorScheme.surface
-                ),
-                windowInsets = WindowInsets(0)
-            )
-        },
-        bottomBar = {
-            if (state.selectedExercises.isNotEmpty()) {
-                Box(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .shadow(8.dp, spotColor = Color.Black.copy(alpha = 0.1f))
-                        .background(MaterialTheme.colorScheme.surface)
-                        .windowInsetsPadding(WindowInsets.navigationBars)
-                        .padding(IMFITSpacing.screenHorizontal)
-                        .padding(vertical = IMFITSpacing.xs)
-                ) {
-                    IMFITButton(
-                        text = pluralStringResource(
-                            R.plurals.exercise_add_count,
-                            state.selectedExercises.size,
-                            state.selectedExercises.size
-                        ),
-                        onClick = { onExercisesSelected(state.selectedExercises) },
-                        icon = Symbols.Default.Check
-                    )
+@Composable
+internal fun ExercisePickerContent(state: ExerciseSelectionState, onBack: () -> Unit, onSearch: (String) -> Unit,
+    onCategory: (ExerciseCategory) -> Unit, onToggle: (Exercise) -> Unit, onReset: () -> Unit,
+    onClearFilters: () -> Unit, onRetry: () -> Unit, onFilter: () -> Unit, onConfirm: () -> Unit, enabled: Boolean = true) {
+    val c = IMFITColors.training
+    Scaffold(modifier = Modifier.imePadding(), containerColor = c.background, contentWindowInsets = WindowInsets(0),
+        topBar = { RoutineAppBar(stringResource(R.string.routine_picker_title), onBack,
+            subtitle = if (state.routineName.isBlank()) stringResource(R.string.routine_picker_context_generic)
+                else stringResource(R.string.routine_picker_context, state.routineName)) },
+        bottomBar = { RoutineFooter {
+            Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                Text(stringResource(R.string.routine_selected_count, state.selectedExercises.size), Modifier.weight(1f),
+                    color = c.primary, style = MaterialTheme.typography.labelMedium)
+                TextButton(onReset, enabled = enabled && state.selectedExercises.isNotEmpty()) { Text(stringResource(R.string.routine_reset), color = c.primary) }
+            }
+            RoutineButton(if (state.selectedExercises.isEmpty()) stringResource(R.string.routine_add_selected)
+                else stringResource(R.string.routine_add_count, state.selectedExercises.size), onConfirm,
+                enabled = enabled && !state.isLoading && state.selectedExercises.isNotEmpty())
+        } }) { padding ->
+        Column(Modifier.fillMaxSize().padding(padding).padding(horizontal = 20.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+            OutlinedTextField(state.searchQuery, onSearch, enabled = enabled, singleLine = true,
+                modifier = Modifier.fillMaxWidth().padding(top = 12.dp).heightIn(min = 52.dp), shape = RoutineControlShape,
+                placeholder = { Text(stringResource(R.string.routine_search_hint), color = c.muted) },
+                leadingIcon = { Icon(Symbols.Default.Search, null, tint = c.muted, modifier = Modifier.size(20.dp)) },
+                trailingIcon = if (state.searchQuery.isNotBlank()) {{ IconButton({ onSearch("") }) { Icon(Symbols.Default.Clear, stringResource(R.string.action_clear), tint = c.muted) } }} else null,
+                colors = OutlinedTextFieldDefaults.colors(focusedBorderColor = c.primary, unfocusedBorderColor = MaterialTheme.colorScheme.onSurfaceVariant,
+                    focusedContainerColor = c.surface, unfocusedContainerColor = c.surface, focusedTextColor = c.text, unfocusedTextColor = c.text, cursorColor = c.primary))
+            Row(Modifier.fillMaxWidth().height(IntrinsicSize.Min).selectableGroup(),
+                horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
+                listOf(ExerciseCategory.ALL, ExerciseCategory.CHEST, ExerciseCategory.BACK).forEach { category ->
+                    MuscleFilterChip(category, state.selectedCategory == category, { onCategory(category) },
+                        modifier = Modifier.weight(1f).fillMaxHeight(), enabled = enabled, quickFilter = true)
+                }
+                val otherFilterActive = state.selectedCategory !in listOf(ExerciseCategory.ALL, ExerciseCategory.CHEST, ExerciseCategory.BACK)
+                OutlinedIconButton(onFilter, enabled = enabled, modifier = Modifier.size(48.dp), shape = RoutineControlShape,
+                    border = BorderStroke(1.dp, if (otherFilterActive) c.primary else c.border),
+                    colors = IconButtonDefaults.outlinedIconButtonColors(
+                        containerColor = if (otherFilterActive) c.primaryContainer else c.surface,
+                        contentColor = if (otherFilterActive) c.onPrimaryContainer else c.muted)) {
+                    Icon(androidx.compose.ui.res.painterResource(R.drawable.ic_routine_filter),
+                        if (otherFilterActive) stringResource(R.string.routine_active_filter, stringResource(state.selectedCategory.labelRes))
+                        else stringResource(R.string.routine_filter_title), modifier = Modifier.size(20.dp))
                 }
             }
-        }
-    ) { padding ->
-        Column(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(padding)
-        ) {
-            // Search Bar
-            OutlinedTextField(
-                value = state.searchQuery,
-                onValueChange = { viewModel.onSearchQueryChange(it) },
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(horizontal = IMFITSpacing.screenHorizontal)
-                    .padding(top = IMFITSpacing.sm),
-                placeholder = { Text(stringResource(R.string.exercise_search_hint)) },
-                leadingIcon = {
-                    Icon(
-                        imageVector = Symbols.Default.Search,
-                        contentDescription = stringResource(R.string.action_search),
-                        tint = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                },
-                trailingIcon = {
-                    if (state.searchQuery.isNotEmpty()) {
-                        IconButton(onClick = { viewModel.onSearchQueryChange("") }) {
-                            Icon(
-                                imageVector = Symbols.Default.Clear,
-                                contentDescription = stringResource(R.string.action_clear),
-                                tint = MaterialTheme.colorScheme.onSurfaceVariant
-                            )
-                        }
-                    }
-                },
-                singleLine = true,
-                shape = IMFITShapes.TextField,
-                colors = OutlinedTextFieldDefaults.colors(
-                    focusedBorderColor = Primary,
-                    unfocusedBorderColor = MaterialTheme.colorScheme.outline.copy(alpha = 0.5f)
-                )
-            )
-
-            LazyRow(
-                modifier = Modifier.fillMaxWidth(),
-                contentPadding = PaddingValues(
-                    horizontal = IMFITSpacing.screenHorizontal,
-                    vertical = IMFITSpacing.sm
-                ),
-                horizontalArrangement = Arrangement.spacedBy(IMFITSpacing.sm)
-            ) {
-                item {
-                    FilterChip(
-                        selected = state.selectedCategory == null,
-                        onClick = { viewModel.selectCategory(null) },
-                        label = { Text(stringResource(R.string.exercise_filter_all)) },
-                        leadingIcon = if (state.selectedCategory == null) {
-                            {
-                                Icon(
-                                    Symbols.Default.Check,
-                                    contentDescription = null,
-                                    modifier = Modifier.size(18.dp)
-                                )
-                            }
-                        } else null,
-                        colors = FilterChipDefaults.filterChipColors(
-                            selectedContainerColor = Primary.copy(alpha = 0.15f),
-                            selectedLabelColor = Primary
-                        )
-                    )
-                }
-
-                items(MuscleCategory.entries, key = { it.name }) { category ->
-                    FilterChip(
-                        selected = state.selectedCategory == category,
-                        onClick = { viewModel.selectCategory(category) },
-                        label = { Text(stringResource(id = category.stringResourceId)) },
-                        leadingIcon = if (state.selectedCategory == category) {
-                            {
-                                Icon(
-                                    Symbols.Default.Check,
-                                    contentDescription = null,
-                                    modifier = Modifier.size(18.dp)
-                                )
-                            }
-                        } else null,
-                        colors = FilterChipDefaults.filterChipColors(
-                            selectedContainerColor = Primary.copy(alpha = 0.15f),
-                            selectedLabelColor = Primary
-                        )
-                    )
-                }
+            Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                Text(stringResource(R.string.routine_available_exercises), Modifier.weight(1f), color = c.text, fontWeight = FontWeight.SemiBold)
+                Text(stringResource(R.string.routine_result_count, state.filteredExercises.size), color = c.muted, style = MaterialTheme.typography.bodySmall)
             }
-
-            LazyColumn(
-                modifier = Modifier.fillMaxSize(),
-                contentPadding = PaddingValues(IMFITSpacing.screenHorizontal),
-                verticalArrangement = Arrangement.spacedBy(IMFITSpacing.md)
-            ) {
-                if (state.isLoading) {
-                    // Shimmer loading state
-                    items(8, key = { it }) { ShimmerExerciseCard() }
-                } else {
-                    items(state.filteredExercises.filterNot { it.id in excludedExerciseIds }.distinctBy { it.id }.mapIndexed { index, exercise ->
-        exercise to "ex_${exercise.id}_${index}"
-    }, key = { it.second }) { (exercise, _) ->
-                        SelectableExerciseCard(
-                            exercise = exercise,
-                            isSelected = state.selectedExercises.contains(exercise),
-                            onToggle = { viewModel.toggleExercise(exercise) }
-                        )
+            LazyColumn(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(8.dp), contentPadding = PaddingValues(bottom = 12.dp)) {
+                if (state.isLoading) item { RoutineLoading(stringResource(R.string.routine_catalog_loading)) }
+                state.errorRes?.let { error -> item { RoutineFailure(stringResource(error), onRetry) } }
+                if (!state.isLoading && state.errorRes == null && state.filteredExercises.isEmpty()) item {
+                    Column(Modifier.padding(vertical = 24.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                        Text(stringResource(R.string.routine_search_empty), color = c.text, style = MaterialTheme.typography.titleMedium)
+                        Text(stringResource(if (state.allExercises.isEmpty()) R.string.routine_catalog_empty else R.string.routine_search_empty_hint), color = c.muted)
+                        if (state.allExercises.isNotEmpty()) TextButton(onClearFilters) { Text(stringResource(R.string.routine_clear_filters), color = c.primary) }
+                        else TextButton(onRetry) { Text(stringResource(R.string.routine_retry), color = c.primary) }
                     }
                 }
-
-                item { Spacer(modifier = Modifier.height(IMFITSpacing.huge)) }
+                items(state.filteredExercises, key = { it.id }) { exercise ->
+                    ExercisePickerRow(exercise, state.selectedExercises.any { it.id == exercise.id }, enabled && !state.isLoading) { onToggle(exercise) }
+                }
             }
         }
     }
 }
 
 @Composable
-private fun SelectableExerciseCard(
-    exercise: Exercise,
-    isSelected: Boolean,
-    onToggle: () -> Unit
-) {
-    Card(
-        modifier = Modifier
-            .fillMaxWidth()
-            .clickable { onToggle() },
-        shape = IMFITShapes.Card,
-        colors = CardDefaults.cardColors(
-            containerColor =
-                MaterialTheme.colorScheme.surface
-        ),
-        elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
-    ) {
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(IMFITSpacing.cardPadding),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Box(
-                modifier = Modifier
-                    .size(48.dp)
-                    .clip(IMFITShapes.IconContainer)
-                    .background(
-                        MaterialTheme.colorScheme.primaryContainer
-                    ),
-                contentAlignment = Alignment.Center
-            ) {
-                Icon(
-                    imageVector = Symbols.Default.FitnessCenter,
-                    contentDescription = null,
-                    tint = MaterialTheme.colorScheme.onPrimaryContainer,
-                    modifier = Modifier.size(IMFITSizes.iconMd)
-                )
+internal fun ExercisePickerRow(exercise: Exercise, selected: Boolean, enabled: Boolean = true, onToggle: () -> Unit) {
+    val c = IMFITColors.training
+    Surface(shape = RoundedCornerShape(12.dp), color = if (selected) c.primaryContainer else c.surface,
+        border = BorderStroke(if (selected) 2.dp else 1.dp, if (selected) c.primary else c.border)) {
+        Row(Modifier.fillMaxWidth().toggleable(selected, enabled = enabled, role = Role.Checkbox, onValueChange = { onToggle() })
+            .heightIn(min = 76.dp).padding(12.dp), verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+            MuscleCategoryArtwork(categoryArtAsset(exercise.muscleCategory), Modifier.size(48.dp).background(c.raised, RoutineControlShape))
+            Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                Text(exercise.name, color = c.text, style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.SemiBold)
+                Text(stringResource(exercise.muscleCategory.stringResourceId) + if (selected) " · " + stringResource(R.string.routine_selected) else "",
+                    color = if (selected) c.onPrimaryContainer else c.muted, style = MaterialTheme.typography.bodySmall)
             }
-
-            Spacer(modifier = Modifier.width(IMFITSpacing.lg))
-
-            Column(modifier = Modifier.weight(1f)) {
-                Text(
-                    text = exercise.name,
-                    style = MaterialTheme.typography.titleSmall,
-                    fontWeight = FontWeight.SemiBold,
-                    color = MaterialTheme.colorScheme.onSurface
-                )
-                Spacer(modifier = Modifier.height(IMFITSpacing.xs))
-                Text(
-                    text = stringResource(id = exercise.muscleCategory.stringResourceId),
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-            }
-
-            Checkbox(
-                checked = isSelected,
-                onCheckedChange = { onToggle() },
-                colors = CheckboxDefaults.colors(
-                    checkedColor = Primary,
-                    checkmarkColor = Color.White
-                )
-            )
+            Checkbox(selected, onCheckedChange = null, enabled = enabled,
+                modifier = Modifier.size(48.dp), colors = CheckboxDefaults.colors(checkedColor = c.primary, checkmarkColor = c.onPrimary, uncheckedColor = MaterialTheme.colorScheme.onSurfaceVariant))
         }
     }
 }
 
-@Preview(showBackground = true, showSystemUi = true)
 @Composable
-private fun ExerciseSelectionScreenPreview() {
-    com.diajarkoding.imfit.theme.IMFITTheme(darkTheme = false) {
-        ExerciseSelectionScreen(
-            templateId = "preview-template",
-            onNavigateBack = {},
-            onExercisesSelected = {}
-        )
+internal fun MuscleFilterChip(category: ExerciseCategory, selected: Boolean, onClick: () -> Unit,
+    modifier: Modifier = Modifier, enabled: Boolean = true, quickFilter: Boolean = false) {
+    val c = IMFITColors.training
+    Surface(modifier, shape = RoutineControlShape, color = if (selected) c.primaryContainer else c.surface,
+        border = BorderStroke(1.dp, if (selected && quickFilter) c.primaryContainer else if (selected) c.primary else c.border)) {
+        Row(Modifier.selectable(selected, enabled = enabled, role = Role.RadioButton, onClick = onClick)
+            .heightIn(min = 48.dp).padding(horizontal = if (quickFilter) 8.dp else 14.dp, vertical = 8.dp),
+            verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp, Alignment.CenterHorizontally)) {
+            if (selected) Icon(Symbols.Default.Check, null, tint = c.onPrimaryContainer, modifier = Modifier.size(14.dp))
+            Text(stringResource(if (category == ExerciseCategory.ALL) R.string.exercise_filter_all else category.labelRes),
+                modifier = Modifier.weight(1f, fill = false), textAlign = TextAlign.Center,
+                color = if (selected) c.onPrimaryContainer else c.muted,
+                fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Medium,
+                style = MaterialTheme.typography.labelMedium.copy(fontSize = 13.sp))
+        }
+    }
+}
+
+@OptIn(ExperimentalMaterial3Api::class, ExperimentalLayoutApi::class)
+@Composable
+internal fun MuscleFilterSheet(current: ExerciseCategory, onDismiss: () -> Unit, onApply: (ExerciseCategory) -> Unit) {
+    val c = IMFITColors.training
+    var draft by rememberSaveable { mutableStateOf(current) }
+    val options = listOf(ExerciseCategory.ALL) + ExerciseCategory.entries.filterNot { it == ExerciseCategory.ALL }
+    ModalBottomSheet(onDismiss, sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true), containerColor = c.surface,
+        shape = RoundedCornerShape(topStart = 24.dp, topEnd = 24.dp)) {
+        Column(Modifier.fillMaxWidth().verticalScroll(rememberScrollState()).padding(horizontal = 20.dp).padding(bottom = 20.dp),
+            verticalArrangement = Arrangement.spacedBy(16.dp)) {
+            Text(stringResource(R.string.routine_filter_title), color = c.text, style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.SemiBold)
+            Text(stringResource(R.string.routine_filter_hint), color = c.muted, style = MaterialTheme.typography.bodyMedium)
+            Column(Modifier.selectableGroup(), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                options.chunked(2).forEach { row ->
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        row.forEach { category -> MuscleFilterChip(category, draft == category, { draft = category }, Modifier.weight(1f)) }
+                        if (row.size == 1) Spacer(Modifier.weight(1f))
+                    }
+                }
+            }
+            FlowRow(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp, Alignment.End), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                TextButton(onDismiss, Modifier.heightIn(min = 48.dp)) { Text(stringResource(R.string.action_cancel), color = c.muted) }
+                Button({ onApply(draft) }, Modifier.heightIn(min = 48.dp), shape = RoutineControlShape,
+                    colors = ButtonDefaults.buttonColors(containerColor = c.primary, contentColor = c.onPrimary)) {
+                    Text(stringResource(R.string.routine_apply_filter))
+                }
+            }
+        }
     }
 }

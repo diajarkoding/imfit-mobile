@@ -28,7 +28,8 @@ data class EditWorkout(val workoutId: String) : NavKey
 data class ExerciseList(val categoryName: String) : NavKey
 
 @Serializable
-data class ExerciseSelection(val templateId: String) : NavKey
+data class ExerciseSelection(val templateId: String, val excludedIds: List<String>? = null,
+    val routineName: String? = null, val forEdit: Boolean = false) : NavKey
 
 @Serializable
 data class ActiveExerciseSelection(val sessionId: String, val excludedIds: List<String>) : NavKey

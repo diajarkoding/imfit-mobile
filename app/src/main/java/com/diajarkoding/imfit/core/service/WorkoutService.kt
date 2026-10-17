@@ -91,44 +91,90 @@ class WorkoutService : Service() {
         if (ticker?.isActive == true || !running.value) return
         val previous = ticker
         ticker = scope.launch {
-            previous?.join() // A cancelled predecessor must finish before the new loop starts.
-            var exactAvailable = runtime.exactAlarmAvailable()
-            while (isActive && running.value) {
+            RestTimerTrace.event("ticker_started", timer.state.value, "source=fgs_ticker")
+            try {
+                previous?.join() // A cancelled predecessor must finish before the new loop starts.
+                var exactAvailable = runtime.exactAlarmAvailable()
+                var lastHeartbeat = 0L
+                var lastIdentity: List<Any?>? = null
+                var lastElapsed = SystemClock.elapsedRealtime()
+                var lastUptime = SystemClock.uptimeMillis()
+                var dueIdentity: Pair<String, Long>? = null
+                val iteration = RestTimerTickerIteration(
+                    readSession = {
+                        RestTimerTrace.measured("ticker_session_read", timer.state.value) {
+                            workouts.getActiveSessionForTimer()
+                        }
+                    },
+                    reconcile = { timer.reconcile(source = "fgs_ticker") },
+                    render = { timer.renderWorkout(it) },
+                    absent = { timer.cancel("SESSION_ABSENT"); stopWorkout() },
+                    now = { SystemClock.elapsedRealtime() },
+                    retry = sessionRetry,
+                    failure = { stage, error, retryMs ->
+                        if (stage == "expiry_reconcile") {
+                            RestTimerTrace.event("ticker_reconcile_failed", timer.state.value,
+                                "source=fgs_ticker stage=$stage exception=${error.javaClass.simpleName}")
+                        } else {
+                            recordReadFailure(stage, error, retryMs)
+                        }
+                    },
+                    recovered = { RestTimerTrace.event("session_read_recovered", timer.state.value, "source=fgs_ticker") }
+                )
+                while (isActive && running.value) {
+                    val now = SystemClock.elapsedRealtime()
+                    val uptime = SystemClock.uptimeMillis()
+                    val rest = timer.state.value
+                    val identity = listOf(rest?.timerId, rest?.generation, rest?.status)
+                    if (now - lastElapsed > 5000) RestTimerTrace.event("ticker_gap", rest,
+                        "source=fgs_ticker gapElapsedMs=${now - lastElapsed} gapUptimeMs=${uptime - lastUptime}")
+                    if (identity != lastIdentity || now - lastHeartbeat >= 30_000) {
+                        RestTimerTrace.event("ticker_heartbeat", rest,
+                            "source=fgs_ticker running=${running.value} readBackoff=${!sessionRetry.available(now)}")
+                        lastHeartbeat = now
+                        lastIdentity = identity
+                    }
+                    lastElapsed = now
+                    lastUptime = uptime
+                    if (rest?.status == TimerStatus.RUNNING && now >= rest.deadlineElapsedMs &&
+                        dueIdentity != (rest.timerId to rest.generation)) {
+                        dueIdentity = rest.timerId to rest.generation
+                        RestTimerTrace.event("ticker_due", rest, "source=fgs_ticker")
+                    }
                 try {
                     runtime.monitorPlayback()
                     val available = runtime.exactAlarmAvailable()
                     if (available != exactAvailable) {
-                        timer.capabilitiesChanged()
+                        timer.capabilitiesChanged(source = "fgs_capability")
                         exactAvailable = available
                     }
-                    if (sessionRetry.available(SystemClock.elapsedRealtime())) {
-                        val session = withTimeout(2500) { workouts.getActiveSessionForTimer() }
-                        if (session == null) {
-                            timer.cancel("SESSION_ABSENT")
-                            stopWorkout()
-                            return@launch
-                        }
-                        timer.reconcile()
-                        timer.renderWorkout(session)
-                        if (sessionRetry.failures > 0) RestTimerTrace.event("session_read_recovered", timer.state.value)
-                        sessionRetry.reset()
+                    if (!iteration.tick()) return@launch
+                    if (!sessionRetry.available(SystemClock.elapsedRealtime()) &&
+                        rest?.status == TimerStatus.RUNNING && now >= rest.deadlineElapsedMs) {
+                        RestTimerTrace.event("ticker_backoff", rest, "source=fgs_ticker")
                     }
                 } catch (e: TimeoutCancellationException) {
-                    recordReadFailure(e)
+                    recordReadFailure("ticker_outer", e, sessionRetry.failed(SystemClock.elapsedRealtime()))
                 } catch (e: CancellationException) {
                     throw e
                 } catch (e: Exception) {
-                    recordReadFailure(e)
+                    recordReadFailure("ticker_outer", e, sessionRetry.failed(SystemClock.elapsedRealtime()))
                 }
                 delay(1000)
+                }
+            } catch (e: CancellationException) {
+                RestTimerTrace.event("ticker_cancelled", timer.state.value,
+                    "source=fgs_ticker exception=${e.javaClass.simpleName}")
+                throw e
+            } finally {
+                RestTimerTrace.event("ticker_completed", timer.state.value, "source=fgs_ticker running=${running.value}")
             }
         }
     }
 
-    private fun recordReadFailure(error: Exception) {
-        val retryMs = sessionRetry.failed(SystemClock.elapsedRealtime())
+    private fun recordReadFailure(stage: String, error: Exception, retryMs: Long) {
         RestTimerTrace.event("ticker_recovery_failed", timer.state.value,
-            "attempt=${sessionRetry.failures} retryMs=$retryMs exception=${error.javaClass.simpleName}")
+            "source=fgs_ticker stage=$stage attempt=${sessionRetry.failures} retryMs=$retryMs exception=${error.javaClass.simpleName}")
     }
 
     private suspend fun setPaused(paused: Boolean) {

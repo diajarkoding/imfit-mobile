@@ -2,6 +2,8 @@
 
 Tanggal: 13 Oktober 2026.
 
+**Update 17 Oktober 2026: issue dilaporkan muncul kembali pada production release.** Kelulusan manual di bawah adalah hasil historis, bukan penerimaan APK terbaru. Follow-up pada branch `timer` dan batas bukti dicatat di bagian 12; build/test patch terbaru belum dijalankan.
+
 **Status: tiga skenario inti rest timer lulus uji manual pada emulator Pixel 5 API 34 dan perangkat fisik REALME X Android 10 (API 29), berdasarkan laporan pengguna.** Timer tetap berjalan saat berpindah aplikasi, countdown notifikasi berjalan di luar IMFIT, dan alert selesai muncul saat pengguna berada di luar IMFIT. Rincian hasil ada di [bagian 10](#10-hasil-verifikasi-manual).
 
 Kompilasi kedua flavor dan source test telah berhasil. Unit test otomatis, instrumentation test otomatis, dan lint belum dijalankan dalam sesi ini. Pengujian manual tersebut membuktikan tiga perilaku pada dua konfigurasi yang dilaporkan; atribusi root cause rekaman awal, pengukuran latency, dan skenario matriks lainnya belum dikonfirmasi.
@@ -247,3 +249,133 @@ Satu proses verifikasi telah dimulai sebelum pengguna meminta seluruh build/test
 ### Integrasi ke `redisgn` — 16 Oktober 2026
 
 Update `timer` sampai `92d9ce5` diintegrasikan setelah push ke remote timer. Konflik `ActiveWorkoutViewModel.completeSet()` diselesaikan dengan mempertahankan mutasi sesi, identitas set, local-auth lookup, serta error handling versi `redisgn`; countdown tetap mengikuti collector coordinator. Bagian di atas mencatat status historis saat patch masih berada di `timer`. Build/test ulang hasil integrasi dan penerimaan perangkat dilakukan manual oleh pengguna; merge tidak menandakan issue rekaman telah terverifikasi selesai.
+
+## 12. Follow-up production release — 17 Oktober 2026, branch `timer`
+
+### Bukti dan batas diagnosis
+
+Log perangkat tanggal 16 Oktober menunjukkan aplikasi masuk background sekitar 23:51:21. Worker recovery yang sama mulai pada 23:53:26, 23:53:39, dan 23:54:02, dengan hasil `RETRY`, `RETRY`, lalu `FAILURE` pada 23:54:05. Aplikasi baru resumed sekitar 23:55:15. PID tetap 17472; tidak ada bukti proses tersebut dibunuh selama interval rest ini. Perubahan package/RescheduleReceiver di sekitar worker merupakan aktivitas komponen WorkManager, bukan bukti aplikasi di-install ulang.
+
+Durasi worker sekitar 2,6–2,8 detik konsisten dengan timeout validasi sesi 2.500 ms, tetapi **belum membuktikan auth, Room, mutex, atau notification post sebagai root cause**. Trace timer sebelumnya hanya aktif pada debug. Berdasarkan source, recovery hanya di-enqueue dari receiver alarm dan penghentian pada attempt ketiga memang berasal dari batas aplikasi, bukan kegagalan membuat worker. SHA APK, API/model aktual, dan kondisi capability tetap perlu dicatat saat reproduksi berikutnya.
+
+### Perubahan source
+
+- `AuthRepositoryImpl.getLocalUserId()` langsung memakai identitas lokal SDK jika sudah tersedia. Tidak menyimpan cache identitas tambahan dan tetap menunggu initialization ketika identitas belum tersedia; tidak mengartikan auth belum siap sebagai logout.
+- `RestTimerSessionValidator` memverifikasi owner auth, identitas sesi lokal, lalu owner auth sekali lagi setelah query. Auth mismatch/absent atau sesi benar-benar absent menghasilkan invalid; error/timeout/cancellation diteruskan, bukan dibentuk menjadi absent.
+- Production `isActiveSessionForTimer(userId, workoutId)` menggunakan query Room **ID sesi aktif terbaru untuk owner tersebut**, bukan cache, decode JSON workout, atau network/profile lookup. Validasi runtime tetap bounded 2.500 ms. Caller wajib memverifikasi auth; ID owner dari timer saja bukan otorisasi.
+- Pemuatan JSON sesi lengkap dipindahkan ke IO untuk kebutuhan UI/rendering. Runtime memulihkan sesi rendering secara terpisah, single-job dengan backoff, kemudian kembali melalui coordinator untuk validasi sebelum render. Kegagalan rendering workout 1001 tidak menjadi prasyarat posting completion 1002. Log restore tidak lagi mencatat UUID sesi atau ditulis setiap pembacaan.
+- AlarmManager tetap scheduler deadline utama. Receiver tetap bounded **4 detik**, termasuk enqueue watchdog. Worker menggunakan budget **15 detik** termasuk antrean Main/mutex; timeout validasi sesi internal tidak diperpanjang. Worker tetap `alarmDelivery=false`, tanpa mengasumsikan exemption FGS dari WorkManager.
+- Recovery memakai initial delay/backoff exponential 10 detik existing. Tidak berhenti pada attempt ketiga: kegagalan transient dapat retry selama usia work **kurang dari 10 menit sejak enqueue**. Safety cap **12 attempt** juga mencakup work lama tanpa timestamp atau reset elapsed clock. Budget diperiksa setelah attempt; WorkManager/OEM dapat menunda attempt berikutnya melewati budget ini. Ini bukan SLA delivery.
+- Completion yang **belum pernah ditangani** dan terlambat lebih dari **5 menit setelah deadline elapsed** diterminalkan sebagai `CANCELLED / DELIVERY_WINDOW_EXPIRED`, termasuk pada foreground reconcile. Deadline tidak diubah. Discard tidak menunggu auth/Room yang masih gagal, tetapi tetap harus berhasil dipersist sebelum recovery dinyatakan handled. Ini batas produk untuk mencegah alert lama mendadak muncul, bukan batas dari Android.
+- Field DataStore JSON opsional `presentationHandled` menyimpan bahwa post diterima atau presentation diblokir pengguna. Default `false` menjaga pembacaan record schema 1 lama. Marker baru disimpan sesudah hasil POSTED/BLOCKED; write failure tetap RETRY. Marker tidak berarti heads-up/audio sudah terlihat/terdengar. Worker redundan dengan identitas yang sama dan marker tersebut tidak mengulang atau menghentikan alert yang sudah ditangani.
+- Trace release `IMFITRest` kini memakai allowlist boundary dan field aman: tahap, durasi, exception class, attempt/outcome, status/generation dan lateness. Tidak menyertakan timer/user/workout IDs, nama, payload, atau exception message. Failure fase berulang di-throttle 30 detik per event/tahap; hasil worker tetap dicatat. Tahap membedakan `auth_identity`, `session_identity`, `auth_recheck`, `mutex_wait`, `store_read`, `store_write`, dan pemulihan rendering. Trace debug tetap lebih lengkap.
+
+Tidak ada perubahan permission, channel ID, PendingIntent identity alarm utama, schema Room, atau refactor mutasi sesi/ViewModel dari branch `redisgn` dalam patch ini.
+
+### Source regression coverage dan verifikasi
+
+Source test ditambahkan untuk validasi owner/account switch/logout, fase auth/Room timeout, read error vs absent, cancellation, retry lebih dari tiga kegagalan, budget recovery, expiry window dan boundary, stale generation setelah extend, discard persistence failure, marker persistence failure, kompatibilitas JSON lama, worker redundan sesudah post, mutex contention, serta sanitasi/throttle log release. Instrumentation Room menambahkan pemeriksaan owner/replacement/delete dan validasi identitas tanpa decode JSON yang rusak.
+
+**Build, unit test, dan instrumentation test patch ini belum dijalankan**, sesuai arahan pengguna agar pengujian lanjutan dilakukan manual. Pemeriksaan whitespace `git diff --check` bersih; hal ini bukan bukti kompilasi atau kelulusan test.
+
+### Penerimaan manual yang diperlukan
+
+1. Build dan pasang `productionRelease` branch `timer`; catat SHA, version, API/model/OEM serta permission/channel/FSI/exact/DND/battery settings. Jangan hanya menguji demo/debug untuk menyimpulkan kelulusan release.
+2. Rest 120 detik, termasuk dua kali extend seperti log reproduksi, lalu tinggalkan aplikasi sampai melewati deadline. Periksa notification shade **sebelum resume**. Ambil log `adb logcat -v threadtime -s IMFITRest WM-WorkerWrapper` tanpa filter PID agar cold-process delivery tidak terlewat.
+3. Harapkan `receiver_received`, `expired_committed`, `notify_result success=true`, dan `receiver_result result=HANDLED`, atau recovery worker akhirnya HANDLED tanpa resume. Jika RETRY, korelasikan `operation_failed stage=...`, durasi, exception, dan hasil worker. Timeout internal 2.500 ms dapat muncul sebelum budget worker 15 detik habis.
+4. Verifikasi empat kegagalan transient diikuti pemulihan masih menghasilkan completion dalam window; setelah lebih dari lima menit, alert yang belum ditangani menjadi silent terminal dan tidak muncul setelah resume. Alert yang sudah ditangani tidak dihentikan atau diulang oleh worker redundan.
+5. Ulangi cold-process (bukan force-stop), logout/account switch, finish/cancel, extend/replacement, ACK/dismiss, reboot, blocked notifications, serta screen-off. Audio dari recovery hanya boleh berjalan dengan Activity/FGS owner yang sah. Heads-up/FSI tetap keputusan OS/OEM, bukan hasil yang dijamin oleh `notify()`.
+
+Perintah opsional untuk dijalankan manual (belum dieksekusi):
+
+```bash
+./gradlew :app:testDemoDebugUnitTest :app:testProductionDebugUnitTest :app:compileDemoDebugAndroidTestKotlin :app:assembleProductionRelease --console=plain
+```
+
+Issue tetap terbuka untuk penerimaan production release/perangkat; patch source ini tidak mengonfirmasi root cause rekaman maupun kompatibilitas seluruh API/OEM.
+
+## 13. Automated regression — 17 Oktober 2026
+
+Arahan terbaru pengguna mewajibkan pengujian otomatis dan menggantikan batas pengujian manual
+di bagian historis sebelumnya. Laporan otoritatif untuk eksekusi terbaru:
+[`IMFIT_REST_TIMER_REGRESSION_REPORT.md`](IMFIT_REST_TIMER_REGRESSION_REPORT.md).
+
+- Emulator yang digunakan: **Pixel_5_API_34**, Android 14, `emulator-5554`; tidak ada perangkat
+  fisik lain yang terhubung. Akun/sesi sintetik offline pada Android user sementara 10.
+- Unit terbaru: **demoDebug 80/80, productionDebug 76/76**, tanpa failures/errors/skips.
+  Analisis korelasi/timing host: **3/3** Python tests.
+- Reproduksi produksi menemukan status Supabase Auth `Initializing` setelah background,
+  disertai timeout `auth_init_wait`. `enableLifecycleCallbacks=false` menghilangkan hambatan
+  tersebut pada reproduksi emulator. Ini belum membuktikan penyebab delay 49.472 ms pada
+  perangkat fisik lama.
+- Rangkaian awal instrumented productionRelease: background aplikasi lain, screen-off,
+  forced Doze, exact denied/inexact, receiver tanpa FGS, cancel, dan rendering-read failure
+  lulus. Bukti deadline/generation/window/lateness ada di laporan; build dengan keep khusus
+  instrumentasi tidak identik byte-per-byte dengan release biasa.
+- Review ticker menambahkan regresi timeout reconcile internal yang harus retry tanpa
+  mematikan loop, sedangkan cancellation/timeout owner tetap diteruskan.
+- Process recreation awal **BLOCKED oleh fixture**: selesai instrumentation tercatat Android
+  sebagai force-stop (`finished inst`). Harness kini menjaga fixture hidup sampai SIGKILL
+  emulator; guard `USER_STOPPED` produk tidak dihapus. Cold final **PASS**: PID 11982 → 12068,
+  commit +333 ms, notify +338 ms, kartu 1002 aktif dan persisted state terverifikasi.
+- API 24–33, 35–37 dan OEM fisik: **NOT_TESTED**. Heads-up, FSI, audio/getaran dan perilaku
+  token refresh akun nyata belum terbukti oleh fixture offline.
+
+Artefak final instrumented release (`7fdd4d07…`) menjalani delapan skenario: run awal **7 PASS,
+1 FAIL** karena observer host memeriksa kartu cold terlalu cepat. Retry cold pada APK yang
+sama lulus setelah memakai polling predicate bounded; bukti query pertama tanpa 1002 dan
+query kedua dengan 1002 disimpan (observasi 160 ms). Hasil gagal awal tidak dihapus.
+Exact commit final +50–66 ms; inexact via ticker +880 ms. Window OS exact 0, inexact 89.817 ms.
+Build release biasa tanpa aturan instrumentasi **PASS**, tetapi E2E pada binari biasa identik
+byte belum dijalankan. Tidak ada klaim kompatibilitas semua API/OEM atau resolusi delay fisik.
+
+Gate engineering terbatas pada instrumented release Pixel 5 API 34: **7/7**, dengan residual
+risk eksplisit di laporan. Emulator sudah dipulihkan: APK awal (SHA terverifikasi), user 0,
+user sementara 10 dihapus, Doze/baterai/network/stay-on dikembalikan. Data owner tidak di-clear.
+Tidak ada commit/push pada fase ini.
+
+## 14. Penerimaan sementara — laporan pengguna REALME X
+
+**Status bug rest timer: BERHASIL SEMENTARA.** Dicatat 17 Oktober 2026 berdasarkan
+pengujian manual pengguna pada **REALME X fisik, Android 10 / API 29**:
+
+- Rest dengan **+30 detik dua kali**: notifikasi alarm rest muncul setelah sekitar dua menit.
+- Rest **langsung disetel dua menit**: notifikasi alarm rest juga muncul setelah sekitar dua menit.
+- Selama menunggu, IMFIT berada di background; pengguna membuka dan memakai aplikasi lain,
+  termasuk scroll Instagram, Threads, dan Telegram.
+
+Perilaku tersebut dinyatakan aman untuk sementara oleh pengguna. Pengujian/penanganan
+lanjutan menunggu laporan berikutnya jika masalah muncul kembali. Ini melengkapi hasil
+otomatis Pixel 5 API 34, bukan klaim semua API/OEM lulus. SHA/flavor APK, log monotonic,
+lateness presisi, screen-off/Doze, serta detail audio/heads-up/FSI belum diberikan pada
+laporan manual ini; delay historis 49.472 ms tidak dinyatakan terukur ulang menjadi nol.
+
+## 15. Integrasi aman ke `redisgn` — 17 Oktober 2026
+
+Update `timer` sampai `dd6efcf` sudah dipush ke `origin/timer`, dalam lima kategori tanpa
+co-author: auth (`20a55e2`), runtime timer/recovery (`5e67492`), build instrumentasi
+(`b3cd67c`), regression tests/tools (`50f5299`), dan dokumentasi (`dd6efcf`).
+
+Merge mempertahankan lima commit lokal `redisgn` yang sebelumnya belum dipush. Empat konflik
+diselesaikan dengan menggabungkan perubahan, bukan menimpa file dari satu branch:
+
+- Repository: mutasi sesi, mutex, terminal-session guard dan cleanup async `redisgn` tetap
+  dipertahankan. Validasi identitas timer menolak sesi terminal sebelum maupun sesudah query
+  Room, sehingga pending cleanup tidak menghidupkan kembali sesi yang dibatalkan.
+- ViewModel: guard revision/cancellation tetap ada bersama trace sumber `ui_ticker`.
+- Tes Room: coverage observer/mutasi/history/cancellation existing dan tes identitas timer
+  digabung; cancellation mendapat assertion identitas timer invalid segera setelah request.
+- Plan: catatan integrasi 16 Oktober dan seluruh hasil regression/manual terbaru dipertahankan.
+
+Verifikasi tree hasil merge **PASS**:
+
+```bash
+./gradlew :app:testDemoDebugUnitTest :app:testProductionDebugUnitTest :app:compileDemoDebugAndroidTestKotlin :app:assembleProductionRelease --console=plain
+python3 -m unittest discover -s tools -p 'test_*.py'
+```
+
+Unit demo **111/111**, production **104/104**, tanpa failures/errors/skips; host tests **3/3**.
+Instrumentation demo hanya dikompilasi pada fase integrasi ini, bukan dieksekusi ulang.
+Build production release termasuk lintVital berhasil; whitespace check bersih. Bukti E2E
+Pixel 5 dan manual REALME X sebelumnya tetap milik build `timer` yang diuji, bukan klaim
+pengulangan runtime E2E pada APK hasil merge `redisgn`.

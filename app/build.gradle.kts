@@ -59,6 +59,12 @@ android {
                 getDefaultProguardFile("proguard-android-optimize.txt"),
                 "proguard-rules.pro"
             )
+            if (providers.gradleProperty("restTestBuildType").orNull == "release") {
+                // Preserve only the inspection surface called across the test/app APK boundary.
+                // Production behavior and minification remain enabled; normal release builds omit this file.
+                proguardFiles("rest-timer-instrumentation-app.pro")
+                testProguardFiles("rest-timer-instrumentation-test.pro")
+            }
             // Supabase config from local.properties (or override for production)
             val supabaseUrl = localProperties.getProperty("SUPABASE_URL", "")
                 .trim().removeSurrounding("\"")
@@ -80,6 +86,9 @@ android {
         compose = true
         buildConfig = true
     }
+
+    // Explicit opt-in: exercise the real minified production APK, not a debug substitute.
+    testBuildType = providers.gradleProperty("restTestBuildType").orElse("debug").get()
 }
 
 dependencies {
@@ -148,6 +157,9 @@ dependencies {
     androidTestImplementation(platform(libs.androidx.compose.bom))
     androidTestImplementation(libs.androidx.compose.ui.test.junit4)
     androidTestImplementation(libs.room.testing)
+    androidTestImplementation("androidx.test.uiautomator:uiautomator:2.3.0")
+    // Required by AndroidX Test tracing when the instrumentation APK is minified too.
+    androidTestCompileOnly("com.google.errorprone:error_prone_annotations:2.36.0")
     debugImplementation(libs.androidx.compose.ui.tooling)
     debugImplementation(libs.androidx.compose.ui.test.manifest)
 }

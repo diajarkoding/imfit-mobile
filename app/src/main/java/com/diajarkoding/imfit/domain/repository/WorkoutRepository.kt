@@ -25,6 +25,9 @@ interface WorkoutRepository {
     suspend fun getActiveSession(): WorkoutSession?
     /** Null means absent; recovery/read failures must propagate to background callers. */
     suspend fun getActiveSessionForTimer(): WorkoutSession? = getActiveSession()
+    /** Caller must verify the current auth owner. Read failures must propagate, never mean absent. */
+    suspend fun isActiveSessionForTimer(userId: String, workoutId: String): Boolean =
+        getActiveSessionForTimer()?.id == workoutId
     suspend fun updateActiveSession(session: WorkoutSession)
     suspend fun mutateActiveSession(sessionId: String, transform: (WorkoutSession) -> WorkoutSession): WorkoutSession? {
         val current = getActiveSession()?.takeIf { it.id == sessionId } ?: return null

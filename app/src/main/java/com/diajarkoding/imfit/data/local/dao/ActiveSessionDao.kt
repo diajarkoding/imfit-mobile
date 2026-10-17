@@ -8,6 +8,10 @@ interface ActiveSessionDao {
     @Query("SELECT * FROM active_sessions WHERE user_id = :userId ORDER BY updated_at DESC LIMIT 1")
     suspend fun getActiveSession(userId: String): ActiveSessionEntity?
 
+    // Identity-only validation must not load/decode the entire workout JSON on the alarm path.
+    @Query("SELECT id FROM active_sessions WHERE user_id = :userId ORDER BY updated_at DESC LIMIT 1")
+    suspend fun getActiveSessionId(userId: String): String?
+
     @Query("SELECT * FROM active_sessions WHERE id = :sessionId")
     suspend fun getSessionById(sessionId: String): ActiveSessionEntity?
 

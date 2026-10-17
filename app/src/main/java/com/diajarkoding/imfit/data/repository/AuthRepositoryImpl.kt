@@ -277,7 +277,15 @@ class AuthRepositoryImpl @Inject constructor(
         supabaseClient.auth.signOut()
     }
 
+    override suspend fun peekLocalUserId(): String? = supabaseClient.auth.currentUserOrNull()?.id
+
+    override suspend fun localAuthStatusName(): String =
+        supabaseClient.auth.sessionStatus.value::class.simpleName ?: "null"
+
     override suspend fun getLocalUserId(): String? {
+        // A loaded local identity needs no initialization wait (or remote profile lookup).
+        // Do not cache it here: logout/account switches must be visible on every call.
+        peekLocalUserId()?.let { return it }
         supabaseClient.auth.awaitInitialization()
         return supabaseClient.auth.currentUserOrNull()?.id
     }

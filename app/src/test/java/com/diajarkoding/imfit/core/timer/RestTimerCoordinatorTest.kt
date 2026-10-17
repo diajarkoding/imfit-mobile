@@ -20,6 +20,7 @@ class RestTimerCoordinatorTest {
         var saved: RestTimerState? = null
         var fail = false
         var failRead = false
+        var failHandledWrite = false
         var cancelAfterWrite = false
         var beforeRead: (() -> Unit)? = null
         override suspend fun read(): RestTimerState? {
@@ -29,6 +30,7 @@ class RestTimerCoordinatorTest {
         }
         override suspend fun write(state: RestTimerState) {
             if (fail) throw java.io.IOException("disk full")
+            if (failHandledWrite && state.presentationHandled) throw java.io.IOException("handled marker write failed")
             saved = state
             if (cancelAfterWrite) {
                 cancelAfterWrite = false
@@ -59,6 +61,8 @@ class RestTimerCoordinatorTest {
         var failShow = false
         var presentation = FinishedPresentation.POSTED
         var observedAlarmDelivery: Boolean? = null
+        val events = mutableListOf<Pair<String, String>>()
+        override fun trace(event: String, state: RestTimerState?, detail: String) { events.add(event to detail) }
         override suspend fun validSession(state: RestTimerState) = validate?.invoke() ?: valid
         override fun userStopped(state: RestTimerState) = stopped
         override fun schedule(state: RestTimerState): SchedulingMode {
@@ -130,9 +134,12 @@ class RestTimerCoordinatorTest {
     @Test fun concurrentExpiryAndRepeatedAcknowledgementNeverDuplicateAudio() = runBlocking {
         val f = Fixture(); f.start(); f.clock.now += 130_000
         val state = f.timer.state.value!!
-        val ui = launch { f.timer.reconcile() }
-        val alarm = launch { f.timer.expiry(state.timerId, state.generation) }
-        ui.join(); alarm.join()
+        val ui = launch { f.timer.reconcile(source = "ui_resume") }
+        val alarm = launch { f.timer.expiry(state.timerId, state.generation, alarmDelivery = true) }
+        val worker = launch { f.timer.expiry(state.timerId, state.generation, recoveryDelivery = true) }
+        ui.join(); alarm.join(); worker.join()
+        assertEquals(1, f.effects.events.count { it.first == "expired_committed" })
+        assertTrue(f.effects.events.first { it.first == "expired_committed" }.second.contains("source=ui_resume"))
         val id = f.timer.state.value!!.timerId
         f.timer.acknowledge(id)
         val count = f.effects.cleanupCount
@@ -642,5 +649,148 @@ class RestTimerCoordinatorTest {
         assertEquals(2, f.effects.schedules)
         assertFalse(f.effects.posted)
         assertEquals(0, f.effects.plays)
+    }
+
+    @Test fun moreThanThreeSessionFailuresCanRecoverWithoutResumeOrDeadlineChange() = runBlocking {
+        val f = Fixture(); f.start()
+        val state = f.store.saved!!
+        f.clock.now = state.deadlineElapsedMs
+        f.effects.validate = { throw java.io.IOException("Room busy") }
+        repeat(4) {
+            assertEquals(AlarmDeliveryResult.RETRY,
+                f.timer.expiry(state.timerId, state.generation, recoveryDelivery = true))
+            assertEquals(TimerStatus.RUNNING, f.store.saved!!.status)
+        }
+        f.effects.validate = null
+        assertEquals(AlarmDeliveryResult.HANDLED,
+            f.timer.expiry(state.timerId, state.generation, recoveryDelivery = true))
+        assertTrue(f.store.saved!!.presentationHandled)
+        assertEquals(state.deadlineElapsedMs, f.store.saved!!.deadlineElapsedMs)
+        assertTrue(f.effects.posted)
+    }
+
+    @Test fun undeliveredRunningAndExpiredTimersBecomeDurablySilentAfterDeliveryWindow() = runBlocking {
+        for (alreadyExpired in listOf(false, true)) {
+            val f = Fixture(); f.start()
+            val state = f.store.saved!!
+            f.clock.now = state.deadlineElapsedMs
+            if (alreadyExpired) {
+                f.effects.presentation = FinishedPresentation.RETRY
+                assertEquals(AlarmDeliveryResult.RETRY, f.timer.expiry(state.timerId, state.generation))
+            }
+            f.clock.now += RestTimerRecoveryPolicy.MAX_ALERT_LATENESS_MS + 1
+            // Do not require broken auth/Room to recover merely to discard a stale alert.
+            f.effects.validate = { throw java.io.IOException("still unavailable") }
+            val cold = RestTimerCoordinator(f.store, f.clock, f.effects)
+            assertEquals(AlarmDeliveryResult.HANDLED,
+                cold.expiry(state.timerId, state.generation, recoveryDelivery = true))
+            assertEquals(TimerStatus.CANCELLED, f.store.saved!!.status)
+            assertEquals("DELIVERY_WINDOW_EXPIRED", f.store.saved!!.reason)
+            f.effects.validate = null
+            f.effects.presentation = FinishedPresentation.POSTED
+            RestTimerCoordinator(f.store, f.clock, f.effects).reconcile()
+            assertFalse(f.effects.posted)
+            assertEquals(0, f.effects.plays)
+        }
+    }
+
+    @Test fun alreadyPresentedAlertIsNotCancelledOrReplayedByLateRedundantRecovery() = runBlocking {
+        val f = Fixture(); f.start(); f.expire()
+        val state = f.store.saved!!
+        assertTrue(state.presentationHandled)
+        val plays = f.effects.plays
+        f.clock.now += RestTimerRecoveryPolicy.MAX_ALERT_LATENESS_MS + 1
+        f.effects.validate = { fail("Handled delivery does not need recovery"); false }
+        val cold = RestTimerCoordinator(f.store, f.clock, f.effects)
+        assertEquals(AlarmDeliveryResult.HANDLED,
+            cold.expiry(state.timerId, state.generation, recoveryDelivery = true))
+        assertEquals(state, f.store.saved)
+        assertTrue(f.effects.posted)
+        assertEquals(plays, f.effects.plays)
+    }
+
+    @Test fun failedPresentationMarkerWriteIsStillRetriedAfterNotificationWasPosted() = runBlocking {
+        val f = Fixture(); f.start()
+        val state = f.store.saved!!
+        f.clock.now = state.deadlineElapsedMs
+        f.store.failHandledWrite = true
+        assertEquals(AlarmDeliveryResult.RETRY,
+            f.timer.expiry(state.timerId, state.generation, recoveryDelivery = true))
+        assertEquals(TimerStatus.EXPIRED, f.store.saved!!.status)
+        assertFalse(f.store.saved!!.presentationHandled)
+        assertTrue(f.effects.posted)
+        assertEquals(0, f.effects.plays)
+        f.store.failHandledWrite = false
+        assertEquals(AlarmDeliveryResult.HANDLED,
+            f.timer.expiry(state.timerId, state.generation, recoveryDelivery = true))
+        assertTrue(f.store.saved!!.presentationHandled)
+        assertEquals(1, f.effects.plays)
+    }
+
+    @Test fun foregroundReconcileAlsoDiscardsUnpresentedOverdueRestWithoutLateReplay() = runBlocking {
+        val f = Fixture(); f.start()
+        f.clock.now = f.store.saved!!.deadlineElapsedMs + RestTimerRecoveryPolicy.MAX_ALERT_LATENESS_MS + 1
+        val cold = RestTimerCoordinator(f.store, f.clock, f.effects)
+        cold.reconcile()
+        assertEquals(TimerStatus.CANCELLED, f.store.saved!!.status)
+        assertEquals("DELIVERY_WINDOW_EXPIRED", f.store.saved!!.reason)
+        assertFalse(f.effects.posted)
+        assertEquals(0, f.effects.plays)
+    }
+
+    @Test fun deliveryWindowBoundaryAndExtendedIdentityUseAuthoritativeDeadline() = runBlocking {
+        val f = Fixture(); f.start()
+        val old = f.store.saved!!
+        f.timer.extend()
+        val extended = f.store.saved!!
+        f.clock.now = old.deadlineElapsedMs + RestTimerRecoveryPolicy.MAX_ALERT_LATENESS_MS + 1
+        assertEquals(AlarmDeliveryResult.HANDLED,
+            f.timer.expiry(old.timerId, old.generation, recoveryDelivery = true))
+        assertEquals(extended, f.store.saved)
+        f.clock.now = extended.deadlineElapsedMs + RestTimerRecoveryPolicy.MAX_ALERT_LATENESS_MS
+        assertEquals(AlarmDeliveryResult.HANDLED,
+            f.timer.expiry(extended.timerId, extended.generation, recoveryDelivery = true))
+        assertEquals(TimerStatus.EXPIRED, f.store.saved!!.status)
+        assertTrue(f.effects.posted)
+    }
+
+    @Test fun lateDeliveryDiscardWriteFailureRemainsRetryableAndNeverAlerts() = runBlocking {
+        val f = Fixture(); f.start()
+        val state = f.store.saved!!
+        f.clock.now = state.deadlineElapsedMs + RestTimerRecoveryPolicy.MAX_ALERT_LATENESS_MS + 1
+        f.store.fail = true
+        assertEquals(AlarmDeliveryResult.RETRY,
+            f.timer.expiry(state.timerId, state.generation, recoveryDelivery = true))
+        assertFalse(f.effects.posted)
+        f.store.fail = false
+        assertEquals(AlarmDeliveryResult.HANDLED,
+            f.timer.expiry(state.timerId, state.generation, recoveryDelivery = true))
+        assertEquals(TimerStatus.CANCELLED, f.store.saved!!.status)
+        assertEquals(0, f.effects.plays)
+    }
+
+    @Test fun receiverWaitingOnCoordinatorLockReportsMutexTimeoutAndKeepsRecovery() = runBlocking {
+        val f = Fixture(); f.start()
+        val state = f.store.saved!!
+        val entered = CompletableDeferred<Unit>()
+        f.effects.validate = { entered.complete(Unit); awaitCancellation() }
+        val blocker = launch { f.timer.reconcile() }
+        entered.await()
+        val queue = RecoveryQueue()
+        assertEquals(AlarmDeliveryResult.RETRY,
+            RestTimerAlarmDelivery(f.timer, queue, timeoutMs = 25).receive(state.timerId, state.generation))
+        assertTrue(f.effects.events.any { it.first == "operation_failed" && "stage=mutex_wait" in it.second })
+        assertNotNull(queue.queued)
+        blocker.cancel(); blocker.join()
+    }
+
+    @Test fun preMarkerPersistedStateRemainsReadableWithUndeliveredDefault() = runBlocking {
+        val f = Fixture(); f.start()
+        val encoded = RestTimerStateCodec.encode(f.store.saved!!)
+            .replace(",\"presentationHandled\":false", "")
+        assertFalse(encoded.contains("presentationHandled"))
+        val decoded = RestTimerStateCodec.decode(encoded)
+        assertFalse(decoded.presentationHandled)
+        assertEquals(f.store.saved, decoded)
     }
 }

@@ -23,6 +23,16 @@ import org.junit.runner.RunWith
  * not the required physical Instagram acceptance test. */
 @RunWith(AndroidJUnit4::class)
 class RestTimerBackgroundTest {
+    private suspend fun awaitCondition(timeoutMs: Long = 10_000, condition: suspend () -> Boolean) {
+        withTimeout(timeoutMs) { while (!condition()) delay(50) }
+    }
+
+    /** A negative assertion needs an observation interval, not a sleep followed by one snapshot. */
+    private suspend fun observeFor(durationMs: Long, assertion: suspend () -> Unit) {
+        val until = android.os.SystemClock.elapsedRealtime() + durationMs
+        while (android.os.SystemClock.elapsedRealtime() < until) { assertion(); delay(50) }
+        assertion()
+    }
     private fun shell(command: String) {
         InstrumentationRegistry.getInstrumentation().uiAutomation.executeShellCommand(command).use { descriptor ->
             java.io.FileInputStream(descriptor.fileDescriptor).use { it.readBytes() }
@@ -57,7 +67,7 @@ class RestTimerBackgroundTest {
             ContextCompat.startForegroundService(context, Intent(context, WorkoutService::class.java).apply {
                 action = WorkoutService.ACTION_START_WORKOUT
             })
-            delay(1500)
+            awaitCondition { withContext(Dispatchers.Main) { ports.runtime().foregroundServiceActive } }
             if (android.os.Build.VERSION.SDK_INT >= 34) assertFalse(manager.canUseFullScreenIntent())
             withContext(Dispatchers.Main) {
                 timer.start(RestTimerState("", userId = user, workoutId = session.id, templateId = session.templateId,
@@ -110,7 +120,7 @@ class RestTimerBackgroundTest {
                 putExtra(WorkoutService.EXTRA_WORKOUT_NAME, session.templateName)
                 putExtra(WorkoutService.EXTRA_TEMPLATE_ID, session.templateId)
             })
-            delay(1500)
+            awaitCondition { withContext(Dispatchers.Main) { ports.runtime().foregroundServiceActive } }
             repeat(2) { index ->
                 withContext(Dispatchers.Main) {
                     timer.start(RestTimerState("", userId = user, workoutId = session.id, templateId = session.templateId,
@@ -159,7 +169,7 @@ class RestTimerBackgroundTest {
                 putExtra(WorkoutService.EXTRA_WORKOUT_NAME, session.templateName)
                 putExtra(WorkoutService.EXTRA_TEMPLATE_ID, session.templateId)
             })
-            delay(1500)
+            awaitCondition { withContext(Dispatchers.Main) { ports.runtime().foregroundServiceActive } }
             withContext(Dispatchers.Main) {
                 timer.start(RestTimerState("", userId = userId, workoutId = session.id, templateId = session.templateId,
                     exerciseId = exercise.id, setId = "integration-set-1", exerciseName = exercise.name,
@@ -167,7 +177,8 @@ class RestTimerBackgroundTest {
             }
             assertEquals(TimerStatus.RUNNING, timer.state.value?.status)
             context.startActivity(Intent(Settings.ACTION_SETTINGS).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
-            delay(90_000)
+            val restDeadline = requireNotNull(timer.state.value).deadlineElapsedMs
+            awaitCondition(95_000) { android.os.SystemClock.elapsedRealtime() >= restDeadline - 30_000 }
             val remaining = requireNotNull(timer.state.value).remainingSeconds(android.os.SystemClock.elapsedRealtime())
             assertTrue("At 90s should have about 30s remaining, got $remaining", remaining in 28..31)
             withTimeout(45_000) {
@@ -195,17 +206,21 @@ class RestTimerBackgroundTest {
             assertFalse("Expected controlled audio instead of silent recovery", timer.state.value!!.audioSuppressed)
             withContext(Dispatchers.Main) { assertTrue(ports.runtime().isAlertPlaying()) }
             finished.notification.contentIntent.send()
-            delay(1000)
+            awaitCondition { InstrumentationRegistry.getInstrumentation().uiAutomation.rootInActiveWindow?.packageName == context.packageName }
             assertEquals(TimerStatus.EXPIRED, timer.state.value?.status)
             context.startActivity(Intent(Settings.ACTION_SETTINGS).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
             // Verify card and playback survive >60s; visible heads-up persistence still needs OEM testing.
-            delay(65_000)
+            observeFor(65_000) {
+                assertEquals(TimerStatus.EXPIRED, timer.state.value?.status)
+                assertTrue(manager.activeNotifications.any { it.id == NotificationChannels.REST_FINISHED_NOTIFICATION_ID })
+            }
             assertTrue(manager.activeNotifications.any { it.id == NotificationChannels.REST_FINISHED_NOTIFICATION_ID })
             withContext(Dispatchers.Main) { assertTrue(ports.runtime().isAlertPlaying()) }
             finished.notification.deleteIntent.send()
             withTimeout(5000) { while (timer.state.value?.status != TimerStatus.ACKNOWLEDGED) delay(50) }
-            delay(1500)
-            assertFalse(manager.activeNotifications.any { it.id == NotificationChannels.REST_FINISHED_NOTIFICATION_ID })
+            observeFor(1500) {
+                assertFalse(manager.activeNotifications.any { it.id == NotificationChannels.REST_FINISHED_NOTIFICATION_ID })
+            }
             assertNotNull(repository.getActiveSession())
             withContext(Dispatchers.Main) { assertFalse(ports.runtime().isAlertPlaying()) }
 
@@ -225,12 +240,12 @@ class RestTimerBackgroundTest {
             assertNotEquals(finished.notification.deleteIntent, nextNotification.deleteIntent)
             finished.notification.deleteIntent.send()
             finished.notification.actions.first().actionIntent.send()
-            delay(500)
-            assertEquals(TimerStatus.EXPIRED, timer.state.value?.status)
+            observeFor(500) { assertEquals(TimerStatus.EXPIRED, timer.state.value?.status) }
             nextNotification.actions.first().actionIntent.send()
             withTimeout(5000) { while (timer.state.value?.status != TimerStatus.ACKNOWLEDGED) delay(50) }
-            delay(1500)
-            assertFalse(manager.activeNotifications.any { it.id == NotificationChannels.REST_FINISHED_NOTIFICATION_ID })
+            observeFor(1500) {
+                assertFalse(manager.activeNotifications.any { it.id == NotificationChannels.REST_FINISHED_NOTIFICATION_ID })
+            }
             withContext(Dispatchers.Main) { assertFalse(ports.runtime().isAlertPlaying()) }
         } finally {
             withContext(Dispatchers.Main) { timer.cancel("TEST_FINISHED") }

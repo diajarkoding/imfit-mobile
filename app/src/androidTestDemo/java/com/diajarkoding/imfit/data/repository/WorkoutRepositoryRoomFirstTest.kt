@@ -25,6 +25,7 @@ import com.diajarkoding.imfit.domain.model.WorkoutSet
 import com.diajarkoding.imfit.data.local.entity.WorkoutLogEntity
 import org.junit.After
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
@@ -140,6 +141,7 @@ class WorkoutRepositoryRoomFirstTest {
     @Test fun asynchronousCancelDeletesPersistedRowAndRejectsLateWrites() = runBlocking {
         val session = repository.startWorkout(sampleTemplate())
         repository.requestCancelSession(session.id)
+        assertFalse(repository.isActiveSessionForTimer(user.id, session.id))
         assertNull(repository.getActiveSessionForTimer())
         repository.updateActiveSession(session)
         withTimeout(5000) { while (database.activeSessionDao().getSessionById(session.id) != null) delay(20) }
@@ -167,6 +169,32 @@ class WorkoutRepositoryRoomFirstTest {
         assertEquals(latestFinished.id, withTimeout(5000) {
             repository.observeLastWorkoutLog(user.id).first { it?.id == latestFinished.id }
         }?.id)
+    }
+
+    @Test
+    fun timerIdentityChecksOwnerAndLatestRoomSessionNotCachedSession() = runBlocking {
+        val session = repository.startWorkout(sampleTemplate())
+        assertTrue(repository.isActiveSessionForTimer(user.id, session.id))
+        assertFalse(repository.isActiveSessionForTimer("another-owner", session.id))
+        assertFalse(repository.isActiveSessionForTimer(user.id, "another-session"))
+        val replacement = repository.startWorkout(sampleTemplate())
+        assertFalse(repository.isActiveSessionForTimer(user.id, session.id))
+        assertTrue(repository.isActiveSessionForTimer(user.id, replacement.id))
+        database.activeSessionDao().deleteSessionById(replacement.id)
+        assertFalse(repository.isActiveSessionForTimer(user.id, replacement.id))
+    }
+
+    @Test
+    fun timerIdentityDoesNotDecodeFullSessionJson() = runBlocking {
+        val session = repository.startWorkout(sampleTemplate())
+        val entity = requireNotNull(database.activeSessionDao().getSessionById(session.id))
+        database.activeSessionDao().updateSession(entity.copy(sessionDataJson = "invalid-json"))
+        assertTrue(repository.isActiveSessionForTimer(user.id, session.id))
+        // Rendering data is broken, but local identity validation still permits timer expiry.
+        try {
+            repository.getActiveSessionForTimer()
+            org.junit.Assert.fail("Full rendering recovery must still report corrupt JSON")
+        } catch (_: kotlinx.serialization.SerializationException) { }
     }
 
     private fun sampleTemplate() = WorkoutTemplate(

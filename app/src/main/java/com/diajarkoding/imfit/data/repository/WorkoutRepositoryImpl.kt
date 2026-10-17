@@ -373,20 +373,31 @@ class WorkoutRepositoryImpl @Inject constructor(
         }
     }
 
-    override suspend fun getActiveSessionForTimer(): WorkoutSession? = withContext(Dispatchers.IO) {
-        val userId = authRepository.getLocalUserId() ?: return@withContext null
+    override suspend fun isActiveSessionForTimer(userId: String, workoutId: String): Boolean =
+        withContext(Dispatchers.IO) {
+            // Preserve redisgn's immediate cancellation guard while Room cleanup is pending.
+            workoutId !in terminalSessions && activeSessionDao.getActiveSessionId(userId) == workoutId &&
+                workoutId !in terminalSessions
+        }
+
+    override suspend fun getActiveSessionForTimer(): WorkoutSession? =
+        withContext(Dispatchers.IO) {
+            val userId = authRepository.getLocalUserId() ?: return@withContext null
             val entity = activeSessionDao.getActiveSession(userId)
             
             if (entity != null && entity.id !in terminalSessions) {
                 val sessionData = json.decodeFromString<SerializableSession>(entity.sessionDataJson)
-                activeSession = sessionData.toDomain()
+                val recovered = sessionData.toDomain()
+                if (activeSession?.id != recovered.id || activeSessionUserId != userId) {
+                    Log.d("WorkoutRepository", "Restored active session from Room")
+                }
+                activeSession = recovered
                 activeSessionUserId = userId
-                Log.d("WorkoutRepository", "Restored active session from Room: ${activeSession?.id}")
-                activeSession
+                recovered
             } else {
                 null
             }
-    }
+        }
 
     override suspend fun updateActiveSession(session: WorkoutSession) {
         mutateActiveSession(session.id) { session }

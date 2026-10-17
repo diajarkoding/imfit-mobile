@@ -94,7 +94,7 @@ class RestAlarmActivity : ComponentActivity() {
                 finish()
                 return@launch
             }
-            timer.reconcile()
+            timer.reconcile(source = "alarm_activity")
             timer.state.collect { state ->
                 if (state?.matchesExpired(timerId, generation) != true) {
                     finish()

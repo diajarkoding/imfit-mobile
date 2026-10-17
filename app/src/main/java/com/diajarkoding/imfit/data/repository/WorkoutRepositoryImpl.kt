@@ -27,6 +27,8 @@ import kotlinx.serialization.Serializable
 import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 import java.nio.charset.StandardCharsets
 import java.util.UUID
 import javax.inject.Inject
@@ -335,27 +337,29 @@ class WorkoutRepositoryImpl @Inject constructor(
         }
     }
 
-    override suspend fun getActiveSessionForTimer(): WorkoutSession? {
-        val userId = authRepository.getLocalUserId() ?: return null
-        if (activeSession != null && activeSessionUserId == userId) {
-            return activeSession
+    override suspend fun isActiveSessionForTimer(userId: String, workoutId: String): Boolean =
+        withContext(Dispatchers.IO) {
+            activeSessionDao.getActiveSessionId(userId) == workoutId
         }
 
-        // Try to restore from database
-        return run {
+    override suspend fun getActiveSessionForTimer(): WorkoutSession? =
+        withContext(Dispatchers.IO) {
+            val userId = authRepository.getLocalUserId() ?: return@withContext null
             val entity = activeSessionDao.getActiveSession(userId)
             
             if (entity != null) {
                 val sessionData = json.decodeFromString<SerializableSession>(entity.sessionDataJson)
-                activeSession = sessionData.toDomain()
+                val recovered = sessionData.toDomain()
+                if (activeSession?.id != recovered.id || activeSessionUserId != userId) {
+                    Log.d("WorkoutRepository", "Restored active session from Room")
+                }
+                activeSession = recovered
                 activeSessionUserId = userId
-                Log.d("WorkoutRepository", "Restored active session from Room: ${activeSession?.id}")
-                activeSession
+                recovered
             } else {
                 null
             }
         }
-    }
 
     override suspend fun updateActiveSession(session: WorkoutSession) {
         val sessionDataJson = json.encodeToString(session.toSerializable())

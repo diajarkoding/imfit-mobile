@@ -66,7 +66,7 @@ class ActiveWorkoutViewModel @Inject constructor(
     fun refreshTimerCapabilities() {
         _state.update { it.copy(fullScreenAlarmAllowed = timerRuntime.fullScreenIntentAvailable(),
             restLimited = timerRuntime.capabilityIssue() != null) }
-        viewModelScope.launch { timer.capabilitiesChanged() }
+        viewModelScope.launch { timer.capabilitiesChanged(source = "ui_resume") }
     }
     fun timerSettingsIntent() = timerRuntime.capabilitySettingsIntent()
     fun setRestSoundEnabled(enabled: Boolean) {
@@ -195,7 +195,7 @@ class ActiveWorkoutViewModel @Inject constructor(
                     }
                     // Use actualElapsedMs which excludes paused time.
                     val elapsed = session.actualElapsedMs / 1000
-                    timer.reconcile()
+                    timer.reconcile(source = "ui_ticker")
                     val rest = timer.state.value?.takeIf { it.workoutId == session.id }
                     _state.update { it.copy(elapsedSeconds = elapsed.coerceAtLeast(0), session = session, isPaused = session.isPaused,
                         isRestTimerActive = rest?.status == TimerStatus.RUNNING,

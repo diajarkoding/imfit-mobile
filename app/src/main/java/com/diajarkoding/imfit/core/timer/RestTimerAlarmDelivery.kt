@@ -19,7 +19,7 @@ class RestTimerAlarmDelivery(
 ) {
     suspend fun receive(timerId: String, generation: Long): AlarmDeliveryResult {
         var result = AlarmDeliveryResult.RETRY
-        val identity = "receivedTimer=$timerId receivedGeneration=$generation"
+        val identity = "source=alarm restInstanceId=${RestTimerCorrelation.instanceId(timerId)} generation=$generation receivedTimer=$timerId receivedGeneration=$generation"
         try {
             withTimeout(timeoutMs) {
                 try {

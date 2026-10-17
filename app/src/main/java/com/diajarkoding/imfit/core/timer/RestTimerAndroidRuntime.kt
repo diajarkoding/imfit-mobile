@@ -63,6 +63,8 @@ class RestTimerAndroidRuntime @Inject constructor(
     private var lastRender: List<Any?>? = null
     private val renderRetry = RestTimerRetry()
     private val finishedRetry = RestTimerRetry()
+    private val workoutRefreshRetry = RestTimerRetry()
+    private var workoutRefreshJob: Job? = null
     private var readinessJob: Job? = null
     private var readinessToken: PlaybackToken? = null
     private var readinessStartedMs = 0L
@@ -75,27 +77,35 @@ class RestTimerAndroidRuntime @Inject constructor(
 
     fun register(application: Application) = application.registerActivityLifecycleCallbacks(this)
 
-    override suspend fun validSession(state: RestTimerState): Boolean = withTimeout(2500) {
-        if (auth.get().getLocalUserId() != state.userId) return@withTimeout false
-        val recovered = workouts.get().getActiveSessionForTimer()
-        session = recovered
-        recovered?.id == state.workoutId
-    }
+    override suspend fun validSession(state: RestTimerState): Boolean = RestTimerSessionValidator(
+        localUserId = { auth.get().getLocalUserId() },
+        peekUserId = { auth.get().peekLocalUserId() },
+        authStatus = { auth.get().localAuthStatusName() },
+        onStatus = { status -> RestTimerTrace.event("auth_status_snapshot", state, "authStatus=$status") },
+        sessionExists = { userId, workoutId -> workouts.get().isActiveSessionForTimer(userId, workoutId) },
+        measure = { stage, block -> RestTimerTrace.measured(stage, state, block) }
+    ).valid(state)
 
     override fun trace(event: String, state: RestTimerState?, detail: String) = RestTimerTrace.event(event, state, detail)
 
-    override suspend fun workoutSessionIsCurrent(session: WorkoutSession): Boolean = withTimeout(2500) {
-        val latest = workouts.get().getActiveSessionForTimer()
-        this@RestTimerAndroidRuntime.session = latest
-        latest?.id == session.id
-    }
+    override suspend fun workoutSessionIsCurrent(session: WorkoutSession): Boolean =
+        RestTimerTrace.measured("workout_render_validation") {
+            withTimeout(2500) {
+                val latest = workouts.get().getActiveSessionForTimer()
+                this@RestTimerAndroidRuntime.session = latest
+                latest?.id == session.id
+            }
+        }
 
     /** Called only through the coordinator lock. No UI/ticker snapshot may post directly. */
     override fun renderWorkout(state: RestTimerState?, session: WorkoutSession?) {
         if (session != null) this.session = session
-        val currentSession = this.session ?: return
+        val currentSession = this.session ?: run { refreshWorkoutRendering(state); return }
         if (state != null && state.workoutId != currentSession.id &&
-            (state.status == TimerStatus.RUNNING || state.status == TimerStatus.EXPIRED)) return
+            (state.status == TimerStatus.RUNNING || state.status == TimerStatus.EXPIRED)) {
+            refreshWorkoutRendering(state)
+            return
+        }
         val now = android.os.SystemClock.elapsedRealtime()
         if (!renderRetry.available(now)) return
         val rest = state?.takeIf { it.status == TimerStatus.RUNNING && it.deadlineElapsedMs > now }
@@ -119,12 +129,37 @@ class RestTimerAndroidRuntime @Inject constructor(
         }
     }
 
+    /** Full JSON recovery is for rendering, never a prerequisite for expiry/notification 1002. */
+    private fun refreshWorkoutRendering(state: RestTimerState?) {
+        if (state == null || state.status !in listOf(TimerStatus.RUNNING, TimerStatus.EXPIRED)) return
+        if (workoutRefreshJob?.isActive == true || !workoutRefreshRetry.available(android.os.SystemClock.elapsedRealtime())) return
+        workoutRefreshJob = scope.launch {
+            try {
+                val recovered = RestTimerTrace.measured("workout_refresh", state) {
+                    withTimeout(2500) { workouts.get().getActiveSessionForTimer() }
+                }
+                // Re-enter the coordinator; logout/replacement while reading must win.
+                if (recovered != null) coordinator.get().renderWorkout(recovered)
+                workoutRefreshRetry.reset()
+            } catch (e: TimeoutCancellationException) {
+                workoutRefreshRetry.failed(android.os.SystemClock.elapsedRealtime())
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                workoutRefreshRetry.failed(android.os.SystemClock.elapsedRealtime())
+            }
+        }
+    }
+
     fun resetWorkoutRendering() {
         lastRender = null
         renderRetry.reset()
     }
 
     override fun dismissWorkout() {
+        workoutRefreshJob?.cancel()
+        workoutRefreshJob = null
+        workoutRefreshRetry.reset()
         notifications.dismissNotification()
         session = null
         resetWorkoutRendering()
@@ -155,6 +190,7 @@ class RestTimerAndroidRuntime @Inject constructor(
             data = Uri.parse("imfit-rest://alarm/${state.timerId}/${state.generation}")
             putExtra("timer_id", state.timerId)
             putExtra("generation", state.generation)
+            putExtra("deadline_elapsed_ms", state.deadlineElapsedMs) // Diagnostics only; coordinator owns authority.
         }
         return PendingIntent.getBroadcast(context, 90, intent, PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE)
     }
@@ -163,22 +199,13 @@ class RestTimerAndroidRuntime @Inject constructor(
         val pending = pendingIntent(state)
         // Track identity independently so a corrupt DataStore can still clean the old alarm.
         prefs.edit().putString("alarm_uri", "imfit-rest://alarm/${state.timerId}/${state.generation}").apply()
-        val mode = try {
-            if (Build.VERSION.SDK_INT < Build.VERSION_CODES.S || alarms.canScheduleExactAlarms()) {
-                alarms.setExactAndAllowWhileIdle(AlarmManager.ELAPSED_REALTIME_WAKEUP, state.deadlineElapsedMs, pending)
-                SchedulingMode.EXACT
-            } else {
-                alarms.setAndAllowWhileIdle(AlarmManager.ELAPSED_REALTIME_WAKEUP, state.deadlineElapsedMs, pending)
-                SchedulingMode.BEST_EFFORT
-            }
-        } catch (_: SecurityException) {
-            try {
-                alarms.setAndAllowWhileIdle(AlarmManager.ELAPSED_REALTIME_WAKEUP, state.deadlineElapsedMs, pending)
-                SchedulingMode.BEST_EFFORT
-            } catch (_: RuntimeException) { SchedulingMode.UNAVAILABLE }
-        } catch (_: RuntimeException) { SchedulingMode.UNAVAILABLE }
-        trace("alarm_scheduled", state, "mode=$mode")
-        return mode
+        return RestTimerAlarmScheduler(
+            exactAllowed = { exactAlarmAvailable() },
+            exact = { alarms.setExactAndAllowWhileIdle(AlarmManager.ELAPSED_REALTIME_WAKEUP, it.deadlineElapsedMs, pending) },
+            inexact = { alarms.setAndAllowWhileIdle(AlarmManager.ELAPSED_REALTIME_WAKEUP, it.deadlineElapsedMs, pending) },
+            now = { android.os.SystemClock.elapsedRealtime() },
+            trace = { event, rest, detail -> trace(event, rest, detail) }
+        ).schedule(state)
     }
 
     override fun cancelAlarm(state: RestTimerState) {

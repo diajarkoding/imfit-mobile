@@ -16,6 +16,10 @@ interface AuthRepository {
     suspend fun getCurrentUser(): User?
     /** Local auth identity for timer recovery; never fetch a remote profile. */
     suspend fun getLocalUserId(): String? = getCurrentUser()?.id
+    /** Synchronous SDK read only; never waits for init or network. Null means not-yet-loaded OR absent. */
+    suspend fun peekLocalUserId(): String? = getLocalUserId()
+    /** Auth state machine name for diagnostics only (e.g. Authenticated, NotAuthenticated); never a user ID. */
+    suspend fun localAuthStatusName(): String = "UNKNOWN"
     suspend fun isLoggedIn(): Boolean
     suspend fun updateProfile(user: User): Result<User>
     

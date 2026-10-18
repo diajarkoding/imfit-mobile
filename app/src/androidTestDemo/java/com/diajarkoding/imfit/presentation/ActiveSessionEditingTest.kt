@@ -28,6 +28,12 @@ class ActiveSessionEditingTest {
         if (android.os.Build.VERSION.SDK_INT >= 33) {
             instrumentation.uiAutomation.executeShellCommand("pm grant ${rule.activity.packageName} android.permission.POST_NOTIFICATIONS").close()
         }
+        if (android.os.Build.VERSION.SDK_INT >= 31) {
+            instrumentation.uiAutomation.executeShellCommand("appops set ${rule.activity.packageName} SCHEDULE_EXACT_ALARM allow").close()
+        }
+        if (android.os.Build.VERSION.SDK_INT >= 34) {
+            instrumentation.uiAutomation.executeShellCommand("appops set ${rule.activity.packageName} USE_FULL_SCREEN_INTENT allow").close()
+        }
         val ports = EntryPointAccessors.fromApplication(rule.activity.application, RestTimerEntryPoint::class.java)
         val repository = ports.workouts()
         val first = FakeExerciseDataSource.exercises.first { it.id == "ex_chest_1" }
@@ -40,7 +46,7 @@ class ActiveSessionEditingTest {
         try {
             rule.onNode(hasScrollToNodeAction()).performScrollToNode(hasText(name))
             rule.onNodeWithText(name).performClick()
-            rule.onNode(hasScrollToNodeAction()).performScrollToNode(hasText(text(R.string.action_start_workout)))
+            waitForText(text(R.string.action_start_workout))
             rule.onNodeWithText(text(R.string.action_start_workout)).performClick()
             waitForText(first.name)
             val original = runBlocking { requireNotNull(repository.getActiveSession()) }
@@ -50,7 +56,7 @@ class ActiveSessionEditingTest {
             rule.onNode(hasSetTextAction()).performTextInput(added.name)
             waitForText(added.name)
             rule.onNode(hasText(added.name) and hasClickAction() and !hasSetTextAction()).performClick()
-            val addOne = LocaleManager.getUpdatedContext(rule.activity).resources.getQuantityString(R.plurals.exercise_add_count, 1, 1)
+            val addOne = text(R.string.routine_add_count, 1)
             rule.onNodeWithText(addOne).performClick()
             rule.waitUntil(15_000) { runBlocking { repository.getActiveSession()?.exerciseLogs?.any { it.exercise.id == added.id } == true } }
             assertEquals(original.id, runBlocking { repository.getActiveSession()?.id })

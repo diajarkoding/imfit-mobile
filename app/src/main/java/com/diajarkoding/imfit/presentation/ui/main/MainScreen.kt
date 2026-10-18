@@ -98,7 +98,7 @@ fun MainScreen(
         is ProgressTab -> R.string.nav_progress
         else -> R.string.app_name
     }
-    val showProfileAction = currentTab !is ProgressTab
+    val showProfileAction = currentTab is HomeTab
 
     // Keep resource locale live without recreating the navigation backstack.
     // LocalContext stays the Activity context required by the existing Hilt owners.

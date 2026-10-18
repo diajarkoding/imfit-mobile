@@ -8,6 +8,7 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
@@ -62,12 +63,12 @@ fun HomeScreen(
     Column(Modifier.fillMaxSize().background(homePalette().background)) {
         LazyColumn(
             modifier = Modifier.fillMaxWidth().weight(1f),
-            contentPadding = PaddingValues(start = IMFITSpacing.screenHorizontal, top = IMFITSpacing.md,
+            contentPadding = PaddingValues(start = IMFITSpacing.screenHorizontal, top = IMFITSpacing.headerContentGap,
                 end = IMFITSpacing.screenHorizontal, bottom = IMFITSpacing.screenVertical),
             verticalArrangement = Arrangement.spacedBy(IMFITSpacing.itemSpacing)
         ) {
             item(key = "greeting") {
-                Box(Modifier.padding(bottom = IMFITSpacing.sm)) {
+                Box(Modifier.padding(bottom = IMFITSpacing.sm).testTag("main_first_content")) {
                     if (state.isLoading) ShimmerWelcomeSection() else HomeGreeting(state.userName)
                 }
             }

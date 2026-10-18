@@ -7,6 +7,7 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.stringResource
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -56,13 +57,15 @@ internal fun ProgressOverview(
     Column(Modifier.fillMaxSize().background(colors.background)) {
         LazyColumn(
             Modifier.fillMaxWidth().weight(1f),
-            contentPadding = PaddingValues(start = IMFITSpacing.screenHorizontal, top = IMFITSpacing.sm,
+            contentPadding = PaddingValues(start = IMFITSpacing.screenHorizontal, top = IMFITSpacing.headerContentGap,
                 end = IMFITSpacing.screenHorizontal, bottom = IMFITSpacing.screenVertical),
             verticalArrangement = Arrangement.spacedBy(IMFITSpacing.xl)
         ) {
             item(key = "profile") {
-                if (state.isLoading && state.userName.isBlank()) ShimmerWelcomeSection()
-                else ProgressProfileRow(state, onProfile)
+                Box(Modifier.testTag("main_first_content")) {
+                    if (state.isLoading && state.userName.isBlank()) ShimmerWelcomeSection()
+                    else ProgressProfileRow(state, onProfile)
+                }
             }
             when {
                 state.isLoading -> {

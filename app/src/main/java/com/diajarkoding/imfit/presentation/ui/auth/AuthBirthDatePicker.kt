@@ -23,7 +23,6 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
 import com.diajarkoding.imfit.R
 import com.diajarkoding.imfit.presentation.components.common.*
@@ -47,7 +46,7 @@ internal fun AuthBirthDatePicker(value: String, onDismiss: () -> Unit, onSelect:
     val month = YearMonth.parse(displayedMonth)
     val selected = LocalDate.parse(selectedDate)
     val locale = Locale.getDefault()
-    Dialog(onDismissRequest = onDismiss, properties = DialogProperties(usePlatformDefaultWidth = false)) {
+    IMFITPlatformDialog(onDismissRequest = onDismiss, properties = DialogProperties(usePlatformDefaultWidth = false)) {
         Surface(modifier = Modifier.padding(12.dp).widthIn(max = 440.dp).fillMaxWidth(),
             shape = RoundedCornerShape(20.dp), color = colors.surface) {
             Column(Modifier.fillMaxWidth().verticalScroll(rememberScrollState()).padding(20.dp), verticalArrangement = Arrangement.spacedBy(16.dp)) {

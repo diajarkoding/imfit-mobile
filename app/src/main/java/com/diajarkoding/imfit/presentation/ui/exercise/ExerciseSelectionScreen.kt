@@ -28,6 +28,10 @@ import com.diajarkoding.imfit.R
 import com.diajarkoding.imfit.domain.model.Exercise
 import com.diajarkoding.imfit.presentation.components.common.*
 import com.diajarkoding.imfit.theme.IMFITColors
+import com.diajarkoding.imfit.theme.IMFITOpacity
+import com.diajarkoding.imfit.theme.IMFITSpacing
+import androidx.compose.ui.platform.testTag
+import com.diajarkoding.imfit.theme.Scrim
 
 @Composable
 fun ExerciseSelectionScreen(templateId: String, onNavigateBack: () -> Unit, onExercisesSelected: (List<Exercise>) -> Unit,
@@ -67,7 +71,8 @@ internal fun ExercisePickerContent(state: ExerciseSelectionState, onBack: () -> 
         } }) { padding ->
         Column(Modifier.fillMaxSize().padding(padding).padding(horizontal = 20.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
             OutlinedTextField(state.searchQuery, onSearch, enabled = enabled, singleLine = true,
-                modifier = Modifier.fillMaxWidth().padding(top = 12.dp).heightIn(min = 52.dp), shape = RoutineControlShape,
+                modifier = Modifier.fillMaxWidth().padding(top = IMFITSpacing.headerContentGap).heightIn(min = 52.dp)
+                    .testTag("exercise_picker_search"), shape = RoutineControlShape,
                 placeholder = { Text(stringResource(R.string.routine_search_hint), color = c.muted) },
                 leadingIcon = { Icon(Symbols.Default.Search, null, tint = c.muted, modifier = Modifier.size(20.dp)) },
                 trailingIcon = if (state.searchQuery.isNotBlank()) {{ IconButton({ onSearch("") }) { Icon(Symbols.Default.Clear, stringResource(R.string.action_clear), tint = c.muted) } }} else null,
@@ -159,6 +164,7 @@ internal fun MuscleFilterSheet(current: ExerciseCategory, onDismiss: () -> Unit,
     var draft by rememberSaveable { mutableStateOf(current) }
     val options = listOf(ExerciseCategory.ALL) + ExerciseCategory.entries.filterNot { it == ExerciseCategory.ALL }
     ModalBottomSheet(onDismiss, sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true), containerColor = c.surface,
+        scrimColor = Scrim.copy(alpha = IMFITOpacity.scrim),
         shape = RoundedCornerShape(topStart = 24.dp, topEnd = 24.dp)) {
         Column(Modifier.fillMaxWidth().verticalScroll(rememberScrollState()).padding(horizontal = 20.dp).padding(bottom = 20.dp),
             verticalArrangement = Arrangement.spacedBy(16.dp)) {

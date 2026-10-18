@@ -35,7 +35,11 @@ import com.diajarkoding.imfit.R
 import com.diajarkoding.imfit.domain.model.RegisterResult
 import com.diajarkoding.imfit.presentation.components.common.*
 import com.diajarkoding.imfit.theme.IMFITColors
+import com.diajarkoding.imfit.theme.IMFITOpacity
 import com.diajarkoding.imfit.theme.IMFITTheme
+import com.diajarkoding.imfit.theme.IMFITSpacing
+import androidx.compose.ui.platform.testTag
+import com.diajarkoding.imfit.theme.Scrim
 import java.io.File
 import java.time.LocalDate
 import java.time.format.DateTimeFormatter
@@ -140,30 +144,32 @@ private fun RegisterScreenContent(
         .windowInsetsPadding(WindowInsets.navigationBars).imePadding()) {
         Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(horizontal = 20.dp)
             .padding(top = 12.dp, bottom = 20.dp), verticalArrangement = Arrangement.spacedBy(20.dp)) {
-            AuthRegisterHeading(onNavigateToLogin, enabled)
-            Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                AuthTextField(state.name, onNameChange, stringResource(R.string.label_fullname), stringResource(R.string.placeholder_name),
-                    error = state.nameError?.let { stringResource(it) }, enabled = enabled)
-                AuthTextField(state.email, onEmailChange, stringResource(R.string.label_email), stringResource(R.string.placeholder_email),
-                    error = state.emailError?.let { stringResource(it) }, keyboardType = KeyboardType.Email, enabled = enabled)
-                Column {
-                    AuthFieldLabel(stringResource(R.string.label_date_of_birth), state.birthDateError?.let { stringResource(it) })
-                    Spacer(Modifier.height(8.dp))
-                    AuthBorderedRow(Modifier.focusRequester(dateFocus).focusable(enabled),
-                        enabled = enabled, isError = state.birthDateError != null,
-                        onClick = { lastPicker = RegisterOverlay.BirthDate; onDateClick() }) {
-                        val date = runCatching { LocalDate.parse(state.birthDate).format(
-                            DateTimeFormatter.ofLocalizedDate(FormatStyle.LONG).withLocale(Locale.getDefault())) }.getOrDefault(state.birthDate)
-                        Text(date.ifBlank { stringResource(R.string.register_select_birth_date) }, Modifier.weight(1f),
-                            color = if (date.isBlank()) colors.muted else colors.text, style = MaterialTheme.typography.bodyLarge)
-                        Icon(Symbols.Default.CalendarMonth, null, tint = colors.primary, modifier = Modifier.size(20.dp))
+            Column(verticalArrangement = Arrangement.spacedBy(IMFITSpacing.headerContentGap)) {
+                AuthRegisterHeading(onNavigateToLogin, enabled)
+                Column(Modifier.testTag("register_first_content"), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                    AuthTextField(state.name, onNameChange, stringResource(R.string.label_fullname), stringResource(R.string.placeholder_name),
+                        error = state.nameError?.let { stringResource(it) }, enabled = enabled)
+                    AuthTextField(state.email, onEmailChange, stringResource(R.string.label_email), stringResource(R.string.placeholder_email),
+                        error = state.emailError?.let { stringResource(it) }, keyboardType = KeyboardType.Email, enabled = enabled)
+                    Column {
+                        AuthFieldLabel(stringResource(R.string.label_date_of_birth), state.birthDateError?.let { stringResource(it) })
+                        Spacer(Modifier.height(8.dp))
+                        AuthBorderedRow(Modifier.focusRequester(dateFocus).focusable(enabled),
+                            enabled = enabled, isError = state.birthDateError != null,
+                            onClick = { lastPicker = RegisterOverlay.BirthDate; onDateClick() }) {
+                            val date = runCatching { LocalDate.parse(state.birthDate).format(
+                                DateTimeFormatter.ofLocalizedDate(FormatStyle.LONG).withLocale(Locale.getDefault())) }.getOrDefault(state.birthDate)
+                            Text(date.ifBlank { stringResource(R.string.register_select_birth_date) }, Modifier.weight(1f),
+                                color = if (date.isBlank()) colors.muted else colors.text, style = MaterialTheme.typography.bodyLarge)
+                            Icon(Symbols.Default.CalendarMonth, null, tint = colors.primary, modifier = Modifier.size(20.dp))
+                        }
+                        AuthFieldError(state.birthDateError?.let { stringResource(it) })
                     }
-                    AuthFieldError(state.birthDateError?.let { stringResource(it) })
+                    AuthTextField(state.password, onPasswordChange, stringResource(R.string.label_password), stringResource(R.string.auth_create_password),
+                        error = state.passwordError?.let { stringResource(it) }, password = true, enabled = enabled)
+                    AuthTextField(state.confirmPassword, onConfirmPasswordChange, stringResource(R.string.label_confirm_password), stringResource(R.string.auth_repeat_password),
+                        error = state.confirmPasswordError?.let { stringResource(it) }, password = true, imeAction = ImeAction.Done, enabled = enabled, onDone = onRegister)
                 }
-                AuthTextField(state.password, onPasswordChange, stringResource(R.string.label_password), stringResource(R.string.auth_create_password),
-                    error = state.passwordError?.let { stringResource(it) }, password = true, enabled = enabled)
-                AuthTextField(state.confirmPassword, onConfirmPasswordChange, stringResource(R.string.label_confirm_password), stringResource(R.string.auth_repeat_password),
-                    error = state.confirmPasswordError?.let { stringResource(it) }, password = true, imeAction = ImeAction.Done, enabled = enabled, onDone = onRegister)
             }
             AuthProfilePhotoField(state.profilePhotoUri, enabled,
                 onClick = { lastPicker = RegisterOverlay.PhotoSource; onPhotoClick() },
@@ -193,6 +199,7 @@ private fun PhotoIcon(icon: androidx.compose.ui.graphics.vector.ImageVector, siz
 internal fun PhotoSourceSheet(onDismiss: () -> Unit, onCamera: () -> Unit, onGallery: () -> Unit) {
     val colors = IMFITColors.training
     ModalBottomSheet(onDismiss, sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true),
+        scrimColor = Scrim.copy(alpha = IMFITOpacity.scrim),
         containerColor = colors.surface, shape = RoundedCornerShape(topStart = 24.dp, topEnd = 24.dp)) {
         Column(Modifier.fillMaxWidth().verticalScroll(rememberScrollState()).padding(horizontal = 20.dp).padding(bottom = 20.dp), verticalArrangement = Arrangement.spacedBy(20.dp)) {
             Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {

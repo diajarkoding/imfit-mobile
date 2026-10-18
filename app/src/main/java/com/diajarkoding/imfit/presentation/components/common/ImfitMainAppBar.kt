@@ -16,6 +16,7 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.contentDescription
@@ -47,7 +48,7 @@ fun ImfitMainAppBar(
     val colors = IMFITColors.training
     val profileLabel = stringResource(R.string.redesign_profile)
     Row(
-        modifier.fillMaxWidth().heightIn(min = IMFITComponentSizes.homeHeader)
+        modifier.testTag("main_app_bar").fillMaxWidth().heightIn(min = IMFITComponentSizes.homeHeader)
             .padding(horizontal = IMFITSpacing.screenHorizontal, vertical = IMFITSpacing.sm),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(IMFITSpacing.controlGap)

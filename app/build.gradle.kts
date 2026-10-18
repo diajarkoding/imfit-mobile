@@ -44,6 +44,10 @@ android {
 
     buildTypes {
         debug {
+            // Opt-in isolated package for modal diagnostics; never replace the installed demo app.
+            if (providers.gradleProperty("modalDiagnostic").orNull == "true") {
+                applicationIdSuffix = ".modaldiagnostic"
+            }
             // Supabase config from local.properties
             val supabaseUrl = localProperties.getProperty("SUPABASE_URL", "")
                 .trim().removeSurrounding("\"")

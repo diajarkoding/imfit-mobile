@@ -217,6 +217,7 @@ object IMFITSpacing {
     // Screen padding
     val screenHorizontal = 20.dp
     val screenVertical = 16.dp
+    val headerContentGap = 8.dp
     
     // Card internal padding
     val cardPadding = 16.dp
@@ -225,6 +226,15 @@ object IMFITSpacing {
     // Section spacing
     val sectionSpacing = 24.dp
     val itemSpacing = 12.dp
+}
+
+object IMFITPreferenceSizes {
+    val trackWidth = 72.dp
+    val trackHeight = 36.dp
+    val thumb = 30.dp
+    val thumbInset = 3.dp
+    val thumbTravel = trackWidth - thumb - thumbInset * 2
+    val languageTouchWidth = 96.dp
 }
 
 object IMFITCornerRadius {
@@ -382,7 +392,9 @@ object IMFITComponentSizes {
 }
 
 object IMFITOpacity {
-    const val scrim = 0.6f
+    // One Compose scrim for dialog hosts, Material bottom sheets and fullscreen sync.
+    // Dialog native dim/blur must remain disabled to avoid stacking with this layer.
+    const val scrim = 0.50f
     const val disabled = 0.4f
     const val disabledContent = 0.6f
     const val secondaryDisabled = 0.5f

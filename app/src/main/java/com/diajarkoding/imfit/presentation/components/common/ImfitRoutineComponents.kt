@@ -19,6 +19,8 @@ import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.semantics.LiveRegionMode
 import androidx.compose.ui.semantics.liveRegion
 import androidx.compose.ui.semantics.semantics
@@ -26,7 +28,6 @@ import androidx.compose.ui.semantics.error
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
 import com.diajarkoding.imfit.R
 import com.diajarkoding.imfit.theme.IMFITColors
@@ -38,7 +39,7 @@ val RoutineControlShape = RoundedCornerShape(IMFITCornerRadius.small)
 fun RoutineAppBar(title: String, onBack: () -> Unit, subtitle: String? = null,
     enabled: Boolean = true, actions: @Composable RowScope.() -> Unit = {}) {
     val c = IMFITColors.training
-    Row(Modifier.fillMaxWidth().background(c.background).statusBarsPadding().heightIn(min = 64.dp).padding(horizontal = 12.dp),
+    Row(Modifier.fillMaxWidth().background(c.background).statusBarsPadding().heightIn(min = 64.dp).padding(horizontal = 12.dp).testTag("screen_header"),
         verticalAlignment = Alignment.CenterVertically) {
         IconButton(onBack, enabled = enabled, modifier = Modifier.size(48.dp)) {
             Icon(Symbols.AutoMirrored.Filled.ArrowBack, stringResource(R.string.action_back), tint = c.text, modifier = Modifier.size(20.dp))
@@ -53,7 +54,8 @@ fun RoutineAppBar(title: String, onBack: () -> Unit, subtitle: String? = null,
 
 @Composable
 fun RoutineButton(text: String, onClick: () -> Unit, enabled: Boolean = true, loading: Boolean = false,
-    outlined: Boolean = false, icon: ImageVector? = null, modifier: Modifier = Modifier) {
+    outlined: Boolean = false, icon: ImageVector? = null, modifier: Modifier = Modifier,
+    matchOutlineToContent: Boolean = false) {
     val c = IMFITColors.training
     val content: @Composable RowScope.() -> Unit = {
         if (loading) {
@@ -62,9 +64,14 @@ fun RoutineButton(text: String, onClick: () -> Unit, enabled: Boolean = true, lo
         } else if (icon != null) { Icon(icon, null, Modifier.size(18.dp)); Spacer(Modifier.width(8.dp)) }
         Text(text, fontWeight = FontWeight.SemiBold, style = MaterialTheme.typography.labelLarge)
     }
-    if (outlined) OutlinedButton(onClick, modifier.fillMaxWidth().heightIn(min = 54.dp), enabled = enabled && !loading,
-        shape = RoutineControlShape, border = BorderStroke(1.dp, MaterialTheme.colorScheme.onSurfaceVariant),
-        colors = ButtonDefaults.outlinedButtonColors(containerColor = c.surface, contentColor = c.primary), content = content)
+    if (outlined) {
+        val colors = ButtonDefaults.outlinedButtonColors(containerColor = c.surface, contentColor = c.primary)
+        val borderColor = if (matchOutlineToContent) {
+            if (enabled && !loading) colors.contentColor else colors.disabledContentColor
+        } else MaterialTheme.colorScheme.onSurfaceVariant
+        OutlinedButton(onClick, modifier.fillMaxWidth().heightIn(min = 54.dp), enabled = enabled && !loading,
+            shape = RoutineControlShape, border = BorderStroke(1.dp, borderColor), colors = colors, content = content)
+    }
     else Button(onClick, modifier.fillMaxWidth().heightIn(min = 54.dp), enabled = enabled && !loading,
         shape = RoutineControlShape, colors = ButtonDefaults.buttonColors(containerColor = c.primary, contentColor = c.onPrimary,
             disabledContainerColor = if (loading) c.primaryContainer else c.border, disabledContentColor = c.muted), content = content)
@@ -119,9 +126,9 @@ fun RoutineFailure(message: String, onRetry: (() -> Unit)? = null) {
 }
 
 @Composable
-fun RoutineLoading(label: String) {
+fun RoutineLoading(label: String, topPadding: Dp = 24.dp) {
     val c = IMFITColors.training
-    Column(Modifier.fillMaxWidth().padding(vertical = 24.dp).semantics { liveRegion = LiveRegionMode.Polite },
+    Column(Modifier.fillMaxWidth().padding(top = topPadding, bottom = 24.dp).semantics { liveRegion = LiveRegionMode.Polite },
         verticalArrangement = Arrangement.spacedBy(16.dp)) {
         LinearProgressIndicator(Modifier.fillMaxWidth(), color = c.primary, trackColor = c.primaryContainer)
         Text(label, color = c.muted, style = MaterialTheme.typography.bodyMedium)
@@ -134,7 +141,7 @@ fun RoutineDialog(title: String, message: String, icon: ImageVector, confirmText
     onConfirm: () -> Unit, onDismiss: () -> Unit, processing: Boolean = false, destructive: Boolean = false,
     errorMessage: String? = null, confirmEnabled: Boolean = true, content: @Composable () -> Unit = {}) {
     val c = IMFITColors.training
-    Dialog(onDismissRequest = { if (!processing) onDismiss() }, properties = DialogProperties(usePlatformDefaultWidth = false)) {
+    IMFITPlatformDialog(onDismissRequest = { if (!processing) onDismiss() }, properties = DialogProperties(usePlatformDefaultWidth = false)) {
         Surface(Modifier.padding(24.dp).widthIn(max = 420.dp).fillMaxWidth(), shape = RoundedCornerShape(24.dp), color = c.surface) {
             Column(Modifier.verticalScroll(rememberScrollState()).padding(24.dp), verticalArrangement = Arrangement.spacedBy(16.dp)) {
                 Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {

@@ -8,6 +8,7 @@ import androidx.compose.foundation.interaction.collectIsFocusedAsState
 import androidx.compose.foundation.selection.selectable
 import androidx.compose.foundation.selection.selectableGroup
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
@@ -20,12 +21,14 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.focus.FocusDirection
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalFocusManager
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.LiveRegionMode
 import androidx.compose.ui.semantics.liveRegion
 import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.error as semanticsError
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.*
@@ -37,6 +40,7 @@ import com.diajarkoding.imfit.theme.IMFITColors
 import com.diajarkoding.imfit.theme.IMFITCornerRadius
 import com.diajarkoding.imfit.theme.IMFITSizes
 import com.diajarkoding.imfit.theme.IMFITSpacing
+import com.diajarkoding.imfit.theme.IMFITPreferenceSizes
 
 internal val AuthControlShape = RoundedCornerShape(IMFITCornerRadius.small)
 
@@ -161,20 +165,34 @@ internal fun AuthPreferences(isDarkMode: Boolean, isIndonesian: Boolean, onToggl
     val colors = IMFITColors.training
     Row(Modifier.fillMaxWidth().height(56.dp), horizontalArrangement = Arrangement.SpaceBetween,
         verticalAlignment = Alignment.CenterVertically) {
-        Row(Modifier.size(104.dp, 56.dp).selectableGroup().clip(RoundedCornerShape(28.dp)).background(colors.raised).padding(4.dp)) {
-            listOf("ID", "EN").forEachIndexed { index, label ->
-                val selected = (index == 0) == isIndonesian
-                Box(Modifier.weight(1f).fillMaxHeight().clip(RoundedCornerShape(20.dp))
-                    .background(if (selected) colors.primary else Color.Transparent)
-                    .selectable(selected = selected, role = Role.RadioButton, onClick = { if (!selected) onToggleLanguage() }), contentAlignment = Alignment.Center) {
-                    Text(label, color = if (selected) colors.onPrimary else colors.muted,
-                        fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
+        // Compact visual track; separate 48 dp targets keep ID/EN easy to select.
+        Box(Modifier.size(IMFITPreferenceSizes.languageTouchWidth, IMFITSizes.minimumInteractiveTarget).selectableGroup(), contentAlignment = Alignment.Center) {
+            Box(Modifier.size(IMFITPreferenceSizes.trackWidth, IMFITPreferenceSizes.trackHeight).testTag("auth_language_track").background(colors.raised, CircleShape))
+            Row(Modifier.fillMaxSize()) {
+                listOf("ID", "EN").forEachIndexed { index, label ->
+                    val selected = (index == 0) == isIndonesian
+                    val description = stringResource(if (index == 0) R.string.settings_language_id else R.string.settings_language_en)
+                    Box(Modifier.weight(1f).fillMaxHeight()
+                        .testTag(if (index == 0) "auth_language_id" else "auth_language_en")
+                        .selectable(selected, role = Role.RadioButton, onClick = { if (!selected) onToggleLanguage() })
+                        .semantics { contentDescription = description },
+                        contentAlignment = if (index == 0) Alignment.CenterEnd else Alignment.CenterStart) {
+                        Box(Modifier.size(33.dp, IMFITPreferenceSizes.thumb)
+                            .background(if (selected) colors.primary else Color.Transparent, CircleShape),
+                            contentAlignment = Alignment.Center) {
+                            Text(label, color = if (selected) colors.onPrimary else colors.muted,
+                                fontSize = 11.sp, fontWeight = FontWeight.SemiBold)
+                        }
+                    }
                 }
             }
         }
-        IconButton(onToggleTheme, Modifier.size(48.dp).background(colors.raised, RoundedCornerShape(24.dp))) {
-            Icon(if (isDarkMode) Symbols.Default.DarkMode else Symbols.Default.LightMode,
-                stringResource(R.string.auth_toggle_theme), tint = colors.primary, modifier = Modifier.size(20.dp))
+        IconButton(onToggleTheme, Modifier.size(IMFITPreferenceSizes.languageTouchWidth, IMFITSizes.minimumInteractiveTarget)) {
+            Box(Modifier.size(IMFITPreferenceSizes.trackWidth, IMFITPreferenceSizes.trackHeight)
+                .testTag("auth_theme_track").background(colors.raised, CircleShape), contentAlignment = Alignment.Center) {
+                Icon(if (isDarkMode) Symbols.Default.DarkMode else Symbols.Default.LightMode,
+                    stringResource(R.string.auth_toggle_theme), tint = colors.primary, modifier = Modifier.size(20.dp))
+            }
         }
     }
 }
@@ -228,7 +246,7 @@ internal fun AuthOperationError(message: String?, title: String) {
 @Composable
 internal fun AuthRegisterHeading(onBack: () -> Unit, enabled: Boolean = true) {
     val colors = IMFITColors.training
-    Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically,
+    Row(Modifier.fillMaxWidth().testTag("screen_header"), verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(IMFITSpacing.md)) {
         IconButton(onBack, enabled = enabled, modifier = Modifier.size(IMFITSizes.minimumInteractiveTarget)) {
             Icon(Symbols.AutoMirrored.Filled.ArrowBack, stringResource(R.string.auth_back_to_login),

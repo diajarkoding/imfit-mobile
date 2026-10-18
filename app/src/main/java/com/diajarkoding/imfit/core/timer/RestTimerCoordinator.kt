@@ -41,8 +41,13 @@ data class RestTimerState(
     val audioSuppressed: Boolean = false,
     val schemaVersion: Int = 1,
     // Distinguish an already handled alert from an undelivered expiry during delayed recovery.
-    val presentationHandled: Boolean = false
+    val presentationHandled: Boolean = false,
+    // Null preserves progress for older records, whose generations only represented +30s.
+    val adjustedDurationMs: Long? = null
 ) {
+    val totalDurationMs: Long
+        get() = adjustedDurationMs ?: (durationMs + generation * 30_000)
+
     fun remainingSeconds(now: Long): Int =
         ((deadlineElapsedMs - now).coerceAtLeast(0L).let { (it + 999) / 1000 }).toInt()
 
@@ -194,6 +199,7 @@ class RestTimerCoordinator(
             bootIdentity = clock.bootIdentity(),
             status = TimerStatus.RUNNING,
             generation = 0,
+            adjustedDurationMs = null,
             audioSuppressed = false,
             presentationHandled = false,
             reason = null,
@@ -449,11 +455,31 @@ class RestTimerCoordinator(
             reconcileLocked()
             return@guarded
         }
-        persist(current.copy(deadlineElapsedMs = current.deadlineElapsedMs + 30_000, generation = current.generation + 1))
+        persist(current.copy(deadlineElapsedMs = current.deadlineElapsedMs + 30_000,
+            generation = current.generation + 1, adjustedDurationMs = current.totalDurationMs + 30_000))
         effects.trace("rest_extended", state.value, "source=extend")
         effects.cancelAlarm(current)
         scheduledIdentity = null
         reconcileLocked(source = "extend")
+    }
+
+    suspend fun reduce(timerId: String? = null, generation: Long? = null) = guarded {
+        val current = state.value ?: return@guarded
+        if (timerId != null && timerId != current.timerId) return@guarded
+        if (generation != null && generation != current.generation) return@guarded
+        val now = clock.elapsedRealtime()
+        if (current.status != TimerStatus.RUNNING || now >= current.deadlineElapsedMs) {
+            reconcileLocked()
+            return@guarded
+        }
+        // Clamp to now so <=30s follows normal expiry, never SKIPPED or a late-alert discard.
+        val deadline = (current.deadlineElapsedMs - 30_000).coerceAtLeast(now)
+        persist(current.copy(deadlineElapsedMs = deadline, generation = current.generation + 1,
+            adjustedDurationMs = (current.totalDurationMs - (current.deadlineElapsedMs - deadline)).coerceAtLeast(0)))
+        effects.trace("rest_reduced", state.value, "source=reduce")
+        effects.cancelAlarm(current)
+        scheduledIdentity = null
+        reconcileLocked(source = "reduce")
     }
 
     suspend fun expiry(timerId: String, generation: Long, alarmDelivery: Boolean = false,

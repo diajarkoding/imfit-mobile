@@ -76,6 +76,7 @@ class ActiveWorkoutViewModel @Inject constructor(
     val restState = timer.state
 
     fun extendRest() { viewModelScope.launch { timer.extend() } }
+    fun reduceRest() { viewModelScope.launch { timer.reduce() } }
     fun refreshTimerCapabilities() {
         _state.update { it.copy(fullScreenAlarmAllowed = timerRuntime.fullScreenIntentAvailable(),
             restLimited = timerRuntime.capabilityIssue() != null) }

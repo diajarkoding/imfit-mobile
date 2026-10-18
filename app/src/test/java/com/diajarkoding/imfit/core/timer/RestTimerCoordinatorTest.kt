@@ -48,6 +48,8 @@ class RestTimerCoordinatorTest {
         var posted = false
         var scheduled = false
         var schedules = 0
+        val scheduledStates = mutableListOf<RestTimerState>()
+        val cancelledStates = mutableListOf<RestTimerState>()
         var mode = SchedulingMode.EXACT
         var cleanupCount = 0
         val dismissed = mutableSetOf<String>()
@@ -67,10 +69,11 @@ class RestTimerCoordinatorTest {
         override fun userStopped(state: RestTimerState) = stopped
         override fun schedule(state: RestTimerState): SchedulingMode {
             schedules++
+            scheduledStates.add(state)
             scheduled = mode != SchedulingMode.UNAVAILABLE
             return mode
         }
-        override fun cancelAlarm(state: RestTimerState) { scheduled = false; cleanupCount++ }
+        override fun cancelAlarm(state: RestTimerState) { cancelledStates.add(state); scheduled = false; cleanupCount++ }
         override fun showFinished(state: RestTimerState): FinishedPresentation {
             if (failShow) throw IllegalStateException("notification service unavailable")
             posted = presentation == FinishedPresentation.POSTED
@@ -260,6 +263,151 @@ class RestTimerCoordinatorTest {
         f.timer.reconcile()
         assertEquals(TimerStatus.SKIPPED, f.store.saved!!.status)
         assertEquals(0, f.effects.plays)
+    }
+
+    @Test fun reductionCommitsDeadlineAndReplacesOnlyTheOldAlarmGeneration() = runBlocking {
+        val f = Fixture(); f.start()
+        val old = f.store.saved!!
+        f.clock.now += 10_000
+        f.timer.reduce(old.timerId, old.generation)
+        val reduced = f.store.saved!!
+        assertEquals(old.timerId, reduced.timerId)
+        assertEquals(old.deadlineElapsedMs - 30_000, reduced.deadlineElapsedMs)
+        assertEquals(old.generation + 1, reduced.generation)
+        assertEquals(90_000L, reduced.totalDurationMs)
+        assertEquals(80, reduced.remainingSeconds(f.clock.now))
+        assertEquals(TimerStatus.RUNNING, reduced.status)
+        assertTrue(f.effects.cancelledStates.any { it.timerId == old.timerId && it.generation == old.generation })
+        assertEquals(reduced.deadlineElapsedMs, f.effects.scheduledStates.last().deadlineElapsedMs)
+        assertEquals(reduced.generation, f.effects.scheduledStates.last().generation)
+        repeat(3) { f.timer.reconcile() }
+        f.timer.reduce(old.timerId, old.generation) // stale tap
+        f.timer.reduce("different-timer", reduced.generation)
+        f.timer.expiry(old.timerId, old.generation, alarmDelivery = true)
+        assertEquals(reduced, f.store.saved)
+        assertEquals(2, f.effects.schedules)
+        assertEquals(0, f.effects.plays)
+    }
+
+    @Test fun reductionAtOrBelowThirtySecondsExpiresNormallyAndNeverReplaysAudio() = runBlocking {
+        for (remaining in listOf(30_000L, 29_001L, 1L)) {
+            val f = Fixture(); f.start()
+            val old = f.store.saved!!
+            f.clock.now = old.deadlineElapsedMs - remaining
+            f.timer.reduce()
+            val expired = f.store.saved!!
+            assertEquals(TimerStatus.EXPIRED, expired.status)
+            assertEquals(f.clock.now, expired.deadlineElapsedMs)
+            assertEquals(0, expired.remainingSeconds(f.clock.now))
+            assertTrue(expired.presentationHandled)
+            assertTrue(f.effects.posted)
+            assertFalse(f.effects.scheduled)
+            assertEquals(1, f.effects.plays)
+            val staleAlarm = launch { f.timer.expiry(old.timerId, old.generation, alarmDelivery = true) }
+            val alarm = launch { f.timer.expiry(expired.timerId, expired.generation, alarmDelivery = true) }
+            val worker = launch { f.timer.expiry(expired.timerId, expired.generation, recoveryDelivery = true) }
+            val ticker = launch { f.timer.reconcile() }
+            staleAlarm.join(); alarm.join(); worker.join(); ticker.join()
+            f.effects.queuedToken?.let { f.timer.checkPlayback(it) }
+            f.timer.reduce()
+            assertEquals(1, f.effects.events.count { it.first == "expired_committed" })
+            assertEquals(1, f.effects.plays)
+            assertEquals(TimerStatus.EXPIRED, f.store.saved!!.status)
+        }
+    }
+
+    @Test fun shortenedTimerAlarmAndTickerRaceExpiresOnceAtTheNewDeadline() = runBlocking {
+        val f = Fixture(); f.start()
+        val old = f.store.saved!!
+        f.timer.reduce()
+        val reduced = f.store.saved!!
+        f.clock.now = reduced.deadlineElapsedMs
+        val alarm = launch { f.timer.expiry(reduced.timerId, reduced.generation, alarmDelivery = true) }
+        val ticker = launch { f.timer.reconcile() }
+        val worker = launch { f.timer.expiry(reduced.timerId, reduced.generation, recoveryDelivery = true) }
+        alarm.join(); ticker.join(); worker.join()
+        f.effects.queuedToken?.let { f.timer.checkPlayback(it) }
+        assertEquals(1, f.effects.plays)
+        f.clock.now = old.deadlineElapsedMs
+        f.timer.expiry(old.timerId, old.generation, alarmDelivery = true)
+        assertEquals(1, f.effects.plays)
+        assertEquals(1, f.effects.events.count { it.first == "expired_committed" })
+        assertFalse(f.effects.scheduled)
+    }
+
+    @Test fun reductionAfterNaturalDeadlineDoesNotMutateOrSkipExpiredTimer() = runBlocking {
+        val f = Fixture(); f.start()
+        val old = f.store.saved!!
+        f.clock.now = old.deadlineElapsedMs
+        f.timer.reduce()
+        assertEquals(TimerStatus.EXPIRED, f.store.saved!!.status)
+        assertEquals(old.deadlineElapsedMs, f.store.saved!!.deadlineElapsedMs)
+        assertEquals(old.generation, f.store.saved!!.generation)
+        assertEquals(1, f.effects.plays)
+        f.timer.acknowledge(old.timerId)
+        f.timer.reduce()
+        assertEquals(TimerStatus.ACKNOWLEDGED, f.store.saved!!.status)
+        assertEquals(1, f.effects.plays)
+    }
+
+    @Test fun failedReductionWriteLeavesDeadlineAndAlarmUnchanged() = runBlocking {
+        val f = Fixture(); f.start()
+        val old = f.store.saved!!
+        val cancellations = f.effects.cancelledStates.size
+        f.store.fail = true
+        f.timer.reduce()
+        assertEquals(old, f.store.saved)
+        assertEquals(old, f.timer.state.value)
+        assertEquals(cancellations, f.effects.cancelledStates.size)
+        assertEquals(1, f.effects.schedules)
+        assertTrue(f.effects.scheduled)
+        assertNotNull(f.timer.error.value)
+        f.store.fail = false
+        f.timer.reduce()
+        assertEquals(old.deadlineElapsedMs - 30_000, f.store.saved!!.deadlineElapsedMs)
+    }
+
+    @Test fun committedReductionSurvivesCancellationAndColdRecoveryWithoutDuplicateAlarm() = runBlocking {
+        val f = Fixture(); f.start()
+        val old = f.store.saved!!
+        f.store.cancelAfterWrite = true
+        try {
+            f.timer.reduce()
+            fail("Cancellation must propagate")
+        } catch (_: kotlinx.coroutines.CancellationException) { }
+        val reduced = f.store.saved!!
+        val cold = RestTimerCoordinator(f.store, f.clock, f.effects)
+        cold.expiry(old.timerId, old.generation, alarmDelivery = true)
+        assertEquals(reduced.deadlineElapsedMs, f.effects.scheduledStates.last().deadlineElapsedMs)
+        assertEquals(reduced.generation, f.effects.scheduledStates.last().generation)
+        assertEquals(0, f.effects.plays)
+        f.clock.now = reduced.deadlineElapsedMs
+        cold.expiry(reduced.timerId, reduced.generation)
+        cold.expiry(old.timerId, old.generation)
+        assertEquals(1, f.effects.plays)
+        assertEquals(TimerStatus.EXPIRED, f.store.saved!!.status)
+    }
+
+    @Test fun progressDurationTracksBothDirectionsAndRestoresLegacyExtendedRecords() = runBlocking {
+        val f = Fixture(); f.start()
+        f.timer.extend()
+        val legacy = RestTimerStateCodec.decode(RestTimerStateCodec.encode(f.store.saved!!)
+            .replace(Regex(",\"adjustedDurationMs\":\\d+"), ""))
+        assertNull(legacy.adjustedDurationMs)
+        assertEquals(150_000L, legacy.totalDurationMs)
+        f.store.saved = legacy
+        val cold = RestTimerCoordinator(f.store, f.clock, f.effects)
+        cold.reduce()
+        assertEquals(120_000L, cold.state.value!!.totalDurationMs)
+        cold.reduce()
+        assertEquals(90_000L, cold.state.value!!.totalDurationMs)
+        cold.extend()
+        assertEquals(120_000L, cold.state.value!!.totalDurationMs)
+        val state = cold.state.value!!
+        assertEquals(state, RestTimerStateCodec.decode(RestTimerStateCodec.encode(state)))
+        cold.start(f.request("set-2"))
+        assertEquals(120_000L, cold.state.value!!.totalDurationMs)
+        assertEquals(0L, cold.state.value!!.generation)
     }
     @Test fun pauseGuardIsSharedByScreenAndService() = runBlocking {
         val f = Fixture(); f.start()

@@ -9,6 +9,7 @@ object RestTimerStateCodec {
     fun encode(state: RestTimerState): String = json.encodeToString(state)
     fun decode(encoded: String): RestTimerState = json.decodeFromString<RestTimerState>(encoded).also {
         require(it.schemaVersion == 1 && it.durationMs in 0..86_400_000 && it.deadlineElapsedMs >= 0 && it.generation >= 0)
+        require(it.adjustedDurationMs == null || it.adjustedDurationMs >= 0)
         require(it.timerId.isNotBlank() && it.userId.isNotBlank() && it.workoutId.isNotBlank() && it.setId.isNotBlank())
     }
 }

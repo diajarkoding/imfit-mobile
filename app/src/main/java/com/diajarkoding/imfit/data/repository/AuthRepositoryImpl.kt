@@ -218,7 +218,7 @@ class AuthRepositoryImpl @Inject constructor(
                 // Create profile if it doesn't exist (fallback for users without trigger)
                 val currentUser = supabaseClient.auth.currentUserOrNull()
                 if (currentUser != null) {
-                    val userName = currentUser.userMetadata?.get("name")?.toString()?.removeSurrounding("\"") ?: "User"
+                    val userName = currentUser.userMetadata.displayNameOrDefault()
                     val birthDate = currentUser.userMetadata?.get("birth_date")?.toString()?.removeSurrounding("\"")
                     try {
                         supabaseClient.postgrest.from("profiles")
@@ -246,7 +246,7 @@ class AuthRepositoryImpl @Inject constructor(
                 if (currentUser != null) {
                     val basicUser = User(
                         id = userId,
-                        name = currentUser.userMetadata?.get("name")?.toString()?.removeSurrounding("\"") ?: "User",
+                        name = currentUser.userMetadata.displayNameOrDefault(),
                         email = email,
                         birthDate = null,
                         profilePhotoUri = null
@@ -310,7 +310,7 @@ class AuthRepositoryImpl @Inject constructor(
                 // Create basic user object from auth metadata
                 val basicUser = User(
                     id = currentUser.id,
-                    name = currentUser.userMetadata?.get("name")?.toString() ?: "User",
+                    name = currentUser.userMetadata.displayNameOrDefault(),
                     email = currentUser.email ?: "",
                     birthDate = null,
                     profilePhotoUri = null

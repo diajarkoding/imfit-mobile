@@ -9,6 +9,7 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.stringResource
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -41,6 +42,7 @@ fun YearlyCalendarScreen(
         containerColor = colors.background,
         topBar = {
             TopAppBar(
+                modifier = Modifier.testTag("screen_header"),
                 title = {
                     Row(verticalAlignment = androidx.compose.ui.Alignment.CenterVertically) {
                         IconButton(onClick = { year-- }, enabled = year > 1) {
@@ -59,16 +61,17 @@ fun YearlyCalendarScreen(
             )
         }
     ) { padding ->
-        Column(Modifier.fillMaxSize().padding(padding).background(colors.background)) {
+        Column(Modifier.fillMaxSize().padding(padding).background(colors.background)
+            .padding(top = IMFITSpacing.headerContentGap).testTag("year_calendar_content")) {
             if (state.isLoading) LinearProgressIndicator(Modifier.fillMaxWidth())
             if (state.hasError) {
-                Text(stringResource(R.string.progress_overview_load_error), Modifier.padding(IMFITSpacing.lg), color = colors.text)
+                Text(stringResource(R.string.progress_overview_load_error), Modifier.padding(horizontal = IMFITSpacing.lg).padding(bottom = IMFITSpacing.lg), color = colors.text)
                 TextButton(onClick = viewModel::loadData) { Text(stringResource(R.string.redesign_retry)) }
             }
             LazyColumn(
                 state = listState,
                 modifier = Modifier.fillMaxWidth().weight(1f),
-                contentPadding = PaddingValues(IMFITSpacing.screenHorizontal),
+                contentPadding = PaddingValues(start = IMFITSpacing.screenHorizontal, end = IMFITSpacing.screenHorizontal, bottom = IMFITSpacing.screenHorizontal),
                 verticalArrangement = Arrangement.spacedBy(IMFITSpacing.xl)
             ) {
                 items(months, key = { it.toString() }) { month ->

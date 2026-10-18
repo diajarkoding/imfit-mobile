@@ -119,11 +119,11 @@ fun CreateTemplateScreen(
                 modifier = Modifier
                     .weight(1f)
                     .fillMaxWidth(),
-                contentPadding = PaddingValues(IMFITSpacing.screenHorizontal),
+                contentPadding = PaddingValues(start = IMFITSpacing.screenHorizontal, end = IMFITSpacing.screenHorizontal,
+                    top = IMFITSpacing.headerContentGap, bottom = IMFITSpacing.screenHorizontal),
                 verticalArrangement = Arrangement.spacedBy(IMFITSpacing.lg)
             ) {
                 item {
-                    Spacer(modifier = Modifier.height(IMFITSpacing.sm))
                     IMFITTextField(
                         value = state.templateName,
                         onValueChange = { viewModel.onNameChange(it) },

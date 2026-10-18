@@ -21,6 +21,8 @@ import com.diajarkoding.imfit.R
 import com.diajarkoding.imfit.domain.model.*
 import com.diajarkoding.imfit.presentation.components.common.*
 import com.diajarkoding.imfit.theme.IMFITColors
+import com.diajarkoding.imfit.theme.IMFITSpacing
+import androidx.compose.ui.platform.testTag
 
 @Composable
 fun WorkoutDetailScreen(
@@ -30,6 +32,7 @@ fun WorkoutDetailScreen(
     onSelectedExercisesConsumed: () -> Unit = {}, viewModel: WorkoutDetailViewModel = hiltViewModel()
 ) {
     val state by viewModel.state.collectAsStateWithLifecycle()
+    val startRequest = rememberWorkoutStartRequest(workoutId, state.isCurrentWorkoutActive) { onStartWorkout(workoutId) }
     var deleteDialog by rememberSaveable { mutableStateOf(false) }
     LaunchedEffect(workoutId) { viewModel.initialize(workoutId) }
     LaunchedEffect(selectedExerciseIds, state.workout?.id) {
@@ -57,13 +60,13 @@ fun WorkoutDetailScreen(
         onBack = onNavigateBack, onEdit = { onNavigateToEdit(workoutId) },
         onDelete = { viewModel.clearDeleteError(); deleteDialog = true },
         onAdd = { onNavigateToExerciseSelection(workoutId) }, onRetry = viewModel::loadWorkout, onRetryAdd = viewModel::retryAddExercises,
-        onStart = { onStartWorkout(workoutId) })
+        onStart = startRequest.start, startPending = startRequest.pending)
 }
 
 @Composable
 internal fun WorkoutDetailContent(state: WorkoutDetailState, estimatedMinutes: Int,
     onBack: () -> Unit = {}, onEdit: () -> Unit = {}, onDelete: () -> Unit = {},
-    onAdd: () -> Unit = {}, onStart: () -> Unit = {}, onRetry: () -> Unit = {}, onRetryAdd: () -> Unit = {}) {
+    onAdd: () -> Unit = {}, onStart: () -> Unit = {}, onRetry: () -> Unit = {}, onRetryAdd: () -> Unit = {}, startPending: Boolean = false) {
     val c = IMFITColors.training
     val workout = state.workout
     val exercises = workout?.exercises.orEmpty()
@@ -79,12 +82,12 @@ internal fun WorkoutDetailContent(state: WorkoutDetailState, estimatedMinutes: I
                 if (workout != null && exercises.isEmpty()) Text(stringResource(R.string.routine_start_requirement), color = c.muted, style = MaterialTheme.typography.bodySmall)
                 if (state.isWorkoutActive && !state.isCurrentWorkoutActive) Text(stringResource(R.string.warning_workout_active), color = c.muted, style = MaterialTheme.typography.bodySmall)
                 RoutineButton(stringResource(if (state.isCurrentWorkoutActive) R.string.routine_resume else R.string.action_start_workout), onStart,
-                    enabled = workout != null && exercises.isNotEmpty() && !state.isLoading && !state.isDeleting && !state.isUpdating && (!state.isWorkoutActive || state.isCurrentWorkoutActive))
+                    enabled = !startPending && workout != null && exercises.isNotEmpty() && !state.isLoading && !state.isDeleting && !state.isUpdating && (!state.isWorkoutActive || state.isCurrentWorkoutActive))
             }
         }) { padding ->
-        LazyColumn(Modifier.fillMaxSize().padding(padding), contentPadding = PaddingValues(start = 20.dp, end = 20.dp, top = 16.dp, bottom = 12.dp),
+        LazyColumn(Modifier.fillMaxSize().padding(padding).testTag("routine_detail_list"), contentPadding = PaddingValues(start = 20.dp, end = 20.dp, top = IMFITSpacing.headerContentGap, bottom = 12.dp),
             verticalArrangement = Arrangement.spacedBy(12.dp)) {
-            if (state.isLoading && workout == null) item { RoutineLoading(stringResource(R.string.routine_loading)) }
+            if (state.isLoading && workout == null) item { RoutineLoading(stringResource(R.string.routine_loading), topPadding = 0.dp) }
             state.errorRes?.let { error -> item { RoutineFailure(stringResource(error), onRetry) } }
             state.operationErrorRes?.let { error -> item { RoutineFailure(stringResource(error), if (!state.isUpdating) onRetryAdd else null) } }
             if (workout != null) {
@@ -101,7 +104,7 @@ internal fun WorkoutDetailContent(state: WorkoutDetailState, estimatedMinutes: I
                 if (exercises.isEmpty()) item { RoutineEmptyExercises(onAdd, editable) }
                 else {
                     items(exercises, key = { it.id }) { RoutineExerciseRow(it) }
-                    item { RoutineButton(stringResource(R.string.action_add_exercise), onAdd, enabled = editable, outlined = true, icon = Symbols.Default.Add) }
+                    item { RoutineButton(stringResource(R.string.action_add_exercise), onAdd, enabled = editable, outlined = true, icon = Symbols.Default.Add, matchOutlineToContent = true) }
                 }
                 if (state.isUpdating) item { RoutineLoading(stringResource(R.string.routine_adding)) }
             }

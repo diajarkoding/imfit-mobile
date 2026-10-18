@@ -1,0 +1,15 @@
+<resources>
+    <string name="summary_set_details_formatted">%1$s kg × %2$d repetisi</string>
+    <string name="summary_screen_title">Ringkasan sesi</string>
+    <string name="summary_saved_title">Sesi selesai!</string>
+    <string name="summary_volume_meaning">Volume mencakup semua set berisi data.</string>
+    <string name="summary_exercise_breakdown_title">Rincian gerakan</string>
+    <string name="summary_no_completed_sets">Tidak ada set yang ditandai selesai.</string>
+    <string name="summary_loading">Memuat ringkasan sesi…</string>
+    <string name="summary_unavailable_title">Ringkasan belum tersedia</string>
+    <string name="summary_unavailable_desc">Detail sesi ini belum dapat ditampilkan.</string>
+    <string name="summary_back_to_home">Kembali ke Beranda</string>
+    <plurals name="summary_completed_sets_count">
+        <item quantity="other">%1$d set selesai</item>
+    </plurals>
+</resources>

@@ -32,6 +32,8 @@ import com.diajarkoding.imfit.R
 import com.diajarkoding.imfit.domain.model.TemplateExercise
 import com.diajarkoding.imfit.presentation.components.common.*
 import com.diajarkoding.imfit.theme.IMFITColors
+import com.diajarkoding.imfit.theme.IMFITSpacing
+import androidx.compose.ui.platform.testTag
 
 @Composable
 fun EditWorkoutScreen(workoutId: String, onNavigateBack: () -> Unit,
@@ -66,9 +68,9 @@ internal fun EditWorkoutContent(state: EditWorkoutState, onBack: () -> Unit = {}
             RoutineButton(stringResource(if (state.isSaving) R.string.routine_saving else R.string.action_save_changes), onSave,
                 enabled = editable && state.workoutName.isNotBlank() && state.invalidConfigIds.isEmpty(), loading = state.isSaving)
         } }) { padding ->
-        LazyColumn(Modifier.fillMaxSize().padding(padding), contentPadding = PaddingValues(horizontal = 20.dp, vertical = 16.dp),
+        LazyColumn(Modifier.fillMaxSize().padding(padding).testTag("routine_edit_list"), contentPadding = PaddingValues(start = 20.dp, end = 20.dp, top = IMFITSpacing.headerContentGap, bottom = 16.dp),
             verticalArrangement = Arrangement.spacedBy(12.dp)) {
-            if (state.isLoading) item { RoutineLoading(stringResource(R.string.routine_loading)) }
+            if (state.isLoading) item { RoutineLoading(stringResource(R.string.routine_loading), topPadding = 0.dp) }
             state.errorRes?.let { message -> item {
                 RoutineFailure(stringResource(message), if (!state.hasLoaded) onRetryLoad else if (message == R.string.routine_add_failed && !state.isAdding) onRetryAdd else null)
             } }
@@ -82,7 +84,7 @@ internal fun EditWorkoutContent(state: EditWorkoutState, onBack: () -> Unit = {}
                         onConfig = { sets, reps, rest -> onConfig(exercise.id, sets, reps, rest) },
                         onValidity = { valid -> onValidity(exercise.id, valid) })
                 }
-                item { RoutineButton(stringResource(R.string.action_add_exercise), onAdd, enabled = editable, outlined = true, icon = Symbols.Default.Add) }
+                item { RoutineButton(stringResource(R.string.action_add_exercise), onAdd, enabled = editable, outlined = true, icon = Symbols.Default.Add, matchOutlineToContent = true) }
                 item { Text(stringResource(R.string.routine_edit_history_hint), color = c.muted, style = MaterialTheme.typography.bodySmall,
                     modifier = Modifier.padding(vertical = 12.dp)) }
                 if (state.isAdding) item { RoutineLoading(stringResource(R.string.routine_adding)) }

@@ -1,5 +1,45 @@
 <resources>
+    <string name="rest_reduce">−30 detik</string>
+    <string name="active_session_saving">Menyimpan sesi…</string>
+    <string name="active_session_weight_input">%1$s, set %2$d, beban dalam kg</string>
+    <string name="active_session_reps_input">%1$s, set %2$d, repetisi</string>
+    <string name="active_session_complete_set">Selesaikan %1$s, set %2$d</string>
+    <string name="active_session_delete_set">Hapus %1$s, set %2$d</string>
     <string name="active_session_add_exercises">Tambah gerakan</string>
     <string name="active_session_remove_exercise">Hapus %1$s dari sesi ini</string>
     <string name="active_session_empty">Belum ada gerakan di sesi ini. Tambahkan gerakan untuk melanjutkan, atau batalkan sesi.</string>
+
+    <!-- Overview -->
+    <string name="active_session_sets_completed">Set selesai</string>
+    <string name="active_session_volume_meaning">Volume dari semua set berisi data.</string>
+
+    <!-- State Banners -->
+    <string name="active_session_pause_explanation">Sesi sedang dijeda. Lanjutkan untuk menyelesaikan set berikutnya.</string>
+    <string name="active_session_finish_reminder">Semua set selesai. Ketuk Selesaikan sesi untuk menyimpan riwayat.</string>
+    <string name="active_session_empty_title">Belum ada gerakan</string>
+    <string name="active_session_empty_description">Tambahkan gerakan untuk melanjutkan sesi ini.</string>
+    <string name="active_session_loading">Memuat sesi…</string>
+
+    <!-- Table Columns -->
+    <string name="active_session_column_set">Set</string>
+    <string name="active_session_column_kg">kg</string>
+    <string name="active_session_column_reps">Repetisi</string>
+    <string name="active_session_column_done">Selesai</string>
+
+    <!-- Cancel Dialog Messages -->
+    <string name="active_session_cancel_title">Batalkan sesi?</string>
+    <string name="active_session_cancel_message_zero">Belum ada set yang selesai. Jika dibatalkan, sesi ini tidak dicatat ke riwayat.</string>
+    <string name="active_session_cancel_message_one">1 dari %1$d set sudah selesai. Jika dibatalkan, progres sesi ini akan hilang dan tidak dicatat ke riwayat.</string>
+    <string name="active_session_cancel_message_some">%1$d dari %2$d set sudah selesai. Jika dibatalkan, progres sesi ini akan hilang dan tidak dicatat ke riwayat.</string>
+    <string name="active_session_cancel_message_all">Semua %1$d set selesai, tetapi sesi belum disimpan ke riwayat. Jika dibatalkan, progres sesi ini akan hilang.</string>
+    <string name="active_session_cancel_continue">Lanjutkan sesi</string>
+    <string name="active_session_cancel_confirm">Batalkan sesi</string>
+
+    <!-- Rest Timer Settings & Countdown -->
+    <string name="rest_timer_scope_desc">Durasi berlaku untuk seluruh sesi ini.</string>
+    <string name="rest_timer_remaining_label">Waktu tersisa</string>
+    <string name="rest_timer_unit_hours">Jam</string>
+    <string name="rest_timer_unit_minutes">Menit</string>
+    <string name="rest_timer_unit_seconds">Detik</string>
+    <string name="rest_timer_minus_30">−30 detik</string>
 </resources>

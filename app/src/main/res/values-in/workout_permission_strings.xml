@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="workout_background_service_error">Layanan latihan latar belakang belum dapat dimulai. Sesi tetap tersedia di aplikasi.</string>
+    <string name="workout_alarm_settings_error">Pengaturan alarm belum dapat dibuka.</string>
+</resources>

@@ -1,75 +1,37 @@
 package com.diajarkoding.imfit.presentation.ui.profile
 
-import androidx.lifecycle.compose.collectAsStateWithLifecycle
-
-import androidx.compose.foundation.background
-import androidx.compose.foundation.border
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
-import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.consumeWindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.navigationBars
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.statusBars
-import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.shape.CircleShape
-import com.diajarkoding.imfit.presentation.components.common.ArrowBack
-import com.diajarkoding.imfit.presentation.components.common.Cake
-import com.diajarkoding.imfit.presentation.components.common.DarkMode
-import com.diajarkoding.imfit.presentation.components.common.Email
-import com.diajarkoding.imfit.presentation.components.common.ExitToApp
-import com.diajarkoding.imfit.presentation.components.common.Language
-import com.diajarkoding.imfit.presentation.components.common.Person
-import com.diajarkoding.imfit.presentation.components.common.Symbols
-import androidx.compose.ui.tooling.preview.Preview
-import androidx.compose.material3.Card
-import androidx.compose.material3.CardDefaults
-import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
-import androidx.compose.material3.TopAppBar
-import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
-import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
-import androidx.compose.ui.draw.shadow
-import androidx.compose.ui.graphics.Brush
-import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.vector.ImageVector
-import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalConfiguration
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.semantics.heading
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.unit.dp
+import androidx.compose.ui.tooling.preview.Preview
 import androidx.hilt.navigation.compose.hiltViewModel
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.diajarkoding.imfit.R
-import com.diajarkoding.imfit.presentation.components.common.IMFITLanguageSwitch
-import com.diajarkoding.imfit.presentation.components.common.IMFITThemeSwitch
-import com.diajarkoding.imfit.presentation.components.common.IMFITProfilePhoto
-import com.diajarkoding.imfit.presentation.components.common.ShimmerInfoCard
-import com.diajarkoding.imfit.presentation.components.common.ShimmerProfileHeader
+import com.diajarkoding.imfit.presentation.components.common.RoutineAppBar
+import com.diajarkoding.imfit.presentation.ui.progress.ProgressState
 import com.diajarkoding.imfit.presentation.ui.progress.ProgressViewModel
-import com.diajarkoding.imfit.theme.DeletePink
-import com.diajarkoding.imfit.theme.IMFITShapes
-import com.diajarkoding.imfit.theme.IMFITSizes
+import com.diajarkoding.imfit.theme.IMFITColors
 import com.diajarkoding.imfit.theme.IMFITSpacing
-import com.diajarkoding.imfit.theme.Primary
-import com.diajarkoding.imfit.theme.PrimaryLight
-@OptIn(ExperimentalMaterial3Api::class)
+import com.diajarkoding.imfit.theme.IMFITTheme
+import java.util.Locale
+
 @Composable
 fun ProfileScreen(
     onNavigateBack: () -> Unit,
@@ -81,596 +43,124 @@ fun ProfileScreen(
     viewModel: ProgressViewModel = hiltViewModel()
 ) {
     val state by viewModel.state.collectAsStateWithLifecycle()
-
-    Scaffold(
-        contentWindowInsets = WindowInsets(0),
-        containerColor = MaterialTheme.colorScheme.background,
-        topBar = {
-            ProfileTopAppBar(onNavigateBack = onNavigateBack)
-        }
-    ) { padding ->
-        LazyColumn(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(padding),
-            contentPadding = PaddingValues(IMFITSpacing.screenHorizontal),
-            verticalArrangement = Arrangement.spacedBy(IMFITSpacing.lg)
-        ) {
-
-            if (state.isLoading) {
-                item { ShimmerProfileHeader() }
-                item { SectionTitle(title = stringResource(R.string.profile_section_info)) }
-                item { ShimmerInfoCard(itemCount = 3) }
-            } else {
-                item {
-                    ProfileHeaderCard(
-                        name = state.userName,
-                        email = state.userEmail,
-                        profilePhotoUri = state.userProfilePhotoUri
-                    )
-                }
-
-                item {
-                    SectionTitle(title = stringResource(R.string.profile_section_info))
-                }
-
-                item {
-                    Card(
-                        modifier = Modifier.fillMaxWidth(),
-                        shape = IMFITShapes.Card,
-                        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
-                        elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
-                    ) {
-                        Column {
-                            ProfileInfoItem(
-                                icon = Symbols.Default.Person,
-                                label = stringResource(R.string.label_fullname),
-                                value = state.userName
-                            )
-                            ProfileInfoItem(
-                                icon = Symbols.Default.Email,
-                                label = stringResource(R.string.label_email),
-                                value = state.userEmail
-                            )
-                            ProfileInfoItem(
-                                icon = Symbols.Default.Cake,
-                                label = stringResource(R.string.label_date_of_birth),
-                                value = state.userBirthDate
-                                    ?: stringResource(R.string.placeholder_dash),
-                                showDivider = false
-                            )
-                        }
-                    }
-                }
-            }
-
-            // Settings Section
-            item {
-                SectionTitle(title = stringResource(R.string.profile_section_settings))
-            }
-
-            item {
-                Card(
-                    modifier = Modifier.fillMaxWidth(),
-                    shape = IMFITShapes.Card,
-                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
-                    elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
-                ) {
-                    Column {
-                        // Dark Mode Toggle
-                        SettingsToggleItem(
-                            icon = Symbols.Default.DarkMode,
-                            title = stringResource(R.string.settings_dark_mode),
-                            subtitle = if (isDarkMode) stringResource(R.string.settings_dark_mode_on) else stringResource(
-                                R.string.settings_dark_mode_off
-                            ),
-                            content = {
-                                IMFITThemeSwitch(
-                                    isDarkMode = isDarkMode,
-                                    onToggle = onToggleTheme
-                                )
-                            }
-                        )
-
-                        // Language Toggle
-                        SettingsToggleItem(
-                            icon = Symbols.Default.Language,
-                            title = stringResource(R.string.settings_language),
-                            subtitle = if (isIndonesian) stringResource(R.string.settings_language_id) else stringResource(
-                                R.string.settings_language_en
-                            ),
-                            showDivider = false,
-                            content = {
-                                IMFITLanguageSwitch(
-                                    isIndonesian = isIndonesian,
-                                    onToggle = onToggleLanguage
-                                )
-                            }
-                        )
-                    }
-                }
-            }
-
-            // Logout Section
-            item {
-                Spacer(modifier = Modifier.height(IMFITSpacing.md))
-            }
-
-            item {
-                Card(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .clickable {
-                            viewModel.logout(onLogout)
-                        },
-                    shape = IMFITShapes.Card,
-                    colors = CardDefaults.cardColors(
-                        containerColor = DeletePink.copy(alpha = 0.1f)
-                    )
-                ) {
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(IMFITSpacing.cardPadding),
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.Center
-                    ) {
-                        Icon(
-                            imageVector = Symbols.AutoMirrored.Filled.ExitToApp,
-                            contentDescription = null,
-                            tint = DeletePink,
-                            modifier = Modifier.size(IMFITSizes.iconMd)
-                        )
-                        Spacer(modifier = Modifier.width(IMFITSpacing.sm))
-                        Text(
-                            text = stringResource(R.string.action_logout),
-                            style = MaterialTheme.typography.titleMedium,
-                            fontWeight = FontWeight.SemiBold,
-                            color = DeletePink
-                        )
-                    }
-                }
-            }
-
-            item { Spacer(modifier = Modifier.height(IMFITSpacing.huge)) }
-        }
-    }
+    ProfileScreenContent(
+        state = state,
+        isDarkMode = isDarkMode,
+        isIndonesian = isIndonesian,
+        onNavigateBack = onNavigateBack,
+        onLogout = { viewModel.logout(onLogout) },
+        onToggleTheme = onToggleTheme,
+        onToggleLanguage = onToggleLanguage,
+        onRetry = viewModel::loadData
+    )
 }
 
-@OptIn(ExperimentalMaterial3Api::class)
+/** One renderer shared by the route, previews and synthetic UI fixtures. */
 @Composable
-private fun ProfileScreenContent(
-    userName: String,
-    userEmail: String,
-    userBirthDate: String?,
-    userProfilePhotoUri: String?,
+internal fun ProfileScreenContent(
+    state: ProgressState,
     isDarkMode: Boolean,
     isIndonesian: Boolean,
-    isLoading: Boolean,
     onNavigateBack: () -> Unit,
     onLogout: () -> Unit,
     onToggleTheme: () -> Unit,
-    onToggleLanguage: () -> Unit
+    onToggleLanguage: () -> Unit,
+    onRetry: () -> Unit,
+    modifier: Modifier = Modifier
 ) {
+    val colors = IMFITColors.training
+    val presentation = profileDataPresentation(state)
+    val locale = LocalConfiguration.current.locales[0] ?: Locale.ROOT
+    val missingValue = stringResource(R.string.profile_missing_value)
     Scaffold(
-        contentWindowInsets = WindowInsets(0),
-        containerColor = MaterialTheme.colorScheme.background,
-        topBar = {
-            ProfileTopAppBar(onNavigateBack = onNavigateBack)
-        }
+        modifier = modifier,
+        containerColor = colors.background,
+        contentWindowInsets = WindowInsets.navigationBars,
+        topBar = { RoutineAppBar(stringResource(R.string.title_profile), onNavigateBack) }
     ) { padding ->
         LazyColumn(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(padding),
-            contentPadding = PaddingValues(IMFITSpacing.screenHorizontal),
-            verticalArrangement = Arrangement.spacedBy(IMFITSpacing.lg)
+            Modifier.fillMaxSize().padding(padding).consumeWindowInsets(padding).testTag("profile_list"),
+            contentPadding = PaddingValues(
+                start = IMFITSpacing.screenHorizontal, end = IMFITSpacing.screenHorizontal,
+                top = IMFITSpacing.headerContentGap,
+                bottom = IMFITSpacing.xxxl
+            ),
+            verticalArrangement = Arrangement.spacedBy(IMFITSpacing.sectionSpacing)
         ) {
-            if (isLoading) {
-                item { ShimmerProfileHeader() }
-                item { SectionTitle(title = stringResource(R.string.profile_section_info)) }
-                item { ShimmerInfoCard(itemCount = 3) }
-            } else {
-                item {
-                    ProfileHeaderCard(
-                        name = userName,
-                        email = userEmail,
-                        profilePhotoUri = userProfilePhotoUri
-                    )
-                }
-
-                item {
-                    SectionTitle(title = stringResource(R.string.profile_section_info))
-                }
-
-                item {
-                    Card(
-                        modifier = Modifier.fillMaxWidth(),
-                        shape = IMFITShapes.Card,
-                        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
-                        elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
-                    ) {
-                        Column {
-                            ProfileInfoItem(
-                                icon = Symbols.Default.Person,
-                                label = stringResource(R.string.label_fullname),
-                                value = userName
-                            )
-                            ProfileInfoItem(
-                                icon = Symbols.Default.Email,
-                                label = stringResource(R.string.label_email),
-                                value = userEmail
-                            )
-                            ProfileInfoItem(
-                                icon = Symbols.Default.Cake,
-                                label = stringResource(R.string.label_date_of_birth),
-                                value = userBirthDate ?: stringResource(R.string.placeholder_dash),
-                                showDivider = false
-                            )
-                        }
-                    }
+            if (presentation != ProfileDataPresentation.Unavailable) {
+                item(key = "identity") {
+                    if (presentation == ProfileDataPresentation.Loading) ProfileIdentityLoading()
+                    else ProfileIdentity(state)
                 }
             }
-
-            item {
-                SectionTitle(title = stringResource(R.string.profile_section_settings))
-            }
-
-            item {
-                Card(
-                    modifier = Modifier.fillMaxWidth(),
-                    shape = IMFITShapes.Card,
-                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
-                    elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
-                ) {
-                    Column {
-                        SettingsToggleItem(
-                            icon = Symbols.Default.DarkMode,
-                            title = stringResource(R.string.settings_dark_mode),
-                            subtitle = if (isDarkMode) stringResource(R.string.settings_dark_mode_on) else stringResource(R.string.settings_dark_mode_off),
-                            content = {
-                                IMFITThemeSwitch(
-                                    isDarkMode = isDarkMode,
-                                    onToggle = onToggleTheme
-                                )
-                            }
-                        )
-
-                        SettingsToggleItem(
-                            icon = Symbols.Default.Language,
-                            title = stringResource(R.string.settings_language),
-                            subtitle = if (isIndonesian) stringResource(R.string.settings_language_id) else stringResource(R.string.settings_language_en),
-                            showDivider = false,
-                            content = {
-                                IMFITLanguageSwitch(
-                                    isIndonesian = isIndonesian,
-                                    onToggle = onToggleLanguage
-                                )
-                            }
+            item(key = "information") {
+                ProfileSection(stringResource(R.string.profile_information_title)) {
+                    when (presentation) {
+                        ProfileDataPresentation.Loading -> ProfileInformationLoading()
+                        ProfileDataPresentation.Unavailable -> ProfileLoadFailure(onRetry)
+                        ProfileDataPresentation.Ready -> ProfileInformation(
+                            state.userName.ifBlank { stringResource(R.string.progress_overview_guest) },
+                            state.userEmail.ifBlank { missingValue },
+                            formatProfileBirthDate(state.userBirthDate, locale, missingValue)
                         )
                     }
                 }
             }
-
-            item {
-                Spacer(modifier = Modifier.height(IMFITSpacing.md))
-            }
-
-            item {
-                Card(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .clickable { onLogout() },
-                    shape = IMFITShapes.Card,
-                    colors = CardDefaults.cardColors(
-                        containerColor = DeletePink.copy(alpha = 0.1f)
-                    )
-                ) {
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(IMFITSpacing.cardPadding),
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.Center
-                    ) {
-                        Icon(
-                            imageVector = Symbols.AutoMirrored.Filled.ExitToApp,
-                            contentDescription = null,
-                            tint = DeletePink,
-                            modifier = Modifier.size(IMFITSizes.iconMd)
-                        )
-                        Spacer(modifier = Modifier.width(IMFITSpacing.sm))
-                        Text(
-                            text = stringResource(R.string.action_logout),
-                            style = MaterialTheme.typography.titleMedium,
-                            fontWeight = FontWeight.SemiBold,
-                            color = DeletePink
-                        )
-                    }
+            item(key = "preferences") {
+                ProfileSection(stringResource(R.string.profile_preferences_title)) {
+                    ProfilePreferences(isDarkMode, isIndonesian, onToggleTheme, onToggleLanguage)
                 }
             }
-
-            item { Spacer(modifier = Modifier.height(IMFITSpacing.huge)) }
-        }
-    }
-}
-
-@OptIn(ExperimentalMaterial3Api::class)
-@Composable
-private fun ProfileTopAppBar(
-    onNavigateBack: () -> Unit
-) {
-    TopAppBar(
-        modifier = Modifier.windowInsetsPadding(WindowInsets.statusBars),
-        title = {
-            Text(
-                text = stringResource(R.string.title_profile),
-                style = MaterialTheme.typography.titleLarge,
-                fontWeight = FontWeight.Bold,
-                color = MaterialTheme.colorScheme.onSurface
-            )
-        },
-        navigationIcon = {
-            IconButton(onClick = onNavigateBack) {
-                Icon(
-                    imageVector = Symbols.AutoMirrored.Filled.ArrowBack,
-                    contentDescription = stringResource(R.string.action_back),
-                    tint = MaterialTheme.colorScheme.onSurface
-                )
-            }
-        },
-        colors = TopAppBarDefaults.topAppBarColors(
-            containerColor = MaterialTheme.colorScheme.surface,
-            scrolledContainerColor = MaterialTheme.colorScheme.surface,
-            navigationIconContentColor = MaterialTheme.colorScheme.onSurface,
-            titleContentColor = MaterialTheme.colorScheme.onSurface
-        ),
-        windowInsets = WindowInsets(0)
-    )
-}
-
-@Composable
-private fun ProfileHeaderCard(
-    name: String,
-    email: String,
-    profilePhotoUri: String?
-) {
-    Card(
-        modifier = Modifier
-            .fillMaxWidth()
-            .shadow(8.dp, IMFITShapes.Card, spotColor = Primary.copy(alpha = 0.15f)),
-        shape = IMFITShapes.Card,
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
-    ) {
-        Box(
-            modifier = Modifier
-                .fillMaxWidth()
-                .background(
-                    com.diajarkoding.imfit.theme.IMFITGradients.surfaceWash
-                )
-        ) {
-            Column(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(IMFITSpacing.xl),
-                horizontalAlignment = Alignment.CenterHorizontally
-            ) {
-                // Profile Photo with border
-                Box(
-                    modifier = Modifier
-                        .size(100.dp)
-                        .shadow(6.dp, CircleShape)
-                        .border(3.dp, Primary, CircleShape),
-                    contentAlignment = Alignment.Center
-                ) {
-                    IMFITProfilePhoto(
-                        profilePhotoUri = profilePhotoUri,
-                        size = 100.dp
-                    )
-                }
-
-                Spacer(modifier = Modifier.height(IMFITSpacing.lg))
-
-                Text(
-                    text = name,
-                    style = MaterialTheme.typography.headlineSmall,
-                    fontWeight = FontWeight.Bold,
-                    color = MaterialTheme.colorScheme.onSurface
-                )
-
-                Spacer(modifier = Modifier.height(IMFITSpacing.xs))
-
-                Text(
-                    text = email,
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-            }
+            item(key = "logout") { ProfileLogout(onLogout) }
         }
     }
 }
 
 @Composable
-private fun SectionTitle(title: String) {
-    Text(
-        text = title,
-        style = MaterialTheme.typography.titleMedium,
-        fontWeight = FontWeight.Bold,
-        color = MaterialTheme.colorScheme.onSurface,
-        modifier = Modifier.padding(vertical = IMFITSpacing.xs)
-    )
-}
-
-@Composable
-private fun ProfileInfoItem(
-    icon: ImageVector,
-    label: String,
-    value: String,
-    showDivider: Boolean = true
-) {
-    Column {
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(IMFITSpacing.cardPadding),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Box(
-                modifier = Modifier
-                    .size(40.dp)
-                    .clip(CircleShape)
-                    .background(MaterialTheme.colorScheme.primaryContainer),
-                contentAlignment = Alignment.Center
-            ) {
-                Icon(
-                    imageVector = icon,
-                    contentDescription = null,
-                    tint = MaterialTheme.colorScheme.onPrimaryContainer,
-                    modifier = Modifier.size(20.dp)
-                )
-            }
-            Spacer(modifier = Modifier.width(IMFITSpacing.md))
-            Column(modifier = Modifier.weight(1f)) {
-                Text(
-                    text = label,
-                    style = MaterialTheme.typography.labelMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-                Spacer(modifier = Modifier.height(2.dp))
-                Text(
-                    text = value,
-                    style = MaterialTheme.typography.bodyLarge,
-                    fontWeight = FontWeight.Medium,
-                    color = MaterialTheme.colorScheme.onSurface
-                )
-            }
-        }
-        if (showDivider) {
-            Box(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(start = 64.dp)
-                    .height(1.dp)
-                    .background(MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f))
-            )
-        }
+private fun ProfileSection(title: String, content: @Composable () -> Unit) {
+    androidx.compose.foundation.layout.Column(verticalArrangement = Arrangement.spacedBy(IMFITSpacing.md)) {
+        Text(title, Modifier.semantics { heading() }, color = IMFITColors.training.text,
+            style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.SemiBold)
+        content()
     }
 }
 
-@Preview(showBackground = true, showSystemUi = true)
+@Preview(showBackground = true, widthDp = 412, heightDp = 900, locale = "in")
 @Composable
-private fun ProfileScreenPreviewLight() {
-    com.diajarkoding.imfit.theme.IMFITTheme(darkTheme = false) {
+private fun ProfilePreviewLight() = ProfilePreview(false)
+
+@Preview(showBackground = true, widthDp = 412, heightDp = 900, locale = "in")
+@Composable
+private fun ProfilePreviewDark() = ProfilePreview(true)
+
+@Preview(showBackground = true, widthDp = 320, heightDp = 1000, fontScale = 1.3f, locale = "in")
+@Composable
+private fun ProfilePreviewCompact() = ProfilePreview(false, longName = true)
+
+@Preview(showBackground = true, widthDp = 412, heightDp = 900, locale = "in")
+@Composable
+private fun ProfilePreviewLoading() = ProfilePreview(false, state = ProgressState())
+
+@Preview(showBackground = true, widthDp = 412, heightDp = 900, locale = "in")
+@Composable
+private fun ProfilePreviewFailure() = ProfilePreview(false, state = ProgressState(isLoading = false, hasError = true))
+
+@Composable
+private fun ProfilePreview(dark: Boolean, longName: Boolean = false, state: ProgressState? = null, indonesian: Boolean = true) {
+    IMFITTheme(darkTheme = dark) {
         ProfileScreenContent(
-            userName = "John Doe",
-            userEmail = "john@example.com",
-            userBirthDate = "15 Januari 1990",
-            userProfilePhotoUri = null,
-            isDarkMode = false,
-            isIndonesian = true,
-            isLoading = false,
-            onNavigateBack = {},
-            onLogout = {},
-            onToggleTheme = {},
-            onToggleLanguage = {}
+            state ?: ProgressState(userName = if (longName) "Alex Pratama Wijayakusuma" else "Alex Pratama",
+                userEmail = "alex@example.com", userBirthDate = "1998-01-15", isLoading = false),
+            dark, indonesian, {}, {}, {}, {}, {}
         )
     }
 }
 
-@Preview(showBackground = true, showSystemUi = true)
+@Preview(showBackground = true, widthDp = 412, heightDp = 900, locale = "en")
 @Composable
-private fun ProfileScreenPreviewDark() {
-    com.diajarkoding.imfit.theme.IMFITTheme(darkTheme = true) {
-        ProfileScreenContent(
-            userName = "John Doe",
-            userEmail = "john@example.com",
-            userBirthDate = "15 Januari 1990",
-            userProfilePhotoUri = null,
-            isDarkMode = true,
-            isIndonesian = true,
-            isLoading = false,
-            onNavigateBack = {},
-            onLogout = {},
-            onToggleTheme = {},
-            onToggleLanguage = {}
-        )
-    }
-}
+private fun ProfilePreviewEnglish() = ProfilePreview(false, indonesian = false)
 
-@Preview(showBackground = true, showSystemUi = true)
+@Preview(showBackground = true, widthDp = 412, heightDp = 900, locale = "in")
 @Composable
-private fun ProfileScreenPreviewLoading() {
-    com.diajarkoding.imfit.theme.IMFITTheme(darkTheme = false) {
-        ProfileScreenContent(
-            userName = "",
-            userEmail = "",
-            userBirthDate = null,
-            userProfilePhotoUri = null,
-            isDarkMode = false,
-            isIndonesian = true,
-            isLoading = true,
-            onNavigateBack = {},
-            onLogout = {},
-            onToggleTheme = {},
-            onToggleLanguage = {}
-        )
-    }
-}
-
-@Composable
-private fun SettingsToggleItem(
-    icon: ImageVector,
-    title: String,
-    subtitle: String,
-    showDivider: Boolean = true,
-    content: @Composable () -> Unit
-) {
-    Column {
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(IMFITSpacing.cardPadding),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Box(
-                modifier = Modifier
-                    .size(40.dp)
-                    .clip(CircleShape)
-                    .background(MaterialTheme.colorScheme.primaryContainer),
-                contentAlignment = Alignment.Center
-            ) {
-                Icon(
-                    imageVector = icon,
-                    contentDescription = null,
-                    tint = MaterialTheme.colorScheme.onPrimaryContainer,
-                    modifier = Modifier.size(20.dp)
-                )
-            }
-            Spacer(modifier = Modifier.width(IMFITSpacing.md))
-            Column(modifier = Modifier.weight(1f)) {
-                Text(
-                    text = title,
-                    style = MaterialTheme.typography.bodyLarge,
-                    fontWeight = FontWeight.Medium,
-                    color = MaterialTheme.colorScheme.onSurface
-                )
-                Spacer(modifier = Modifier.height(2.dp))
-                Text(
-                    text = subtitle,
-                    style = MaterialTheme.typography.labelMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-            }
-            content()
-        }
-        if (showDivider) {
-            Box(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(start = 64.dp)
-                    .height(1.dp)
-                    .background(MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f))
-            )
-        }
-    }
-}
+private fun ProfilePreviewOptionalEmpty() = ProfilePreview(false,
+    state = ProgressState(userName = "Alex Pratama", userEmail = "alex@example.com", isLoading = false))

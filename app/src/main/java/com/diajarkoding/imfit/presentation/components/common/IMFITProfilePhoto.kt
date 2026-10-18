@@ -23,6 +23,7 @@ import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
@@ -45,12 +46,16 @@ private const val TAG = "IMFITProfilePhoto"
  * @param profilePhotoUri The URI of the profile photo, or null to show placeholder
  * @param size The size of the profile photo
  * @param modifier Optional modifier for additional styling
+ * @param placeholderBackground Optional surface override; existing callers keep the brand gradient
+ * @param placeholderTint Foreground for fallback/loading on that surface
  */
 @Composable
 fun IMFITProfilePhoto(
     profilePhotoUri: String?,
     size: Dp = 64.dp,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    placeholderBackground: Brush? = null,
+    placeholderTint: Color = Color.White
 ) {
     val context = LocalContext.current
     
@@ -82,7 +87,7 @@ fun IMFITProfilePhoto(
             .clip(CircleShape)
             .background(
                 if (showPlaceholder || isLoading) {
-                    com.diajarkoding.imfit.theme.IMFITGradients.brandLinear
+                    placeholderBackground ?: com.diajarkoding.imfit.theme.IMFITGradients.brandLinear
                 } else {
                     Brush.linearGradient(listOf(Color.Transparent, Color.Transparent))
                 }
@@ -143,7 +148,7 @@ fun IMFITProfilePhoto(
         if (isLoading && !hasLoadedSuccessfully && !profilePhotoUri.isNullOrBlank()) {
             CircularProgressIndicator(
                 modifier = Modifier.size(size * 0.3f),
-                color = Color.White,
+                color = placeholderTint,
                 strokeWidth = 2.dp
             )
         }
@@ -153,8 +158,8 @@ fun IMFITProfilePhoto(
             Icon(
                 imageVector = Symbols.Default.Person,
                 contentDescription = null,
-                tint = Color.White,
-                modifier = Modifier.size(size * 0.5f)
+                tint = placeholderTint,
+                modifier = Modifier.size(size * 0.5f).testTag("profile_photo_placeholder")
             )
         }
     }
@@ -200,4 +205,3 @@ private fun isValidImageUrl(url: String?): Boolean {
     
     return false
 }
-

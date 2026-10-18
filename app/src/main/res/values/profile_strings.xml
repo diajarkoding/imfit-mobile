@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="profile_information_title">Profile information</string>
+    <string name="profile_preferences_title">Preferences</string>
+    <string name="profile_name_label">Full name</string>
+    <string name="profile_birth_date_label">Date of birth</string>
+    <string name="profile_dark_mode_label">Dark mode</string>
+    <string name="profile_error_title">Profile couldn’t be loaded</string>
+    <string name="profile_error_message">Try again to display your account information. You can still use settings.</string>
+    <string name="profile_retry_label">Try again</string>
+    <string name="profile_loading">Loading profile</string>
+    <string name="profile_logout_label">Log out</string>
+    <string name="profile_missing_value" translatable="false">—</string>
+    <string name="profile_option_id" translatable="false">ID</string>
+    <string name="profile_option_en" translatable="false">EN</string>
+</resources>

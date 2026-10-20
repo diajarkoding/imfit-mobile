@@ -53,6 +53,18 @@ class ExerciseBrowserViewModel @Inject constructor(
                 val results = records.distinctBy { it.id }.sortedBy { it.id }
                 _state.value = _state.value.copy(results = results,
                     exercisesByCategory = results.groupBy { it.muscleCategory }, isLoading = false)
+
+                if (query.isEmpty()) {
+                    val refreshed = exerciseRepository.refreshExercises()
+                    if (refreshed) {
+                        val freshRecords = exerciseRepository.getAllExercises()
+                        val freshResults = freshRecords.distinctBy { it.id }.sortedBy { it.id }
+                        _state.value = _state.value.copy(
+                            results = freshResults,
+                            exercisesByCategory = freshResults.groupBy { it.muscleCategory }
+                        )
+                    }
+                }
             } catch (e: CancellationException) {
                 throw e
             } catch (_: Exception) {

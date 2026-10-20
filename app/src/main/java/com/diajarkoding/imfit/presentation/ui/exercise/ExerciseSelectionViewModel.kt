@@ -69,6 +69,14 @@ class ExerciseSelectionViewModel @Inject constructor(
                 _state.update { state -> state.copy(allExercises = exercises, routineName = draftName ?: template?.name.orEmpty(),
                     selectedExercises = state.selectedExercises.filter { selected -> exercises.any { it.id == selected.id } }, isLoading = false) }
                 applyFilters()
+
+                val refreshed = exerciseRepository.refreshExercises()
+                if (refreshed) {
+                    val freshExercises = exerciseRepository.getAllExercises().distinctBy { it.id }.filterNot { it.id in exclusions }
+                    _state.update { state -> state.copy(allExercises = freshExercises,
+                        selectedExercises = state.selectedExercises.filter { selected -> freshExercises.any { it.id == selected.id } }) }
+                    applyFilters()
+                }
             } catch (e: CancellationException) { throw e }
             catch (_: Exception) { _state.update { it.copy(isLoading = false, errorRes = R.string.routine_catalog_failed) } }
         }

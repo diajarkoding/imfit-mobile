@@ -253,6 +253,8 @@ import com.diajarkoding.imfit.core.timer.RestTimerTrace
                   data = android.net.Uri.parse("imfit-rest://open-workout/${state.timerId}/${state.generation}")
                   putExtra(EXTRA_OPEN_WORKOUT, true)
                   putExtra(EXTRA_TEMPLATE_ID, state.templateId)
+                  putExtra(EXTRA_REST_TIMER_ID, state.timerId)
+                  putExtra(EXTRA_REST_GENERATION, state.generation)
               },
               PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE)
           val notification = NotificationCompat.Builder(context, NotificationChannels.REST_FINISHED_CHANNEL_ID)

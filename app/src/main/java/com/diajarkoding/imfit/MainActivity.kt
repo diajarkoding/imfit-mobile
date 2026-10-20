@@ -15,7 +15,10 @@ import androidx.compose.material3.Surface
 import androidx.compose.ui.Modifier
 import androidx.core.splashscreen.SplashScreen.Companion.installSplashScreen
 import com.diajarkoding.imfit.core.notification.WorkoutNotificationManager
+import com.diajarkoding.imfit.core.timer.RestTimerCoordinator
 import com.diajarkoding.imfit.data.auth.AuthDeepLinkHandler
+import androidx.lifecycle.lifecycleScope
+import kotlinx.coroutines.launch
 import com.diajarkoding.imfit.presentation.navigation.NavGraph
 import com.diajarkoding.imfit.theme.IMFITTheme
 import com.diajarkoding.imfit.theme.LocaleManager
@@ -27,6 +30,7 @@ import javax.inject.Inject
 class MainActivity : ComponentActivity() {
 
     @Inject lateinit var authDeepLinkHandler: AuthDeepLinkHandler
+    @Inject lateinit var timer: RestTimerCoordinator
 
     private val themeViewModel: ThemeViewModel by viewModels()
 
@@ -105,6 +109,25 @@ class MainActivity : ComponentActivity() {
     
     private fun handleNotificationIntent(intent: Intent?) {
         if (intent?.getBooleanExtra(WorkoutNotificationManager.EXTRA_OPEN_WORKOUT, false) == true) {
+            val timerId = intent.getStringExtra(WorkoutNotificationManager.EXTRA_REST_TIMER_ID)
+                ?: intent.data?.let { uri ->
+                    if (uri.scheme == "imfit-rest" && uri.host == "open-workout") uri.pathSegments.getOrNull(0) else null
+                }
+            val generation = intent.getLongExtra(WorkoutNotificationManager.EXTRA_REST_GENERATION, -1L).takeIf { it != -1L }
+                ?: intent.data?.let { uri ->
+                    if (uri.scheme == "imfit-rest" && uri.host == "open-workout") uri.pathSegments.getOrNull(1)?.toLongOrNull() else null
+                } ?: -1L
+
+            if (timerId != null && generation != -1L) {
+                lifecycleScope.launch {
+                    try {
+                        timer.acknowledge(timerId, generation)
+                    } catch (e: Exception) {
+                        android.util.Log.w("MainActivity", "Failed to acknowledge rest timer: ${e.message}")
+                    }
+                }
+            }
+
             val templateId = intent.getStringExtra(WorkoutNotificationManager.EXTRA_TEMPLATE_ID)
             if (templateId != null) {
                 pendingWorkoutNavigation.value = true

@@ -6,6 +6,7 @@ import android.os.Bundle
 import android.view.WindowManager
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
+import androidx.activity.enableEdgeToEdge
 import androidx.activity.viewModels
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
@@ -67,6 +68,7 @@ class RestAlarmActivity : ComponentActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        enableEdgeToEdge()
         if (Build.VERSION.SDK_INT >= 27) {
             setShowWhenLocked(true)
             setTurnScreenOn(true)
@@ -107,12 +109,19 @@ class RestAlarmActivity : ComponentActivity() {
                         val themeState by theme.uiState.collectAsStateWithLifecycle()
                         IMFITTheme(darkTheme = themeState.isDarkMode) {
                             RestAlarmScreen(exerciseName = state.exerciseName, darkTheme = themeState.isDarkMode) {
+                                lifecycleScope.launch {
+                                    try {
+                                        timer.acknowledge(timerId, generation)
+                                    } catch (_: Exception) {}
+                                }
                                 startActivity(Intent(this@RestAlarmActivity, MainActivity::class.java).apply {
                                     flags = Intent.FLAG_ACTIVITY_SINGLE_TOP or Intent.FLAG_ACTIVITY_CLEAR_TOP
                                     putExtra(WorkoutNotificationManager.EXTRA_OPEN_WORKOUT, true)
                                     putExtra(WorkoutNotificationManager.EXTRA_TEMPLATE_ID, state.templateId)
+                                    putExtra(WorkoutNotificationManager.EXTRA_REST_TIMER_ID, timerId)
+                                    putExtra(WorkoutNotificationManager.EXTRA_REST_GENERATION, generation)
                                 })
-                                finish() // Navigation never acknowledges the timer.
+                                finish()
                             }
                         }
                     }

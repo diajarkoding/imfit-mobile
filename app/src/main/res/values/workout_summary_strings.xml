@@ -2,7 +2,7 @@
     <string name="summary_set_details_formatted">%1$s kg × %2$d reps</string>
     <string name="summary_screen_title">Session summary</string>
     <string name="summary_saved_title">Session complete!</string>
-    <string name="summary_volume_meaning">Volume includes all sets with entered values.</string>
+    <string name="summary_volume_meaning">Volume includes completed sets only.</string>
     <string name="summary_exercise_breakdown_title">Exercise breakdown</string>
     <string name="summary_no_completed_sets">No completed sets recorded.</string>
     <string name="summary_loading">Loading session summary…</string>

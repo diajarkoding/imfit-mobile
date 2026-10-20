@@ -11,7 +11,7 @@
 
     <!-- Overview -->
     <string name="active_session_sets_completed">Completed sets</string>
-    <string name="active_session_volume_meaning">Volume includes all sets with entered values.</string>
+    <string name="active_session_volume_meaning">Volume includes completed sets only.</string>
 
     <!-- State Banners -->
     <string name="active_session_pause_explanation">Session is paused. Resume to complete the next set.</string>

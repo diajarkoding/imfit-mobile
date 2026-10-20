@@ -11,7 +11,7 @@
 
     <!-- Overview -->
     <string name="active_session_sets_completed">Set selesai</string>
-    <string name="active_session_volume_meaning">Volume dari semua set berisi data.</string>
+    <string name="active_session_volume_meaning">Volume hanya menghitung set yang telah selesai.</string>
 
     <!-- State Banners -->
     <string name="active_session_pause_explanation">Sesi sedang dijeda. Lanjutkan untuk menyelesaikan set berikutnya.</string>

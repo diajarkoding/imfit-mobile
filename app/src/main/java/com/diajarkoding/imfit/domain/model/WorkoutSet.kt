@@ -7,5 +7,5 @@ data class WorkoutSet(
     val isCompleted: Boolean = false
 ) {
     val volume: Float
-        get() = weight * reps
+        get() = if (isCompleted) weight * reps else 0f
 }

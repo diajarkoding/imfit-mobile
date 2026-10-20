@@ -2,7 +2,7 @@
     <string name="summary_set_details_formatted">%1$s kg × %2$d repetisi</string>
     <string name="summary_screen_title">Ringkasan sesi</string>
     <string name="summary_saved_title">Sesi selesai!</string>
-    <string name="summary_volume_meaning">Volume mencakup semua set berisi data.</string>
+    <string name="summary_volume_meaning">Volume hanya menghitung set yang telah selesai.</string>
     <string name="summary_exercise_breakdown_title">Rincian gerakan</string>
     <string name="summary_no_completed_sets">Tidak ada set yang ditandai selesai.</string>
     <string name="summary_loading">Memuat ringkasan sesi…</string>

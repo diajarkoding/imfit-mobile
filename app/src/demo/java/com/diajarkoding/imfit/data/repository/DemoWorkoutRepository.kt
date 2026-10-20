@@ -102,9 +102,15 @@ class DemoWorkoutRepository @Inject constructor(
     }
 
     override suspend fun finishWorkout(): WorkoutLog? = lifecycleMutex.withLock {
+        val current = sessionMutex.withLock {
+            FakeWorkoutDataSource.getActiveSession()
+        } ?: return@withLock null
+
+        val hasAnyCompleted = current.exerciseLogs.any { log -> log.sets.any { it.isCompleted } }
+        if (!hasAnyCompleted) return@withLock null
+
         timerCleanup?.stop("WORKOUT_FINISHED")
         val workoutLog = sessionMutex.withLock {
-            val current = FakeWorkoutDataSource.getActiveSession() ?: return@withLock null
             if (!terminalSessions.add(current.id)) return@withLock null
             FakeWorkoutDataSource.finishWorkout()
         }

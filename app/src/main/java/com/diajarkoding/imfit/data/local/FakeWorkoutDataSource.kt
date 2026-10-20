@@ -261,15 +261,22 @@ object FakeWorkoutDataSource {
     fun finishWorkout(): WorkoutLog? {
         val session = activeSession ?: return null
 
+        val sanitizedLogs = session.exerciseLogs.mapNotNull { log ->
+            val completed = log.sets.filter { it.isCompleted }
+            if (completed.isNotEmpty()) log.copy(sets = completed) else null
+        }
+        if (sanitizedLogs.isEmpty()) return null
+
+        val sanitizedSession = session.copy(exerciseLogs = sanitizedLogs)
         val workoutLog = WorkoutLog(
             id = "log_${System.currentTimeMillis()}",
             userId = FakeUserDataSource.getCurrentUser()?.id ?: "unknown",
-            templateName = session.templateName,
-            date = session.startTime,
-            startTime = session.startTime,
+            templateName = sanitizedSession.templateName,
+            date = sanitizedSession.startTime,
+            startTime = sanitizedSession.startTime,
             endTime = System.currentTimeMillis(),
-            totalVolume = session.totalVolume,
-            exerciseLogs = session.exerciseLogs
+            totalVolume = sanitizedSession.totalVolume,
+            exerciseLogs = sanitizedLogs
         )
 
         workoutLogs.add(0, workoutLog)

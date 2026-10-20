@@ -170,16 +170,15 @@ class ActiveWorkoutViewModel @Inject constructor(
             val userId = authRepository.getLocalUserId() ?: return session
             
             val updatedLogs = session.exerciseLogs.map { log ->
-                // Get per-set weights from local Room database
-                val lastWeights = workoutRepository.getLastWeightsForExercise(log.exercise.id, userId)
-                android.util.Log.d("ActiveWorkoutVM", "Prefill ${log.exercise.name}: lastWeights=$lastWeights")
+                val lastPerformance = workoutRepository.getLastPerformanceForExercise(log.exercise.id, userId)
+                android.util.Log.d("ActiveWorkoutVM", "Prefill ${log.exercise.name}: lastPerformance=$lastPerformance")
                 
-                if (lastWeights.isNotEmpty()) {
+                if (lastPerformance.isNotEmpty()) {
                     val newSets = log.sets.map { set ->
-                        val lastWeight = lastWeights[set.setNumber]
-                        if (lastWeight != null && set.weight == 0f) {
-                            android.util.Log.d("ActiveWorkoutVM", "  Set ${set.setNumber}: prefilling weight=$lastWeight")
-                            set.copy(weight = lastWeight)
+                        val last = lastPerformance[set.setNumber]
+                        if (last != null && !set.isCompleted && set.weight == 0f) {
+                            android.util.Log.d("ActiveWorkoutVM", "  Set ${set.setNumber}: prefilling weight=${last.first}, reps=${last.second}")
+                            set.copy(weight = last.first, reps = last.second, isCompleted = false)
                         } else {
                             set
                         }
@@ -194,7 +193,11 @@ class ActiveWorkoutViewModel @Inject constructor(
                 current.copy(exerciseLogs = current.exerciseLogs.map { log ->
                     val prefilled = updatedLogs.find { it.exercise.id == log.exercise.id }
                     log.copy(sets = log.sets.map { set ->
-                        if (!set.isCompleted && set.weight == 0f) prefilled?.sets?.find { it.setNumber == set.setNumber }?.let { set.copy(weight = it.weight) } ?: set else set
+                        if (!set.isCompleted && set.weight == 0f) {
+                            prefilled?.sets?.find { it.setNumber == set.setNumber }?.let {
+                                set.copy(weight = it.weight, reps = it.reps, isCompleted = false)
+                            } ?: set
+                        } else set
                     })
                 })
             } ?: session
@@ -366,8 +369,20 @@ class ActiveWorkoutViewModel @Inject constructor(
                 val additions = exerciseIds.distinct().mapNotNull { id ->
                     exerciseRepository.getExerciseById(id)?.let { exercise ->
                         val config = TemplateExercise(exercise)
-                        val weights = workoutRepository.getLastWeightsForExercise(id, userId)
-                        ExerciseLog(exercise, (1..config.sets).map { WorkoutSet(it, weights[it] ?: 0f, config.reps, false) }, config.restSeconds)
+                        val lastPerf = workoutRepository.getLastPerformanceForExercise(id, userId)
+                        ExerciseLog(
+                            exercise = exercise,
+                            sets = (1..config.sets).map { setNumber ->
+                                val last = lastPerf[setNumber]
+                                WorkoutSet(
+                                    setNumber = setNumber,
+                                    weight = last?.first ?: 0f,
+                                    reps = last?.second ?: config.reps,
+                                    isCompleted = false
+                                )
+                            },
+                            restSeconds = config.restSeconds
+                        )
                     }
                 }
                 workoutRepository.mutateActiveSession(sessionId) { it.appendExercises(additions) }?.let(::publishSession)

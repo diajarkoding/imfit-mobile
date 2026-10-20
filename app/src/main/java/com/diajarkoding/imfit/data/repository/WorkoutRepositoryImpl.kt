@@ -425,10 +425,28 @@ class WorkoutRepositoryImpl @Inject constructor(
         } }
 
     override suspend fun finishWorkout(): WorkoutLog? = lifecycleMutex.withLock lifecycle@{
-        timerCleanup?.stop("WORKOUT_FINISHED")
-        val session = sessionMutex.withLock {
-            getActiveSessionForTimer()?.also { terminalSessions.add(it.id) }
+        val rawSession = sessionMutex.withLock {
+            getActiveSessionForTimer()
         } ?: return@lifecycle null
+
+        val sanitizedExerciseLogs = rawSession.exerciseLogs.mapNotNull { exerciseLog ->
+            val completedSets = exerciseLog.sets.filter { it.isCompleted }
+            if (completedSets.isNotEmpty()) {
+                exerciseLog.copy(sets = completedSets)
+            } else {
+                null
+            }
+        }
+
+        if (sanitizedExerciseLogs.isEmpty()) {
+            return@lifecycle null
+        }
+
+        timerCleanup?.stop("WORKOUT_FINISHED")
+        sessionMutex.withLock {
+            terminalSessions.add(rawSession.id)
+        }
+        val session = rawSession.copy(exerciseLogs = sanitizedExerciseLogs)
         val endTime = System.currentTimeMillis()
 
         try {
@@ -437,8 +455,10 @@ class WorkoutRepositoryImpl @Inject constructor(
                     ?: return@withTransaction null
                 val workoutLogId = session.id
                 val now = endTime
+                val totalVolume = session.totalVolume
+                val totalSets = session.totalCompletedSets
                 val totalReps = session.exerciseLogs.sumOf { log ->
-                    log.sets.filter { it.isCompleted }.sumOf { it.reps }
+                    log.sets.sumOf { it.reps }
                 }
 
                 val workoutLogEntity = WorkoutLogEntity(
@@ -449,8 +469,8 @@ class WorkoutRepositoryImpl @Inject constructor(
                     date = session.startTime,
                     startTime = session.startTime,
                     endTime = endTime,
-                    totalVolume = session.totalVolume,
-                    totalSets = session.totalCompletedSets,
+                    totalVolume = totalVolume,
+                    totalSets = totalSets,
                     totalReps = totalReps,
                     syncStatus = SyncStatus.PENDING_SYNC.name,
                     pendingOperation = PendingOperation.CREATE.name,
@@ -466,8 +486,8 @@ class WorkoutRepositoryImpl @Inject constructor(
                         muscleCategory = exerciseLog.exercise.muscleCategory.name,
                         orderIndex = index,
                         totalVolume = exerciseLog.totalVolume,
-                        totalSets = exerciseLog.sets.count { it.isCompleted },
-                        totalReps = exerciseLog.sets.filter { it.isCompleted }.sumOf { it.reps },
+                        totalSets = exerciseLog.sets.size,
+                        totalReps = exerciseLog.sets.sumOf { it.reps },
                         syncStatus = SyncStatus.PENDING_SYNC.name,
                         pendingOperation = PendingOperation.CREATE.name,
                         createdAt = now,
@@ -506,7 +526,7 @@ class WorkoutRepositoryImpl @Inject constructor(
                     date = session.startTime,
                     startTime = session.startTime,
                     endTime = endTime,
-                    totalVolume = session.totalVolume,
+                    totalVolume = totalVolume,
                     exerciseLogs = session.exerciseLogs
                 )
             } }
@@ -684,17 +704,24 @@ class WorkoutRepositoryImpl @Inject constructor(
     }
 
     /**
-     * Gets a map of set_number to weight from the last completed workout for an exercise.
-     * Uses local Room database for efficient per-set weight lookup.
+     * Gets a map of set_number to (weight, reps) from the last completed workout for an exercise.
+     * Uses local Room database for efficient per-set performance lookup.
      */
-    override suspend fun getLastWeightsForExercise(exerciseId: String, userId: String): Map<Int, Float> {
+    override suspend fun getLastPerformanceForExercise(
+        exerciseId: String,
+        userId: String
+    ): Map<Int, Pair<Float, Int>> {
         return try {
             val lastSets = workoutSetDao.getLastWorkoutSetsForExercise(exerciseId, userId)
-            lastSets.associate { it.setNumber to it.weight }
+            lastSets.associate { it.setNumber to (it.weight to it.reps) }
         } catch (e: Exception) {
-            Log.e("WorkoutRepository", "Error getting last weights for exercise: ${e.message}", e)
+            Log.e("WorkoutRepository", "Error getting last performance for exercise: ${e.message}", e)
             emptyMap()
         }
+    }
+
+    override suspend fun getLastWeightsForExercise(exerciseId: String, userId: String): Map<Int, Float> {
+        return getLastPerformanceForExercise(exerciseId, userId).mapValues { it.value.first }
     }
 
     companion object {

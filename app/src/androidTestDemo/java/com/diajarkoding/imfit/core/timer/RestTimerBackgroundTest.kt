@@ -205,10 +205,6 @@ class RestTimerBackgroundTest {
             assertNotEquals(finished.notification.deleteIntent, finished.notification.actions.first().actionIntent)
             assertFalse("Expected controlled audio instead of silent recovery", timer.state.value!!.audioSuppressed)
             withContext(Dispatchers.Main) { assertTrue(ports.runtime().isAlertPlaying()) }
-            finished.notification.contentIntent.send()
-            awaitCondition { InstrumentationRegistry.getInstrumentation().uiAutomation.rootInActiveWindow?.packageName == context.packageName }
-            assertEquals(TimerStatus.EXPIRED, timer.state.value?.status)
-            context.startActivity(Intent(Settings.ACTION_SETTINGS).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
             // Verify card and playback survive >60s; visible heads-up persistence still needs OEM testing.
             observeFor(65_000) {
                 assertEquals(TimerStatus.EXPIRED, timer.state.value?.status)
@@ -216,7 +212,11 @@ class RestTimerBackgroundTest {
             }
             assertTrue(manager.activeNotifications.any { it.id == NotificationChannels.REST_FINISHED_NOTIFICATION_ID })
             withContext(Dispatchers.Main) { assertTrue(ports.runtime().isAlertPlaying()) }
-            finished.notification.deleteIntent.send()
+            val device = androidx.test.uiautomator.UiDevice.getInstance(InstrumentationRegistry.getInstrumentation())
+            device.openNotification()
+            assertTrue(device.wait(androidx.test.uiautomator.Until.hasObject(androidx.test.uiautomator.By.text(exercise.name)), 5000))
+            device.findObject(androidx.test.uiautomator.By.text(exercise.name)).click()
+            awaitCondition { InstrumentationRegistry.getInstrumentation().uiAutomation.rootInActiveWindow?.packageName == context.packageName }
             withTimeout(5000) { while (timer.state.value?.status != TimerStatus.ACKNOWLEDGED) delay(50) }
             observeFor(1500) {
                 assertFalse(manager.activeNotifications.any { it.id == NotificationChannels.REST_FINISHED_NOTIFICATION_ID })

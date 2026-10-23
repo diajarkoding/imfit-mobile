@@ -3,10 +3,10 @@ name: imfit-ui-ux
 description: Designs, implements, and reviews IMFIT Android Jetpack Compose UI/UX using the existing redisgn design system and state contracts. Use for redesigning unfinished screens, new screens, login/register, beranda/Home, gerakan/Exercises, Progres, rutinitas creation/editing, exercise pickers, shared components, themes, accessibility, and ID/EN UI copy. Do not use for backend-only, database migrations, sync algorithms, authentication policy, or rest-timer engine work.
 compatibility: Requires access to the IMFIT Kotlin/Jetpack Compose repository. Android SDK, Gradle, and ADB are needed only for applicable build/device verification. Tool permissions and skill discovery depend on the host agent.
 metadata:
-  version: "1.0.5"
+  version: "1.0.6"
   source-branch: "redisgn"
   source-commit: "3ec72efbf43dc8b749aa3e4ae413a4a0373d8fa7"
-  source-overlay: "Profile/scrim and UI polish; all page headers use an 8 dp content gap, Exercises avatar removed, 2026-10-19; see reference addenda"
+  source-overlay: "UI polish plus fix-bug 37bfdf9 working tree, 2026-10-20: reactive local UI, completed-set volume, target-aware prefill and system-native notifications; see state-contract addendum"
 ---
 
 # IMFIT UI/UX

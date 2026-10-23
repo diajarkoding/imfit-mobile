@@ -121,6 +121,28 @@ Jika desain baru bersinggungan dengan ActiveWorkout, baca source target dan regr
 `docs/IMFIT_REST_TIMER_REGRESSION_REPORT.md`.
 
 Pertahankan stable session/set IDs, mutation/revision/cancellation guards, dan pemisahan
-template/session/history. Countdown harus mengikuti state committed coordinator; jangan
-menulis durasi optimistic dari mockup, menduplikasi ticker, atau merombak AlarmManager/FGS.
-UI-only skill tidak berwenang mengubah auth lifecycle, recovery policy atau deadline.
+  template/session/history. Countdown harus mengikuti state committed coordinator; jangan
+  menulis durasi optimistic dari mockup, menduplikasi ticker, atau merombak AlarmManager/FGS.
+  UI-only skill tidak berwenang mengubah auth lifecycle, recovery policy atau deadline.
+
+## 7. Addendum fix-bug — 20 Oktober 2026
+
+Permintaan business/data terpisah dari redesign mengubah kontrak berikut. Ini bukan izin
+bagi tugas UI-only untuk mengubah sinkronisasi/migrasi/timer di kemudian hari.
+
+- Katalog/picker dan profil sekarang mengamati Room; jangan menambahkan cache snapshot
+  atau mengganti hasil kosong production dengan fixture demo. Query/filter/selection tetap
+  milik ViewModel. Refresh remote terkoaleskan pada route/foreground, bukan saat recomposition.
+- Home/Progres/Profil mengamati identitas owner lokal. Summary mengamati satu log. Editor
+  memperbarui source ketika bersih; source revision mereset field hanya saat source diadopsi,
+  bukan setiap ketikan. Refresh tidak boleh menimpa draft yang dirty atau snapshot sesi aktif.
+- Volume hanya completed sets. Input/auto-fill belum selesai tetap berkontribusi **0**.
+  Log akhir tidak memasukkan gerakan tanpa completed set maupun set belum selesai.
+- Auto-fill mengikuti exercise ID/owner dan target set/reps asal yang tepercaya. Target
+  berubah → default untuk gerakan itu; rename saja tidak membatalkan. Tambah set manual
+  memakai default target, bukan otomatis menyalin beban terakhir. Resume tidak mengisi ulang.
+- Notifikasi selesai: bodi membuka sesi sambil menghentikan alarm; Stop background saja.
+  Notifikasi native mengikuti tema Android, bukan toggle Compose. Pengaturan/dialog alarm
+  tidak diubah. Jangan mengganti surface native/custom background demi menyeragamkan tema.
+- Source/test/batas integrasi Supabase: [laporan enam issue](../../../IMFIT_FIX_BUG_SIX_ISSUES_REPORT.md).
+  Pengujian lokal/importer bukan bukti E2E dashboard Supabase atau persetujuan OEM.

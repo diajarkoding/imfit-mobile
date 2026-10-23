@@ -43,6 +43,7 @@ internal class SyncSafetyFixture private constructor() {
     val transactions = TransactionProbeExecutor()
     val insideTransaction = AtomicReference<BlockingProbe?>()
     val db = Room.inMemoryDatabaseBuilder(context, IMFITDatabase::class.java)
+        .addCallback(IMFITDatabase.REVISION_CALLBACK)
         .setTransactionExecutor(transactions)
         .setQueryCallback({ sql, _ ->
             if (sql.startsWith("INSERT", ignoreCase = true) && sql.contains("exercises")) {

@@ -14,7 +14,8 @@ class RemoteSnapshotImporterTest {
     private lateinit var db: IMFITDatabase
     private lateinit var importer: RemoteSnapshotImporter
     @Before fun setup() {
-        db = Room.inMemoryDatabaseBuilder(ApplicationProvider.getApplicationContext<Context>(), IMFITDatabase::class.java).build()
+        db = Room.inMemoryDatabaseBuilder(ApplicationProvider.getApplicationContext<Context>(), IMFITDatabase::class.java)
+            .addCallback(IMFITDatabase.REVISION_CALLBACK).build()
         importer = RemoteSnapshotImporter(db)
     }
     @After fun close() { db.close() }

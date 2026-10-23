@@ -13,17 +13,18 @@ internal data class LocalWorkoutSnapshot(
     val parent: WorkoutLogEntity,
     val exercises: List<ExerciseLogEntity>,
     val sets: List<WorkoutSetEntity>,
+    val revision: Long,
 )
 
 internal data class LocalTemplateSnapshot(
     val parent: WorkoutTemplateEntity,
     val exercises: List<TemplateExerciseEntity>,
+    val revision: Long,
 )
 
 /**
  * Capture a consistent, owner-scoped local graph in a short transaction; send outside the lock.
- * No flags are modified. Intentionally has no acknowledge(snapshot) API: full-content equality
- * cannot distinguish same-ms/operation ABA. A durable revision contract needs separate approval.
+ * Capture never changes flags. Acknowledgement compares durable mutation identity, not content/time.
  * Not a session fence: production callers must also hold SessionCommitGate around local access.
  */
 internal class AggregateSnapshotStore(private val database: IMFITDatabase) {
@@ -39,7 +40,7 @@ internal class AggregateSnapshotStore(private val database: IMFITDatabase) {
         check(exerciseIds.size == exercises.size && exercises.all { it.workoutLogId == id })
         check(sets.map { it.id }.toSet().size == sets.size)
         check(sets.all { set -> set.workoutLogId == id && exerciseIds[set.exerciseLogId]?.exerciseId == set.exerciseId })
-        LocalWorkoutSnapshot(parent, exercises, sets)
+        LocalWorkoutSnapshot(parent, exercises, sets, revision(ownerId, "workout", id))
     }
 
     suspend fun template(ownerId: String, id: String): LocalTemplateSnapshot? = database.withTransaction {
@@ -49,8 +50,35 @@ internal class AggregateSnapshotStore(private val database: IMFITDatabase) {
         val exercises = database.templateExerciseDao().getExercisesForTemplateList(id)
             .sortedWith(compareBy<TemplateExerciseEntity> { it.orderIndex }.thenBy { it.exerciseId })
         check(exercises.all { it.templateId == id } && exercises.map { it.exerciseId }.toSet().size == exercises.size)
-        LocalTemplateSnapshot(parent, exercises)
+        LocalTemplateSnapshot(parent, exercises, revision(ownerId, "template", id))
     }
+
+    /** Caller must hold the session fence; this transaction supplies the independent revision CAS. */
+    suspend fun acknowledge(snapshot: LocalWorkoutSnapshot): Boolean = database.withTransaction {
+        val expected = snapshot.parent
+        val current = database.workoutLogDao().getWorkoutLogById(expected.id)
+        if (current?.userId != expected.userId || current.pendingOperation != expected.pendingOperation ||
+            revision(expected.userId, "workout", expected.id) != snapshot.revision) return@withTransaction false
+        database.workoutLogDao().markAsSynced(expected.id)
+        database.exerciseLogDao().markWorkoutExerciseLogsAsSynced(expected.id)
+        database.workoutSetDao().markWorkoutSetsAsSynced(expected.id)
+        true
+    }
+
+    /** Template transport safety (D6) is not supplied by a safe local acknowledgement. */
+    suspend fun acknowledge(snapshot: LocalTemplateSnapshot): Boolean = database.withTransaction {
+        val expected = snapshot.parent
+        val current = database.workoutTemplateDao().getTemplateByIdIncludingDeleted(expected.id)
+        if (current?.userId != expected.userId || current.pendingOperation != expected.pendingOperation ||
+            revision(expected.userId, "template", expected.id) != snapshot.revision) return@withTransaction false
+        database.workoutTemplateDao().markAsSynced(expected.id, "SYNCED")
+        database.templateExerciseDao().markTemplateExercisesAsSynced(expected.id)
+        true
+    }
+
+    private suspend fun revision(owner: String, type: String, id: String): Long =
+        checkNotNull(database.aggregateRevisionDao().revision(owner, type, id)) { "Missing aggregate mutation identity" }
+            .also { check(it > 0) { "Invalid aggregate mutation identity" } }
 
     private fun requireKnownOperation(operation: String?) {
         check(PendingOperation.entries.any { it.name == operation }) { "Unrecognized pending operation; capture rejected" }

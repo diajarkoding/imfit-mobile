@@ -7,6 +7,7 @@ import androidx.room.withTransaction
 import androidx.room.migration.Migration
 import androidx.sqlite.db.SupportSQLiteDatabase
 import com.diajarkoding.imfit.data.local.dao.ActiveSessionDao
+import com.diajarkoding.imfit.data.local.dao.AggregateRevisionDao
 import com.diajarkoding.imfit.data.local.dao.ExerciseDao
 import com.diajarkoding.imfit.data.local.dao.ExerciseLogDao
 import com.diajarkoding.imfit.data.local.dao.TemplateExerciseDao
@@ -15,6 +16,7 @@ import com.diajarkoding.imfit.data.local.dao.WorkoutLogDao
 import com.diajarkoding.imfit.data.local.dao.WorkoutSetDao
 import com.diajarkoding.imfit.data.local.dao.WorkoutTemplateDao
 import com.diajarkoding.imfit.data.local.entity.ActiveSessionEntity
+import com.diajarkoding.imfit.data.local.entity.AggregateRevisionEntity
 import com.diajarkoding.imfit.data.local.entity.ExerciseEntity
 import com.diajarkoding.imfit.data.local.entity.ExerciseLogEntity
 import com.diajarkoding.imfit.data.local.entity.TemplateExerciseEntity
@@ -32,9 +34,10 @@ import com.diajarkoding.imfit.data.local.entity.WorkoutTemplateEntity
         WorkoutLogEntity::class,
         ExerciseLogEntity::class,
         WorkoutSetEntity::class,
-        ActiveSessionEntity::class
+        ActiveSessionEntity::class,
+        AggregateRevisionEntity::class
     ],
-    version = 7,
+    version = 8,
     exportSchema = true
 )
 @TypeConverters(Converters::class)
@@ -47,6 +50,7 @@ abstract class IMFITDatabase : RoomDatabase() {
     abstract fun exerciseLogDao(): ExerciseLogDao
     abstract fun workoutSetDao(): WorkoutSetDao
     abstract fun activeSessionDao(): ActiveSessionDao
+    abstract fun aggregateRevisionDao(): AggregateRevisionDao
 
     suspend fun deleteUserData(userId: String) = withTransaction {
         workoutSetDao().deleteSetsByUser(userId)
@@ -56,9 +60,30 @@ abstract class IMFITDatabase : RoomDatabase() {
         workoutTemplateDao().deleteTemplatesByUser(userId)
         activeSessionDao().deleteSession(userId)
         userDao().deleteUserById(userId)
+        aggregateRevisionDao().deleteForOwner(userId)
     }
 
     companion object {
+        val REVISION_CALLBACK = object : Callback() {
+            override fun onCreate(db: SupportSQLiteDatabase) {
+                AggregateRevisionTriggers.install(db)
+            }
+        }
+
+        val MIGRATION_7_8 = object : Migration(7, 8) {
+            override fun migrate(database: SupportSQLiteDatabase) {
+                database.execSQL("""CREATE TABLE IF NOT EXISTS aggregate_revisions (
+                    owner_id TEXT NOT NULL, aggregate_type TEXT NOT NULL,
+                    aggregate_id TEXT NOT NULL, revision INTEGER NOT NULL,
+                    PRIMARY KEY(owner_id, aggregate_type, aggregate_id))""")
+                database.execSQL("""INSERT INTO aggregate_revisions
+                    SELECT user_id, 'workout', id, 1 FROM workout_logs""")
+                database.execSQL("""INSERT INTO aggregate_revisions
+                    SELECT user_id, 'template', id, 1 FROM workout_templates""")
+                AggregateRevisionTriggers.install(database)
+            }
+        }
+
         val MIGRATION_6_7 = object : Migration(6, 7) {
             override fun migrate(database: SupportSQLiteDatabase) {
                 database.execSQL("ALTER TABLE exercise_logs ADD COLUMN input_defaults TEXT")

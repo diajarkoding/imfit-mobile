@@ -12,8 +12,11 @@ internal class RemoteSnapshotImporter(private val database: IMFITDatabase) {
         require(exercises.map { it.exerciseId }.distinct().size == exercises.size)
         database.withTransaction {
             val local = database.workoutTemplateDao().getTemplateByIdIncludingDeleted(parent.id)
-            if (local != null && (local.userId != parent.userId || local.syncStatus != SyncStatus.SYNCED.name ||
+            if (local != null && (local.userId != parent.userId || local.pendingOperation != null || local.syncStatus != SyncStatus.SYNCED.name ||
                     local.updatedAt > parent.updatedAt)) return@withTransaction
+            if (database.templateExerciseDao().getExercisesForTemplateList(parent.id).any {
+                    it.pendingOperation != null || it.syncStatus != SyncStatus.SYNCED.name
+                }) return@withTransaction
             database.workoutTemplateDao().insertTemplate(parent)
             database.templateExerciseDao().deleteExercisesByTemplate(parent.id)
             database.templateExerciseDao().insertTemplateExercises(exercises)
@@ -29,8 +32,13 @@ internal class RemoteSnapshotImporter(private val database: IMFITDatabase) {
         } })
         database.withTransaction {
             val local = database.workoutLogDao().getWorkoutLogById(parent.id)
-            if (local != null && (local.userId != parent.userId || local.syncStatus != SyncStatus.SYNCED.name ||
+            if (local != null && (local.userId != parent.userId || local.pendingOperation != null || local.syncStatus != SyncStatus.SYNCED.name ||
                     local.updatedAt > parent.updatedAt)) return@withTransaction
+            if (database.exerciseLogDao().getExerciseLogsByWorkoutLogId(parent.id).any {
+                    it.pendingOperation != null || it.syncStatus != SyncStatus.SYNCED.name
+                } || database.workoutSetDao().getSetsByWorkoutLogId(parent.id).any {
+                    it.pendingOperation != null || it.syncStatus != SyncStatus.SYNCED.name
+                }) return@withTransaction
             database.workoutLogDao().insertWorkoutLog(parent)
             // Keep local target provenance only when remote performance is unchanged.
             val existingExercises = database.exerciseLogDao().getExerciseLogsByWorkoutLogId(parent.id)

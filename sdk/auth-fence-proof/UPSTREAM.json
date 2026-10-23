@@ -1,0 +1,10 @@
+{
+  "coordinate": "io.github.jan-tennert.supabase:auth-kt-android:3.0.3",
+  "sources_sha256": "58c785e03908506120653bd6a2a636db6ebb33e4194169a20d08bf7f64fea1ce",
+  "android_release_aar_sha256": "67a38fab3da28ccd08b6c28f08da0180a633cf13153a97878405da6cc1e22a86",
+  "kotlin_source_files": 58,
+  "upstream_tag_url": "https://github.com/supabase-community/supabase-kt/tree/3.0.3",
+  "license_url": "https://raw.githubusercontent.com/supabase-community/supabase-kt/3.0.3/LICENSE",
+  "license": "MIT; Copyright (c) 2024 Jan Tennert",
+  "artifact_role": "isolated proof only; no application dependency substitution"
+}

@@ -411,6 +411,8 @@ Approval recorded verbatim in register; do not repeatedly ask administrative per
 
 **Latest release decision:** user explicitly authorized **commit and push only** of all current work in categorized commits without co-author, to `origin` on the current `fix-bug` branch. This is not approval for deployment, normal-app installation, backend/schema changes beyond the already-tested work, or a release-ready verdict. Technical status remains `PARTIAL` as recorded above.
 
+**Commit/push result (2026-10-23):** seven categorized commits `cdb1cd1` through `261b3c7` were pushed to `origin/fix-bug` (`5c0c813..261b3c7`), with no co-author trailers. Categories: isolated proof module, pinned SDK sources, proof tests, provenance/device tooling, Room8 revision/ack implementation, sync tests, and consolidated documents. This record-only documentation commit follows; it does not change runtime code. Repository publication is not deployment or release approval.
+
 **Mandatory STOP:** trusted raw staged/legacy session, old epoch ack, wrong-owner request/header/read/publish, lost pending write, destructive unsupported template operations, unproven fsync/CAS/account isolation, silent backup/credential purge, unapproved changes to schema/backend/privacy/normal device. Update this same report with a decision question; other independent safe tasks may continue.
 
 **Exit only if:** all mandatory G gates verified, six refresh/two infinite/six shimmer work and have tests, privacy/E2E/visual approval and regressions complete, no P0 unresolved, final verdict `READY_FOR_USER_RELEASE_APPROVAL`. This does **not** authorize commit/push/deployment.

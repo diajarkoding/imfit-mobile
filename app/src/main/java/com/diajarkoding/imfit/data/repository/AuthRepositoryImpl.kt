@@ -27,6 +27,11 @@ import kotlinx.serialization.json.put
 import java.util.UUID
 import javax.inject.Inject
 import javax.inject.Singleton
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.flow.flow
+import kotlinx.coroutines.flow.emitAll
+import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.distinctUntilChanged
 
 private const val TAG = "AuthRepository"
 private const val AVATARS_BUCKET = "avatars"
@@ -115,7 +120,7 @@ class AuthRepositoryImpl @Inject constructor(
                 Log.e(TAG, "Failed to update profile: ${e.message}", e)
             }
 
-            cachedUser = newUser
+            cacheUser(newUser)
             syncLifecycleController.unblock(userId)
             syncScheduler.enqueue(userId)
             Result.success(RegisterResult.Authenticated(newUser))
@@ -237,7 +242,7 @@ class AuthRepositoryImpl @Inject constructor(
             }
 
             if (profile != null) {
-                cachedUser = profile
+                cacheUser(profile)
                 syncLifecycleController.unblock(userId)
                 syncScheduler.enqueue(userId)
                 Result.success(profile)
@@ -251,7 +256,7 @@ class AuthRepositoryImpl @Inject constructor(
                         birthDate = null,
                         profilePhotoUri = null
                     )
-                    cachedUser = basicUser
+                    cacheUser(basicUser)
                     syncLifecycleController.unblock(userId)
                     syncScheduler.enqueue(userId)
                     Result.success(basicUser)
@@ -292,8 +297,9 @@ class AuthRepositoryImpl @Inject constructor(
 
     override suspend fun getCurrentUser(): User? {
         return try {
-            // Return cached user if available
-            cachedUser?.let { return it }
+            val localUserId = getLocalUserId() ?: return null
+            database.userDao().getUserById(localUserId)?.let { return it.toUser() }
+            cachedUser?.takeIf { it.id == localUserId }?.let { return it }
 
             // Check if user is authenticated
             val currentUser = supabaseClient.auth.currentUserOrNull()
@@ -304,7 +310,7 @@ class AuthRepositoryImpl @Inject constructor(
             // Try to fetch profile from database
             val profile = fetchProfile(currentUser.id)
             if (profile != null) {
-                cachedUser = profile
+                cacheUser(profile)
                 return profile
             } else {
                 // Create basic user object from auth metadata
@@ -315,14 +321,30 @@ class AuthRepositoryImpl @Inject constructor(
                     birthDate = null,
                     profilePhotoUri = null
                 )
-                cachedUser = basicUser
+                cacheUser(basicUser)
                 return basicUser
             }
+        } catch (e: CancellationException) { throw e
         } catch (e: Exception) {
             Log.e("AuthRepository", "Get current user error: ${e.message}", e)
             // Don't throw exception, just return null to indicate no user
             null
         }
+    }
+
+    override fun observeCurrentUser() = flow {
+        val userId = getLocalUserId()
+        if (userId == null) emit(null)
+        else {
+            getCurrentUser() // Ensure a local fallback exists before observing Room.
+            emitAll(database.userDao().observeUser(userId).map { it?.toUser() }.distinctUntilChanged())
+        }
+    }
+
+    private suspend fun cacheUser(user: User) {
+        if (getLocalUserId() != user.id) return
+        database.userDao().insertUser(user.toLocal())
+        cachedUser = user
     }
 
     override suspend fun isLoggedIn(): Boolean {
@@ -347,7 +369,7 @@ class AuthRepositoryImpl @Inject constructor(
                 }) {
                     filter { eq("id", user.id) }
                 }
-            cachedUser = user
+            cacheUser(user)
             Result.success(user)
         } catch (e: Exception) {
             Log.e("AuthRepository", "Update profile error: ${e.message}", e)

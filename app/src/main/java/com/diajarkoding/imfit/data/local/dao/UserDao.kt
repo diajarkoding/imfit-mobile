@@ -7,6 +7,8 @@ import kotlinx.coroutines.flow.Flow
 @Dao
 interface UserDao {
     @Query("SELECT * FROM users WHERE id = :id")
+    fun observeUser(id: String): Flow<UserEntity?>
+    @Query("SELECT * FROM users WHERE id = :id")
     suspend fun getUserById(id: String): UserEntity?
 
     @Query("SELECT * FROM users WHERE email = :email")

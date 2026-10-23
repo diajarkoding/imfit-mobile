@@ -13,6 +13,7 @@ import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.flow.collectLatest
 import java.time.Instant
 import java.time.LocalDate
 import java.time.ZoneId
@@ -49,7 +50,7 @@ class ProgressViewModel @Inject constructor(
             _state.update { it.copy(isLoading = true, hasError = false) }
 
             try {
-                val user = authRepository.getCurrentUser()
+                authRepository.observeCurrentUser().collectLatest { user ->
                 if (user == null) {
                     _state.update { it.copy(
                         userName = "Guest",
@@ -60,7 +61,7 @@ class ProgressViewModel @Inject constructor(
                         workoutLogsByDate = emptyMap(),
                         isLoading = false
                     ) }
-                    return@launch
+                    return@collectLatest
                 }
 
                 _state.update { it.copy(userName = user.name, userEmail = user.email, userBirthDate = user.birthDate) }
@@ -81,6 +82,7 @@ class ProgressViewModel @Inject constructor(
                         userProfilePhotoUri = signedAvatarUrl, workoutDates = workoutLogsByDate.keys,
                         workoutLogsByDate = workoutLogsByDate, isLoading = false, hasError = false
                     ) }
+                }
                 }
             } catch (e: CancellationException) {
                 throw e

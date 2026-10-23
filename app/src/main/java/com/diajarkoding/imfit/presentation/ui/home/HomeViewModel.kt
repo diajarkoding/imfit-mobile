@@ -15,6 +15,7 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.CancellationException
@@ -57,13 +58,13 @@ class HomeViewModel @Inject constructor(
             _state.update { it.copy(isLoading = true) }
 
             try {
-                val user = authRepository.getCurrentUser()
+                authRepository.observeCurrentUser().collectLatest { user ->
                 if (user == null) {
                     _state.update { it.copy(
                         userName = "Guest", userProfilePhotoUri = null, templates = emptyList(),
                         lastWorkout = null, isLoading = false, activeWorkoutTemplateId = null
                     ) }
-                    return@launch
+                    return@collectLatest
                 }
 
                 val userId = user.id
@@ -87,6 +88,7 @@ class HomeViewModel @Inject constructor(
                     templates to last
                 }.collect { (templates, last) ->
                     _state.update { it.copy(templates = templates, lastWorkout = last, isLoading = false) }
+                }
                 }
             } catch (e: CancellationException) {
                 throw e

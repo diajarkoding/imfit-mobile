@@ -65,16 +65,16 @@ class ExerciseSelectionViewModel @Inject constructor(
             try {
                 val template = contextId?.takeIf { it.isNotBlank() && !it.startsWith("temp_") }?.let { workoutRepository.getTemplateById(it) }
                 exclusions = requestedExclusions ?: template?.exercises?.map { it.id }?.toSet().orEmpty()
-                val exercises = exerciseRepository.getAllExercises().distinctBy { it.id }.filterNot { it.id in exclusions }
-                _state.update { state -> state.copy(allExercises = exercises, routineName = draftName ?: template?.name.orEmpty(),
-                    selectedExercises = state.selectedExercises.filter { selected -> exercises.any { it.id == selected.id } }, isLoading = false) }
-                applyFilters()
-
-                val refreshed = exerciseRepository.refreshExercises()
-                if (refreshed) {
-                    val freshExercises = exerciseRepository.getAllExercises().distinctBy { it.id }.filterNot { it.id in exclusions }
-                    _state.update { state -> state.copy(allExercises = freshExercises,
-                        selectedExercises = state.selectedExercises.filter { selected -> freshExercises.any { it.id == selected.id } }) }
+                launch {
+                    try { exerciseRepository.refreshExercises() }
+                    catch (e: CancellationException) { throw e }
+                    catch (_: Exception) { /* Existing catalog/selection remains usable offline. */ }
+                }
+                exerciseRepository.observeExercises().collect { records ->
+                    val exercises = records.distinctBy { it.id }.filterNot { it.id in exclusions }
+                    _state.update { state -> state.copy(allExercises = exercises,
+                        routineName = draftName ?: template?.name.orEmpty(), isLoading = false,
+                        selectedExercises = state.selectedExercises.mapNotNull { selected -> exercises.find { it.id == selected.id } }) }
                     applyFilters()
                 }
             } catch (e: CancellationException) { throw e }

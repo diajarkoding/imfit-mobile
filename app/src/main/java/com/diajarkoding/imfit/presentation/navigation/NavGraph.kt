@@ -1,6 +1,9 @@
 package com.diajarkoding.imfit.presentation.navigation
 
 import androidx.compose.runtime.Composable
+import androidx.hilt.navigation.compose.hiltViewModel
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.compose.LifecycleEventEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -38,8 +41,11 @@ fun NavGraph(
     onActiveWorkoutOpened: () -> Unit = {},
     authenticatedFromDeepLink: Boolean = false,
     onAuthenticatedFromDeepLinkConsumed: () -> Unit = {},
+    remoteRefresh: RemoteRefreshViewModel = hiltViewModel(),
 ) {
     val backStack = rememberNavBackStack(Splash)
+    LifecycleEventEffect(Lifecycle.Event.ON_RESUME) { remoteRefresh.refresh() }
+    LaunchedEffect(backStack.lastOrNull()) { remoteRefresh.refresh() }
     var exerciseSelectionResult by rememberSaveable {
         mutableStateOf<ArrayList<String>?>(null)
     }
@@ -114,7 +120,8 @@ fun NavGraph(
             }
 
             entry<Main> {
-                MainScreen(
+                        MainScreen(
+                            onRefreshRemote = remoteRefresh::refresh,
                     onNavigateToWorkoutDetail = { workoutId ->
                         backStack.add(WorkoutDetail(workoutId))
                     },

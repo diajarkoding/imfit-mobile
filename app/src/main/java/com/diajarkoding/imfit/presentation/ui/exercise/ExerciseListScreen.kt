@@ -39,6 +39,7 @@ fun ExerciseListScreen(
     onNavigateBack: () -> Unit,
     viewModel: ExerciseBrowserViewModel = hiltViewModel()
 ) {
+    androidx.lifecycle.compose.LifecycleEventEffect(androidx.lifecycle.Lifecycle.Event.ON_RESUME) { viewModel.refresh() }
     val state by viewModel.state.collectAsStateWithLifecycle()
     ExerciseListContent(ExerciseCategory.fromRoute(categoryName), state, onNavigateBack, viewModel::setQuery, viewModel::refresh)
 }

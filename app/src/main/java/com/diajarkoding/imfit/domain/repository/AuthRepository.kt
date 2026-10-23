@@ -14,6 +14,7 @@ interface AuthRepository {
     suspend fun login(email: String, password: String): Result<User>
     suspend fun logout()
     suspend fun getCurrentUser(): User?
+    fun observeCurrentUser(): kotlinx.coroutines.flow.Flow<User?> = kotlinx.coroutines.flow.flow { emit(getCurrentUser()) }
     /** Local auth identity for timer recovery; never fetch a remote profile. */
     suspend fun getLocalUserId(): String? = getCurrentUser()?.id
     /** Synchronous SDK read only; never waits for init or network. Null means not-yet-loaded OR absent. */

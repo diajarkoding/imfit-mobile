@@ -25,6 +25,7 @@ import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.remember
@@ -80,7 +81,8 @@ fun MainScreen(
     onNavigateToWorkoutHistory: (LocalDate) -> Unit = {},
     onNavigateToYearlyCalendar: (java.time.YearMonth) -> Unit = {},
     onNavigateToProfile: () -> Unit = {},
-    homeViewModel: HomeViewModel = hiltViewModel()
+    homeViewModel: HomeViewModel = hiltViewModel(),
+    onRefreshRemote: () -> Unit = {}
 ) {
     val items = listOf(
         BottomNavItem(HomeTab, com.diajarkoding.imfit.R.string.nav_home, Symbols.Filled.Home, Symbols.Outlined.Home),
@@ -89,6 +91,7 @@ fun MainScreen(
     )
     val bottomBackStack = rememberNavBackStack(HomeTab)
     val currentTab = bottomBackStack.lastOrNull()
+    LaunchedEffect(currentTab) { onRefreshRemote() }
     
     // Get sync state from HomeViewModel
     val syncState by homeViewModel.syncState.collectAsStateWithLifecycle()

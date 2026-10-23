@@ -8,6 +8,8 @@ import com.diajarkoding.imfit.domain.model.WorkoutSession
 import com.diajarkoding.imfit.domain.model.WorkoutSet
 import com.diajarkoding.imfit.domain.model.ExerciseLog
 import com.diajarkoding.imfit.domain.model.TemplateExercise
+import com.diajarkoding.imfit.domain.model.inputDefaults
+import com.diajarkoding.imfit.domain.model.addDefaultSet
 import com.diajarkoding.imfit.domain.model.appendExercises
 import com.diajarkoding.imfit.domain.model.removeIncompleteExercise
 import com.diajarkoding.imfit.domain.repository.ExerciseRepository
@@ -151,61 +153,13 @@ class ActiveWorkoutViewModel @Inject constructor(
             
             val session = workoutRepository.startWorkout(template)
             
-            // Prefill volumes BEFORE updating state to prevent race condition
-            // where UI renders empty values before prefill completes
-            val prefilledSession = prefillVolumes(session)
-            
-            _state.update { it.copy(session = prefilledSession) }
+            // Repository commits defaults/prefill before exposing the session.
+            _state.update { it.copy(session = session) }
 
             startElapsedTimeCounter()
         }
     }
 
-    /**
-     * Pre-fills workout sets with weights from the last completed workout.
-     * Uses local Room database for efficient per-set weight lookup.
-     */
-    private suspend fun prefillVolumes(session: WorkoutSession): WorkoutSession {
-        return try {
-            val userId = authRepository.getLocalUserId() ?: return session
-            
-            val updatedLogs = session.exerciseLogs.map { log ->
-                val lastPerformance = workoutRepository.getLastPerformanceForExercise(log.exercise.id, userId)
-                android.util.Log.d("ActiveWorkoutVM", "Prefill ${log.exercise.name}: lastPerformance=$lastPerformance")
-                
-                if (lastPerformance.isNotEmpty()) {
-                    val newSets = log.sets.map { set ->
-                        val last = lastPerformance[set.setNumber]
-                        if (last != null && !set.isCompleted && set.weight == 0f) {
-                            android.util.Log.d("ActiveWorkoutVM", "  Set ${set.setNumber}: prefilling weight=${last.first}, reps=${last.second}")
-                            set.copy(weight = last.first, reps = last.second, isCompleted = false)
-                        } else {
-                            set
-                        }
-                    }
-                    log.copy(sets = newSets)
-                } else {
-                    log
-                }
-            }
-            
-            workoutRepository.mutateActiveSession(session.id) { current ->
-                current.copy(exerciseLogs = current.exerciseLogs.map { log ->
-                    val prefilled = updatedLogs.find { it.exercise.id == log.exercise.id }
-                    log.copy(sets = log.sets.map { set ->
-                        if (!set.isCompleted && set.weight == 0f) {
-                            prefilled?.sets?.find { it.setNumber == set.setNumber }?.let {
-                                set.copy(weight = it.weight, reps = it.reps, isCompleted = false)
-                            } ?: set
-                        } else set
-                    })
-                })
-            } ?: session
-        } catch (e: Exception) {
-            android.util.Log.e("ActiveWorkoutVM", "Error prefilling volumes: ${e.message}", e)
-            session // Return original session on error
-        }
-    }
 
     private fun startElapsedTimeCounter() {
         elapsedTimeJob?.cancel()
@@ -341,7 +295,7 @@ class ActiveWorkoutViewModel @Inject constructor(
     }
 
     fun addSet(exerciseIndex: Int) = editExercise(exerciseIndex) { log ->
-        log.copy(sets = log.sets + WorkoutSet(setNumber = (log.sets.maxOfOrNull { it.setNumber } ?: 0) + 1))
+        log.addDefaultSet()
     }
 
     fun removeSet(exerciseIndex: Int, setIndex: Int) = editExercise(exerciseIndex) { log ->
@@ -369,7 +323,7 @@ class ActiveWorkoutViewModel @Inject constructor(
                 val additions = exerciseIds.distinct().mapNotNull { id ->
                     exerciseRepository.getExerciseById(id)?.let { exercise ->
                         val config = TemplateExercise(exercise)
-                        val lastPerf = workoutRepository.getLastPerformanceForExercise(id, userId)
+                        val lastPerf = workoutRepository.getPrefillForExercise(id, userId, config.inputDefaults())
                         ExerciseLog(
                             exercise = exercise,
                             sets = (1..config.sets).map { setNumber ->
@@ -381,7 +335,8 @@ class ActiveWorkoutViewModel @Inject constructor(
                                     isCompleted = false
                                 )
                             },
-                            restSeconds = config.restSeconds
+                            restSeconds = config.restSeconds,
+                            inputDefaults = config.inputDefaults()
                         )
                     }
                 }

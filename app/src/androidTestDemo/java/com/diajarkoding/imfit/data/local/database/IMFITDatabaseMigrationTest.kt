@@ -6,6 +6,9 @@ import androidx.sqlite.db.SupportSQLiteOpenHelper
 import androidx.sqlite.db.framework.FrameworkSQLiteOpenHelperFactory
 import androidx.test.core.app.ApplicationProvider
 import androidx.test.ext.junit.runners.AndroidJUnit4
+import androidx.room.testing.MigrationTestHelper
+import androidx.test.platform.app.InstrumentationRegistry
+import org.junit.Rule
 import org.junit.After
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -13,8 +16,23 @@ import org.junit.runner.RunWith
 
 @RunWith(AndroidJUnit4::class)
 class IMFITDatabaseMigrationTest {
+    @get:Rule val migrations = MigrationTestHelper(InstrumentationRegistry.getInstrumentation(), IMFITDatabase::class.java)
     private val context = ApplicationProvider.getApplicationContext<Context>()
     private val databaseName = "migration-test.db"
+
+    @Test fun fullRoomSchemaSixToSevenIsValidatedAndRetainsHistory() {
+        migrations.createDatabase(databaseName, 6).use { db ->
+            db.execSQL("INSERT INTO exercise_logs (id, workout_log_id, exercise_id, exercise_name, muscle_category, order_index, total_volume, total_sets, total_reps, sync_status, created_at, updated_at) VALUES ('legacy','workout','exercise','Bench','CHEST',0,80,1,8,'SYNCED',1,1)")
+        }
+        migrations.runMigrationsAndValidate(databaseName, 7, true, IMFITDatabase.MIGRATION_6_7).use { db ->
+            db.query("SELECT exercise_name, total_volume, input_defaults FROM exercise_logs WHERE id = 'legacy'").use {
+                assertTrue(it.moveToFirst())
+                org.junit.Assert.assertEquals("Bench", it.getString(0))
+                org.junit.Assert.assertEquals(80f, it.getFloat(1))
+                assertTrue(it.isNull(2))
+            }
+        }
+    }
 
     @After
     fun cleanUp() {
@@ -73,5 +91,27 @@ class IMFITDatabaseMigrationTest {
             assertTrue("session_rest_override" in columns)
             assertTrue(db.query("SELECT id FROM active_sessions").use { it.moveToFirst() })
         }
+    }
+
+    @Test fun provenanceMigrationKeepsLegacyHistoryAndUsesNullRatherThanGuessingOldTargets() {
+        val helper = FrameworkSQLiteOpenHelperFactory().create(
+            SupportSQLiteOpenHelper.Configuration.builder(context).name(databaseName)
+                .callback(object : SupportSQLiteOpenHelper.Callback(6) {
+                    override fun onCreate(db: SupportSQLiteDatabase) {
+                        db.execSQL("CREATE TABLE exercise_logs (id TEXT NOT NULL PRIMARY KEY, exercise_name TEXT NOT NULL)")
+                    }
+                    override fun onUpgrade(db: SupportSQLiteDatabase, oldVersion: Int, newVersion: Int) = Unit
+                }).build())
+        try {
+            val db = helper.writableDatabase
+            db.execSQL("INSERT INTO exercise_logs VALUES ('legacy', 'Bench')")
+            IMFITDatabase.MIGRATION_6_7.migrate(db)
+            db.query("SELECT id, exercise_name, input_defaults FROM exercise_logs").use {
+                assertTrue(it.moveToFirst())
+                org.junit.Assert.assertEquals("legacy", it.getString(0))
+                org.junit.Assert.assertEquals("Bench", it.getString(1))
+                assertTrue(it.isNull(2))
+            }
+        } finally { helper.close() }
     }
 }

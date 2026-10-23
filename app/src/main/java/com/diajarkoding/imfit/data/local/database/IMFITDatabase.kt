@@ -34,7 +34,7 @@ import com.diajarkoding.imfit.data.local.entity.WorkoutTemplateEntity
         WorkoutSetEntity::class,
         ActiveSessionEntity::class
     ],
-    version = 6,
+    version = 7,
     exportSchema = true
 )
 @TypeConverters(Converters::class)
@@ -59,6 +59,11 @@ abstract class IMFITDatabase : RoomDatabase() {
     }
 
     companion object {
+        val MIGRATION_6_7 = object : Migration(6, 7) {
+            override fun migrate(database: SupportSQLiteDatabase) {
+                database.execSQL("ALTER TABLE exercise_logs ADD COLUMN input_defaults TEXT")
+            }
+        }
         val MIGRATION_4_5 = object : Migration(4, 5) {
             override fun migrate(database: SupportSQLiteDatabase) {
                 database.execSQL("ALTER TABLE active_sessions ADD COLUMN is_paused INTEGER NOT NULL DEFAULT 0")

@@ -18,6 +18,7 @@ import com.diajarkoding.imfit.domain.repository.AuthRepository
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.*
 import kotlinx.coroutines.flow.first
+import androidx.lifecycle.viewModelScope
 import com.diajarkoding.imfit.domain.model.appendExercises
 import com.diajarkoding.imfit.domain.model.removeIncompleteExercise
 import com.diajarkoding.imfit.domain.model.ExerciseLog
@@ -111,6 +112,96 @@ class WorkoutRepositoryRoomFirstTest {
         assertEquals("Edited", entity?.name)
         assertEquals(PendingOperation.CREATE.name, entity?.pendingOperation)
         assertEquals(2, scheduler.enqueuedUsers.size)
+    }
+
+    @Test fun zeroCompletedSetsDoesNotWriteHistoryOrDestroyTheActiveSession() = runBlocking {
+        val session = repository.startWorkout(sampleTemplate())
+        assertEquals(0f, session.totalVolume)
+        assertNull(repository.finishWorkout())
+        assertEquals(session.id, repository.getActiveSessionForTimer()?.id)
+        assertTrue(repository.getWorkoutLogs(user.id).isEmpty())
+        assertTrue(scheduler.enqueuedUsers.isEmpty())
+    }
+
+    @Test fun cleanEditorReceivesUpdatesButRemoteRefreshCannotOverwriteAnUnsavedDraft() = runBlocking {
+        val sample = sampleTemplate()
+        sample.exercises.forEach { item -> database.exerciseDao().insertExercise(
+            com.diajarkoding.imfit.data.local.entity.ExerciseEntity(item.id, item.name, item.muscleCategory.ordinal + 1, item.description)) }
+        val template = repository.createTemplate(user.id, "Initial", sample.exercises)
+        val catalog = ExerciseRepositoryImpl(database.exerciseDao(), object : com.diajarkoding.imfit.data.sync.SyncRunner {
+            override suspend fun run(expectedUserId: String?) = com.diajarkoding.imfit.data.sync.SyncRunResult.SUCCESS
+        })
+        val vm = withContext(Dispatchers.Main) { com.diajarkoding.imfit.presentation.ui.workout.EditWorkoutViewModel(
+            repository, catalog, androidx.lifecycle.SavedStateHandle()).also { it.initialize(template.id) } }
+        try {
+            withTimeout(5000) { vm.state.first { it.hasLoaded } }
+            repository.updateTemplate(template.id, "Remote clean", template.exercises)
+            assertEquals("Remote clean", withTimeout(5000) { vm.state.first { it.workoutName == "Remote clean" } }.workoutName)
+            withContext(Dispatchers.Main) { vm.updateWorkoutName("Unsaved local draft") }
+            repository.updateTemplate(template.id, "Another remote", emptyList())
+            // Let the source observer process the revision without relying on a fixed sleep.
+            withTimeout(5000) { repository.observeTemplate(template.id).first { it?.name == "Another remote" } }
+            withContext(Dispatchers.Main) {
+                assertEquals("Unsaved local draft", vm.state.value.workoutName)
+                assertEquals(template.exercises, vm.state.value.exercises)
+            }
+        } finally { withContext(Dispatchers.Main) { vm.viewModelScope.cancel() } }
+    }
+
+    @Test fun finishEliminatesZeroCompletedExercisesAndUnfinishedSetsFromEveryLocalPayload() = runBlocking {
+        val base = sampleTemplate()
+        val untouched = base.exercises.first().copy(exercise = base.exercises.first().exercise.copy(id = "untouched"))
+        val session = repository.startWorkout(base.copy(exercises = base.exercises + untouched))
+        repository.mutateActiveSession(session.id) { current -> current.copy(exerciseLogs = current.exerciseLogs.mapIndexed { index, log ->
+            if (index == 0) log.copy(sets = listOf(WorkoutSet(1, 40f, 10, true), WorkoutSet(2, 999f, 99, false)))
+            else log.copy(sets = log.sets.map { it.copy(weight = 999f) })
+        }) }
+        val result = requireNotNull(repository.finishWorkout())
+        assertEquals(400f, result.totalVolume)
+        assertEquals(1, result.exerciseLogs.size)
+        assertEquals(1, result.exerciseLogs.single().sets.size)
+        val parent = requireNotNull(database.workoutLogDao().getWorkoutLogById(session.id))
+        assertEquals(400f, parent.totalVolume); assertEquals(1, parent.totalSets); assertEquals(10, parent.totalReps)
+        assertEquals(1, database.exerciseLogDao().getExerciseLogsByWorkoutLogId(session.id).size)
+        assertTrue(database.workoutSetDao().getSetsByWorkoutLogId(session.id).all { it.isCompleted })
+        assertEquals(1, database.workoutSetDao().getSetsByWorkoutLogId(session.id).size)
+        database.exerciseDao().insertExercise(com.diajarkoding.imfit.data.local.entity.ExerciseEntity(
+            base.exercises.first().id, "Renamed master", MuscleCategory.BACK.ordinal + 1, "Changed"))
+        val history = requireNotNull(repository.getWorkoutLogById(session.id)).exerciseLogs.single().exercise
+        assertEquals("Bench Press", history.name)
+        assertEquals(MuscleCategory.CHEST, history.muscleCategory)
+    }
+
+    @Test fun prefillSurvivesColdRepositoryAndRenameButChangedExerciseTargetsUseDefaults() = runBlocking {
+        val original = sampleTemplate()
+        val other = original.exercises.single().copy(exercise = original.exercises.single().exercise.copy(id = "other-exercise"))
+        val template = original.copy(exercises = original.exercises + other)
+        val first = repository.startWorkout(template)
+        repository.mutateActiveSession(first.id) { current -> current.copy(exerciseLogs = current.exerciseLogs.map { log ->
+            log.copy(sets = log.sets.map { it.copy(weight = 40f + it.setNumber, reps = 5 + it.setNumber, isCompleted = true) })
+        }) }
+        repository.finishWorkout()
+        repository = WorkoutRepositoryImpl(FakeAuthRepository(user), database.exerciseLogDao(), database.workoutSetDao(),
+            database.exerciseDao(), database.workoutLogDao(), database.workoutTemplateDao(), database.templateExerciseDao(),
+            database.activeSessionDao(), database, scheduler)
+        val renamed = repository.startWorkout(template.copy(name = "Renamed"))
+        assertEquals(41f, renamed.exerciseLogs.first().sets.first().weight)
+        assertEquals(6, renamed.exerciseLogs.first().sets.first().reps)
+        assertTrue(renamed.exerciseLogs.flatMap { it.sets }.none { it.isCompleted })
+        assertEquals(0f, renamed.totalVolume)
+        assertTrue(repository.getPrefillForExercise(template.exercises.first().id, "another-user",
+            com.diajarkoding.imfit.domain.model.ExerciseInputDefaults(3, 8)).isEmpty())
+        assertEquals(renamed.exerciseLogs, repository.getActiveSessionForTimer()?.exerciseLogs)
+        repository.cancelWorkout()
+        val changed = repository.startWorkout(template.copy(exercises = listOf(template.exercises.first().copy(sets = 4, reps = 12), other)))
+        assertEquals(4, changed.exerciseLogs.first().sets.size)
+        assertTrue(changed.exerciseLogs.first().sets.all { it.weight == 0f && it.reps == 12 })
+        assertEquals(41f, changed.exerciseLogs.last().sets.first().weight)
+        val row = database.exerciseLogDao().getExerciseLogsByWorkoutLogId(first.id).first()
+        database.exerciseLogDao().updateExerciseLog(row.copy(inputDefaults = null))
+        repository.cancelWorkout()
+        val legacy = repository.startWorkout(template)
+        assertTrue(legacy.exerciseLogs.first().sets.all { it.weight == 0f && it.reps == original.exercises.first().reps })
     }
 
     @Test fun observerSeesCommittedRenameWhileSyncRemainsPending() = runBlocking {

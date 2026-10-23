@@ -44,11 +44,15 @@ interface WorkoutRepository {
     fun observeLastWorkoutLog(userId: String): Flow<WorkoutLog?> = flow { emit(getLastWorkoutLog(userId)) }
     suspend fun getWorkoutLogs(userId: String): List<WorkoutLog>
     suspend fun getWorkoutLogById(logId: String): WorkoutLog?
+    fun observeWorkoutLog(logId: String): Flow<WorkoutLog?> = flow { emit(getWorkoutLogById(logId)) }
     suspend fun getLastWorkoutLog(userId: String): WorkoutLog?
     suspend fun getLastExerciseLog(exerciseId: String): ExerciseLog?
     
     // Last Known Performance operations
     suspend fun getLastWeightsForExercise(exerciseId: String, userId: String): Map<Int, Float>
+    /** Unknown provenance or changed targets means defaults, not guessed history. */
+    suspend fun getPrefillForExercise(exerciseId: String, userId: String,
+        defaults: com.diajarkoding.imfit.domain.model.ExerciseInputDefaults): Map<Int, Pair<Float, Int>> = emptyMap()
     suspend fun getLastPerformanceForExercise(
         exerciseId: String,
         userId: String

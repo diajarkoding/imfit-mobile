@@ -71,7 +71,7 @@ interface WorkoutSetDao {
                 AND wl.user_id = :userId
                 AND wl.deleted_at IS NULL
                 AND ws2.is_completed = 1
-            ORDER BY wl.date DESC
+            ORDER BY wl.end_time DESC, wl.id DESC
             LIMIT 1
         )
         AND ws.exercise_id = :exerciseId

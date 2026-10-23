@@ -26,7 +26,8 @@ data class EditWorkoutState(
     val hasLoaded: Boolean = false,
     val invalidConfigIds: Set<String> = emptySet(),
     @StringRes val nameErrorRes: Int? = null,
-    @StringRes val errorRes: Int? = null
+    @StringRes val errorRes: Int? = null,
+    val sourceRevision: Int = 0
 )
 
 @HiltViewModel
@@ -38,6 +39,8 @@ class EditWorkoutViewModel @Inject constructor(
 
     private var workoutId: String? = savedStateHandle["workoutId"]
     private var initialized = false
+    private var observedSource: com.diajarkoding.imfit.domain.model.WorkoutTemplate? = null
+    private var observeJob: kotlinx.coroutines.Job? = null
     private var pendingExerciseIds: List<String> = emptyList()
 
     private val _state = MutableStateFlow(EditWorkoutState())
@@ -54,19 +57,27 @@ class EditWorkoutViewModel @Inject constructor(
 
     fun loadWorkout() {
         val workoutId = workoutId ?: return
-        viewModelScope.launch {
-            _state.update { it.copy(isLoading = true, errorRes = null) }
+        observeJob?.cancel()
+        observeJob = viewModelScope.launch {
+            _state.update { it.copy(isLoading = !it.hasLoaded, errorRes = null) }
             try {
-                val workout = workoutRepository.getTemplateById(workoutId)
+                workoutRepository.observeTemplate(workoutId).collect { workout ->
+                val draft = _state.value
+                val source = observedSource
+                val dirty = source != null && (draft.workoutName != source.name || draft.exercises != source.exercises ||
+                    draft.invalidConfigIds.isNotEmpty() || draft.isAdding || draft.isSaving)
+                if (dirty) return@collect
                 if (workout != null) {
+                    observedSource = workout
                     _state.update {
                         it.copy(
                             workoutName = workout.name,
                             exercises = workout.exercises,
-                            isLoading = false, hasLoaded = true
+                            isLoading = false, hasLoaded = true, sourceRevision = it.sourceRevision + 1
                         )
                     }
                 } else _state.update { it.copy(errorRes = R.string.error_routine_not_found, isLoading = false) }
+                }
             } catch (e: CancellationException) {
                 throw e
             } catch (e: Exception) {

@@ -3,6 +3,8 @@ package com.diajarkoding.imfit.data.repository
 import com.diajarkoding.imfit.data.local.FakeWorkoutDataSource
 import com.diajarkoding.imfit.data.local.FakeUserDataSource
 import com.diajarkoding.imfit.domain.model.ExerciseLog
+import com.diajarkoding.imfit.domain.model.ExerciseInputDefaults
+import com.diajarkoding.imfit.domain.model.inputDefaults
 import com.diajarkoding.imfit.domain.model.TemplateExercise
 import com.diajarkoding.imfit.domain.model.WorkoutLog
 import com.diajarkoding.imfit.domain.model.WorkoutSession
@@ -35,6 +37,7 @@ class DemoWorkoutRepository @Inject constructor(
     override fun observeTemplate(templateId: String) = templateRevision.map { getTemplateById(templateId) }.distinctUntilChanged()
     override fun observeWorkoutLogs(userId: String) = historyRevision.map { getWorkoutLogs(userId) }.distinctUntilChanged()
     override fun observeLastWorkoutLog(userId: String) = historyRevision.map { getLastWorkoutLog(userId) }.distinctUntilChanged()
+    override fun observeWorkoutLog(logId: String) = historyRevision.map { getWorkoutLogById(logId) }.distinctUntilChanged()
 
     override suspend fun getTemplates(userId: String): List<WorkoutTemplate> =
         FakeWorkoutDataSource.getTemplates(userId)
@@ -82,7 +85,18 @@ class DemoWorkoutRepository @Inject constructor(
     override suspend fun startWorkout(template: WorkoutTemplate): WorkoutSession = lifecycleMutex.withLock {
         timerCleanup?.stop("SESSION_REPLACED")
         sessionRestOverride = null
-        sessionMutex.withLock { FakeWorkoutDataSource.startWorkout(template) }
+        sessionMutex.withLock {
+            val session = FakeWorkoutDataSource.startWorkout(template)
+            val prefilled = session.copy(exerciseLogs = session.exerciseLogs.map { log ->
+                val config = template.exercises.first { it.id == log.exercise.id }.inputDefaults()
+                val previous = getPrefillForExercise(log.exercise.id, template.userId, config)
+                log.copy(inputDefaults = config, sets = log.sets.map { set ->
+                    previous[set.setNumber]?.let { set.copy(weight = it.first, reps = it.second, isCompleted = false) } ?: set
+                })
+            })
+            FakeWorkoutDataSource.updateActiveSession(prefilled)
+            prefilled
+        }
     }
 
     override suspend fun getActiveSession(): WorkoutSession? =
@@ -175,4 +189,14 @@ class DemoWorkoutRepository @Inject constructor(
         ?.sets
         ?.associate { it.setNumber to it.weight }
         .orEmpty()
+
+    override suspend fun getPrefillForExercise(exerciseId: String, userId: String,
+        defaults: ExerciseInputDefaults): Map<Int, Pair<Float, Int>> {
+        val log = FakeWorkoutDataSource.getWorkoutLogs(userId).sortedByDescending { it.endTime }
+            .asSequence().mapNotNull { workout -> workout.exerciseLogs.firstOrNull {
+                it.exercise.id == exerciseId && it.sets.any { set -> set.isCompleted }
+            } }.firstOrNull() ?: return emptyMap()
+        if (log.inputDefaults != defaults) return emptyMap()
+        return log.sets.filter { it.isCompleted }.associate { it.setNumber to (it.weight to it.reps) }
+    }
 }

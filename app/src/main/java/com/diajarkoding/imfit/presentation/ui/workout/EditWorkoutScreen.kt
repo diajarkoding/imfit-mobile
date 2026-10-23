@@ -82,7 +82,7 @@ internal fun EditWorkoutContent(state: EditWorkoutState, onBack: () -> Unit = {}
                     RoutineExerciseEditor(exercise, editable,
                         onRemove = { onRemove(index) },
                         onConfig = { sets, reps, rest -> onConfig(exercise.id, sets, reps, rest) },
-                        onValidity = { valid -> onValidity(exercise.id, valid) })
+                        onValidity = { valid -> onValidity(exercise.id, valid) }, sourceRevision = state.sourceRevision)
                 }
                 item { RoutineButton(stringResource(R.string.action_add_exercise), onAdd, enabled = editable, outlined = true, icon = Symbols.Default.Add, matchOutlineToContent = true) }
                 item { Text(stringResource(R.string.routine_edit_history_hint), color = c.muted, style = MaterialTheme.typography.bodySmall,
@@ -95,11 +95,11 @@ internal fun EditWorkoutContent(state: EditWorkoutState, onBack: () -> Unit = {}
 
 @Composable
 internal fun RoutineExerciseEditor(exercise: TemplateExercise, enabled: Boolean,
-    onRemove: () -> Unit, onConfig: (Int, Int, Int) -> Unit, onValidity: (Boolean) -> Unit) {
+    onRemove: () -> Unit, onConfig: (Int, Int, Int) -> Unit, onValidity: (Boolean) -> Unit, sourceRevision: Int = 0) {
     val c = IMFITColors.training
-    var sets by rememberSaveable(exercise.id) { mutableStateOf(exercise.sets.toString()) }
-    var reps by rememberSaveable(exercise.id) { mutableStateOf(exercise.reps.toString()) }
-    var rest by rememberSaveable(exercise.id) { mutableStateOf(exercise.restSeconds.toString()) }
+    var sets by rememberSaveable(exercise.id, sourceRevision) { mutableStateOf(exercise.sets.toString()) }
+    var reps by rememberSaveable(exercise.id, sourceRevision) { mutableStateOf(exercise.reps.toString()) }
+    var rest by rememberSaveable(exercise.id, sourceRevision) { mutableStateOf(exercise.restSeconds.toString()) }
     val valid = (sets.toIntOrNull() ?: 0) > 0 && (reps.toIntOrNull() ?: 0) > 0 && (rest.toIntOrNull() ?: -1) >= 0
     fun publish(newSets: String, newReps: String, newRest: String) {
         val setCount = newSets.toIntOrNull()

@@ -93,6 +93,7 @@ android {
 
     // Explicit opt-in: exercise the real minified production APK, not a debug substitute.
     testBuildType = providers.gradleProperty("restTestBuildType").orElse("debug").get()
+    sourceSets.getByName("androidTest").assets.srcDir("$projectDir/schemas")
 }
 
 dependencies {

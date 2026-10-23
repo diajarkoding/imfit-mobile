@@ -39,5 +39,8 @@ data class ExerciseLogEntity(
     @ColumnInfo(name = "created_at")
     val createdAt: Long = System.currentTimeMillis(),
     @ColumnInfo(name = "updated_at")
-    val updatedAt: Long = System.currentTimeMillis()
+    val updatedAt: Long = System.currentTimeMillis(),
+    // Local provenance only; not part of the Supabase payload/schema.
+    @ColumnInfo(name = "input_defaults")
+    val inputDefaults: String? = null
 )

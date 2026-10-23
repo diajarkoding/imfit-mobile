@@ -15,6 +15,8 @@ import com.diajarkoding.imfit.data.local.sync.SyncStatus
 import com.diajarkoding.imfit.data.sync.SyncScheduler
 import com.diajarkoding.imfit.domain.model.Exercise
 import com.diajarkoding.imfit.domain.model.ExerciseLog
+import com.diajarkoding.imfit.domain.model.ExerciseInputDefaults
+import com.diajarkoding.imfit.domain.model.inputDefaults
 import com.diajarkoding.imfit.domain.model.MuscleCategory
 import com.diajarkoding.imfit.domain.model.TemplateExercise
 import com.diajarkoding.imfit.domain.model.WorkoutLog
@@ -91,6 +93,12 @@ class WorkoutRepositoryImpl @Inject constructor(
         database.invalidationTracker.createFlow("workout_logs", "exercise_logs", "workout_sets", "exercises")
             .map { database.withTransaction {
                 workoutLogDao.getLastWorkoutLog(userId)?.let { mapWorkoutLogEntityToDomain(it) }
+            } }.distinctUntilChanged().flowOn(Dispatchers.IO)
+
+    override fun observeWorkoutLog(logId: String): Flow<WorkoutLog?> =
+        database.invalidationTracker.createFlow("workout_logs", "exercise_logs", "workout_sets", "exercises")
+            .map { database.withTransaction {
+                workoutLogDao.getWorkoutLogById(logId)?.takeIf { it.deletedAt == null }?.let { mapWorkoutLogEntityToDomain(it) }
             } }.distinctUntilChanged().flowOn(Dispatchers.IO)
 
     override suspend fun getTemplates(userId: String): List<WorkoutTemplate> {
@@ -315,18 +323,22 @@ class WorkoutRepositoryImpl @Inject constructor(
 
     override suspend fun startWorkout(template: WorkoutTemplate): WorkoutSession = lifecycleMutex.withLock {
         timerCleanup?.stop("SESSION_REPLACED")
+        val userId = authRepository.getLocalUserId() ?: template.userId
         val exerciseLogs = template.exercises.map { templateExercise ->
+            val defaults = templateExercise.inputDefaults()
+            val previous = getPrefillForExercise(templateExercise.id, userId, defaults)
             ExerciseLog(
                 exercise = templateExercise.exercise,
                 sets = (1..templateExercise.sets).map { setNumber ->
                     WorkoutSet(
                         setNumber = setNumber,
-                        weight = 0f,
-                        reps = templateExercise.reps,
+                        weight = previous[setNumber]?.first ?: 0f,
+                        reps = previous[setNumber]?.second ?: templateExercise.reps,
                         isCompleted = false
                     )
                 },
-                restSeconds = templateExercise.restSeconds
+                restSeconds = templateExercise.restSeconds,
+                inputDefaults = defaults
             )
         }
         
@@ -338,7 +350,6 @@ class WorkoutRepositoryImpl @Inject constructor(
             exerciseLogs = exerciseLogs
         )
         
-        val userId = authRepository.getLocalUserId() ?: template.userId
         val sessionDataJson = json.encodeToString(session.toSerializable())
             
         val entity = ActiveSessionEntity(
@@ -425,31 +436,19 @@ class WorkoutRepositoryImpl @Inject constructor(
         } }
 
     override suspend fun finishWorkout(): WorkoutLog? = lifecycleMutex.withLock lifecycle@{
-        val rawSession = sessionMutex.withLock {
-            getActiveSessionForTimer()
-        } ?: return@lifecycle null
-
-        val sanitizedExerciseLogs = rawSession.exerciseLogs.mapNotNull { exerciseLog ->
-            val completedSets = exerciseLog.sets.filter { it.isCompleted }
-            if (completedSets.isNotEmpty()) {
-                exerciseLog.copy(sets = completedSets)
-            } else {
-                null
+        val session = sessionMutex.withLock {
+            val raw = getActiveSessionForTimer() ?: return@withLock null
+            val completed = raw.exerciseLogs.mapNotNull { log ->
+                log.sets.filter { it.isCompleted }.takeIf { it.isNotEmpty() }?.let { log.copy(sets = it) }
             }
-        }
-
-        if (sanitizedExerciseLogs.isEmpty()) {
-            return@lifecycle null
-        }
-
-        timerCleanup?.stop("WORKOUT_FINISHED")
-        sessionMutex.withLock {
-            terminalSessions.add(rawSession.id)
-        }
-        val session = rawSession.copy(exerciseLogs = sanitizedExerciseLogs)
+            if (completed.isEmpty()) return@withLock null
+            terminalSessions.add(raw.id)
+            raw.copy(exerciseLogs = completed)
+        } ?: return@lifecycle null
         val endTime = System.currentTimeMillis()
 
         try {
+            timerCleanup?.stop("WORKOUT_FINISHED")
             val result = withContext(Dispatchers.IO) { database.withTransaction {
                 val persistedSession = activeSessionDao.getSessionById(session.id)
                     ?: return@withTransaction null
@@ -491,7 +490,8 @@ class WorkoutRepositoryImpl @Inject constructor(
                         syncStatus = SyncStatus.PENDING_SYNC.name,
                         pendingOperation = PendingOperation.CREATE.name,
                         createdAt = now,
-                        updatedAt = now
+                        updatedAt = now,
+                        inputDefaults = exerciseLog.inputDefaults?.key
                     )
                 }
                 val setEntities = session.exerciseLogs.flatMapIndexed { exerciseIndex, exerciseLog ->
@@ -641,9 +641,9 @@ class WorkoutRepositoryImpl @Inject constructor(
             val exerciseEntity = exerciseDao.getExerciseById(exerciseLogEntity.exerciseId)
             val setEntities = workoutSetDao.getSetsForExercise(logEntity.id, exerciseLogEntity.exerciseId)
             
-            val muscleCategory = exerciseEntity?.let {
-                MuscleCategory.entries.getOrNull(it.muscleCategoryId - 1)
-            } ?: MuscleCategory.CHEST
+            val muscleCategory = MuscleCategory.entries.firstOrNull { it.name == exerciseLogEntity.muscleCategory }
+                ?: exerciseEntity?.let { MuscleCategory.entries.getOrNull(it.muscleCategoryId - 1) }
+                ?: MuscleCategory.CHEST
             
             val exercise = Exercise(
                 id = exerciseLogEntity.exerciseId,
@@ -682,7 +682,7 @@ class WorkoutRepositoryImpl @Inject constructor(
     }
 
     override suspend fun getLastExerciseLog(exerciseId: String): ExerciseLog? {
-        val userId = authRepository.getCurrentUser()?.id ?: return null
+        val userId = authRepository.getLocalUserId() ?: return null
         val logEntity = exerciseLogDao.getLastExerciseLog(exerciseId, userId) ?: return null
         val exerciseEntity = exerciseDao.getExerciseById(exerciseId) ?: return null
         val setEntities = workoutSetDao.getSetsForExercise(logEntity.workoutLogId, exerciseId)
@@ -722,6 +722,15 @@ class WorkoutRepositoryImpl @Inject constructor(
 
     override suspend fun getLastWeightsForExercise(exerciseId: String, userId: String): Map<Int, Float> {
         return getLastPerformanceForExercise(exerciseId, userId).mapValues { it.value.first }
+    }
+
+    override suspend fun getPrefillForExercise(exerciseId: String, userId: String,
+        defaults: ExerciseInputDefaults): Map<Int, Pair<Float, Int>> = database.withTransaction {
+        val sets = workoutSetDao.getLastWorkoutSetsForExercise(exerciseId, userId)
+        val first = sets.firstOrNull() ?: return@withTransaction emptyMap()
+        val log = exerciseLogDao.getExerciseLog(first.workoutLogId, exerciseId) ?: return@withTransaction emptyMap()
+        if (log.inputDefaults != defaults.key) return@withTransaction emptyMap()
+        sets.associate { it.setNumber to (it.weight to it.reps) }
     }
 
     companion object {
@@ -775,12 +784,14 @@ private data class SerializableSession(
 private data class SerializableExerciseLog(
     val exercise: SerializableExercise,
     val sets: List<SerializableWorkoutSet>,
-    val restSeconds: Int = 60
+    val restSeconds: Int = 60,
+    val inputDefaults: ExerciseInputDefaults? = null
 ) {
     fun toDomain(): ExerciseLog = ExerciseLog(
         exercise = exercise.toDomain(),
         sets = sets.map { it.toDomain() },
-        restSeconds = restSeconds
+        restSeconds = restSeconds,
+        inputDefaults = inputDefaults
     )
 }
 
@@ -835,7 +846,8 @@ private fun WorkoutSession.toSerializable() = SerializableSession(
 private fun ExerciseLog.toSerializable() = SerializableExerciseLog(
     exercise = exercise.toSerializable(),
     sets = sets.map { it.toSerializable() },
-    restSeconds = restSeconds
+    restSeconds = restSeconds,
+    inputDefaults = inputDefaults
 )
 
 private fun Exercise.toSerializable() = SerializableExercise(

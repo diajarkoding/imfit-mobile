@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+    <application>
+        <!-- Diagnostic APK only. Never exported or merged into a normal application variant. -->
+        <service android:name="io.github.jan.supabase.auth.StoreProbeServiceA"
+            android:exported="false" android:process=":storeproof_a" />
+        <service android:name="io.github.jan.supabase.auth.StoreProbeServiceB"
+            android:exported="false" android:process=":storeproof_b" />
+    </application>
+</manifest>

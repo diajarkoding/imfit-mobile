@@ -28,6 +28,9 @@ android {
         versionName = "1.0"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
+        if (providers.gradleProperty("b0Instrumentation").orNull == "true") {
+            testInstrumentationRunner = "com.diajarkoding.imfit.b0.B0TestRunner"
+        }
     }
 
     flavorDimensions += "dataSource"
@@ -94,6 +97,9 @@ android {
     // Explicit opt-in: exercise the real minified production APK, not a debug substitute.
     testBuildType = providers.gradleProperty("restTestBuildType").orElse("debug").get()
     sourceSets.getByName("androidTest").assets.srcDir("$projectDir/schemas")
+    // B0 harness is shared only by tests; never packaged into the application.
+    sourceSets.getByName("test").kotlin.srcDir("src/b0Test/kotlin")
+    sourceSets.getByName("androidTest").kotlin.srcDir("src/b0Test/kotlin")
 }
 
 dependencies {
@@ -157,6 +163,9 @@ dependencies {
     // --- TESTING ---
     testImplementation(libs.junit)
     testImplementation(libs.androidx.work.testing)
+    testImplementation("io.ktor:ktor-client-mock:${libs.versions.ktor.get()}")
+    androidTestImplementation("io.ktor:ktor-client-mock:${libs.versions.ktor.get()}")
+    androidTestImplementation(libs.androidx.work.testing)
     androidTestImplementation(libs.androidx.junit)
     androidTestImplementation(libs.androidx.espresso.core)
     androidTestImplementation(platform(libs.androidx.compose.bom))

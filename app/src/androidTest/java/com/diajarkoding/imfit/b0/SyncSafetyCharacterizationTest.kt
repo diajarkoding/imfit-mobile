@@ -393,11 +393,13 @@ class SyncSafetyCharacterizationTest {
         val name = "b0-recovery-${UUID.randomUUID()}"
         val original = seedTemplate()
         preferences.setInitialSyncCompleted(OWNER_A, false)
-        val persistent = Room.databaseBuilder(context, IMFITDatabase::class.java, name).build()
+        val persistent = Room.databaseBuilder(context, IMFITDatabase::class.java, name)
+            .addCallback(IMFITDatabase.REVISION_CALLBACK).build()
         try {
             persistent.workoutTemplateDao().insertTemplate(original)
         } finally { persistent.close() }
-        val reopened = Room.databaseBuilder(context, IMFITDatabase::class.java, name).build()
+        val reopened = Room.databaseBuilder(context, IMFITDatabase::class.java, name)
+            .addCallback(IMFITDatabase.REVISION_CALLBACK).build()
         try {
             assertEquals("CREATE", reopened.workoutTemplateDao().getPendingSyncTemplates(OWNER_A).single().pendingOperation)
             assertEquals(original.name, reopened.workoutTemplateDao().getTemplateById(TEMPLATE)?.name)

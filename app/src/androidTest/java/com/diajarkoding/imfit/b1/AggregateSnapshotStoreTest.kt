@@ -21,7 +21,7 @@ import org.junit.runner.RunWith
 import java.util.concurrent.Executor
 import java.util.concurrent.atomic.AtomicReference
 
-/** Real Room7 tests, no SDK/network. No production application or normal app data is opened. */
+/** Real Room tests, no SDK/network. No production application or normal app data is opened. */
 @RunWith(AndroidJUnit4::class)
 class AggregateSnapshotStoreTest {
     private class Fixture {
@@ -31,6 +31,7 @@ class AggregateSnapshotStoreTest {
         }
         val afterParentRead = AtomicReference<BlockingProbe?>()
         val db = Room.inMemoryDatabaseBuilder(context, IMFITDatabase::class.java)
+            .addCallback(IMFITDatabase.REVISION_CALLBACK)
             .setQueryCallback({ sql, _ ->
                 if (sql.startsWith("SELECT * FROM workout_logs WHERE id", ignoreCase = true)) {
                     afterParentRead.getAndSet(null)?.pause()
@@ -183,8 +184,8 @@ class AggregateSnapshotStoreTest {
         assertEquals("B", gate.transition("B")!!.ownerId)
     }
 
-    /** BLOCKER proof only, NOT a safe-ack acceptance test. No acknowledgement is performed. */
-    @Test fun schema7BlockerFullStateEqualityCannotDetectSameMillisecondOperationABA() = scenario {
+    /** The former schema7 blocker: equal content must now have distinct durable revisions. */
+    @Test fun durableRevisionDistinguishesSameMillisecondOperationABA() = scenario {
         seedWorkout()
         val before = store.workout("A", "workout")!!
         db.withTransaction {
@@ -196,10 +197,13 @@ class AggregateSnapshotStoreTest {
             db.workoutSetDao().updateWorkoutSet(before.sets.single())
         }
         val after = store.workout("A", "workout")!!
-        assertEquals(before, after)
+        assertEquals(before.parent, after.parent)
+        assertEquals(before.exercises, after.exercises)
+        assertEquals(before.sets, after.sets)
+        assertTrue(after.revision > before.revision)
+        assertFalse(store.acknowledge(before))
         assertEquals(100L, after.parent.updatedAt)
         assertEquals("CREATE", after.parent.pendingOperation)
-        // No durable mutation identity exists to reject an ack of 'before' after these writes.
-        assertEquals(7, db.openHelper.readableDatabase.version)
+        assertEquals(8, db.openHelper.readableDatabase.version)
     }
 }

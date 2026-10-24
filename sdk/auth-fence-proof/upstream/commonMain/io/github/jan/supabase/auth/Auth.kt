@@ -352,11 +352,13 @@ sealed interface Auth : MainPlugin<AuthConfig>, CustomSerializationPlugin {
      * Exchanges a code for a session. Used when using the [FlowType.PKCE] flow
      * @param code The code to exchange
      * @param saveSession Whether to save the session in storage
+     * @param flow The exact retained initiation handle. Missing provenance is rejected before effects.
+     * @param state The state returned by that external flow, not a value read from a current cache.
      * @throws RestException or one of its subclasses if receiving an error response. If the error response contains a error code, an [AuthRestException] will be thrown which can be used to easier identify the problem.
      * @throws HttpRequestTimeoutException if the request timed out
      * @throws HttpRequestException on network related issues
      */
-    suspend fun exchangeCodeForSession(code: String, saveSession: Boolean = true): UserSession
+    suspend fun exchangeCodeForSession(code: String, saveSession: Boolean = true, flow: AuthExternalFlow? = null, state: String? = null): UserSession
 
     /**
      * Starts auto refreshing the current session

@@ -98,7 +98,7 @@ def main():
         installed = True
         class_names = ["AtomicSessionAuthorityTest", "SdkAtomicFenceProofTest", "SdkPersistenceRecoveryGateTest"]
         if args.include_store:
-            class_names += ["AtomicSessionStoreProtocolTest", "SdkAtomicStoreRecoveryTest", "StoreBackupBoundaryTest", "SdkWriterFenceTest", "SdkAwaitedWriterTest", "AndroidAwaitedDeepLinkTest", "AndroidAtomicStoreDeviceTest", "AndroidStoreProcessTest"]
+            class_names += ["AtomicSessionStoreProtocolTest", "SdkAtomicStoreRecoveryTest", "StoreBackupBoundaryTest", "SdkWriterFenceTest", "SdkAwaitedWriterTest", "SdkTokenAndOtpFenceTest", "SdkExternalFlowApiTest", "SdkExpiredRecoveryTest", "SdkLifecycleFlowTest", "AndroidLifecycleFlowTest", "AndroidAwaitedDeepLinkTest", "AndroidAtomicStoreDeviceTest", "AndroidStoreProcessTest"]
         expected_tests = 0
         for name in class_names:
             sources = list((ROOT / "sdk/auth-fence-proof/src").glob("*/java/io/github/jan/supabase/auth/" + name + ".kt"))

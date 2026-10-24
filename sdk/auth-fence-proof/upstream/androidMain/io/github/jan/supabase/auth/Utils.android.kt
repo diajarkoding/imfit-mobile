@@ -14,5 +14,6 @@ internal actual suspend fun Auth.startExternalAuth(
     getUrl: suspend (redirectTo: String?) -> String,
     onSessionSuccess: suspend (UserSession) -> Unit
 ) {
-    supabaseClient.openExternalUrl(getUrl(redirectUrl))
+    val url = getUrl(redirectUrl) // Any provider HTTP work is outside the authority.
+    (this as AuthImpl).publishExternalAction { supabaseClient.openExternalUrl(url) }
 }

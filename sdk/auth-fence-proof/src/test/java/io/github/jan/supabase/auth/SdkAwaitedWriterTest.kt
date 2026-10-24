@@ -64,6 +64,7 @@ class SdkAwaitedWriterTest {
                 coroutineDispatcher = dispatcher
                 retryDelay = 1.milliseconds
                 flowType = FlowType.PKCE
+                scheme = "imfit"; host = "auth"
             }
         }
         val auth get() = client.auth as AuthImpl
@@ -243,7 +244,7 @@ class SdkAwaitedWriterTest {
 
     @Test fun pkceVerifierIsPresentWhenAwaitedUrlReturns() = scenario { f ->
         val flow = f.auth.beginExternalFlow()
-        val url = f.auth.getOAuthUrl(Google, flow = flow)
+        val url = java.net.URLDecoder.decode(f.auth.getOAuthUrl(Google, flow = flow), "UTF-8")
         assertTrue(url.contains("state=${flow.state}"))
         val verifier = requireNotNull(f.auth.codeVerifierCache.loadCodeVerifier())
         assertTrue(url.contains("code_challenge=${generateCodeChallenge(verifier)}"))
@@ -270,7 +271,7 @@ class SdkAwaitedWriterTest {
         val old = requireNotNull(f.auth.sessionJob)
         val lease = f.auth.sessionAuthority.lease()
         f.body = USER_A
-        f.auth.updateUser { email = "synthetic@example.invalid" }
+        f.auth.withExternalFlow(f.auth.beginExternalFlow()) { updateUser { email = "synthetic@example.invalid" } }
         assertTrue(old.isCancelled)
         assertTrue(f.auth.isAutoRefreshRunning)
         assertNotSame(old, f.auth.sessionJob)
@@ -305,9 +306,9 @@ class SdkAwaitedWriterTest {
 
     @Test fun delayedExplicitRefreshCannotDeliverToSuccessor() = staleResult(SESSION_A) { it.refreshSession("refresh-A") }
 
-    @Test fun delayedSsoUrlCannotDeliverToSuccessor() = staleResult("""{"url":"https://synthetic.invalid"}""") { it.retrieveSSOUrl { domain = "synthetic.invalid" } }
+    @Test fun delayedSsoUrlCannotDeliverToSuccessor() = staleResult("""{"url":"https://synthetic.invalid"}""") { it.withExternalFlow(it.beginExternalFlow()) { retrieveSSOUrl { domain = "synthetic.invalid" } } }
 
-    @Test fun delayedPasswordResetCannotReportSuccessForSuccessor() = staleResult("{}") { it.resetPasswordForEmail("synthetic@example.invalid") }
+    @Test fun delayedPasswordResetCannotReportSuccessForSuccessor() = staleResult("{}") { it.withExternalFlow(it.beginExternalFlow()) { resetPasswordForEmail("synthetic@example.invalid") } }
 
     @Test fun delayedReauthenticationCannotReportSuccessForSuccessor() = staleResult("{}") { it.reauthenticate() }
 
@@ -403,6 +404,7 @@ class SdkAwaitedWriterTest {
     @Test fun implicitMissingOrDuplicateStateCannotFetchUserOrPublish() = scenario { f ->
         f.auth.config.flowType = FlowType.IMPLICIT
         val flow = f.auth.beginExternalFlow()
+        f.auth.getOAuthUrl(Google, flow = flow)
         for (bad in listOf(fragment(flow).substringBefore("&state="), fragment(flow) + "&state=${flow.state}")) {
             try { f.auth.parseFragmentAndImportSession(bad, flow) { fail() }; fail() }
             catch (_: IllegalStateException) { }
@@ -414,6 +416,7 @@ class SdkAwaitedWriterTest {
     @Test fun delayedImplicitUserReplyCannotDeliverBeforeOrAfterSuccessor() = scenario { f ->
         f.auth.config.flowType = FlowType.IMPLICIT; f.body = USER_A; f.pause = true
         val flow = f.auth.beginExternalFlow()
+        f.auth.getOAuthUrl(Google, flow = flow)
         val old = async { stale { f.auth.parseFragmentAndImportSession(fragment(flow), flow) { fail() } } }
         f.entered.await(); f.owner("B"); f.release.complete(Unit); old.await()
         assertEquals("B", f.auth.currentUserOrNull()!!.id)

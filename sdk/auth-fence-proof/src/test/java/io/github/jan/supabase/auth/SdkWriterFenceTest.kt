@@ -56,10 +56,18 @@ class SdkWriterFenceTest {
                 if (delayResponse) { entered.complete(Unit); release.await() }
                 respond(body, status, headersOf(HttpHeaders.ContentType, "application/json"))
             }
-            install(Auth) { minimalSettings(sessionManager = store, autoSaveToStorage = true) }
+            install(Auth) {
+                minimalSettings(sessionManager = store, autoSaveToStorage = true)
+                scheme = "imfit"; host = "auth"
+            }
         }
         val auth get() = client.auth
         suspend fun owner(owner: String) = auth.importSession(syntheticSession(owner), autoRefresh = false)
+        suspend fun <T> external(action: suspend Auth.() -> T): T = auth.withExternalFlow(auth.beginExternalFlow(), action).result
+        suspend fun pkce(): AuthExternalFlow {
+            auth.config.flowType = FlowType.PKCE
+            return auth.beginExternalFlow().also { auth.getOAuthUrl(io.github.jan.supabase.auth.providers.Google, flow = it) }
+        }
         suspend fun close() { release.complete(Unit); client.close() }
     }
 
@@ -91,7 +99,7 @@ class SdkWriterFenceTest {
     }
 
     @Test fun delayedEmailSignupCannotReplaceSuccessor() = staleResponse(SESSION_A) {
-        it.signUpWith(Email) { email = "fixture@example.invalid"; password = "synthetic" }
+        it.withExternalFlow(it.beginExternalFlow()) { signUpWith(Email) { email = "fixture@example.invalid"; password = "synthetic" } }
     }
 
     @Test fun delayedAnonymousLoginCannotReplaceSuccessor() = staleResponse(SESSION_A) { it.signInAnonymously() }
@@ -109,7 +117,7 @@ class SdkWriterFenceTest {
     }
 
     @Test fun delayedUserUpdateCannotWriteOrPublishIntoSuccessor() = staleResponse(USER_A) {
-        it.updateUser { email = "new@example.invalid" }
+        it.withExternalFlow(it.beginExternalFlow()) { updateUser { email = "new@example.invalid" } }
     }
 
     @Test fun delayedCurrentUserLookupCannotWriteOrPublishIntoSuccessor() = staleResponse(USER_A) {
@@ -140,7 +148,7 @@ class SdkWriterFenceTest {
 
     @Test fun successfulUserUpdatePersistsBeforePublicationAndPreservesIdentityLease() = scenario { f ->
         val lease = f.auth.sessionAuthority.lease()
-        f.auth.updateUser { email = "new@example.invalid" }
+        f.external { updateUser { email = "new@example.invalid" } }
         assertEquals("A", f.store.stored!!.user!!.id)
         assertEquals(2, f.store.saves)
         f.auth.sessionAuthority.commit(lease) { }
@@ -150,7 +158,7 @@ class SdkWriterFenceTest {
     @Test fun userUpdatePublicationWaitsForExistingLocalCommit() = scenario { f ->
         val lease = f.auth.sessionAuthority.lease()
         f.delayResponse = true
-        val update = async { f.auth.updateUser { email = "new@example.invalid" } }
+        val update = async { f.external { updateUser { email = "new@example.invalid" } } }
         f.entered.await()
         val held = CompletableDeferred<Unit>()
         val finish = CompletableDeferred<Unit>()
@@ -163,7 +171,7 @@ class SdkWriterFenceTest {
 
     @Test fun wrongOwnerUserResponseIsRejectedBeforeLocalWrite() = scenario { f ->
         f.body = """{"aud":"authenticated","id":"B"}"""
-        try { f.auth.updateUser { email = "new@example.invalid" }; fail() }
+        try { f.external { updateUser { email = "new@example.invalid" } }; fail() }
         catch (_: IllegalStateException) { }
         assertEquals(1, f.store.saves)
         assertEquals("A", f.auth.currentUserOrNull()!!.id)
@@ -174,11 +182,11 @@ class SdkWriterFenceTest {
         val finish = CountDownLatch(1)
         val old = async(Dispatchers.Default) {
             try {
-                f.auth.updateUser {
+                f.external { updateUser {
                     email = "owner-A@example.invalid"
                     built.countDown()
                     check(finish.await(5, TimeUnit.SECONDS)) // test-only worker barrier, not UI
-                }
+                } }
                 false
             } catch (_: StaleAuthOperationException) { true }
         }
@@ -192,7 +200,7 @@ class SdkWriterFenceTest {
 
     @Test fun actualDelayedSendKeepsCapturedAuthorizationAndNeverUsesBForA() = scenario { f ->
         f.delaySend = true
-        val old = async { try { f.auth.updateUser { email = "owner-A@example.invalid" }; false } catch (_: StaleAuthOperationException) { true } }
+        val old = async { try { f.external { updateUser { email = "owner-A@example.invalid" } }; false } catch (_: StaleAuthOperationException) { true } }
         f.entered.await(); f.owner("B"); f.release.complete(Unit)
         assertTrue(old.await())
         assertEquals(listOf("A"), f.headerOwners)
@@ -273,9 +281,9 @@ class SdkWriterFenceTest {
     }
 
     @Test fun stalePkceExchangeCannotDeleteSuccessorVerifierOrPublish() = scenario { f ->
-        f.auth.codeVerifierCache.saveCodeVerifier("synthetic-initial-verifier")
+        val flow = f.pkce()
         f.body = SESSION_A; f.delayResponse = true
-        val old = async { try { f.auth.exchangeCodeForSession("synthetic-code"); false } catch (_: StaleAuthOperationException) { true } }
+        val old = async { try { f.auth.exchangeCodeForSession("synthetic-code", flow = flow, state = flow.state); false } catch (_: StaleAuthOperationException) { true } }
         f.entered.await(); f.owner("B")
         f.auth.codeVerifierCache.saveCodeVerifier("synthetic-successor-verifier")
         f.release.complete(Unit)
@@ -286,9 +294,9 @@ class SdkWriterFenceTest {
     }
 
     @Test fun staleReadOnlyPkceExchangeCannotDeleteVerifierOrDeliverSession() = scenario { f ->
-        f.auth.codeVerifierCache.saveCodeVerifier("synthetic-initial-verifier")
+        val flow = f.pkce()
         f.body = SESSION_A; f.delayResponse = true
-        val old = async { try { f.auth.exchangeCodeForSession("synthetic-code", saveSession = false); false } catch (_: StaleAuthOperationException) { true } }
+        val old = async { try { f.auth.exchangeCodeForSession("synthetic-code", saveSession = false, flow = flow, state = flow.state); false } catch (_: StaleAuthOperationException) { true } }
         f.entered.await(); f.owner("B")
         f.auth.codeVerifierCache.saveCodeVerifier("synthetic-successor-verifier")
         f.release.complete(Unit)
@@ -298,10 +306,10 @@ class SdkWriterFenceTest {
     }
 
     @Test fun successfulReadOnlyPkceExchangeConsumesOnlyCapturedVerifier() = scenario { f ->
-        f.auth.codeVerifierCache.saveCodeVerifier("synthetic-initial-verifier")
+        val flow = f.pkce()
         f.body = SESSION_A
         val lease = f.auth.sessionAuthority.lease()
-        assertEquals("A", f.auth.exchangeCodeForSession("synthetic-code", saveSession = false).user!!.id)
+        assertEquals("A", f.auth.exchangeCodeForSession("synthetic-code", saveSession = false, flow = flow, state = flow.state).user!!.id)
         assertNull(f.auth.codeVerifierCache.loadCodeVerifier())
         assertEquals(1, f.store.saves)
         f.auth.sessionAuthority.commit(lease) { }

@@ -42,7 +42,9 @@ import io.ktor.client.statement.request
 import io.ktor.http.HttpMethod
 import io.ktor.http.HttpHeaders
 import io.ktor.http.HttpStatusCode
+import io.ktor.http.URLBuilder
 import io.ktor.utils.io.errors.IOException
+import kotlinx.atomicfu.atomic
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.CoroutineStart
 import kotlinx.coroutines.CancellationException
@@ -91,6 +93,9 @@ internal class AuthImpl(
     var sessionJob: Job? = null
         private set
     private var externalFlow: AuthExternalFlow? = null
+    private var lifecyclePaused = false // same authority as session/job/flow publication
+    private var refreshContext: AuthCallContext? = null
+    internal var platformLifecycleJob: Job? by atomic(null)
     override val isAutoRefreshRunning: Boolean
         get() = sessionJob?.isActive == true
 
@@ -119,32 +124,20 @@ internal class AuthImpl(
 
     override fun init() {
         setupPlatform()
-        if (config.autoLoadFromStorage) {
-            authScope.launch {
-                Auth.logger.i {
-                    "Trying to load latest session from storage."
-                }
-                val startup = sessionAuthority.bootstrapOperation
-                val successful = loadFromStorageChecked(config.alwaysAutoRefresh, startup)
-                if (successful) {
-                    Auth.logger.i {
-                        "Successfully loaded session from storage!"
-                    }
-                } else {
-                    Auth.logger.i {
-                        "No session found."
-                    }
-                    sessionAuthority.mutate(startup, null, true, ::invalidateFailedSession) {
-                        _sessionStatus.value = SessionStatus.NotAuthenticated(false)
-                    }
-                }
+        authScope.launch {
+            val startup = sessionAuthority.bootstrapOperation
+            try {
+                if (config.autoLoadFromStorage && loadFromStorageChecked(config.alwaysAutoRefresh, startup)) return@launch
+            } catch (cancelled: CancellationException) { throw cancelled }
+              catch (_: Exception) {
+                // Do not leave awaitInitialization suspended or log credential-bearing failures.
+                Auth.logger.e { "Session recovery unavailable; stored bytes are retained" }
             }
-        } else {
-            authScope.launch {
-                sessionAuthority.mutate(sessionAuthority.bootstrapOperation, null, true, ::invalidateFailedSession) {
+            try {
+                sessionAuthority.mutate(startup, null, true, ::invalidateFailedSession) {
                     _sessionStatus.value = SessionStatus.NotAuthenticated(false)
                 }
-            }
+            } catch (_: StaleAuthOperationException) { /* Login, shutdown or a failed publication already superseded startup. */ }
         }
     }
 
@@ -187,6 +180,8 @@ internal class AuthImpl(
         redirectUrl: String?,
         config: ExternalAuthConfigDefaults.() -> Unit
     ): String? = withAuthOperation { call ->
+        val flow = requireExternalFlow()
+        if (call.session?.user?.id == null) throw UnverifiedAuthFlowException(AuthFlowRejection.OWNER_MISMATCH)
         val automaticallyOpen = ExternalAuthConfigDefaults().apply(config).automaticallyOpenUrl
         val fetchUrl: suspend (String?) -> String = { redirectTo: String? ->
             val url = getOAuthUrl(provider, redirectTo, "user/identities/authorize", additionalConfig = config)
@@ -196,8 +191,8 @@ internal class AuthImpl(
             response.request.url.toString()
         }
         if(!automaticallyOpen) {
-            val result = fetchUrl(redirectUrl ?: "")
-            sessionAuthority.validate(call.operation)
+            val result = fetchUrl(redirectUrl)
+            sessionAuthority.local(call.operation) { ensureCurrentFlow(flow) }
             return@withAuthOperation result
         }
         startExternalAuth(
@@ -227,6 +222,8 @@ internal class AuthImpl(
         redirectUrl: String?,
         config: SSO.Config.() -> Unit
     ): SSO.Result = withAuthOperation { call ->
+        val flow = requireExternalFlow()
+        val target = externalRedirect(redirectUrl)
         val createdConfig = SSO.Config().apply(config)
 
         require((createdConfig.domain != null && createdConfig.domain!!.isNotBlank()) || (createdConfig.providerId != null && createdConfig.providerId!!.isNotBlank())) {
@@ -237,9 +234,9 @@ internal class AuthImpl(
             "Either domain or providerId must be set, not both"
         }
 
-        val codeChallenge: String? = preparePKCEIfEnabled()
+        val codeChallenge: String? = preparePKCEIfEnabled(flow, AuthFlowPurpose.SSO)
         val result = api.postJson("sso", buildJsonObject {
-            redirectUrl?.let { put("redirect_to", it) }
+            put("redirect_to", target)
             createdConfig.captchaToken?.let(::putCaptchaToken)
             codeChallenge?.let(::putCodeChallenge)
             createdConfig.domain?.let {
@@ -249,7 +246,7 @@ internal class AuthImpl(
                 put("provider_id", it)
             }
         }).body<SSO.Result>()
-        sessionAuthority.validate(call.operation)
+        sessionAuthority.local(call.operation) { ensureCurrentFlow(flow) }
         result
     }
 
@@ -259,13 +256,16 @@ internal class AuthImpl(
         config: UserUpdateBuilder.() -> Unit
     ): UserInfo = withAuthOperation { call ->
         val updateBuilder = UserUpdateBuilder(serializer = serializer).apply(config)
-        val codeChallenge = preparePKCEIfEnabled()
+        val emailFlow = if (updateBuilder.email != null) requireExternalFlow() else null
+        if (emailFlow != null && call.session?.user?.id == null) throw UnverifiedAuthFlowException(AuthFlowRejection.OWNER_MISMATCH)
+        val target = if (emailFlow != null) externalRedirect(redirectUrl) else redirectUrl
+        val codeChallenge = emailFlow?.let { preparePKCEIfEnabled(it, AuthFlowPurpose.EMAIL_UPDATE) }
         val body = buildJsonObject {
             putJsonObject(supabaseJson.encodeToJsonElement(updateBuilder).jsonObject)
             codeChallenge?.let(::putCodeChallenge)
         }.toString()
         val response = api.putJson("user", body) {
-            redirectUrl?.let { url.parameters.append("redirect_to", it) }
+            target?.let { url.parameters.append("redirect_to", it) }
         }
         val userInfo = response.safeBody<UserInfo>()
         if (updateCurrentUser && call.session != null) {
@@ -279,12 +279,21 @@ internal class AuthImpl(
         val previousOwner = call.session?.user?.id
         check(previousOwner == null || previousOwner == session.user?.id) { "User response changed owner" }
         val refresh = isAutoRefreshRunning
+        val flow = currentCoroutineContext()[AuthExternalContext]?.flow?.takeIf { it.purpose == AuthFlowPurpose.EMAIL_UPDATE }
         sessionAuthority.mutate(call.operation, session.user?.id, previousOwner != session.user?.id, ::invalidateFailedSession,
-            onCommitted = { if (refresh) scheduleRefresh(session, it) }) {
+            guard = { flow == null || (flowIsCurrent(flow) && flow.call.operation === call.operation) },
+            onCommitted = {
+                // Transfer only this operation's exact, same-owner publication receipt, never capture B.
+                if (flow != null) {
+                    flow.call = AuthCallContext(this, it, session)
+                    flow.completedOperation = it
+                }
+                if (refresh) scheduleRefresh(session, it)
+            }) {
             if (config.autoSaveToStorage) sessionManager.saveSession(session)
             sessionJob?.cancel()
             sessionJob = null
-            externalFlow = null
+            externalFlow = flow
             _sessionStatus.value = SessionStatus.Authenticated(session, source)
         }
     }
@@ -317,19 +326,21 @@ internal class AuthImpl(
         redirectUrl: String?,
         captchaToken: String?
     ) = withAuthOperation { call ->
+        val flow = requireExternalFlow()
+        val target = externalRedirect(redirectUrl)
         require(email.isNotBlank()) {
             "Email must not be blank"
         }
-        val codeChallenge = preparePKCEIfEnabled()
+        val codeChallenge = preparePKCEIfEnabled(flow, AuthFlowPurpose.RECOVERY)
         val body = buildJsonObject {
             put("email", email)
             captchaToken?.let(::putCaptchaToken)
             codeChallenge?.let(::putCodeChallenge)
         }.toString()
         api.postJson("recover", body) {
-            redirectUrl?.let { url.encodedParameters.append("redirect_to", it) }
+            url.parameters.append("redirect_to", target)
         }
-        sessionAuthority.validate(call.operation)
+        sessionAuthority.local(call.operation) { ensureCurrentFlow(flow) }
     }
 
     override suspend fun reauthenticate() = withAuthOperation { call ->
@@ -421,22 +432,37 @@ internal class AuthImpl(
         user
     }
 
-    override suspend fun exchangeCodeForSession(code: String, saveSession: Boolean): UserSession = withAuthOperation { call ->
-        val codeVerifier = codeVerifierCache.loadCodeVerifier()
-        val session = api.postJson("token?grant_type=pkce", buildJsonObject {
-            put("auth_code", code)
-            put("code_verifier", codeVerifier)
-        }) {
-            headers.remove("Authorization")
-        }.safeBody<UserSession>()
-        val consumeVerifier: suspend () -> Unit = {
-            check(codeVerifierCache.loadCodeVerifier() == codeVerifier) { "PKCE verifier changed" }
-            codeVerifierCache.deleteCodeVerifier()
-        }
-        if (saveSession) {
-            importSessionChecked(session, config.alwaysAutoRefresh, SessionSource.External, call.operation, consumeVerifier)
-        } else sessionAuthority.local(call.operation, consumeVerifier)
-        session
+    override suspend fun importAuthToken(
+        accessToken: String,
+        refreshToken: String,
+        retrieveUser: Boolean,
+        autoRefresh: Boolean,
+    ) = withAuthOperation { call ->
+        // Keep the original operation across lookup AND publication. The upstream default helper
+        // catches stale/cancelled lookup and then recaptures a successor in importSession().
+        val user = if (retrieveUser) {
+            try { retrieveUser(accessToken) }
+            catch (cancelled: CancellationException) { throw cancelled }
+            catch (_: Exception) {
+                sessionAuthority.validate(call.operation)
+                Auth.logger.e { "Token user lookup unavailable; no credential details logged" }
+                null
+            }
+        } else null
+        importSessionChecked(UserSession(accessToken, refreshToken, "", "", 0L, "", user),
+            autoRefresh, SessionSource.Unknown, call.operation)
+        Unit
+    }
+
+    /** Provider-side verifier writes use the same authority even for direct provider invocation.
+     * This does NOT certify a raw callback as having opaque external-flow provenance.
+     */
+    internal suspend fun prepareProviderCodeChallenge(purpose: AuthFlowPurpose): String? =
+        preparePKCEIfEnabled(requireExternalFlow(), purpose)
+
+    override suspend fun exchangeCodeForSession(code: String, saveSession: Boolean, flow: AuthExternalFlow?, state: String?): UserSession {
+        val active = flow ?: throw UnverifiedAuthFlowException(AuthFlowRejection.MISSING_PROVENANCE)
+        return exchangeExternalCode(active, state, code, saveSession).session
     }
 
     override suspend fun refreshSession(refreshToken: String): UserSession = withAuthOperation { call ->
@@ -487,14 +513,17 @@ internal class AuthImpl(
                 ?: throw AuthAuthorityUnavailableException()
         }
         val ownJob = currentCoroutineContext()[AuthRefreshTask]?.job
+        val initiatingFlow = currentCoroutineContext()[AuthExternalContext]?.flow
         var committed: AuthOperation? = null
         sessionAuthority.mutate(operation, session.user?.id, source !is SessionSource.Refresh, ::invalidateFailedSession,
-            guard = guard,
+            guard = { guard() && (initiatingFlow == null || (flowIsCurrent(initiatingFlow) && initiatingFlow.call.operation === operation)) },
             onCommitted = { ticket ->
                 committed = ticket
+                if (initiatingFlow != null) initiatingFlow.completedOperation = ticket
                 if (autoRefresh) scheduleRefresh(session, ticket)
-            }) {
+        }) {
             beforePersistence()
+            if (initiatingFlow != null) consumeExternalFlow(initiatingFlow)
             if (session.refreshToken.isNotBlank() && session.expiresIn != 0L && config.autoSaveToStorage) sessionManager.saveSession(session)
             if (sessionJob !== ownJob) sessionJob?.cancel()
             sessionJob = null
@@ -505,6 +534,8 @@ internal class AuthImpl(
     }
 
     private fun scheduleRefresh(session: UserSession, operation: AuthOperation) {
+        refreshContext = AuthCallContext(this, operation, session)
+        if (lifecyclePaused) return
         lateinit var task: Job
         task = authScope.launch(start = CoroutineStart.LAZY) {
             withContext(AuthRefreshTask(task)) {
@@ -587,12 +618,13 @@ internal class AuthImpl(
         sessionAuthority.control(call.operation, ::invalidateFailedSession) {
             sessionJob?.cancel()
             sessionJob = null
+            refreshContext = null
         }
         Unit
     }
 
-    override suspend fun loadFromStorage(autoRefresh: Boolean): Boolean {
-        return loadFromStorageChecked(autoRefresh, sessionAuthority.operation())
+    override suspend fun loadFromStorage(autoRefresh: Boolean): Boolean = withAuthOperation { call ->
+        loadFromStorageChecked(autoRefresh, call.operation)
     }
 
     private suspend fun loadFromStorageChecked(autoRefresh: Boolean, operation: AuthOperation): Boolean {
@@ -608,8 +640,11 @@ internal class AuthImpl(
         sessionAuthority.validate(operation)
         if (recovered !is StoreOutcome.VerifiedCommitted) return false
         val session = recovered.session ?: return false
-        // Expired recovery needs the complete expiry/refresh writer audit (B1.1b).
-        if (session.expiresAt <= Clock.System.now()) return false
+        if (session.expiresAt <= Clock.System.now()) {
+            // Never rotate a durable credential without an explicitly enabled refresh + persistence.
+            if (!autoRefresh || !config.autoSaveToStorage) return false
+            return renewRecoveredSession(store, recovered, operation)
+        }
         sessionAuthority.mutate(operation, session.user?.id, true, ::invalidateFailedSession,
             onCommitted = { if (autoRefresh) scheduleRefresh(session, it) }) {
             if (!store.publishIfCurrent(recovered.ticket) {
@@ -617,6 +652,40 @@ internal class AuthImpl(
                 sessionJob = null
                 externalFlow = null
                 _sessionStatus.value = SessionStatus.Authenticated(session, SessionSource.Storage)
+            }) throw AuthStorageUnavailableException()
+        }
+        return true
+    }
+
+    @OptIn(kotlin.uuid.ExperimentalUuidApi::class)
+    private suspend fun renewRecoveredSession(
+        store: AtomicSessionStore,
+        recovered: StoreOutcome.VerifiedCommitted,
+        operation: AuthOperation,
+    ): Boolean {
+        val original = requireNotNull(recovered.session)
+        sessionAuthority.local(operation) {
+            if (!store.publishIfCurrent(recovered.ticket) {}) throw AuthStorageUnavailableException()
+        }
+        // A single bounded attempt, outside authority/storage locks. No retry/logout/legacy fallback.
+        val renewed = withContext(AuthCallContext(this, operation, original)) {
+            refreshSession(original.refreshToken)
+        }
+        check(renewed.user?.id == original.user?.id) { "Recovery refresh changed owner" }
+        check(renewed.expiresAt > Clock.System.now()) { "Recovery refresh is already expired" }
+        sessionAuthority.mutate(operation, renewed.user?.id, true, ::invalidateFailedSession,
+            onCommitted = { scheduleRefresh(renewed, it) }) {
+            // Never reread a successor head as the expected predecessor after network suspension.
+            val prepared = store.prepare(recovered.ticket.head, kotlin.uuid.Uuid.random().toString(), renewed) as? StoreOutcome.Prepared
+                ?: throw AuthStorageUnavailableException()
+            if (store.verifyPrepared(prepared.ticket) !is StoreOutcome.Prepared) throw AuthStorageUnavailableException()
+            val committed = store.commitIfCurrent(prepared.ticket) as? StoreOutcome.VerifiedCommitted
+                ?: throw AuthStorageUnavailableException()
+            if (!store.publishIfCurrent(committed.ticket) {
+                sessionJob?.cancel()
+                sessionJob = null
+                externalFlow = null
+                _sessionStatus.value = SessionStatus.Authenticated(renewed, SessionSource.Storage)
             }) throw AuthStorageUnavailableException()
         }
         return true
@@ -630,7 +699,10 @@ internal class AuthImpl(
                 sessionJob = null
                 externalFlow = null
                 _sessionStatus.value = SessionStatus.NotAuthenticated(false)
+                refreshContext = null
             }
+            // Observer removal dispatches to Main; never wait for it inside the session fence.
+            platformLifecycleJob?.join()
         }
     }
 
@@ -685,24 +757,29 @@ internal class AuthImpl(
         flow: AuthExternalFlow?,
         additionalConfig: ExternalAuthConfigDefaults.() -> Unit
     ): String {
-        val active = flow ?: beginExternalFlow()
+        val active = requireExternalFlow(flow)
         return withContext(active.call) {
-        val config = ExternalAuthConfigDefaults().apply(additionalConfig)
-        val codeChallenge = preparePKCEIfEnabled(active)
-        config.queryParams["state"] = active.state
-        codeChallenge?.let {
-            config.queryParams["code_challenge"] = it
-            config.queryParams["code_challenge_method"] = PKCEConstants.CHALLENGE_METHOD
-        }
-        resolveUrl(buildString {
-            append("$url?provider=${provider.name}&redirect_to=$redirectUrl")
-            if (config.scopes.isNotEmpty()) append("&scopes=${config.scopes.joinToString("+")}")
-            if (config.queryParams.isNotEmpty()) {
-                for ((key, value) in config.queryParams) {
-                    append("&$key=$value")
+            val options = ExternalAuthConfigDefaults().apply(additionalConfig)
+            val target = externalRedirect(redirectUrl, active)
+            val purpose = if (url == "user/identities/authorize") AuthFlowPurpose.LINK else AuthFlowPurpose.OAUTH
+            if (purpose == AuthFlowPurpose.LINK && active.call.session?.user?.id == null) throw UnverifiedAuthFlowException(AuthFlowRejection.OWNER_MISMATCH)
+            val challenge = preparePKCEIfEnabled(active, purpose)
+            val result = URLBuilder(resolveUrl(url)).apply {
+                val reserved = setOf("provider", "redirect_to", "state", "scopes", "code_challenge", "code_challenge_method")
+                options.queryParams.filterKeys { it !in reserved }.forEach { (key, value) -> parameters.append(key, value) }
+                parameters["provider"] = provider.name
+                parameters["redirect_to"] = target
+                parameters["state"] = active.state
+                if (options.scopes.isNotEmpty()) parameters["scopes"] = options.scopes.joinToString(" ")
+                challenge?.let {
+                    parameters["code_challenge"] = it
+                    parameters["code_challenge_method"] = PKCEConstants.CHALLENGE_METHOD
                 }
+            }.buildString()
+            sessionAuthority.local(active.call.operation) {
+                ensureCurrentFlow(active)
+                result
             }
-        })
         }
     }
 
@@ -719,6 +796,7 @@ internal class AuthImpl(
             if (sessionJob !== ownJob) sessionJob?.cancel()
             _sessionStatus.value = SessionStatus.NotAuthenticated(true)
             sessionJob = null
+            refreshContext = null
             externalFlow = null
         }
         currentCoroutineContext()[AuthCallContext]?.takeIf {
@@ -730,6 +808,7 @@ internal class AuthImpl(
         // Inline under authority: never clear a successor from an asynchronous catch/collector.
         sessionJob?.cancel()
         sessionJob = null
+        refreshContext = null
         externalFlow = null
         _sessionStatus.value = SessionStatus.NotAuthenticated(false)
     }
@@ -741,54 +820,177 @@ internal class AuthImpl(
     suspend fun resetLoadingState() = lifecycleBackground(sessionAuthority.operation())
 
     internal suspend fun lifecycleBackground(expected: AuthOperation) {
-        sessionAuthority.control(expected, ::invalidateFailedSession) {
-            sessionJob?.cancel(); sessionJob = null
-            _sessionStatus.value = SessionStatus.Initializing
-        }
+        applyLifecycle(expected, foreground = false)
     }
 
     internal suspend fun lifecycleForeground(expected: AuthOperation) {
-        if (!loadFromStorageChecked(config.alwaysAutoRefresh, expected)) {
-            sessionAuthority.mutate(expected, null, true, ::invalidateFailedSession) {
-                _sessionStatus.value = SessionStatus.NotAuthenticated(false)
+        applyLifecycle(expected, foreground = true)
+    }
+
+    private suspend fun applyLifecycle(expected: AuthOperation, foreground: Boolean) {
+        // Bootstrap must finish its own restore/no-session publication. Do not retire its ticket.
+        val initializing = if (_sessionStatus.value is SessionStatus.Initializing) sessionAuthority.local(expected) {
+            if (_sessionStatus.value is SessionStatus.Initializing) {
+                lifecyclePaused = !foreground
+                true
+            } else false
+        } else false
+        if (initializing) return
+        sessionAuthority.lifecycleControl(expected, ::invalidateFailedSession) { previous, next ->
+            lifecyclePaused = !foreground
+            sessionJob?.cancel()
+            sessionJob = null
+            val retained = refreshContext?.takeIf {
+                it.operation.identity === previous.identity && it.operation.generation == previous.generation
+            }?.session
+            val session = currentSessionOrNull() ?: retained
+            refreshContext = session?.let { AuthCallContext(this, next, it) }
+            externalFlow?.let { flow ->
+                val original = flow.call
+                if (!flow.inFlight && original.operation.authority === previous.authority &&
+                    original.operation.identity === previous.identity && original.operation.generation == previous.generation) {
+                    // Only the exact lifecycle receipt carries the original immutable credential.
+                    flow.call = AuthCallContext(this, next, original.session)
+                } else externalFlow = null
             }
+            if (foreground && config.alwaysAutoRefresh && session != null) scheduleRefresh(session, next)
         }
     }
 
     internal suspend fun beginExternalFlow(): AuthExternalFlow = withAuthOperation { call ->
-        val flow = AuthExternalFlow(call, generateCodeVerifier())
+        val flow = AuthExternalFlow(call, generateCodeVerifier(), config.flowType)
         sessionAuthority.local(call.operation) { externalFlow = flow }
         flow
     }
 
     private fun flowIsCurrent(flow: AuthExternalFlow): Boolean = flow.call.auth === this && externalFlow === flow
 
-    internal suspend fun importExternalFragment(flow: AuthExternalFlow, fragment: String, callback: (UserSession) -> Unit) = withContext(flow.call) {
-        sessionAuthority.local(flow.call.operation) {
-            if (!flowIsCurrent(flow)) throw StaleAuthOperationException()
+    private fun ensureCurrentFlow(flow: AuthExternalFlow) {
+        if (!flowIsCurrent(flow)) throw StaleAuthOperationException()
+        if (flow.flowType != config.flowType) throw UnverifiedAuthFlowException(AuthFlowRejection.FLOW_TYPE_MISMATCH)
+    }
+
+    private suspend fun requireExternalFlow(explicit: AuthExternalFlow? = null): AuthExternalFlow {
+        val flow = explicit ?: currentCoroutineContext()[AuthExternalContext]?.flow
+            ?: throw UnverifiedAuthFlowException(AuthFlowRejection.MISSING_PROVENANCE)
+        if (flow.call.auth !== this) throw StaleAuthOperationException()
+        sessionAuthority.local(flow.call.operation) { ensureCurrentFlow(flow) }
+        return flow
+    }
+
+    internal suspend fun <T> initiateExternalFlow(flow: AuthExternalFlow, initiate: suspend () -> T): AuthExternalInitiation<T> {
+        requireExternalFlow(flow)
+        return withContext(flow.call + AuthExternalContext(flow)) {
+            try {
+                val result = initiate()
+                val completion = flow.completedOperation ?: flow.call.operation
+                sessionAuthority.local(completion) {
+                    if (externalFlow !== flow && !(externalFlow == null && flow.completedOperation === completion)) throw StaleAuthOperationException()
+                    AuthExternalInitiation(flow, result)
+                }
+            } catch (failure: Throwable) {
+                // Retire this ephemeral attempt, not committed authentication or durable bytes.
+                withContext(NonCancellable) {
+                    try { sessionAuthority.local(flow.call.operation) { if (flowIsCurrent(flow)) externalFlow = null } }
+                    catch (_: StaleAuthOperationException) { /* Cannot retire a successor's flow. */ }
+                }
+                throw failure
+            }
         }
-        val states = fragment.split('&').filter { it.substringBefore('=') == "state" }
-        check(states == listOf("state=${flow.state}")) { "Unverified external flow state" }
-        val parsed = parseSessionFromFragment(fragment)
-        val user = retrieveUser(parsed.accessToken)
-        val session = parsed.copy(user = user)
-        val published = importSessionChecked(session, config.alwaysAutoRefresh, SessionSource.External, flow.call.operation,
-            beforePersistence = { consumeExternalFlow(flow) }, guard = { flowIsCurrent(flow) })
+    }
+
+    internal suspend fun externalRedirect(redirectUrl: String?, explicit: AuthExternalFlow? = null): String {
+        val flow = requireExternalFlow(explicit)
+        val redirect = redirectUrl ?: defaultRedirectUrl() ?: throw UnverifiedAuthFlowException(AuthFlowRejection.INVALID_REDIRECT)
+        val target = try { URLBuilder(redirect) } catch (_: Exception) { throw UnverifiedAuthFlowException(AuthFlowRejection.INVALID_REDIRECT) }
+        if (!redirect.contains("://") || target.host.isBlank() || target.fragment.isNotEmpty() ||
+            (target.protocol.name !in setOf("http", "https") && (target.protocol.name != config.scheme || target.host != config.host))) {
+            throw UnverifiedAuthFlowException(AuthFlowRejection.INVALID_REDIRECT)
+        }
+        if (target.parameters.contains("state")) throw UnverifiedAuthFlowException(AuthFlowRejection.STATE_MISMATCH)
+        target.parameters.append("state", flow.state)
+        return target.buildString()
+    }
+
+    /** The platform caller supplies only its bounded local browser-launch effect, never HTTP. */
+    internal suspend fun publishExternalAction(action: suspend () -> Unit) {
+        val flow = requireExternalFlow()
+        sessionAuthority.local(flow.call.operation) {
+            ensureCurrentFlow(flow)
+            if (!flow.prepared) throw UnverifiedAuthFlowException(AuthFlowRejection.NOT_PREPARED)
+            action()
+        }
+    }
+
+    private suspend fun claimCallback(flow: AuthExternalFlow, state: String?, expectedType: FlowType, operation: AuthOperation) {
+        sessionAuthority.local(operation) {
+            ensureCurrentFlow(flow)
+            if (flow.call.operation !== operation) throw StaleAuthOperationException()
+            if (!flow.prepared || flow.purpose == null) throw UnverifiedAuthFlowException(AuthFlowRejection.NOT_PREPARED)
+            if (flow.flowType != expectedType) throw UnverifiedAuthFlowException(AuthFlowRejection.FLOW_TYPE_MISMATCH)
+            if (state != flow.state) throw UnverifiedAuthFlowException(AuthFlowRejection.STATE_MISMATCH)
+            if (flow.inFlight) throw UnverifiedAuthFlowException(AuthFlowRejection.ALREADY_IN_FLIGHT)
+            if (expectedType == FlowType.PKCE && (flow.verifier == null || codeVerifierCache.loadCodeVerifier() != flow.verifier)) {
+                throw UnverifiedAuthFlowException(AuthFlowRejection.VERIFIER_MISMATCH)
+            }
+            flow.inFlight = true
+        }
+    }
+
+    private suspend fun releaseCallback(flow: AuthExternalFlow, operation: AuthOperation) = withContext(NonCancellable) {
+        try { sessionAuthority.local(operation) { if (flowIsCurrent(flow)) flow.inFlight = false } }
+        catch (_: StaleAuthOperationException) { /* Never touch a successor. */ }
+    }
+
+    private fun checkCallbackOwner(flow: AuthExternalFlow, session: UserSession) {
+        if (flow.purpose in setOf(AuthFlowPurpose.LINK, AuthFlowPurpose.EMAIL_UPDATE) &&
+            flow.call.session?.user?.id != session.user?.id) throw UnverifiedAuthFlowException(AuthFlowRejection.OWNER_MISMATCH)
+    }
+
+    internal suspend fun importExternalFragment(flow: AuthExternalFlow, fragment: String, callback: (UserSession) -> Unit) {
+        val call = flow.call
+        withContext(call + AuthExternalContext(null)) {
+            val states = fragment.split('&').filter { it.substringBefore('=') == "state" }
+            if (states != listOf("state=${flow.state}")) throw UnverifiedAuthFlowException(AuthFlowRejection.STATE_MISMATCH)
+            val operation = call.operation
+            claimCallback(flow, flow.state, FlowType.IMPLICIT, operation)
+            try {
+                val parsed = parseSessionFromFragment(fragment)
+                val user = retrieveUser(parsed.accessToken)
+                val session = parsed.copy(user = user)
+                checkCallbackOwner(flow, session)
+                val published = importSessionChecked(session, config.alwaysAutoRefresh, SessionSource.External, operation,
+                    beforePersistence = { consumeExternalFlow(flow) }, guard = { flowIsCurrent(flow) && flow.flowType == config.flowType })
+                sessionAuthority.local(published.operation) { callback(published.session) }
+            } finally { releaseCallback(flow, operation) }
+        }
+    }
+
+    internal suspend fun importExternalCode(flow: AuthExternalFlow, state: String?, code: String, callback: (UserSession) -> Unit) {
+        val published = exchangeExternalCode(flow, state, code, true)
         sessionAuthority.local(published.operation) { callback(published.session) }
     }
 
-    internal suspend fun importExternalCode(flow: AuthExternalFlow, state: String?, code: String, callback: (UserSession) -> Unit) = withContext(flow.call) {
-        sessionAuthority.local(flow.call.operation) {
-            if (!flowIsCurrent(flow)) throw StaleAuthOperationException()
-            check(state == flow.state && flow.verifier != null) { "Unverified external flow state" }
+    private suspend fun exchangeExternalCode(flow: AuthExternalFlow, state: String?, code: String, saveSession: Boolean): Publication {
+        val call = flow.call
+        return withContext(call + AuthExternalContext(null)) {
+            if (code.isBlank()) throw UnverifiedAuthFlowException(AuthFlowRejection.NOT_PREPARED)
+            val operation = call.operation
+            claimCallback(flow, state, FlowType.PKCE, operation)
+            try {
+                val verifier = requireNotNull(flow.verifier)
+                val session = api.postJson("token?grant_type=pkce", buildJsonObject {
+                    put("auth_code", code); put("code_verifier", verifier)
+                }) { headers.remove("Authorization") }.safeBody<UserSession>()
+                checkCallbackOwner(flow, session)
+                if (saveSession) importSessionChecked(session, config.alwaysAutoRefresh, SessionSource.External, operation,
+                    beforePersistence = { consumeExternalFlow(flow) }, guard = { flowIsCurrent(flow) && flow.flowType == config.flowType })
+                else sessionAuthority.local(operation) {
+                    consumeExternalFlow(flow)
+                    Publication(operation, session)
+                }
+            } finally { releaseCallback(flow, operation) }
         }
-        val verifier = requireNotNull(flow.verifier)
-        val session = api.postJson("token?grant_type=pkce", buildJsonObject {
-            put("auth_code", code); put("code_verifier", verifier)
-        }) { headers.remove("Authorization") }.safeBody<UserSession>()
-        val published = importSessionChecked(session, config.alwaysAutoRefresh, SessionSource.External, flow.call.operation,
-            beforePersistence = { consumeExternalFlow(flow) }, guard = { flowIsCurrent(flow) })
-        sessionAuthority.local(published.operation) { callback(published.session) }
     }
 
     private suspend fun consumeExternalFlow(flow: AuthExternalFlow) {
@@ -803,25 +1005,20 @@ internal class AuthImpl(
     /**
      * Prepares PKCE if enabled and returns the code challenge.
      */
-    private suspend fun preparePKCEIfEnabled(flow: AuthExternalFlow? = null): String? {
-        if (this.config.flowType != FlowType.PKCE) {
-            if (flow != null) sessionAuthority.local(flow.call.operation) {
-                if (!flowIsCurrent(flow)) throw StaleAuthOperationException()
-                check(!flow.prepared) { "External flow was already prepared" }
-                flow.prepared = true
-            }
-            return null
-        }
-        val active = flow ?: beginExternalFlow()
+    private suspend fun preparePKCEIfEnabled(flow: AuthExternalFlow, purpose: AuthFlowPurpose): String? {
+        val active = requireExternalFlow(flow)
         val codeVerifier = generateCodeVerifier()
         sessionAuthority.local(active.call.operation) {
-            if (!flowIsCurrent(active)) throw StaleAuthOperationException()
+            ensureCurrentFlow(active)
             check(!active.prepared) { "External flow was already prepared" }
-            codeVerifierCache.saveCodeVerifier(codeVerifier)
-            active.verifier = codeVerifier
+            if (active.flowType == FlowType.PKCE) {
+                codeVerifierCache.saveCodeVerifier(codeVerifier)
+                active.verifier = codeVerifier
+            }
+            active.purpose = purpose
             active.prepared = true
         }
-        return generateCodeChallenge(codeVerifier)
+        return if (active.flowType == FlowType.PKCE) generateCodeChallenge(codeVerifier) else null
     }
 
 }

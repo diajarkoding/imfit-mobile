@@ -41,8 +41,10 @@ suspend fun SupabaseClient.handleDeeplinks(intent: Intent, flow: AuthExternalFlo
             auth.parseFragmentAndImportSession(fragment, flow, onSessionSuccess)
         }
         FlowType.PKCE -> {
-            val code = data.getQueryParameter("code") ?: return
-            check(data.getQueryParameters("state").size == 1) { "Unverified external flow state" }
+            if (data.getQueryParameters("code").size != 1 || data.getQueryParameters("state").size != 1) {
+                throw UnverifiedAuthFlowException(AuthFlowRejection.STATE_MISMATCH)
+            }
+            val code = data.getQueryParameter("code") ?: throw UnverifiedAuthFlowException(AuthFlowRejection.NOT_PREPARED)
             (auth as AuthImpl).importExternalCode(flow, data.getQueryParameter("state"), code, onSessionSuccess)
         }
     }

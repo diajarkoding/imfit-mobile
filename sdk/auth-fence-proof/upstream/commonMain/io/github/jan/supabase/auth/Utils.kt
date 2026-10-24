@@ -8,6 +8,10 @@ import io.ktor.client.request.HttpRequestBuilder
 /** Capture at initiation and retain only in the originating flow; never recover from stored credentials. */
 suspend fun Auth.beginExternalFlow(): AuthExternalFlow = (this as AuthImpl).beginExternalFlow()
 
+/** Retain [flow] BEFORE calling an initiator/browser; never infer it from current SDK/cache state. */
+suspend fun <T> Auth.withExternalFlow(flow: AuthExternalFlow, initiate: suspend Auth.() -> T): AuthExternalInitiation<T> =
+    (this as AuthImpl).initiateExternalFlow(flow) { initiate(this) }
+
 @SupabaseInternal
 suspend fun Auth.parseFragmentAndImportSession(fragment: String, flow: AuthExternalFlow, onSessionSuccess: (UserSession) -> Unit = {}) {
     (this as AuthImpl).importExternalFragment(flow, fragment, onSessionSuccess)

@@ -17,9 +17,12 @@ EXPECTED_DELTAS = {
     "commonMain/io/github/jan/supabase/auth/AuthImpl.kt",
     "commonMain/io/github/jan/supabase/auth/AuthenticatedSupabaseApi.kt",
     "commonMain/io/github/jan/supabase/auth/mfa/MfaApi.kt",
+    "commonMain/io/github/jan/supabase/auth/providers/builtin/OTP.kt",
+    "commonMain/io/github/jan/supabase/auth/providers/builtin/DefaultAuthProvider.kt",
     "commonMain/io/github/jan/supabase/auth/Utils.kt",
     "androidMain/io/github/jan/supabase/auth/Android.kt",
     "androidMain/io/github/jan/supabase/auth/setupPlatform.kt",
+    "androidMain/io/github/jan/supabase/auth/Utils.android.kt",
 }
 EXPECTED_ADDITIONS = {
     "commonMain/io/github/jan/supabase/auth/AtomicSessionAuthority.kt",

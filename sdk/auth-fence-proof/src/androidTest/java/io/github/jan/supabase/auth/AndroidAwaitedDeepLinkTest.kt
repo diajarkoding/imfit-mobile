@@ -110,4 +110,29 @@ class AndroidAwaitedDeepLinkTest {
         assertEquals(1, delivered)
         assertEquals("A", f.auth.currentUserOrNull()!!.id)
     }
+
+    @Test fun missingBlankOrDuplicateCodeIsTypedUnverifiedBeforeHttp() = scenario { f ->
+        val flow = f.flow(); var delivered = 0
+        val verifier = f.auth.codeVerifierCache.loadCodeVerifier()
+        for (query in listOf("state=${flow.state}", "state=${flow.state}&code=", "state=${flow.state}&code=first&code=second")) {
+            try { f.client.handleDeeplinks(f.intent(flow, query), flow) { delivered++ }; fail() }
+            catch (failure: UnverifiedAuthFlowException) {
+                assertTrue(failure.reason in setOf(AuthFlowRejection.STATE_MISMATCH, AuthFlowRejection.NOT_PREPARED))
+            }
+        }
+        assertEquals(0, delivered)
+        assertEquals(0, f.requests)
+        assertEquals(verifier, f.auth.codeVerifierCache.loadCodeVerifier())
+        assertNull(f.auth.currentSessionOrNull())
+    }
+
+    @Test fun uriEncodedStateMustRoundTripExactlyWithItsRetainedHandle() = scenario { f ->
+        val flow = f.flow(); var delivered = 0
+        val uri = Uri.Builder().scheme("proof").authority("callback")
+            .appendQueryParameter("state", flow.state).appendQueryParameter("code", "synthetic-code").build()
+        assertEquals(listOf(flow.state), uri.getQueryParameters("state"))
+        f.client.handleDeeplinks(Intent(Intent.ACTION_VIEW, uri), flow) { delivered++; assertSame(it, f.auth.currentSessionOrNull()) }
+        assertEquals(1, delivered)
+        assertEquals(1, f.requests)
+    }
 }

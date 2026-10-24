@@ -3,10 +3,8 @@ package io.github.jan.supabase.auth.providers.builtin
 import io.github.jan.supabase.SupabaseClient
 import io.github.jan.supabase.SupabaseSerializer
 import io.github.jan.supabase.auth.AuthImpl
-import io.github.jan.supabase.auth.FlowType
+import io.github.jan.supabase.auth.AuthFlowPurpose
 import io.github.jan.supabase.auth.auth
-import io.github.jan.supabase.auth.generateCodeChallenge
-import io.github.jan.supabase.auth.generateCodeVerifier
 import io.github.jan.supabase.auth.providers.AuthProvider
 import io.github.jan.supabase.auth.putCaptchaToken
 import io.github.jan.supabase.auth.user.UserSession
@@ -60,6 +58,8 @@ data object OTP: AuthProvider<OTP.Config, Unit> {
         redirectUrl: String?,
         config: (Config.() -> Unit)?
     ) {
+        val auth = supabaseClient.auth as AuthImpl
+        auth.withAuthOperation { call ->
         val otpConfig = Config(supabaseClient.auth.serializer).apply(config ?: {})
 
         require((otpConfig.email != null && otpConfig.email!!.isNotBlank()) || (otpConfig.phone != null && otpConfig.phone!!.isNotBlank())) { "You need to provide either an email or a phone number" }
@@ -76,13 +76,9 @@ data object OTP: AuthProvider<OTP.Config, Unit> {
                 put("phone", it)
             }
         }
-        var codeChallenge: String? = null
-        if (supabaseClient.auth.config.flowType == FlowType.PKCE) {
-            val codeVerifier = generateCodeVerifier()
-            supabaseClient.auth.codeVerifierCache.saveCodeVerifier(codeVerifier)
-            codeChallenge = generateCodeChallenge(codeVerifier)
-        }
-        (supabaseClient.auth as AuthImpl).api.postJson("otp", buildJsonObject {
+        val target = auth.externalRedirect(redirectUrl)
+        val codeChallenge = auth.prepareProviderCodeChallenge(AuthFlowPurpose.OTP)
+        auth.api.postJson("otp", buildJsonObject {
             putJsonObject(body)
             codeChallenge?.let {
                 put("code_challenge", it)
@@ -90,7 +86,9 @@ data object OTP: AuthProvider<OTP.Config, Unit> {
             }
             otpConfig.captchaToken?.let { putCaptchaToken(it) }
         }) {
-            redirectUrl?.let { url.parameters.append("redirect_to", it) }
+            url.parameters.append("redirect_to", target)
+        }
+        auth.sessionAuthority.validate(call.operation)
         }
     }
 

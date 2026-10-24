@@ -4,10 +4,8 @@ import io.github.jan.supabase.SupabaseClient
 import io.github.jan.supabase.annotations.SupabaseExperimental
 import io.github.jan.supabase.annotations.SupabaseInternal
 import io.github.jan.supabase.auth.AuthImpl
-import io.github.jan.supabase.auth.FlowType
+import io.github.jan.supabase.auth.AuthFlowPurpose
 import io.github.jan.supabase.auth.auth
-import io.github.jan.supabase.auth.generateCodeChallenge
-import io.github.jan.supabase.auth.generateCodeVerifier
 import io.github.jan.supabase.auth.providers.AuthProvider
 import io.github.jan.supabase.auth.putCodeChallenge
 import io.github.jan.supabase.auth.redirectTo
@@ -53,15 +51,18 @@ sealed interface DefaultAuthProvider<C, R> : AuthProvider<C, R> {
         redirectUrl: String?,
         config: (C.() -> Unit)?
     ) {
+        val gotrue = supabaseClient.auth as AuthImpl
+        gotrue.withAuthOperation { call ->
         require(config != null) { "Credentials are required" }
         val encodedCredentials = encodeCredentials(config)
-        val gotrue = supabaseClient.auth as AuthImpl
         val url = "token?grant_type=$grantType"
         val response = gotrue.api.postJson(url, encodedCredentials) {
             redirectUrl?.let { redirectTo(it) }
         }
         response.body<UserSession>().also {
+            gotrue.sessionAuthority.validate(call.operation)
             onSuccess(it)
+        }
         }
     }
 
@@ -72,15 +73,12 @@ sealed interface DefaultAuthProvider<C, R> : AuthProvider<C, R> {
         redirectUrl: String?,
         config: (C.() -> Unit)?
     ): R? {
+        val gotrue = supabaseClient.auth as AuthImpl
+        return gotrue.withAuthOperation { call ->
         require(config != null) { "Credentials are required" }
         val body = encodeCredentials(config)
-        val gotrue = supabaseClient.auth as AuthImpl
-        var codeChallenge: String? = null
-        if(gotrue.config.flowType == FlowType.PKCE) {
-            val codeVerifier = generateCodeVerifier()
-            gotrue.codeVerifierCache.saveCodeVerifier(codeVerifier)
-            codeChallenge = generateCodeChallenge(codeVerifier)
-        }
+        val target = if (this == IDToken) redirectUrl else gotrue.externalRedirect(redirectUrl)
+        val codeChallenge = if (this == IDToken) null else gotrue.prepareProviderCodeChallenge(AuthFlowPurpose.SIGNUP)
         val url = when (this) {
             Email -> "signup"
             Phone -> "signup"
@@ -92,15 +90,17 @@ sealed interface DefaultAuthProvider<C, R> : AuthProvider<C, R> {
                 putCodeChallenge(codeChallenge)
             }
         }) {
-            redirectUrl?.let { redirectTo(it) }
+            target?.let { redirectTo(it) }
         }
         val json = response.body<JsonObject>()
+        gotrue.sessionAuthority.validate(call.operation)
         if(json.containsKey("access_token")) {
             val userSession = supabaseJson.decodeFromJsonElement<UserSession>(json)
             onSuccess(userSession)
-            return null
+            return@withAuthOperation null
         }
-        return decodeResult(json)
+        decodeResult(json)
+        }
     }
 
     @SupabaseInternal

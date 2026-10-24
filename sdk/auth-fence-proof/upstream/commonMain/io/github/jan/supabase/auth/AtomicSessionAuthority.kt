@@ -2,6 +2,7 @@ package io.github.jan.supabase.auth
 
 import io.github.jan.supabase.auth.user.UserSession
 import io.ktor.util.AttributeKey
+import kotlinx.atomicfu.atomic
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.currentCoroutineContext
@@ -35,6 +36,11 @@ class AuthCommitLease internal constructor(
 class StaleAuthOperationException : CancellationException("Authentication operation is stale")
 class AuthAuthorityUnavailableException : IllegalStateException("Authentication authority requires recovery")
 
+enum class AuthFlowRejection { MISSING_PROVENANCE, NOT_PREPARED, STATE_MISMATCH, FLOW_TYPE_MISMATCH, INVALID_REDIRECT, VERIFIER_MISMATCH, ALREADY_IN_FLIGHT, OWNER_MISMATCH }
+
+/** Reasons only: never include callback codes, fragments, verifier values or credentials. */
+class UnverifiedAuthFlowException(val reason: AuthFlowRejection) : IllegalStateException("External authentication flow rejected: ${reason.name}")
+
 /** Immutable inputs captured before Auth work. Never log this context or its session. */
 internal class AuthCallContext(
     val auth: AuthImpl,
@@ -49,11 +55,25 @@ internal val AuthRequestContext = AttributeKey<AuthCallContext>("imfit-auth-oper
 
 /** Proof-only flow provenance. Neither credentials nor this ticket may be reconstructed from storage. */
 class AuthExternalFlow internal constructor(
-    internal val call: AuthCallContext,
+    call: AuthCallContext,
     val state: String,
+    internal val flowType: FlowType,
 ) {
+    internal var call by atomic(call)
+    internal var completedOperation: AuthOperation? by atomic(null)
     internal var verifier: String? = null
     internal var prepared = false
+    internal var purpose: AuthFlowPurpose? = null
+    internal var inFlight = false
+}
+
+internal enum class AuthFlowPurpose { OAUTH, SSO, LINK, RECOVERY, SIGNUP, OTP, EMAIL_UPDATE }
+
+/** Explicit transport of the initiating handle and result. Not a credential/recovery envelope. */
+class AuthExternalInitiation<out T> internal constructor(val flow: AuthExternalFlow, val result: T)
+
+internal class AuthExternalContext(val flow: AuthExternalFlow?) : AbstractCoroutineContextElement(Key) {
+    companion object Key : CoroutineContext.Key<AuthExternalContext>
 }
 
 internal class AuthRefreshTask(val job: Job) : AbstractCoroutineContextElement(Key) {
@@ -70,6 +90,9 @@ class AtomicSessionAuthority {
     private var generation = 0L
     private var available = false
     private var closed = false
+    // Compact proof of consecutive lifecycle-only control receipts for this exact identity.
+    // Every other generation-changing path breaks the chain; normal validators never use it.
+    private var lifecycleFloor: Long? = null
     internal val bootstrapOperation = AuthOperation(this, identity, generation)
     private val publishedOperation = MutableStateFlow(bootstrapOperation)
 
@@ -112,15 +135,32 @@ class AtomicSessionAuthority {
         expected: AuthOperation,
         onFailure: (Throwable) -> Unit = {},
         work: (AuthOperation) -> Unit,
+    ): AuthOperation = changeControl(expected, false, onFailure) { _, next -> work(next) }
+
+    internal suspend fun lifecycleControl(
+        expected: AuthOperation,
+        onFailure: (Throwable) -> Unit,
+        work: (AuthOperation, AuthOperation) -> Unit,
+    ): AuthOperation = changeControl(expected, true, onFailure, work)
+
+    private suspend fun changeControl(
+        expected: AuthOperation,
+        lifecycle: Boolean,
+        onFailure: (Throwable) -> Unit,
+        work: (AuthOperation, AuthOperation) -> Unit,
     ): AuthOperation = locked {
-        if (closed || expected.authority !== this || expected.identity !== identity || expected.generation != generation) {
+        val followsReceipts = lifecycle && lifecycleFloor?.let { expected.generation in it..generation } == true
+        if (closed || expected.authority !== this || expected.identity !== identity ||
+            (expected.generation != generation && !followsReceipts)) {
             throw StaleAuthOperationException()
         }
         check(generation < Long.MAX_VALUE) { "Session generation exhausted" }
+        val previous = AuthOperation(this, identity, generation)
         val next = AuthOperation(this, identity, generation + 1)
         try {
-            work(next)
+            work(previous, next)
             currentCoroutineContext().ensureActive()
+            lifecycleFloor = if (lifecycle) lifecycleFloor ?: generation else null
             generation++
             publishedOperation.value = next
             next
@@ -163,6 +203,7 @@ class AtomicSessionAuthority {
             val result = publication()
             currentCoroutineContext().ensureActive()
             identity = next
+            lifecycleFloor = null
             generation++
             available = true
             val committed = AuthOperation(this, identity, generation)
@@ -176,6 +217,7 @@ class AtomicSessionAuthority {
     }
 
     private fun poison(failure: Throwable, onFailure: (Throwable) -> Unit) {
+        lifecycleFloor = null
         // Saturate on exhaustion: never wrap/reuse a generation even if a post-commit hook failed.
         identity = AuthIdentity(null, if (identity.epoch < Long.MAX_VALUE) identity.epoch + 1 else Long.MAX_VALUE)
         if (generation < Long.MAX_VALUE) generation++
@@ -196,6 +238,7 @@ class AtomicSessionAuthority {
     /** Drain an in-flight local mutation, then permanently reject late work without touching storage. */
     internal suspend fun shutdown(publication: () -> Unit) = locked {
         closed = true
+        lifecycleFloor = null
         available = false
         publishedOperation.value = AuthOperation(this, identity, generation)
         publication()

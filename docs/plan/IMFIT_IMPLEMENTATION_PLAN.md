@@ -3,6 +3,8 @@
 **ID:** IMFIT-RPS-PLAN-001 · **Versi:** 1.2 · **Diperbarui:** 24 Oktober 2026
 **Dokumen inti:** `IMFIT_FEATURE_SPEC.md` = perilaku, file ini = cara kerja, `IMFIT_IMPLEMENTATION_REPORT.md` = status/keputusan/evidence terbaru.
 
+**Scope repository:** lanjutkan rencana/implementasi ini di `feat/pull-to-refresh-pagination`, bukan `fix-bug`. Branch fitur diturunkan dari `fix-bug` setelah pemisahan logis ke baseline redesign/bugfix sebelum fase fitur. Seluruh11 commit fase fitur dan pending SDK/UI/docs dipertahankan dan diterapkan kembali tanpa rewrite riwayat; detail/map commit serta pemeriksaan di laporan. Pergantian branch tidak mengizinkan memasang APK Room7 di atas DB Room8 atau menjalankan migrasi perangkat. Push memerlukan izin baru yang eksplisit.
+
 > **Perubahan urutan yang diminta user:** utamakan fitur yang terlihat, bukan menyelesaikan seluruh fork SDK/API/safety dahulu. Urutan lama B1 → B2 → C → D → E → F **tidak lagi menjadi gerbang delivery UI**. Bukti/keputusan SDK dan risiko data tetap dipertahankan dalam laporan, bukan dianggap selesai atau dihapus.
 
 > **Koreksi UX user yang berlaku:** jangan tambahkan tombol refresh/retry/load-more. Tarik konten ke bawah saat posisi paling atas untuk refresh manual; scroll mendekati akhir memuat batch lokal otomatis. `pageSize=10`, `initialLoadSize=10` untuk List/Picker; konfigurasi bersama produksi/demo (`prefetchDistance=2`). Kontrol existing tetap. Implementasi diperbaiki lebih dahulu, lalu ketiga dokumen ini diselaraskan; hasil aktual hanya di laporan yang sama.

@@ -5,6 +5,8 @@
 **Status:** TARGET PRODUK; implementasi belum selesai  
 **Dokumen inti:** `IMFIT_FEATURE_SPEC.md` (APA yang harus dibangun), `IMFIT_IMPLEMENTATION_PLAN.md` (BAGAIMANA membangun), dan `IMFIT_IMPLEMENTATION_REPORT.md` (BUKTI/STATUS terbaru).
 
+**Branch pemilik fitur:** `feat/pull-to-refresh-pagination`. Rencana/implementasi refresh, paging, SDK proof dan Room8/exact-ack berada di branch fitur ini. `fix-bug` dipisahkan secara logis kembali ke tracked tree sebelum fase fitur (`c3e1f66`); itu pemisahan source, **bukan izin downgrade/install Room7 di atas data Room8**. Riwayat/status pemisahan ada di laporan yang sama; perilaku fitur versi1.2 tidak berubah.
+
 > **Aturan sumber tunggal:** Ketiga dokumen di atas cukup untuk melanjutkan pekerjaan. Dokumen lama Plan v2/v2.1, Phase A/B0/B1, ADR, dan laporan uji tetap menjadi arsip/evidence bila perlu diaudit, **bukan** file wajib yang harus terus dibaca atau diperbarui. Kontrak yang ditulis di sini tidak otomatis mengesahkan keputusan kebijakan yang masih terbuka. Status aktual dan approval selalu berada di `IMFIT_IMPLEMENTATION_REPORT.md`.
 
 ## 1. Tujuan dan hasil akhir

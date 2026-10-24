@@ -16,8 +16,7 @@ import org.junit.Assert.*
 class ExerciseReactiveRepositoryTest {
     private lateinit var db: IMFITDatabase
     @Before fun setup() {
-        db = Room.inMemoryDatabaseBuilder(ApplicationProvider.getApplicationContext<Context>(), IMFITDatabase::class.java)
-            .addCallback(IMFITDatabase.REVISION_CALLBACK).build()
+        db = Room.inMemoryDatabaseBuilder(ApplicationProvider.getApplicationContext<Context>(), IMFITDatabase::class.java).build()
     }
     @After fun close() { db.close() }
     @Test fun roomUpdatesFlowToExistingCatalogAndEmptySearchNeverFallsBackToFakeRecords() = runBlocking {

@@ -75,7 +75,6 @@ class SyncManager @Inject constructor(
     private val syncMutex = Mutex()
     private val masterMutex = Mutex()
     private val importer = RemoteSnapshotImporter(database)
-    private val snapshots = AggregateSnapshotStore(database)
     private val blockedUsers = Collections.synchronizedSet(mutableSetOf<String>())
 
     init {
@@ -326,25 +325,31 @@ class SyncManager @Inject constructor(
 
         for (template in pendingTemplates) {
             try {
-                requireCurrentUser(userId)
-                val snapshot = snapshots.template(userId, template.id) ?: continue
-                val captured = snapshot.parent
-                when (captured.pendingOperation) {
+                val operation = template.pendingOperation ?: continue
+                val exercises = templateExerciseDao.getExercisesForTemplateList(template.id)
+                when (template.pendingOperation) {
                     PendingOperation.CREATE.name -> {
-                        createTemplateRemote(captured.id, captured.userId, captured.name)
-                        syncTemplateExercises(captured.id, snapshot.exercises)
+                        createTemplateRemote(template.id, template.userId, template.name)
+                        syncTemplateExercises(template.id, exercises)
                     }
                     PendingOperation.UPDATE.name -> {
-                        updateTemplateRemote(captured.id, captured.name)
-                        syncTemplateExercises(captured.id, snapshot.exercises)
+                        updateTemplateRemote(template.id, template.name)
+                        syncTemplateExercises(template.id, exercises)
                     }
                     PendingOperation.DELETE.name -> {
-                        deleteTemplateRemote(captured.id)
+                        deleteTemplateRemote(template.id)
                     }
                 }
-                // Revision CAS is independent of the still-blocked SDK epoch adapter (see B1 report).
-                requireCurrentUser(userId)
-                if (!snapshots.acknowledge(snapshot)) allSucceeded = false
+                database.withTransaction {
+                    val marked = workoutTemplateDao.markAsSyncedIfUnchanged(
+                        template.id,
+                        template.updatedAt,
+                        operation
+                    )
+                    if (marked == 1) {
+                        templateExerciseDao.markTemplateExercisesAsSynced(template.id)
+                    }
+                }
                 Log.d(TAG, "Synced template: ${template.id} (${template.pendingOperation})")
             } catch (e: CancellationException) {
                 throw e
@@ -385,18 +390,28 @@ class SyncManager @Inject constructor(
      * Either all entities sync successfully, or none are marked as synced.
      */
     private suspend fun syncWorkoutAggregate(log: WorkoutLogEntity) {
-        requireCurrentUser(log.userId)
-        val snapshot = snapshots.workout(log.userId, log.id) ?: return
+        val operation = log.pendingOperation ?: return
+        val exerciseLogs = exerciseLogDao.getExerciseLogsByWorkoutLogId(log.id)
+        val workoutSets = workoutSetDao.getSetsByWorkoutLogId(log.id)
         
         try {
             val result = aggregateRemoteDataSource.upsertWorkout(
-                workout = rpcJson.encodeToJsonElement(workoutDto(snapshot.parent)).jsonObject,
-                exercises = rpcJson.encodeToJsonElement(snapshot.exercises.map(::exerciseLogDto)).jsonArray,
-                sets = rpcJson.encodeToJsonElement(snapshot.sets.map(::workoutSetDto)).jsonArray,
+                workout = rpcJson.encodeToJsonElement(workoutDto(log)).jsonObject,
+                exercises = rpcJson.encodeToJsonElement(exerciseLogs.map(::exerciseLogDto)).jsonArray,
+                sets = rpcJson.encodeToJsonElement(workoutSets.map(::workoutSetDto)).jsonArray,
             )
 
-            requireCurrentUser(log.userId)
-            check(snapshots.acknowledge(snapshot)) { "Local workout changed during upload; pending preserved" }
+            database.withTransaction {
+                val marked = workoutLogDao.markAsSyncedIfUnchanged(
+                    log.id,
+                    log.updatedAt,
+                    operation
+                )
+                if (marked == 1) {
+                    exerciseLogDao.markWorkoutExerciseLogsAsSynced(log.id)
+                    workoutSetDao.markWorkoutSetsAsSynced(log.id)
+                }
+            }
             
             Log.d(TAG, "Aggregate sync completed for workout: ${result.workoutId} (${result.exerciseCount} exercises, ${result.setCount} sets)")
         } catch (e: Exception) {

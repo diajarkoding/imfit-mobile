@@ -46,7 +46,6 @@ class WorkoutRepositoryRoomFirstTest {
     fun setUp() {
         val context = ApplicationProvider.getApplicationContext<Context>()
         database = Room.inMemoryDatabaseBuilder(context, IMFITDatabase::class.java)
-            .addCallback(IMFITDatabase.REVISION_CALLBACK)
             .allowMainThreadQueries()
             .build()
         scheduler = RecordingSyncScheduler()

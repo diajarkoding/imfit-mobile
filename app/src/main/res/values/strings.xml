@@ -457,4 +457,8 @@
     <string name="error_rest_pause">Skip the rest timer before pausing</string>
     <string name="error_routine_save">Unable to save routine</string>
     <string name="error_routine_not_found">Routine not found</string>
+    <string name="catalog_refresh">Refresh</string>
+    <string name="catalog_refresh_failed">Could not refresh the catalog. Pull down from the top to try again.</string>
+    <string name="catalog_local_load_failed">Could not load exercises. Pull down from the top to try again.</string>
+    <string name="catalog_no_cached_results">No matching exercises in the local catalog. Refresh to check for updates.</string>
 </resources>

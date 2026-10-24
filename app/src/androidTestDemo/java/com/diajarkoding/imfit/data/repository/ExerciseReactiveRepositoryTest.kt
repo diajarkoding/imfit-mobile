@@ -57,7 +57,7 @@ class ExerciseReactiveRepositoryTest {
         assertFalse(repo.refreshExercises())
         assertEquals("Offline", repo.getAllExercises().single().name)
         cancel = true
-        try { repo.refreshExercises(); fail() } catch (_: CancellationException) { }
+        try { repo.refreshExercises(force = true); fail() } catch (_: CancellationException) { }
     }
     @Test fun profileCacheIsPersistedObservableAndScopedToTheOwner() = runBlocking {
         val dao = db.userDao()

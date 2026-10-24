@@ -2,74 +2,55 @@ package com.diajarkoding.imfit.presentation.ui.exercise
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import androidx.paging.cachedIn
 import com.diajarkoding.imfit.domain.model.Exercise
 import com.diajarkoding.imfit.domain.model.MuscleCategory
 import com.diajarkoding.imfit.domain.repository.ExerciseRepository
 import dagger.hilt.android.lifecycle.HiltViewModel
-import kotlinx.coroutines.flow.MutableStateFlow
-import kotlinx.coroutines.flow.asStateFlow
-import kotlinx.coroutines.launch
-import kotlinx.coroutines.Job
-import kotlinx.coroutines.flow.update
-import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.*
+import kotlinx.coroutines.flow.*
 import javax.inject.Inject
 
 data class ExerciseBrowserState(
     val exercisesByCategory: Map<MuscleCategory, List<Exercise>> = emptyMap(),
     val isLoading: Boolean = false,
     val query: String = "",
-    val results: List<Exercise> = emptyList(),
-    val hasError: Boolean = false
+    val results: List<Exercise> = emptyList(), // Preview/fixture presentation; runtime rows come from Room Paging.
+    val hasError: Boolean = false,
+    val isRefreshing: Boolean = false,
 )
 
 @HiltViewModel
 class ExerciseBrowserViewModel @Inject constructor(
     private val exerciseRepository: ExerciseRepository
 ) : ViewModel() {
-
     private val _state = MutableStateFlow(ExerciseBrowserState())
     val state = _state.asStateFlow()
-    private var loadJob: Job? = null
-    private var allExercises: List<Exercise> = emptyList()
+    private val category = MutableStateFlow(ExerciseCategory.ALL)
+    private var refreshJob: Job? = null
 
-    init {
-        viewModelScope.launch {
-            try { exerciseRepository.observeExercises().collect { publish(it) } }
-            catch (e: CancellationException) { throw e }
-            catch (_: Exception) { _state.update { it.copy(isLoading = false, hasError = true) } }
-        }
-        loadExercises()
-    }
+    @OptIn(ExperimentalCoroutinesApi::class)
+    val exercises = combine(category, state.map { it.query }.distinctUntilChanged()) { category, query ->
+        category.catalogFilter(query)
+    }.distinctUntilChanged().flatMapLatest(exerciseRepository::pageExercises).cachedIn(viewModelScope)
 
-    fun setQuery(query: String) {
-        _state.value = _state.value.copy(query = query)
-        publish(allExercises)
-    }
+    init { onResume() }
 
-    fun refresh() = loadExercises()
+    fun setCategory(value: ExerciseCategory) { category.value = value }
+    fun setQuery(query: String) { _state.update { it.copy(query = query) } }
+    fun refresh() = requestRefresh(force = true)
+    fun onResume() = requestRefresh(force = false)
 
-    private fun publish(records: List<Exercise>) {
-        allExercises = records
-        _state.update { current ->
-            val results = records.distinctBy { it.id }.filter {
-                current.query.isBlank() || it.name.contains(current.query.trim(), ignoreCase = true)
-            }.sortedBy { it.id }
-            current.copy(results = results, exercisesByCategory = results.groupBy { it.muscleCategory }, isLoading = false, hasError = false)
-        }
-    }
-
-    private fun loadExercises() {
-        loadJob?.cancel()
-        loadJob = viewModelScope.launch {
-            _state.value = _state.value.copy(isLoading = true, hasError = false)
+    private fun requestRefresh(force: Boolean) {
+        if (refreshJob?.isActive == true) return
+        refreshJob = viewModelScope.launch {
+            _state.update { it.copy(isRefreshing = true, hasError = false) }
             try {
-                publish(exerciseRepository.getAllExercises())
-                exerciseRepository.refreshExercises()
-            } catch (e: CancellationException) {
-                throw e
-            } catch (_: Exception) {
-                _state.value = _state.value.copy(isLoading = false, hasError = true)
-            }
+                val success = exerciseRepository.refreshExercises(force)
+                _state.update { it.copy(hasError = !success) }
+            } catch (cancelled: CancellationException) { throw cancelled }
+              catch (_: Exception) { _state.update { it.copy(hasError = true) } }
+            finally { _state.update { it.copy(isRefreshing = false) } }
         }
     }
 }

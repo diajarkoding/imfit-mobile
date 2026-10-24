@@ -51,6 +51,16 @@ class ExerciseListScreenTest {
     private var retryCalls = 0
     private val searches = mutableListOf<String>()
 
+    @Test fun refreshHasNoNewButtonAndRemainsAvailableAsAnAccessibilityAction() {
+        show()
+        rule.onNodeWithTag("exercise_list_refresh").assertDoesNotExist()
+        val action = rule.onNodeWithTag("exercise_list_refresh_container").fetchSemanticsNode()
+            .config[SemanticsActions.CustomActions].single { it.label == text(R.string.catalog_refresh) }
+        rule.runOnIdle { assertTrue(action.action()); assertEquals(1, retryCalls) }
+        // Existing back/search-clear controls are not removed by the gesture-only contract.
+        rule.onNodeWithContentDescription(text(R.string.action_back)).assertIsDisplayed()
+    }
+
     @Test fun contentMatchesPickerFamilyAcrossThemesLocalesAndCompactViewport() {
         show()
         for (dark in listOf(false, true)) for (indonesian in listOf(true, false)) for (compact in listOf(false, true)) {
@@ -74,7 +84,8 @@ class ExerciseListScreenTest {
 
     @Test fun loadingFailureAndThreeEmptyStatesRemainDistinct() {
         show()
-        rule.runOnIdle { scene.value = Scene(state = ExerciseBrowserState(isLoading = true, hasError = true, results = listOf(bench))) }
+        rule.runOnIdle { scene.value = Scene(state = ExerciseBrowserState(isLoading = true, hasError = true)) }
+        rule.waitUntil(5_000) { rule.onAllNodesWithTag("exercise_list_loading").fetchSemanticsNodes().isNotEmpty() }
         rule.onNodeWithTag("exercise_list_loading").assertExists()
         rule.onNodeWithTag("exercise_list_error").assertDoesNotExist()
         rule.onNodeWithTag("exercise_list_row_bench").assertDoesNotExist()
@@ -83,8 +94,10 @@ class ExerciseListScreenTest {
         rule.runOnIdle { scene.value = Scene(state = ExerciseBrowserState(hasError = true, query = "bench", results = listOf(bench))) }
         rule.onNodeWithTag("exercise_list_error").assertExists()
         rule.onNodeWithTag("exercise_list_empty").assertDoesNotExist()
-        rule.onNodeWithTag("exercise_list_row_bench").assertDoesNotExist()
-        rule.onNodeWithText(text(R.string.routine_retry)).performClick()
+        rule.onNodeWithTag("exercise_list_row_bench").assertIsDisplayed()
+        rule.onNodeWithText(text(R.string.routine_retry)).assertDoesNotExist()
+        rule.onNodeWithTag("exercise_list_refresh").assertDoesNotExist()
+        rule.onNodeWithTag("exercise_list_refresh_container").performTouchInput { swipeDown() }
         rule.runOnIdle { assertEquals(1, retryCalls); assertEquals("bench", scene.value.state.query) }
         capture("failure-retains-query")
 
@@ -99,7 +112,7 @@ class ExerciseListScreenTest {
         capture("subgroup-empty")
     }
 
-    @Test fun searchClearRetryAndBackKeepTheirExistingOwners() {
+    @Test fun searchClearAndBackKeepTheirExistingOwners() {
         show()
         rule.onNodeWithTag("exercise_list_search").performTextInput("bench")
         rule.runOnIdle { assertEquals(listOf("bench"), searches) }
@@ -177,7 +190,7 @@ class ExerciseListScreenTest {
             CompositionLocalProvider(LocalConfiguration provides config, LocalResources provides resources,
                 LocalDensity provides Density(constraints.maxWidth.toFloat() / value.width, value.fontScale)) {
                 IMFITTheme(darkTheme = value.dark) {
-                    ExerciseListContent(value.category, value.state, onBack = { backCalls++ }, onRetry = { retryCalls++ },
+                    ExerciseListContent(value.category, value.state, onBack = { backCalls++ }, onRefresh = { retryCalls++ },
                         onSearch = { query -> searches.add(query); scene.value = scene.value.copy(state = scene.value.state.copy(query = query)) })
                 }
             }

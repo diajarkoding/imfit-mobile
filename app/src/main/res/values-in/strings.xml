@@ -454,4 +454,8 @@
     <string name="error_rest_pause">Lewati timer istirahat sebelum menjeda</string>
     <string name="error_routine_save">Tidak dapat menyimpan rutinitas</string>
     <string name="error_routine_not_found">Rutinitas tidak ditemukan</string>
+    <string name="catalog_refresh">Segarkan</string>
+    <string name="catalog_refresh_failed">Katalog belum berhasil diperbarui. Tarik ke bawah dari bagian atas untuk mencoba lagi.</string>
+    <string name="catalog_local_load_failed">Gerakan belum berhasil dimuat. Tarik ke bawah dari bagian atas untuk mencoba lagi.</string>
+    <string name="catalog_no_cached_results">Tidak ada gerakan yang cocok di katalog lokal. Segarkan untuk memeriksa pembaruan.</string>
 </resources>

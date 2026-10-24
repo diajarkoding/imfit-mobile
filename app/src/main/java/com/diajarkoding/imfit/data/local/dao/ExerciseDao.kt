@@ -3,9 +3,14 @@ package com.diajarkoding.imfit.data.local.dao
 import androidx.room.*
 import com.diajarkoding.imfit.data.local.entity.ExerciseEntity
 import kotlinx.coroutines.flow.Flow
+import androidx.paging.PagingSource
+import androidx.sqlite.db.SupportSQLiteQuery
 
 @Dao
 interface ExerciseDao {
+    @RawQuery(observedEntities = [ExerciseEntity::class])
+    fun pagingSource(query: SupportSQLiteQuery): PagingSource<Int, ExerciseEntity>
+
     @Query("SELECT * FROM exercises WHERE is_active = 1")
     fun getAllActiveExercises(): Flow<List<ExerciseEntity>>
 

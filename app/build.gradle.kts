@@ -143,6 +143,9 @@ dependencies {
     implementation(libs.room.runtime)
     ksp(libs.room.compiler)
     implementation(libs.room.ktx)
+    implementation(libs.room.paging)
+    implementation(libs.paging.runtime)
+    implementation(libs.paging.compose)
     implementation(libs.datastore.preferences)
 
     // --- SUPABASE ---
@@ -162,6 +165,7 @@ dependencies {
 
     // --- TESTING ---
     testImplementation(libs.junit)
+    testImplementation("org.jetbrains.kotlinx:kotlinx-coroutines-test:1.10.2")
     testImplementation(libs.androidx.work.testing)
     testImplementation("io.ktor:ktor-client-mock:${libs.versions.ktor.get()}")
     androidTestImplementation("io.ktor:ktor-client-mock:${libs.versions.ktor.get()}")

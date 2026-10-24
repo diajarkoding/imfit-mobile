@@ -21,6 +21,7 @@ coil = "3.3.0"
 roomRuntime = "2.8.4"
 roomCompiler = "2.8.4"
 roomKtx = "2.8.4"
+paging = "3.3.6"
 datastorePreferences = "1.0.0"
 hilt = "2.60.1"
 material3Lint = "1.5.0-alpha04"
@@ -61,6 +62,9 @@ room-runtime = { group = "androidx.room", name = "room-runtime", version.ref = "
 room-compiler = { group = "androidx.room", name = "room-compiler", version.ref = "roomCompiler" }
 room-ktx = { group = "androidx.room", name = "room-ktx", version.ref = "roomKtx" }
 room-testing = { group = "androidx.room", name = "room-testing", version.ref = "roomRuntime" }
+room-paging = { group = "androidx.room", name = "room-paging", version.ref = "roomRuntime" }
+paging-runtime = { group = "androidx.paging", name = "paging-runtime-ktx", version.ref = "paging" }
+paging-compose = { group = "androidx.paging", name = "paging-compose", version.ref = "paging" }
 datastore-preferences = { group = "androidx.datastore", name = "datastore-preferences", version.ref = "datastorePreferences" }
 junit = { group = "junit", name = "junit", version.ref = "junit" }
 androidx-junit = { group = "androidx.test.ext", name = "junit", version.ref = "junitVersion" }

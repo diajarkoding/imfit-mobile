@@ -161,7 +161,7 @@ class SyncManager @Inject constructor(
         if (userId in blockedUsers) return@withLock SyncRunResult.NO_AUTHENTICATED_USER
         if (!networkMonitor.isOnline) return@withLock SyncRunResult.RETRYABLE_FAILURE
         try {
-            pullExercises(userId)
+            pullCatalogRead(userId, deactivateMissing = false)
             SyncRunResult.SUCCESS
         } catch (e: CancellationException) { throw e }
         catch (_: Exception) { SyncRunResult.RETRYABLE_FAILURE }
@@ -411,7 +411,9 @@ class SyncManager @Inject constructor(
     /**
      * Pulls exercises from server. Server-authoritative - always overwrite local.
      */
-    private suspend fun pullExercises(userId: String) {
+    private suspend fun pullExercises(userId: String) = pullCatalogRead(userId, deactivateMissing = true)
+
+    private suspend fun pullCatalogRead(userId: String, deactivateMissing: Boolean) {
         try {
             val remoteExercises = pages { from, to -> supabaseClient.postgrest.from("exercises").select {
                 order("id", Order.ASCENDING); range(from, to)
@@ -429,11 +431,19 @@ class SyncManager @Inject constructor(
                         isActive = remote.isActive ?: true
                 )
             }
+            if (!deactivateMissing) {
+                require(entities.all { it.id.isNotBlank() && it.name.isNotBlank() && it.muscleCategoryId in 1..8 })
+                require(entities.map { it.id }.distinct().size == entities.size)
+            }
             requireCurrentUser(userId)
             database.withTransaction {
-                val remoteIds = entities.map { it.id }.toSet()
-                exerciseDao.getAllActiveExercisesList().filterNot { it.id in remoteIds }
-                    .forEach { exerciseDao.deactivateExercise(it.id) }
+                // A short remote page is not a verified authoritative snapshot. Manual catalog
+                // reads may update returned records, never deactivate omitted cached records.
+                if (deactivateMissing) {
+                    val remoteIds = entities.map { it.id }.toSet()
+                    exerciseDao.getAllActiveExercisesList().filterNot { it.id in remoteIds }
+                        .forEach { exerciseDao.deactivateExercise(it.id) }
+                }
                 exerciseDao.insertExercises(entities)
             }
             

@@ -4,6 +4,7 @@ import androidx.annotation.StringRes
 import com.diajarkoding.imfit.R
 import com.diajarkoding.imfit.domain.model.Exercise
 import com.diajarkoding.imfit.domain.model.MuscleCategory
+import com.diajarkoding.imfit.domain.model.ExerciseCatalogFilter
 
 /** Presentation filters are independent of the persisted MuscleCategory ordinal IDs. */
 enum class ExerciseCategory(
@@ -31,6 +32,14 @@ enum class ExerciseCategory(
             CALVES !in verifiedSubgroups[exercise.id].orEmpty()
         else -> exercise.muscleCategory == domainCategory
     }
+
+    fun catalogFilter(query: String) = ExerciseCatalogFilter(
+        query = query,
+        muscleCategory = domainCategory,
+        includedIds = if (this in setOf(FOREARMS, GLUTES, CALVES))
+            verifiedSubgroups.filterValues { this in it }.keys else null,
+        excludedIds = if (this == LEGS) verifiedSubgroups.filterValues { CALVES in it }.keys else emptySet(),
+    )
 
     companion object {
         // Verified against FakeExerciseDataSource. No name-based guesses for remote records.

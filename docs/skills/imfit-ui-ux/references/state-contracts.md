@@ -117,8 +117,7 @@ Source: `data/repository/WorkoutRepositoryImpl.kt`, `domain/repository/WorkoutRe
 ## 6. Active workout/rest timer boundary
 
 Jika desain baru bersinggungan dengan ActiveWorkout, baca source target dan regresi timer:
-`presentation/ui/workout/ActiveWorkoutViewModel.kt`, `core/timer/RestTimerCoordinator.kt`,
-`docs/IMFIT_REST_TIMER_REGRESSION_REPORT.md`.
+`presentation/ui/workout/ActiveWorkoutViewModel.kt` dan `core/timer/RestTimerCoordinator.kt`.
 
 Pertahankan stable session/set IDs, mutation/revision/cancellation guards, dan pemisahan
   template/session/history. Countdown harus mengikuti state committed coordinator; jangan
@@ -144,5 +143,4 @@ bagi tugas UI-only untuk mengubah sinkronisasi/migrasi/timer di kemudian hari.
 - Notifikasi selesai: bodi membuka sesi sambil menghentikan alarm; Stop background saja.
   Notifikasi native mengikuti tema Android, bukan toggle Compose. Pengaturan/dialog alarm
   tidak diubah. Jangan mengganti surface native/custom background demi menyeragamkan tema.
-- Source/test/batas integrasi Supabase: [laporan enam issue](../../../IMFIT_FIX_BUG_SIX_ISSUES_REPORT.md).
-  Pengujian lokal/importer bukan bukti E2E dashboard Supabase atau persetujuan OEM.
+- Pengujian lokal/importer bukan bukti E2E dashboard Supabase atau persetujuan OEM.

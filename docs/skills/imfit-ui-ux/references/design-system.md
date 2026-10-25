@@ -133,5 +133,4 @@ memilihnya hanya dari nama file**: root aktual memakai komponen khusus di tabel 
   jika diizinkan; cleanup memulihkan atribut native. Jangan pindahkan logika timer/sync.
 - Actual Register dan Home API 34 diuji; calendar/sheet Register memiliki RGB backdrop
   identik. Root cause lama dan direct visual approval tidak disimpulkan dari screenshot.
-- Detail APK, hasil/gap dan policy native 60% yang telah digantikan ada di
-  [laporan Compose scrim](../../../IMFIT_COMPOSE_SCRIM_REPORT.md); bukan jaminan OEM/lintas-API.
+- Catatan ini bukan jaminan perilaku OEM/lintas-API.

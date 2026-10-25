@@ -162,8 +162,7 @@ Source: `presentation/ui/exercise/ExerciseSelectionScreen.kt`, `ExerciseSelectio
 ## 8a. Profil — addendum 18 Oktober 2026
 
 Baseline commit di atas tetap berlaku untuk bagian lain. Profil kini memakai perubahan
-working tree yang belum di-commit; bukti ada di
-[laporan implementasi Profile](../../../IMFIT_PROFILE_REDESIGN_REPORT.md).
+working tree yang belum di-commit saat addendum ditulis.
 Source: `presentation/ui/profile/ProfileScreen.kt`, `ProfileComponents.kt`,
 `ProfilePresentation.kt`; state/aksi tetap milik `ProgressViewModel`.
 
@@ -185,21 +184,18 @@ Source: `presentation/ui/profile/ProfileScreen.kt`, `ProfileComponents.kt`,
 
 ## 9. Perbedaan dokumen historis dan batas audit
 
-Addendum working tree 18 Oktober 2026: [polish 1–7](../../../IMFIT_UI_POLISH_1_TO_7_REPORT.md)
-  mengubah gap main menjadi 0 dp (revisi awal dari 12 dp), grid kategori agar fit viewport, ukuran preference track,
+Addendum working tree 18 Oktober 2026: polish 1–7 mengubah gap main menjadi 0 dp (revisi awal dari 12 dp), grid kategori agar fit viewport, ukuran preference track,
 dan border Add exercise. Permintaan notifikasi kini pada Start di Detail **sebelum**
 session dibuat, bukan ketika ActiveWorkout dibuka. Denial tidak memblokir latihan;
 resume tidak meminta ulang. Snackbar keterbatasan generik otomatis dihapus, bukan engine
 capability/fallback atau error penyimpanan. Mapping nama metadata memakai isi JSON string,
-bukan serialisasi/strip kutip global. Lihat laporan untuk source, APK, test dan batas scope.
+bukan serialisasi/strip kutip global.
 
 Revisi 19 Oktober 2026: `IMFITSpacing.headerContentGap = 8.dp` menggantikan 0/12 dp itu
 untuk **semua halaman berheader**, bukan hanya main tabs; avatar appbar Gerakan dihapus.
-Padding internal header/inset dan jarak antarkonten lain tetap. Bukti terbaru dipisahkan di
-[laporan revisi header](../../../IMFIT_HEADER_GAP_8DP_REPORT.md).
+Padding internal header/inset dan jarak antarkonten lain tetap.
 
-`docs/IMFIT_UI_REDESIGN_IMPLEMENTATION_REPORT.md` dan plan tiga root screen menjelaskan
-iterasi lama: 8 kategori, 4/2 kolom, search root, hero/four metrics Progres, dan window metrik
+Iterasi desain tiga root screen yang lama memakai pola: 8 kategori, 4/2 kolom, search root, hero/four metrics Progres, dan window metrik
 berbeda. Source aktif serta test saat baseline di atas lebih baru. `ImfitRedesignComponents`
 atau `CreateTemplateScreen` yang masih ada tidak membuktikan route/pattern lama aktif.
 

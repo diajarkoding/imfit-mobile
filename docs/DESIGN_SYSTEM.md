@@ -60,7 +60,7 @@ the countdown dismissible or apply an unconfirmed draft.
 
 `SyncProgressDialog` is included in the same 50% policy; only its shared opacity changes,
 not sync state or operations. Android-owned permission, camera and document-picker UI
-remains outside app backdrop ownership. See [implementation evidence](IMFIT_COMPOSE_SCRIM_REPORT.md).
+remains outside app backdrop ownership.
 
 ## Platform bridge and assets
 

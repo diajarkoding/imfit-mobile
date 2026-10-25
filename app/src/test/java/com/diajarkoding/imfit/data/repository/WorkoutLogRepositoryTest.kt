@@ -30,14 +30,7 @@ class WorkoutLogRepositoryTest {
         workoutSetDao = mockk(relaxed = true)
         exerciseDao = mockk(relaxed = true)
         
-        repository = WorkoutLogRepository(
-            supabaseClient = supabaseClient,
-            database = database,
-            workoutLogDao = workoutLogDao,
-            exerciseLogDao = exerciseLogDao,
-            workoutSetDao = workoutSetDao,
-            exerciseDao = exerciseDao
-        )
+        repository = WorkoutLogRepository(mockk(), mockk(), mockk())
     }
 
     @Test(expected = IllegalArgumentException::class)

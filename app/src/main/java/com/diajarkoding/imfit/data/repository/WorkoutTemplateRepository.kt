@@ -1,534 +1,166 @@
- package com.diajarkoding.imfit.data.repository
- 
- import android.util.Log
- import com.diajarkoding.imfit.core.constants.WorkoutConstants
- import com.diajarkoding.imfit.core.network.NetworkMonitor
- import com.diajarkoding.imfit.core.network.NetworkOperationException
- import com.diajarkoding.imfit.core.network.NoNetworkException
-import com.diajarkoding.imfit.core.network.RetryUtils
- import com.diajarkoding.imfit.data.local.dao.ExerciseDao
- import com.diajarkoding.imfit.data.local.dao.TemplateExerciseDao
- import com.diajarkoding.imfit.data.local.dao.WorkoutTemplateDao
- import com.diajarkoding.imfit.data.local.entity.TemplateExerciseEntity
- import com.diajarkoding.imfit.data.local.entity.WorkoutTemplateEntity
- import com.diajarkoding.imfit.data.remote.dto.TemplateExerciseDto
- import com.diajarkoding.imfit.data.remote.dto.WorkoutTemplateDto
- import com.diajarkoding.imfit.data.remote.dto.toDomain
- import com.diajarkoding.imfit.domain.model.Exercise
- import com.diajarkoding.imfit.domain.model.MuscleCategory
- import com.diajarkoding.imfit.domain.model.TemplateExercise
- import com.diajarkoding.imfit.domain.model.WorkoutTemplate
- import io.github.jan.supabase.SupabaseClient
- import io.github.jan.supabase.postgrest.postgrest
- import io.github.jan.supabase.postgrest.query.Columns
- import kotlinx.serialization.SerialName
- import kotlinx.serialization.Serializable
- import java.time.OffsetDateTime
- import java.time.ZoneOffset
- import java.time.format.DateTimeFormatter
- import java.util.UUID
- import javax.inject.Inject
- import javax.inject.Singleton
- 
- /**
-  * Repository for managing workout templates.
-  * Implements online-first strategy with local caching.
-  */
- @Singleton
- class WorkoutTemplateRepository @Inject constructor(
-     private val supabaseClient: SupabaseClient,
-     private val workoutTemplateDao: WorkoutTemplateDao,
-     private val templateExerciseDao: TemplateExerciseDao,
-     private val exerciseDao: ExerciseDao,
-     private val networkMonitor: NetworkMonitor
- ) {
-     
-     companion object {
-         private const val TAG = "WorkoutTemplateRepo"
-     }
-     
-     // ==================== READ OPERATIONS ====================
-     
-     /**
-      * Gets all templates for a user.
-      * Tries Supabase first, falls back to local cache on failure.
-      */
-     suspend fun getTemplates(userId: String): List<WorkoutTemplate> {
-         require(userId.isNotBlank()) { "User ID cannot be blank" }
-         
-         return try {
-             val remoteTemplates = fetchTemplatesFromSupabase(userId)
-             cacheTemplates(remoteTemplates, userId)
-             Log.d(TAG, "Fetched ${remoteTemplates.size} templates from Supabase")
-             remoteTemplates
-         } catch (e: Exception) {
-             Log.w(TAG, "Failed to fetch templates from Supabase, using cache: ${e.message}")
-             getTemplatesFromCache(userId)
-         }
-     }
-     
-     /**
-      * Gets a single template by ID.
-      * Tries Supabase first, falls back to local cache on failure.
-      */
-     suspend fun getTemplateById(templateId: String): WorkoutTemplate? {
-         require(templateId.isNotBlank()) { "Template ID cannot be blank" }
-         
-         return try {
-             val response = supabaseClient.postgrest
-                 .from("workout_templates")
-                 .select(Columns.raw("*, template_exercises(*, exercises(*))")) {
-                     filter {
-                         eq("id", templateId)
-                         eq("is_deleted", false)
-                     }
-                 }
-                 .decodeSingleOrNull<WorkoutTemplateDto>()
-             
-             val template = response?.toDomain()
-             template?.let { cacheTemplate(it) }
-             template
-         } catch (e: Exception) {
-             Log.w(TAG, "Failed to fetch template from Supabase, using cache: ${e.message}")
-             getTemplateByIdFromCache(templateId)
-         }
-     }
-     
-     // ==================== WRITE OPERATIONS ====================
-     
-     /**
-      * Creates a new workout template.
-      * Requires network connectivity.
-      * 
-      * @throws NoNetworkException if offline
-      * @throws NetworkOperationException if creation fails
-      * @throws IllegalArgumentException if name is blank or too long
-      */
-     suspend fun createTemplate(
-         userId: String,
-         name: String,
-         exercises: List<TemplateExercise>
-     ): WorkoutTemplate {
-         // Validation
-         require(userId.isNotBlank()) { "User ID cannot be blank" }
-         require(name.isNotBlank()) { "Template name cannot be blank" }
-         require(name.length <= WorkoutConstants.MAX_TEMPLATE_NAME_LENGTH) { 
-             "Template name cannot exceed ${WorkoutConstants.MAX_TEMPLATE_NAME_LENGTH} characters" 
-         }
-         
-         if (!networkMonitor.isOnline) {
-             throw NoNetworkException("No internet connection. Please check your network and try again.")
-         }
-         
-         val templateId = UUID.randomUUID().toString()
-         val now = System.currentTimeMillis()
-         
-         try {
-             // Create on Supabase first
-             val templateDto = CreateTemplateDto(
-                 id = templateId,
-                 userId = userId,
-                 name = name
-             )
-             supabaseClient.postgrest.from("workout_templates").insert(templateDto)
-             
-             // Insert exercises
-             exercises.forEachIndexed { index, exercise ->
-                 val exerciseDto = TemplateExerciseDto(
-                     templateId = templateId,
-                     exerciseId = exercise.exercise.id,
-                     orderIndex = index,
-                     sets = exercise.sets,
-                     reps = exercise.reps,
-                     restSeconds = exercise.restSeconds
-                 )
-                 supabaseClient.postgrest.from("template_exercises").insert(exerciseDto)
-             }
-             
-             Log.d(TAG, "Created template on Supabase: $templateId")
-             
-             // Cache locally
-             cacheNewTemplate(templateId, userId, name, exercises, now)
-             
-         } catch (e: Exception) {
-             Log.e(TAG, "Failed to create template on Supabase: ${e.message}", e)
-             throw NetworkOperationException("Failed to create template. Please check your connection.", e)
-         }
-         
-         return WorkoutTemplate(
-             id = templateId,
-             userId = userId,
-             name = name,
-             exercises = exercises,
-             createdAt = now
-         )
-     }
-     
-     /**
-      * Updates an existing workout template.
-      * Requires network connectivity.
-      * 
-      * @throws NoNetworkException if offline
-      * @throws NetworkOperationException if update fails
-      */
-     suspend fun updateTemplate(
-         templateId: String,
-         name: String,
-         exercises: List<TemplateExercise>
-     ): WorkoutTemplate? {
-         require(templateId.isNotBlank()) { "Template ID cannot be blank" }
-         require(name.isNotBlank()) { "Template name cannot be blank" }
-         
-         if (!networkMonitor.isOnline) {
-             throw NoNetworkException("No internet connection. Please check your network and try again.")
-         }
-         
-         val now = System.currentTimeMillis()
-         
-         try {
-             // Update on Supabase
-             supabaseClient.postgrest.from("workout_templates")
-                 .update({
-                     set("name", name)
-                     set("updated_at", OffsetDateTime.now(ZoneOffset.UTC).format(DateTimeFormatter.ISO_OFFSET_DATE_TIME))
-                 }) {
-                     filter { eq("id", templateId) }
-                 }
-             
-             // Replace exercises
-             supabaseClient.postgrest.from("template_exercises")
-                 .delete {
-                     filter { eq("template_id", templateId) }
-                 }
-             
-             exercises.forEachIndexed { index, exercise ->
-                 val exerciseDto = TemplateExerciseDto(
-                     templateId = templateId,
-                     exerciseId = exercise.exercise.id,
-                     orderIndex = index,
-                     sets = exercise.sets,
-                     reps = exercise.reps,
-                     restSeconds = exercise.restSeconds
-                 )
-                 supabaseClient.postgrest.from("template_exercises").insert(exerciseDto)
-             }
-             
-             Log.d(TAG, "Updated template on Supabase: $templateId")
-             
-             // Update local cache
-             val existingTemplate = workoutTemplateDao.getTemplateById(templateId)
-             if (existingTemplate != null) {
-                 val updatedEntity = existingTemplate.copy(name = name, updatedAt = now)
-                 workoutTemplateDao.updateTemplate(updatedEntity)
-             }
-             
-             templateExerciseDao.deleteExercisesByTemplate(templateId)
-             exercises.forEachIndexed { index, exercise ->
-                 val templateExerciseEntity = TemplateExerciseEntity(
-                     templateId = templateId,
-                     exerciseId = exercise.exercise.id,
-                     orderIndex = index,
-                     sets = exercise.sets,
-                     reps = exercise.reps,
-                     restSeconds = exercise.restSeconds
-                 )
-                 templateExerciseDao.insertTemplateExercise(templateExerciseEntity)
-             }
-             
-         } catch (e: Exception) {
-             Log.e(TAG, "Failed to update template on Supabase: ${e.message}", e)
-             throw NetworkOperationException("Failed to update template. Please check your connection.", e)
-         }
-         
-         return getTemplateByIdFromCache(templateId)
-     }
-     
-     /**
-      * Updates a single exercise in a template.
-      * Requires network connectivity.
-      */
-     suspend fun updateTemplateExercise(
-         templateId: String,
-         exerciseId: String,
-         sets: Int,
-         reps: Int,
-         restSeconds: Int
-     ): WorkoutTemplate? {
-         require(templateId.isNotBlank()) { "Template ID cannot be blank" }
-         require(exerciseId.isNotBlank()) { "Exercise ID cannot be blank" }
-         require(sets > 0 && sets <= WorkoutConstants.MAX_SETS_PER_EXERCISE) { 
-             "Sets must be between 1 and ${WorkoutConstants.MAX_SETS_PER_EXERCISE}" 
-         }
-         require(reps > 0 && reps <= WorkoutConstants.MAX_REPS_PER_SET) { 
-             "Reps must be between 1 and ${WorkoutConstants.MAX_REPS_PER_SET}" 
-         }
-         require(restSeconds >= 0) { "Rest seconds cannot be negative" }
-         
-         if (!networkMonitor.isOnline) {
-             throw NoNetworkException("No internet connection. Please check your network and try again.")
-         }
-         
-         try {
-             supabaseClient.postgrest.from("template_exercises")
-                 .update({
-                     set("sets", sets)
-                     set("reps", reps)
-                     set("rest_seconds", restSeconds)
-                 }) {
-                     filter {
-                         eq("template_id", templateId)
-                         eq("exercise_id", exerciseId)
-                     }
-                 }
-             Log.d(TAG, "Updated exercise on Supabase: $exerciseId")
-             
-             // Update local cache
-             val existingExercise = templateExerciseDao.getTemplateExercise(templateId, exerciseId)
-             if (existingExercise != null) {
-                 val updatedExercise = existingExercise.copy(
-                     sets = sets,
-                     reps = reps,
-                     restSeconds = restSeconds,
-                     updatedAt = System.currentTimeMillis()
-                 )
-                 templateExerciseDao.updateTemplateExercise(updatedExercise)
-             }
-         } catch (e: Exception) {
-             Log.e(TAG, "Failed to update exercise on Supabase: ${e.message}", e)
-             throw NetworkOperationException("Failed to update exercise. Please check your connection.", e)
-         }
-         
-         return getTemplateByIdFromCache(templateId)
-     }
-     
-     /**
-      * Soft deletes a template.
-      * Requires network connectivity.
-      */
-     suspend fun deleteTemplate(templateId: String): Boolean {
-         require(templateId.isNotBlank()) { "Template ID cannot be blank" }
-         
-         if (!networkMonitor.isOnline) {
-             throw NoNetworkException("No internet connection. Please check your network and try again.")
-         }
-         
-         try {
-             supabaseClient.postgrest.from("workout_templates")
-                 .update({
-                     set("is_deleted", true)
-                 }) {
-                     filter { eq("id", templateId) }
-                 }
-             Log.d(TAG, "Deleted template on Supabase: $templateId")
-             
-             // Update local cache
-             val existingTemplate = workoutTemplateDao.getTemplateById(templateId)
-             if (existingTemplate != null) {
-                 val updatedTemplate = existingTemplate.copy(
-                     isDeleted = true,
-                     updatedAt = System.currentTimeMillis()
-                 )
-                 workoutTemplateDao.updateTemplate(updatedTemplate)
-             }
-             
-             return true
-         } catch (e: Exception) {
-             Log.e(TAG, "Failed to delete template on Supabase: ${e.message}", e)
-             throw NetworkOperationException("Failed to delete template. Please check your connection.", e)
-         }
-     }
-     
-     // ==================== PRIVATE HELPER METHODS ====================
-     
-     private suspend fun fetchTemplatesFromSupabase(userId: String): List<WorkoutTemplate> {
-         val response = supabaseClient.postgrest
-             .from("workout_templates")
-             .select(Columns.raw("*, template_exercises(*, exercises(*))")) {
-                 filter {
-                     eq("user_id", userId)
-                     eq("is_deleted", false)
-                 }
-             }
-             .decodeList<WorkoutTemplateDto>()
-         
-         return response.map { it.toDomain() }
-     }
-     
-     private suspend fun cacheTemplates(templates: List<WorkoutTemplate>, userId: String) {
-         val templateIds = templates.map { it.id }.toSet()
-         
-         // Delete template exercises for templates we're updating
-         templateIds.forEach { templateId ->
-             templateExerciseDao.deleteExercisesByTemplate(templateId)
-         }
-         
-         // Insert/update templates and their exercises
-         templates.forEach { template ->
-             val templateEntity = WorkoutTemplateEntity(
-                 id = template.id,
-                 userId = template.userId,
-                 name = template.name,
-                 isDeleted = false,
-                 createdAt = template.createdAt,
-                 updatedAt = System.currentTimeMillis()
-             )
-             workoutTemplateDao.insertTemplate(templateEntity)
-             
-             template.exercises.forEachIndexed { index, exercise ->
-                 val exerciseEntity = TemplateExerciseEntity(
-                     templateId = template.id,
-                     exerciseId = exercise.exercise.id,
-                     orderIndex = index,
-                     sets = exercise.sets,
-                     reps = exercise.reps,
-                     restSeconds = exercise.restSeconds
-                 )
-                 templateExerciseDao.insertTemplateExercise(exerciseEntity)
-             }
-         }
-         
-         // Clean up templates that exist locally but not in remote
-         val localTemplates = workoutTemplateDao.getTemplatesByUserList(userId)
-         localTemplates.forEach { local ->
-             if (local.id !in templateIds) {
-                 workoutTemplateDao.deleteTemplate(local.id)
-             }
-         }
-     }
-     
-     private suspend fun cacheTemplate(template: WorkoutTemplate) {
-         val templateEntity = WorkoutTemplateEntity(
-             id = template.id,
-             userId = template.userId,
-             name = template.name,
-             isDeleted = false,
-             createdAt = template.createdAt,
-             updatedAt = System.currentTimeMillis()
-         )
-         workoutTemplateDao.insertTemplate(templateEntity)
-         
-         templateExerciseDao.deleteExercisesByTemplate(template.id)
-         
-         template.exercises.forEachIndexed { index, exercise ->
-             val exerciseEntity = TemplateExerciseEntity(
-                 templateId = template.id,
-                 exerciseId = exercise.exercise.id,
-                 orderIndex = index,
-                 sets = exercise.sets,
-                 reps = exercise.reps,
-                 restSeconds = exercise.restSeconds
-             )
-             templateExerciseDao.insertTemplateExercise(exerciseEntity)
-         }
-     }
-     
-     private suspend fun cacheNewTemplate(
-         templateId: String,
-         userId: String,
-         name: String,
-         exercises: List<TemplateExercise>,
-         timestamp: Long
-     ) {
-         val templateEntity = WorkoutTemplateEntity(
-             id = templateId,
-             userId = userId,
-             name = name,
-             isDeleted = false,
-             createdAt = timestamp,
-             updatedAt = timestamp
-         )
-         workoutTemplateDao.insertTemplate(templateEntity)
-         
-         exercises.forEachIndexed { index, exercise ->
-             val templateExerciseEntity = TemplateExerciseEntity(
-                 templateId = templateId,
-                 exerciseId = exercise.exercise.id,
-                 orderIndex = index,
-                 sets = exercise.sets,
-                 reps = exercise.reps,
-                 restSeconds = exercise.restSeconds
-             )
-             templateExerciseDao.insertTemplateExercise(templateExerciseEntity)
-         }
-         
-         Log.d(TAG, "Cached template locally: $templateId")
-     }
-     
-     private suspend fun getTemplatesFromCache(userId: String): List<WorkoutTemplate> {
-         val localTemplates = workoutTemplateDao.getTemplatesByUserList(userId)
-         
-         return localTemplates.map { templateEntity ->
-             val templateExercises = templateExerciseDao.getExercisesForTemplateList(templateEntity.id)
-             val exercises = templateExercises.mapNotNull { te ->
-                 val exerciseEntity = exerciseDao.getExerciseById(te.exerciseId)
-                 exerciseEntity?.let {
-                     val muscleCategory = MuscleCategory.entries.getOrNull(
-                         it.muscleCategoryId - WorkoutConstants.MUSCLE_CATEGORY_ID_OFFSET
-                     ) ?: MuscleCategory.CHEST
-                     TemplateExercise(
-                         exercise = Exercise(
-                             id = it.id,
-                             name = it.name,
-                             muscleCategory = muscleCategory,
-                             description = it.description,
-                             imageUrl = it.imageUrl
-                         ),
-                         sets = te.sets,
-                         reps = te.reps,
-                         restSeconds = te.restSeconds
-                     )
-                 }
-             }
-             
-             WorkoutTemplate(
-                 id = templateEntity.id,
-                 userId = templateEntity.userId,
-                 name = templateEntity.name,
-                 exercises = exercises,
-                 createdAt = templateEntity.createdAt
-             )
-         }
-     }
-     
-     private suspend fun getTemplateByIdFromCache(templateId: String): WorkoutTemplate? {
-         val templateEntity = workoutTemplateDao.getTemplateById(templateId) ?: return null
-         
-         val templateExercises = templateExerciseDao.getExercisesForTemplateList(templateEntity.id)
-         val exercises = templateExercises.mapNotNull { te ->
-             val exerciseEntity = exerciseDao.getExerciseById(te.exerciseId)
-             exerciseEntity?.let {
-                 val muscleCategory = MuscleCategory.entries.getOrNull(
-                     it.muscleCategoryId - WorkoutConstants.MUSCLE_CATEGORY_ID_OFFSET
-                 ) ?: MuscleCategory.CHEST
-                 TemplateExercise(
-                     exercise = Exercise(
-                         id = it.id,
-                         name = it.name,
-                         muscleCategory = muscleCategory,
-                         description = it.description,
-                         imageUrl = it.imageUrl
-                     ),
-                     sets = te.sets,
-                     reps = te.reps,
-                     restSeconds = te.restSeconds
-                 )
-             }
-         }
-         
-         return WorkoutTemplate(
-             id = templateEntity.id,
-             userId = templateEntity.userId,
-             name = templateEntity.name,
-             exercises = exercises,
-             createdAt = templateEntity.createdAt
-         )
-     }
- }
- 
- @Serializable
- private data class CreateTemplateDto(
-     val id: String,
-     @SerialName("user_id")
-     val userId: String,
-     val name: String
- )
+package com.diajarkoding.imfit.data.repository
+
+import androidx.room.withTransaction
+import com.diajarkoding.imfit.core.network.NetworkOperationException
+import com.diajarkoding.imfit.data.local.database.IMFITDatabase
+import com.diajarkoding.imfit.data.local.entity.TemplateExerciseEntity
+import com.diajarkoding.imfit.data.local.entity.TemplateWriteIntentEntity
+import com.diajarkoding.imfit.data.local.entity.WorkoutTemplateEntity
+import com.diajarkoding.imfit.data.remote.ImfitAggregateRemoteDataSource
+import com.diajarkoding.imfit.data.remote.TemplateWriteRequest
+import com.diajarkoding.imfit.data.remote.templateWriteExercises
+import com.diajarkoding.imfit.data.sync.RemoteWorkoutCoordinator
+import com.diajarkoding.imfit.domain.model.TemplateExercise
+import com.diajarkoding.imfit.domain.model.WorkoutTemplate
+import com.diajarkoding.imfit.domain.repository.AuthRepository
+import kotlinx.coroutines.CancellationException
+import kotlinx.serialization.encodeToString
+import kotlinx.serialization.json.Json
+import java.time.OffsetDateTime
+import java.util.UUID
+import javax.inject.Inject
+import javax.inject.Singleton
+
+/** Network-required atomic template writes. No REST delete/reinsert or offline upload queue. */
+@Singleton
+class WorkoutTemplateRepository @Inject constructor(
+    private val local: WorkoutLocalStore,
+    private val coordinator: RemoteWorkoutCoordinator,
+    private val remote: ImfitAggregateRemoteDataSource,
+    private val auth: AuthRepository,
+    private val database: IMFITDatabase,
+) {
+    private val access = AccountDataAccess(auth)
+    private val json = Json { encodeDefaults = true }
+
+    fun observeTemplates(owner: String) = local.observeTemplates(owner)
+    fun observeTemplate(id: String) = local.observeTemplate(id)
+
+    suspend fun getTemplates(userId: String): List<WorkoutTemplate> {
+        require(userId.isNotBlank())
+        return access.read(userId, emptyList()) { coordinator.refreshTemplates(it); local.getTemplates(it) }
+    }
+
+    suspend fun getTemplateById(templateId: String): WorkoutTemplate? {
+        require(templateId.isNotBlank())
+        return access.read(empty = null as WorkoutTemplate?) { coordinator.refreshTemplates(it); local.getTemplateById(templateId) }
+    }
+
+    suspend fun createTemplate(userId: String, name: String, exercises: List<TemplateExercise>): WorkoutTemplate {
+        require(userId.isNotBlank())
+        validateName(name)
+        templateWriteExercises(exercises)
+        check(auth.getLocalUserId() == userId) { "Authenticated owner required" }
+        val key = key(userId, "create", name.trim())
+        return write(userId, key, null, name.trim(), exercises, false)
+    }
+
+    suspend fun updateTemplate(templateId: String, name: String, exercises: List<TemplateExercise>): WorkoutTemplate? {
+        require(templateId.isNotBlank())
+        validateName(name)
+        val owner = auth.getLocalUserId() ?: error("Authenticated owner required")
+        return write(owner, key(owner, "edit", templateId), templateId, name.trim(), exercises, false)
+    }
+
+    suspend fun updateTemplateExercises(templateId: String, exercises: List<TemplateExercise>): WorkoutTemplate? {
+        val current = local.getTemplateById(templateId) ?: return null
+        return updateTemplate(templateId, current.name, exercises)
+    }
+
+    suspend fun updateTemplateExercise(templateId: String, exerciseId: String, sets: Int, reps: Int, restSeconds: Int): WorkoutTemplate? {
+        require(sets in 1..20 && reps in 1..100 && restSeconds in 0..600)
+        val current = local.getTemplateById(templateId) ?: return null
+        if (current.exercises.none { it.id == exerciseId }) return null
+        return updateTemplate(templateId, current.name, current.exercises.map {
+            if (it.id == exerciseId) it.copy(sets = sets, reps = reps, restSeconds = restSeconds) else it
+        })
+    }
+
+    suspend fun deleteTemplate(templateId: String): Boolean {
+        val current = local.getTemplateById(templateId) ?: return false
+        val owner = auth.getLocalUserId() ?: return false
+        write(owner, key(owner, "edit", templateId), templateId, current.name, current.exercises, true)
+        return true
+    }
+
+    private suspend fun write(owner: String, operationKey: String, id: String?, name: String,
+        exercises: List<TemplateExercise>, deleted: Boolean): WorkoutTemplate {
+        val payloadExercises = templateWriteExercises(exercises)
+        try {
+            return coordinator.withRemoteSession(owner) { credential ->
+                val prepared = database.withTransaction {
+                    coordinator.requireCurrentSession(credential)
+                    val intentDao = database.templateWriteIntentDao()
+                    val previous = intentDao.get(operationKey, owner)
+                    val request = if (previous != null) {
+                        json.decodeFromString<TemplateWriteRequest>(previous.payload).also {
+                            check(it.ownerId == owner) { "Request belongs to another account" }
+                            check(it.sameIntent(name, payloadExercises, deleted)) {
+                                "Resolve the previous save before changing its draft"
+                            }
+                        }
+                    } else {
+                        val initial = id?.let { snapshot(it, owner) }
+                        if (id != null) check(initial?.parent?.remoteRevision != null) {
+                            "Refresh/review this template before editing; backend revision support is required"
+                        }
+                        TemplateWriteRequest(UUID.randomUUID().toString(), id ?: UUID.randomUUID().toString(),
+                            initial?.parent?.remoteRevision, name, payloadExercises,
+                            if (deleted) emptyList() else initial?.children.orEmpty().map { it.exerciseId }
+                                .filterNot { old -> payloadExercises.any { it.exerciseId == old } }, deleted, owner)
+                            .also { intentDao.insert(TemplateWriteIntentEntity(operationKey, owner, it.templateId, json.encodeToString(it))) }
+                    }
+                    request to snapshot(request.templateId, owner, allowAbsent = id == null)
+                }
+                val (request, original) = prepared
+                coordinator.requireCurrentSession(credential)
+                val receipt = remote.saveTemplate(request, credential.accessToken)
+                check(receipt.requestId == request.requestId && receipt.templateId == request.templateId &&
+                    receipt.exerciseCount == request.exercises.size && receipt.revision > (request.expectedRevision ?: -1)) {
+                    "Unexpected save receipt; request retained for recovery"
+                }
+                val timestamp = OffsetDateTime.parse(receipt.serverUpdatedAt).toInstant().toEpochMilli()
+                database.withTransaction {
+                    coordinator.requireCurrentSession(credential)
+                    val current = snapshot(request.templateId, owner, allowAbsent = true)
+                    check(original == current) { "Local template changed while saving; recovery request retained" }
+                    if ((current?.parent?.remoteRevision ?: -1) <= receipt.revision) {
+                        database.workoutTemplateDao().insertTemplate(WorkoutTemplateEntity(request.templateId, owner, name,
+                            isDeleted = deleted, syncStatus = "SYNCED", pendingOperation = null,
+                            createdAt = current?.parent?.createdAt ?: timestamp, updatedAt = timestamp, remoteRevision = receipt.revision))
+                        database.templateExerciseDao().deleteExercisesByTemplate(request.templateId)
+                        database.templateExerciseDao().insertTemplateExercises(request.exercises.map {
+                            TemplateExerciseEntity(request.templateId, it.exerciseId, it.orderIndex, it.sets, it.reps, it.restSeconds,
+                                syncStatus = "SYNCED", pendingOperation = null, createdAt = timestamp, updatedAt = timestamp)
+                        })
+                    }
+                    check(database.templateWriteIntentDao().acknowledge(operationKey, owner, json.encodeToString(request)) == 1)
+                }
+                WorkoutTemplate(request.templateId, owner, name, exercises,
+                    createdAt = original?.parent?.createdAt ?: timestamp)
+            }
+        } catch (cancelled: CancellationException) { throw cancelled }
+        catch (failure: Exception) {
+            throw NetworkOperationException("Template save failed. Your draft/request is retained; retry the same save or review the conflict.", failure)
+        }
+    }
+
+    private suspend fun snapshot(id: String, owner: String, allowAbsent: Boolean = false): TemplateSnapshot? {
+        val parent = database.workoutTemplateDao().getTemplateByIdIncludingDeleted(id)
+        if (parent == null) { check(allowAbsent) { "Template unavailable" }; return null }
+        check(parent.userId == owner && parent.syncStatus == "SYNCED" && parent.pendingOperation == null) {
+            "Pending or foreign template requires review"
+        }
+        val children = database.templateExerciseDao().getExercisesForTemplateList(id).sortedBy { it.exerciseId }
+        check(children.all { it.syncStatus == "SYNCED" && it.pendingOperation == null }) { "Pending children require review" }
+        check(children.all { database.exerciseDao().getExerciseById(it.exerciseId) != null }) {
+            "Incomplete catalog cache; refresh before editing so hidden children cannot be removed"
+        }
+        return TemplateSnapshot(parent, children)
+    }
+
+    private data class TemplateSnapshot(val parent: WorkoutTemplateEntity, val children: List<TemplateExerciseEntity>)
+    private fun key(owner: String, operation: String, target: String) = UUID.nameUUIDFromBytes(
+        "$owner\u001f$operation\u001f$target".toByteArray(Charsets.UTF_8)).toString()
+    private fun validateName(name: String) { require(name.isNotBlank() && name.trim().length <= 100) }
+}

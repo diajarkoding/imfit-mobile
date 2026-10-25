@@ -29,13 +29,7 @@ class WorkoutTemplateRepositoryTest {
         exerciseDao = mockk(relaxed = true)
         networkMonitor = mockk()
         
-        repository = WorkoutTemplateRepository(
-            supabaseClient = supabaseClient,
-            workoutTemplateDao = workoutTemplateDao,
-            templateExerciseDao = templateExerciseDao,
-            exerciseDao = exerciseDao,
-            networkMonitor = networkMonitor
-        )
+        repository = WorkoutTemplateRepository(mockk(), mockk(), mockk(), mockk(), mockk())
     }
 
     @Test(expected = IllegalArgumentException::class)

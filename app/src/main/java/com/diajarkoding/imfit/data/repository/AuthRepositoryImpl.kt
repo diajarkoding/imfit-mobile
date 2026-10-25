@@ -8,6 +8,11 @@ import com.diajarkoding.imfit.data.exception.AuthException
 import com.diajarkoding.imfit.data.exception.mapSupabaseException
 import com.diajarkoding.imfit.data.remote.dto.ProfileDto
 import com.diajarkoding.imfit.data.remote.dto.toDomain
+import com.diajarkoding.imfit.data.local.database.IMFITDatabase
+import com.diajarkoding.imfit.data.sync.SyncLifecycleController
+import com.diajarkoding.imfit.data.sync.SyncPreferences
+import com.diajarkoding.imfit.data.sync.SyncScheduler
+import com.diajarkoding.imfit.domain.model.RegisterResult
 import com.diajarkoding.imfit.domain.model.User
 import com.diajarkoding.imfit.domain.repository.AuthRepository
 import dagger.hilt.android.qualifiers.ApplicationContext
@@ -22,6 +27,15 @@ import kotlinx.serialization.json.put
 import java.util.UUID
 import javax.inject.Inject
 import javax.inject.Singleton
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.flow.flow
+import kotlinx.coroutines.flow.emitAll
+import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.flatMapLatest
+import kotlinx.coroutines.flow.buffer
+import kotlinx.coroutines.flow.flowOf
+import kotlinx.coroutines.ExperimentalCoroutinesApi
 
 private const val TAG = "AuthRepository"
 private const val AVATARS_BUCKET = "avatars"
@@ -29,7 +43,12 @@ private const val AVATARS_BUCKET = "avatars"
 @Singleton
 class AuthRepositoryImpl @Inject constructor(
     private val supabaseClient: SupabaseClient,
-    @ApplicationContext private val context: Context
+    private val syncScheduler: SyncScheduler,
+    private val syncLifecycleController: SyncLifecycleController,
+    private val database: IMFITDatabase,
+    private val syncPreferences: SyncPreferences,
+    @ApplicationContext private val context: Context,
+    private val timerCleanup: com.diajarkoding.imfit.core.timer.TimerSessionCleanup
 ) : AuthRepository {
 
     private var cachedUser: User? = null
@@ -40,7 +59,7 @@ class AuthRepositoryImpl @Inject constructor(
         password: String,
         birthDate: String?,
         profilePhotoUri: String?
-    ): Result<User> {
+    ): Result<RegisterResult> {
         return try {
             // Validate input parameters
             if (name.isBlank()) {
@@ -49,7 +68,7 @@ class AuthRepositoryImpl @Inject constructor(
             if (email.isBlank() || !android.util.Patterns.EMAIL_ADDRESS.matcher(email).matches()) {
                 return Result.failure(AuthException.InvalidEmail())
             }
-            if (password.length < 6) {
+            if (!isStrongPassword(password)) {
                 return Result.failure(AuthException.WeakPassword())
             }
 
@@ -65,7 +84,7 @@ class AuthRepositoryImpl @Inject constructor(
             }
 
             val userId = supabaseClient.auth.currentUserOrNull()?.id
-                ?: return Result.failure(AuthException.UnknownError("Registration completed but no user ID received"))
+                ?: return Result.success(RegisterResult.CheckEmail)
 
             Log.d(TAG, "Registration successful for user ID: $userId")
 
@@ -105,8 +124,10 @@ class AuthRepositoryImpl @Inject constructor(
                 Log.e(TAG, "Failed to update profile: ${e.message}", e)
             }
 
-            cachedUser = newUser
-            Result.success(newUser)
+            cacheUser(newUser)
+            syncLifecycleController.unblock(userId)
+            syncScheduler.enqueue(userId)
+            Result.success(RegisterResult.Authenticated(newUser))
         } catch (e: Exception) {
             Log.e(TAG, "Register error: ${e.message}", e)
             val authException = mapSupabaseException(e)
@@ -206,7 +227,7 @@ class AuthRepositoryImpl @Inject constructor(
                 // Create profile if it doesn't exist (fallback for users without trigger)
                 val currentUser = supabaseClient.auth.currentUserOrNull()
                 if (currentUser != null) {
-                    val userName = currentUser.userMetadata?.get("name")?.toString()?.removeSurrounding("\"") ?: "User"
+                    val userName = currentUser.userMetadata.displayNameOrDefault()
                     val birthDate = currentUser.userMetadata?.get("birth_date")?.toString()?.removeSurrounding("\"")
                     try {
                         supabaseClient.postgrest.from("profiles")
@@ -225,19 +246,23 @@ class AuthRepositoryImpl @Inject constructor(
             }
 
             if (profile != null) {
-                cachedUser = profile
+                cacheUser(profile)
+                syncLifecycleController.unblock(userId)
+                syncScheduler.enqueue(userId)
                 Result.success(profile)
             } else {
                 val currentUser = supabaseClient.auth.currentUserOrNull()
                 if (currentUser != null) {
                     val basicUser = User(
                         id = userId,
-                        name = currentUser.userMetadata?.get("name")?.toString()?.removeSurrounding("\"") ?: "User",
+                        name = currentUser.userMetadata.displayNameOrDefault(),
                         email = email,
                         birthDate = null,
                         profilePhotoUri = null
                     )
-                    cachedUser = basicUser
+                    cacheUser(basicUser)
+                    syncLifecycleController.unblock(userId)
+                    syncScheduler.enqueue(userId)
                     Result.success(basicUser)
                 } else {
                     Result.failure(AuthException.UserNotFound())
@@ -251,18 +276,45 @@ class AuthRepositoryImpl @Inject constructor(
     }
 
     override suspend fun logout() {
+        val userId = supabaseClient.auth.currentUserOrNull()?.id ?: return
+        timerCleanup.stop("LOGOUT")
+        syncScheduler.cancelForUser(userId)
+        syncLifecycleController.blockAndAwaitIdle(userId)
         try {
-            supabaseClient.auth.signOut()
+            check(peekLocalUserId() == userId) { "Authenticated owner changed during logout" }
+            // Keep pending aggregates, dependencies and unfinished drafts, not all cached PII.
+            database.pruneSyncedCacheForLogout(userId)
+            syncPreferences.clearForUser(userId)
             cachedUser = null
-        } catch (e: Exception) {
-            Log.e("AuthRepository", "Logout error: ${e.message}", e)
+            check(peekLocalUserId() == userId) { "Authenticated owner changed during logout" }
+            supabaseClient.auth.signOut()
+        } catch (failure: Exception) {
+            if (peekLocalUserId() == userId) syncLifecycleController.unblock(userId)
+            throw failure
         }
+    }
+
+    override suspend fun peekLocalUserId(): String? = supabaseClient.auth.currentUserOrNull()?.id
+
+    override fun observeLocalUserId() = supabaseClient.auth.sessionStatus
+        .map { supabaseClient.auth.currentUserOrNull()?.id }.distinctUntilChanged()
+
+    override suspend fun localAuthStatusName(): String =
+        supabaseClient.auth.sessionStatus.value::class.simpleName ?: "null"
+
+    override suspend fun getLocalUserId(): String? {
+        // A loaded local identity needs no initialization wait (or remote profile lookup).
+        // Do not cache it here: logout/account switches must be visible on every call.
+        peekLocalUserId()?.let { return it }
+        supabaseClient.auth.awaitInitialization()
+        return supabaseClient.auth.currentUserOrNull()?.id
     }
 
     override suspend fun getCurrentUser(): User? {
         return try {
-            // Return cached user if available
-            cachedUser?.let { return it }
+            val localUserId = getLocalUserId() ?: return null
+            database.userDao().getUserById(localUserId)?.let { return it.toUser().takeIf { peekLocalUserId() == localUserId } }
+            cachedUser?.takeIf { it.id == localUserId && peekLocalUserId() == localUserId }?.let { return it }
 
             // Check if user is authenticated
             val currentUser = supabaseClient.auth.currentUserOrNull()
@@ -273,25 +325,43 @@ class AuthRepositoryImpl @Inject constructor(
             // Try to fetch profile from database
             val profile = fetchProfile(currentUser.id)
             if (profile != null) {
-                cachedUser = profile
-                return profile
+                cacheUser(profile)
+                return profile.takeIf { peekLocalUserId() == localUserId }
             } else {
                 // Create basic user object from auth metadata
                 val basicUser = User(
                     id = currentUser.id,
-                    name = currentUser.userMetadata?.get("name")?.toString() ?: "User",
+                    name = currentUser.userMetadata.displayNameOrDefault(),
                     email = currentUser.email ?: "",
                     birthDate = null,
                     profilePhotoUri = null
                 )
-                cachedUser = basicUser
-                return basicUser
+                cacheUser(basicUser)
+                return basicUser.takeIf { peekLocalUserId() == localUserId }
             }
+        } catch (e: CancellationException) { throw e
         } catch (e: Exception) {
             Log.e("AuthRepository", "Get current user error: ${e.message}", e)
             // Don't throw exception, just return null to indicate no user
             null
         }
+    }
+
+    @OptIn(ExperimentalCoroutinesApi::class)
+    override fun observeCurrentUser(): kotlinx.coroutines.flow.Flow<User?> = observeLocalUserId().flatMapLatest { userId ->
+        if (userId == null) flowOf(null)
+        else flow<User?> {
+            getCurrentUser() // Ensure a local fallback exists before observing Room.
+            emitAll(database.userDao().observeUser(userId).map {
+                if (peekLocalUserId() == userId) it?.toUser() else null
+            }.distinctUntilChanged())
+        }
+    }.buffer(0)
+
+    private suspend fun cacheUser(user: User) {
+        if (getLocalUserId() != user.id) return
+        database.userDao().insertUser(user.toLocal())
+        cachedUser = user
     }
 
     override suspend fun isLoggedIn(): Boolean {
@@ -316,7 +386,7 @@ class AuthRepositoryImpl @Inject constructor(
                 }) {
                     filter { eq("id", user.id) }
                 }
-            cachedUser = user
+            cacheUser(user)
             Result.success(user)
         } catch (e: Exception) {
             Log.e("AuthRepository", "Update profile error: ${e.message}", e)
@@ -337,4 +407,10 @@ class AuthRepositoryImpl @Inject constructor(
             null
         }
     }
+
+    private fun isStrongPassword(password: String): Boolean =
+        password.length >= 8 &&
+            password.any(Char::isUpperCase) &&
+            password.any(Char::isLowerCase) &&
+            password.any(Char::isDigit)
 }

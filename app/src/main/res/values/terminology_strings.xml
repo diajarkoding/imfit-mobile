@@ -1,0 +1,7 @@
+<resources>
+    <string name="routine_create_action">Create Routine</string>
+    <string name="routine_delete_action">Delete Routine</string>
+    <string name="error_routine_load">Unable to load routine</string>
+    <string name="unit_hours_short">hours</string>
+    <string name="unit_seconds_short">sec</string>
+</resources>

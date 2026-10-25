@@ -1,0 +1,31 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="workout_history_app_bar_title">Daily summary</string>
+    <string name="workout_history_date_context">WORKOUT HISTORY</string>
+    <string name="workout_history_totals_heading">Today’s totals</string>
+    <plurals name="workout_history_sessions_count">
+        <item quantity="one">%1$d session</item>
+        <item quantity="other">%1$d sessions</item>
+    </plurals>
+    <string name="workout_history_metric_duration">Duration</string>
+    <string name="workout_history_metric_volume">Volume</string>
+    <string name="workout_history_metric_exercises">Exercises</string>
+    <string name="workout_history_metric_sets">Completed sets</string>
+    <string name="workout_history_duration_minutes_format">%1$d min</string>
+    <string name="workout_history_volume_kg_format">%1$s kg</string>
+    <string name="workout_history_sessions_section_title">Session details</string>
+    <string name="workout_history_session_ordinal_format">Session %1$d of %2$d</string>
+    <string name="workout_history_session_default_name">Workout</string>
+    <plurals name="workout_history_exercise_sets_count">
+        <item quantity="one">%1$d completed set</item>
+        <item quantity="other">%1$d completed sets</item>
+    </plurals>
+    <string name="workout_history_loading_status">Loading workout history…</string>
+    <string name="workout_history_empty_title">No workout sessions yet</string>
+    <string name="workout_history_empty_message">No workouts recorded for this date.</string>
+    <string name="workout_history_error_title">Unable to load workout history</string>
+    <string name="workout_history_error_message">Try again to view workout history for this date.</string>
+    <string name="workout_history_retry_action">Try again</string>
+    <string name="workout_history_banner_error_title">History update failed</string>
+    <string name="workout_history_banner_error_message">Previously loaded workouts remain visible.</string>
+</resources>

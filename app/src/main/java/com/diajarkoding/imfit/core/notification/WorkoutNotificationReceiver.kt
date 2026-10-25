@@ -1,54 +1,42 @@
- package com.diajarkoding.imfit.core.notification
- 
- import android.content.BroadcastReceiver
- import android.content.Context
- import android.content.Intent
- import android.util.Log
- 
- class WorkoutNotificationReceiver : BroadcastReceiver() {
-     
-     override fun onReceive(context: Context, intent: Intent) {
-         Log.d("WorkoutReceiver", "Received action: ${intent.action}")
-         
-         when (intent.action) {
-             WorkoutNotificationManager.ACTION_STOP_WORKOUT -> {
-                 // Broadcast to stop workout
-                 val stopIntent = Intent(ACTION_WORKOUT_COMMAND).apply {
-                     putExtra(EXTRA_COMMAND, COMMAND_STOP)
-                     setPackage(context.packageName)
-                 }
-                 context.sendBroadcast(stopIntent)
-             }
-             WorkoutNotificationManager.ACTION_PAUSE_WORKOUT -> {
-                 val pauseIntent = Intent(ACTION_WORKOUT_COMMAND).apply {
-                     putExtra(EXTRA_COMMAND, COMMAND_PAUSE)
-                     setPackage(context.packageName)
-                 }
-                 context.sendBroadcast(pauseIntent)
-             }
-             WorkoutNotificationManager.ACTION_RESUME_WORKOUT -> {
-                 val resumeIntent = Intent(ACTION_WORKOUT_COMMAND).apply {
-                     putExtra(EXTRA_COMMAND, COMMAND_RESUME)
-                     setPackage(context.packageName)
-                 }
-                 context.sendBroadcast(resumeIntent)
-             }
-             WorkoutNotificationManager.ACTION_SKIP_REST -> {
-                 val skipIntent = Intent(ACTION_WORKOUT_COMMAND).apply {
-                     putExtra(EXTRA_COMMAND, COMMAND_SKIP_REST)
-                     setPackage(context.packageName)
-                 }
-                 context.sendBroadcast(skipIntent)
-             }
-         }
-     }
-     
-     companion object {
-         const val ACTION_WORKOUT_COMMAND = "com.diajarkoding.imfit.ACTION_WORKOUT_COMMAND"
-         const val EXTRA_COMMAND = "extra_command"
-         const val COMMAND_STOP = "stop"
-         const val COMMAND_PAUSE = "pause"
-         const val COMMAND_RESUME = "resume"
-         const val COMMAND_SKIP_REST = "skip_rest"
-     }
- }
+package com.diajarkoding.imfit.core.notification
+
+import android.content.BroadcastReceiver
+import android.content.Context
+import android.content.Intent
+import com.diajarkoding.imfit.core.service.WorkoutService
+import com.diajarkoding.imfit.core.timer.RestTimerCoordinator
+import dagger.hilt.android.AndroidEntryPoint
+import kotlinx.coroutines.*
+import javax.inject.Inject
+
+@AndroidEntryPoint
+class WorkoutNotificationReceiver : BroadcastReceiver() {
+    @Inject lateinit var timer: RestTimerCoordinator
+
+    override fun onReceive(context: Context, intent: Intent) {
+        if (intent.action in listOf(WorkoutActions.ACKNOWLEDGE, WorkoutActions.SKIP, WorkoutActions.EXTEND)) {
+            val result = goAsync()
+            CoroutineScope(SupervisorJob() + Dispatchers.Main).launch {
+                try {
+                    when (intent.action) {
+                        WorkoutActions.ACKNOWLEDGE -> intent.getStringExtra("timer_id")?.let {
+                            // Identity validation and dismissal mark are atomic inside acknowledge.
+                            timer.acknowledge(it, intent.getLongExtra("generation", -1))
+                        }
+                        WorkoutActions.SKIP -> intent.getStringExtra("timer_id")?.let { timer.skip(it) }
+                        WorkoutActions.EXTEND -> intent.getStringExtra("timer_id")?.let { timer.extend(it, intent.getLongExtra("generation", -1)) }
+                    }
+                } catch (e: CancellationException) {
+                    throw e
+                } catch (e: Exception) {
+                    com.diajarkoding.imfit.core.timer.RestTimerTrace.event("notification_action_failed", detail = "action=${intent.action} exception=${e.javaClass.simpleName}")
+                } finally { result.finish() }
+            }
+        } else if (intent.action in listOf(WorkoutActions.PAUSE, WorkoutActions.RESUME, WorkoutActions.STOP)) {
+            try {
+                context.startService(Intent(context, WorkoutService::class.java).apply { action = intent.action })
+            } catch (_: RuntimeException) { /* Expiry recovery retains the persisted timer. */ }
+        }
+    }
+
+}

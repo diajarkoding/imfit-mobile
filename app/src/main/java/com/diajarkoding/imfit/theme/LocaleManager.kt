@@ -1,16 +1,27 @@
 package com.diajarkoding.imfit.theme
 
 import android.content.Context
-import android.content.SharedPreferences
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
+import androidx.datastore.preferences.SharedPreferencesMigration
+import androidx.datastore.preferences.core.edit
+import androidx.datastore.preferences.core.stringPreferencesKey
+import androidx.datastore.preferences.preferencesDataStore
+import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.runBlocking
 import java.util.Locale
 
+private val Context.localeDataStore by preferencesDataStore(
+    name = "imfit_locale",
+    produceMigrations = { context ->
+        listOf(SharedPreferencesMigration(context, "imfit_locale_prefs"))
+    }
+)
+
 object LocaleManager {
-    private const val PREFS_NAME = "imfit_locale_prefs"
-    private const val KEY_LANGUAGE = "language"
+    private val languageKey = stringPreferencesKey("language")
     private const val DEFAULT_LANGUAGE = "in" // Indonesian as default
     
     var currentLanguage by mutableStateOf(DEFAULT_LANGUAGE)
@@ -25,8 +36,7 @@ object LocaleManager {
         get() = currentLanguage == "in"
 
     fun init(context: Context) {
-        val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
-        currentLanguage = prefs.getString(KEY_LANGUAGE, DEFAULT_LANGUAGE) ?: DEFAULT_LANGUAGE
+        currentLanguage = readLanguage(context)
         updateLocale(context, currentLanguage)
     }
 
@@ -38,8 +48,11 @@ object LocaleManager {
     fun setLanguage(context: Context, languageCode: String) {
         currentLanguage = languageCode
         
-        val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
-        prefs.edit().putString(KEY_LANGUAGE, languageCode).apply()
+        runBlocking {
+            context.localeDataStore.edit { preferences ->
+                preferences[languageKey] = languageCode
+            }
+        }
         
         updateLocale(context, languageCode)
         
@@ -75,8 +88,7 @@ object LocaleManager {
     }
     
     fun attachBaseContext(context: Context): Context {
-        val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
-        val language = prefs.getString(KEY_LANGUAGE, DEFAULT_LANGUAGE) ?: DEFAULT_LANGUAGE
+        val language = readLanguage(context)
         
         val locale = createLocale(language)
         Locale.setDefault(locale)
@@ -85,5 +97,9 @@ object LocaleManager {
         config.setLocale(locale)
         
         return context.createConfigurationContext(config)
+    }
+
+    private fun readLanguage(context: Context): String = runBlocking {
+        context.localeDataStore.data.first()[languageKey] ?: DEFAULT_LANGUAGE
     }
 }

@@ -234,13 +234,14 @@ object FakeWorkoutDataSource {
             ExerciseLog(
                 exercise = templateExercise.exercise,
                 sets = (1..templateExercise.sets).map { setNum ->
-                    WorkoutSet(setNumber = setNum)
-                }
+                    WorkoutSet(setNumber = setNum, reps = templateExercise.reps)
+                },
+                restSeconds = templateExercise.restSeconds
             )
         }
 
         val session = WorkoutSession(
-            id = "session_${System.currentTimeMillis()}",
+            id = java.util.UUID.randomUUID().toString(),
             templateId = template.id,
             templateName = template.name,
             startTime = System.currentTimeMillis(),
@@ -260,15 +261,22 @@ object FakeWorkoutDataSource {
     fun finishWorkout(): WorkoutLog? {
         val session = activeSession ?: return null
 
+        val sanitizedLogs = session.exerciseLogs.mapNotNull { log ->
+            val completed = log.sets.filter { it.isCompleted }
+            if (completed.isNotEmpty()) log.copy(sets = completed) else null
+        }
+        if (sanitizedLogs.isEmpty()) return null
+
+        val sanitizedSession = session.copy(exerciseLogs = sanitizedLogs)
         val workoutLog = WorkoutLog(
             id = "log_${System.currentTimeMillis()}",
             userId = FakeUserDataSource.getCurrentUser()?.id ?: "unknown",
-            templateName = session.templateName,
-            date = session.startTime,
-            startTime = session.startTime,
+            templateName = sanitizedSession.templateName,
+            date = sanitizedSession.startTime,
+            startTime = sanitizedSession.startTime,
             endTime = System.currentTimeMillis(),
-            totalVolume = session.totalVolume,
-            exerciseLogs = session.exerciseLogs
+            totalVolume = sanitizedSession.totalVolume,
+            exerciseLogs = sanitizedLogs
         )
 
         workoutLogs.add(0, workoutLog)
@@ -289,6 +297,7 @@ object FakeWorkoutDataSource {
     }
 
     fun getLastWorkoutLog(userId: String): WorkoutLog? {
-        return workoutLogs.filter { it.userId == userId }.maxByOrNull { it.date }
+        return workoutLogs.filter { it.userId == userId }
+            .maxWithOrNull(compareBy<WorkoutLog> { it.endTime }.thenBy { it.startTime }.thenBy { it.id })
     }
 }

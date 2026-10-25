@@ -1,524 +1,156 @@
 package com.diajarkoding.imfit.presentation.ui.workout
 
-import androidx.compose.animation.animateColorAsState
-import androidx.compose.animation.core.animateFloatAsState
-import androidx.compose.animation.core.tween
+import androidx.activity.compose.BackHandler
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
-import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.PaddingValues
-import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.WindowInsets
-import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.navigationBars
-import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.statusBars
-import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.layout.windowInsetsPadding
-import androidx.compose.ui.tooling.preview.Preview
-import androidx.compose.foundation.layout.windowInsetsPadding
+import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.interaction.collectIsFocusedAsState
+import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.text.KeyboardOptions
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.ArrowBack
-import androidx.compose.material.icons.filled.Add
-import androidx.compose.material.icons.filled.Check
-import androidx.compose.material.icons.filled.Close
-import androidx.compose.material.icons.filled.Delete
-import androidx.compose.material.icons.filled.FitnessCenter
-import androidx.compose.material3.Card
-import androidx.compose.material3.CardDefaults
-import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
-import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedTextField
-import androidx.compose.material3.OutlinedTextFieldDefaults
-import androidx.compose.material3.Scaffold
-import androidx.compose.material3.SnackbarHost
-import androidx.compose.material3.SnackbarHostState
-import androidx.compose.material3.SwipeToDismissBox
-import androidx.compose.material3.SwipeToDismissBoxValue
-import androidx.compose.material3.Text
-import androidx.compose.material3.TopAppBar
-import androidx.compose.material3.TopAppBarDefaults
-import androidx.compose.material3.rememberSwipeToDismissBoxState
-import androidx.compose.runtime.Composable
-import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.collectAsState
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.remember
-import androidx.compose.runtime.rememberCoroutineScope
-import androidx.compose.runtime.setValue
+import androidx.compose.material3.*
+import androidx.compose.runtime.*
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
-import androidx.compose.ui.draw.scale
-import androidx.compose.ui.draw.shadow
-import androidx.compose.ui.graphics.Brush
-import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.error
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.platform.LocalDensity
 import androidx.hilt.navigation.compose.hiltViewModel
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.diajarkoding.imfit.R
 import com.diajarkoding.imfit.domain.model.TemplateExercise
-import com.diajarkoding.imfit.presentation.components.common.IMFITButton
-import com.diajarkoding.imfit.presentation.components.common.IMFITDialog
-import com.diajarkoding.imfit.presentation.components.common.IMFITDialogType
-import com.diajarkoding.imfit.theme.DeletePink
-import com.diajarkoding.imfit.theme.IMFITShapes
-import com.diajarkoding.imfit.theme.IMFITSizes
+import com.diajarkoding.imfit.presentation.components.common.*
+import com.diajarkoding.imfit.theme.IMFITColors
 import com.diajarkoding.imfit.theme.IMFITSpacing
-import com.diajarkoding.imfit.theme.Primary
-import com.diajarkoding.imfit.theme.PrimaryLight
-import com.diajarkoding.imfit.theme.SetComplete
-import kotlinx.coroutines.launch
+import androidx.compose.ui.platform.testTag
 
-@OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun EditWorkoutScreen(
-    workoutId: String,
-    onNavigateBack: () -> Unit,
-    viewModel: EditWorkoutViewModel = hiltViewModel()
-) {
-    val state by viewModel.state.collectAsState()
-    val snackbarHostState = remember { SnackbarHostState() }
-    val scope = rememberCoroutineScope()
-
-    LaunchedEffect(Unit) {
-        viewModel.loadWorkout()
-    }
-
-    // Show error via snackbar
-    LaunchedEffect(state.error) {
-        state.error?.let { error ->
-            scope.launch {
-                snackbarHostState.showSnackbar(error)
-                viewModel.clearError()
-            }
+fun EditWorkoutScreen(workoutId: String, onNavigateBack: () -> Unit,
+    viewModel: EditWorkoutViewModel = hiltViewModel(),
+    onAddExercises: (String, List<String>, String) -> Unit = { _, _, _ -> },
+    selectedExerciseIds: List<String>? = null, onSelectedExercisesConsumed: () -> Unit = {}) {
+    val state by viewModel.state.collectAsStateWithLifecycle()
+    BackHandler(enabled = state.isSaving) {}
+    LaunchedEffect(workoutId) { viewModel.initialize(workoutId) }
+    LaunchedEffect(state.isSaved) { if (state.isSaved) onNavigateBack() }
+    LaunchedEffect(selectedExerciseIds, state.hasLoaded) {
+        if (selectedExerciseIds != null && state.hasLoaded) {
+            viewModel.addExercisesByIds(selectedExerciseIds)
+            onSelectedExercisesConsumed()
         }
     }
+    EditWorkoutContent(state, onNavigateBack, viewModel::updateWorkoutName, viewModel::removeExercise,
+        viewModel::updateExerciseConfig, viewModel::setConfigValidity, viewModel::saveChanges, viewModel::loadWorkout,
+        viewModel::retryAddExercises, onAdd = { onAddExercises(workoutId, state.exercises.map { it.id }, state.workoutName) })
+}
 
-    LaunchedEffect(state.isSaved) {
-        if (state.isSaved) {
-            onNavigateBack()
-        }
-    }
-
-    Scaffold(
-        contentWindowInsets = WindowInsets(0),
-        snackbarHost = { SnackbarHost(hostState = snackbarHostState) },
-        topBar = {
-            TopAppBar(
-                modifier = Modifier.windowInsetsPadding(WindowInsets.statusBars),
-                title = {
-                    Text(
-                        text = stringResource(R.string.workout_edit_title),
-                        style = MaterialTheme.typography.titleLarge,
-                        fontWeight = FontWeight.Bold
-                    )
-                },
-                navigationIcon = {
-                    IconButton(onClick = onNavigateBack) {
-                        Icon(
-                            imageVector = Icons.AutoMirrored.Filled.ArrowBack,
-                            contentDescription = stringResource(R.string.action_back)
-                        )
-                    }
-                },
-                colors = TopAppBarDefaults.topAppBarColors(
-                    containerColor = MaterialTheme.colorScheme.surface
-                ),
-                windowInsets = WindowInsets(0)
-            )
-        }
-    ) { padding ->
-        Column(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(padding)
-        ) {
-            LazyColumn(
-                modifier = Modifier
-                    .weight(1f)
-                    .fillMaxWidth(),
-                contentPadding = PaddingValues(IMFITSpacing.screenHorizontal),
-                verticalArrangement = Arrangement.spacedBy(IMFITSpacing.lg)
-            ) {
-                item {
-                    Text(
-                        text = stringResource(R.string.workout_name_label),
-                        style = MaterialTheme.typography.titleSmall,
-                        fontWeight = FontWeight.SemiBold,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                    Spacer(modifier = Modifier.height(IMFITSpacing.sm))
-                    OutlinedTextField(
-                        value = state.workoutName,
-                        onValueChange = { viewModel.updateWorkoutName(it) },
-                        modifier = Modifier.fillMaxWidth(),
-                        placeholder = { Text(stringResource(R.string.home_workout_placeholder)) },
-                        singleLine = true,
-                        shape = IMFITShapes.TextField,
-                        colors = OutlinedTextFieldDefaults.colors(
-                            focusedBorderColor = Primary,
-                            unfocusedBorderColor = MaterialTheme.colorScheme.outline.copy(alpha = 0.5f)
-                        )
-                    )
+@Composable
+internal fun EditWorkoutContent(state: EditWorkoutState, onBack: () -> Unit = {}, onName: (String) -> Unit = {},
+    onRemove: (Int) -> Unit = {}, onConfig: (String, Int, Int, Int) -> Unit = { _, _, _, _ -> },
+    onValidity: (String, Boolean) -> Unit = { _, _ -> }, onSave: () -> Unit = {}, onRetryLoad: () -> Unit = {},
+    onRetryAdd: () -> Unit = {}, onAdd: () -> Unit = {}) {
+    val c = IMFITColors.training
+    val editable = state.hasLoaded && !state.isLoading && !state.isSaving && !state.isAdding
+    Scaffold(modifier = Modifier.imePadding(), containerColor = c.background, contentWindowInsets = WindowInsets(0),
+        topBar = { RoutineAppBar(stringResource(R.string.workout_edit_title), onBack, enabled = !state.isSaving) },
+        bottomBar = { RoutineFooter {
+            RoutineButton(stringResource(if (state.isSaving) R.string.routine_saving else R.string.action_save_changes), onSave,
+                enabled = editable && state.workoutName.isNotBlank() && state.invalidConfigIds.isEmpty(), loading = state.isSaving)
+        } }) { padding ->
+        LazyColumn(Modifier.fillMaxSize().padding(padding).testTag("routine_edit_list"), contentPadding = PaddingValues(start = 20.dp, end = 20.dp, top = IMFITSpacing.headerContentGap, bottom = 16.dp),
+            verticalArrangement = Arrangement.spacedBy(12.dp)) {
+            if (state.isLoading) item { RoutineLoading(stringResource(R.string.routine_loading), topPadding = 0.dp) }
+            state.errorRes?.let { message -> item {
+                RoutineFailure(stringResource(message), if (!state.hasLoaded) onRetryLoad else if (message == R.string.routine_add_failed && !state.isAdding) onRetryAdd else null)
+            } }
+            if (state.hasLoaded) {
+                item { RoutineNameField(state.workoutName, onName, enabled = editable,
+                    errorMessage = state.nameErrorRes?.let { stringResource(it) }) }
+                item { RoutineExerciseHeading(state.exercises.size) }
+                itemsIndexed(state.exercises, key = { _, exercise -> exercise.id }) { index, exercise ->
+                    RoutineExerciseEditor(exercise, editable,
+                        onRemove = { onRemove(index) },
+                        onConfig = { sets, reps, rest -> onConfig(exercise.id, sets, reps, rest) },
+                        onValidity = { valid -> onValidity(exercise.id, valid) }, sourceRevision = state.sourceRevision)
                 }
-
-                item {
-                    Spacer(modifier = Modifier.height(IMFITSpacing.md))
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Text(
-                            text = stringResource(R.string.workout_exercises_label),
-                            style = MaterialTheme.typography.titleMedium,
-                            fontWeight = FontWeight.Bold
-                        )
-                        Text(
-                            text = stringResource(
-                                R.string.workout_exercises_total,
-                                state.exercises.size
-                            ),
-                            style = MaterialTheme.typography.bodyMedium,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                    }
-                }
-
-                if (state.exercises.isEmpty()) {
-                    item {
-                        EmptyExercisesPlaceholder()
-                    }
-                } else {
-                    itemsIndexed(
-                        items = state.exercises,
-                        key = { index, exercise -> "edit_${index}_${exercise.id}" }
-                    ) { index, exercise ->
-                        EditableExerciseCard(
-                            exercise = exercise,
-                            onRemoveExercise = { viewModel.removeExercise(index) },
-                            onUpdateSets = { sets -> viewModel.updateExerciseSets(index, sets) },
-                            onUpdateReps = { reps -> viewModel.updateExerciseReps(index, reps) },
-                            onUpdateRest = { rest -> viewModel.updateExerciseRest(index, rest) },
-                            onRemoveSet = { setIndex -> viewModel.removeSet(index, setIndex) },
-                            onAddSet = { viewModel.addSet(index) }
-                        )
-                    }
-                }
-
-                item { Spacer(modifier = Modifier.height(IMFITSpacing.huge)) }
-            }
-
-            Box(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .shadow(8.dp, spotColor = Color.Black.copy(alpha = 0.1f))
-                    .background(MaterialTheme.colorScheme.surface)
-                    .windowInsetsPadding(WindowInsets.navigationBars)
-                    .padding(IMFITSpacing.screenHorizontal)
-                    .padding(vertical = IMFITSpacing.xs)
-            ) {
-                IMFITButton(
-                    text = stringResource(R.string.action_save_changes),
-                    onClick = { viewModel.saveChanges() },
-                    enabled = state.workoutName.isNotBlank() && !state.isSaving,
-                    isLoading = state.isSaving,
-                    icon = Icons.Default.Check
-                )
+                item { RoutineButton(stringResource(R.string.action_add_exercise), onAdd, enabled = editable, outlined = true, icon = Symbols.Default.Add, matchOutlineToContent = true) }
+                item { Text(stringResource(R.string.routine_edit_history_hint), color = c.muted, style = MaterialTheme.typography.bodySmall,
+                    modifier = Modifier.padding(vertical = 12.dp)) }
+                if (state.isAdding) item { RoutineLoading(stringResource(R.string.routine_adding)) }
             }
         }
     }
 }
 
 @Composable
-private fun EmptyExercisesPlaceholder() {
-    Card(
-        modifier = Modifier.fillMaxWidth(),
-        shape = IMFITShapes.Card,
-        colors = CardDefaults.cardColors(
-            containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(
-                alpha = 0.5f
-            )
-        )
-    ) {
-        Column(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(IMFITSpacing.xl),
-            horizontalAlignment = Alignment.CenterHorizontally
-        ) {
-            Icon(
-                imageVector = Icons.Default.FitnessCenter,
-                contentDescription = null,
-                modifier = Modifier.size(48.dp),
-                tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f)
-            )
-            Spacer(modifier = Modifier.height(IMFITSpacing.md))
-            Text(
-                text = stringResource(R.string.workout_no_exercises),
-                style = MaterialTheme.typography.bodyLarge,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
-            )
-        }
+internal fun RoutineExerciseEditor(exercise: TemplateExercise, enabled: Boolean,
+    onRemove: () -> Unit, onConfig: (Int, Int, Int) -> Unit, onValidity: (Boolean) -> Unit, sourceRevision: Int = 0) {
+    val c = IMFITColors.training
+    var sets by rememberSaveable(exercise.id, sourceRevision) { mutableStateOf(exercise.sets.toString()) }
+    var reps by rememberSaveable(exercise.id, sourceRevision) { mutableStateOf(exercise.reps.toString()) }
+    var rest by rememberSaveable(exercise.id, sourceRevision) { mutableStateOf(exercise.restSeconds.toString()) }
+    val valid = (sets.toIntOrNull() ?: 0) > 0 && (reps.toIntOrNull() ?: 0) > 0 && (rest.toIntOrNull() ?: -1) >= 0
+    fun publish(newSets: String, newReps: String, newRest: String) {
+        val setCount = newSets.toIntOrNull()
+        val repCount = newReps.toIntOrNull()
+        val restSeconds = newRest.toIntOrNull()
+        val validConfig = setCount != null && setCount > 0 && repCount != null && repCount > 0 && restSeconds != null && restSeconds >= 0
+        onValidity(validConfig)
+        if (validConfig) onConfig(requireNotNull(setCount), requireNotNull(repCount), requireNotNull(restSeconds))
     }
-}
-
-@OptIn(ExperimentalMaterial3Api::class)
-@Composable
-private fun EditableExerciseCard(
-    exercise: TemplateExercise,
-    onRemoveExercise: () -> Unit,
-    onUpdateSets: (Int) -> Unit,
-    onUpdateReps: (Int) -> Unit,
-    onUpdateRest: (Int) -> Unit,
-    onRemoveSet: (Int) -> Unit,
-    onAddSet: () -> Unit
-) {
-    var showDeleteConfirmation by remember { mutableStateOf(false) }
-
-    if (showDeleteConfirmation) {
-        IMFITDialog(
-            onDismissRequest = { showDeleteConfirmation = false },
-            title = stringResource(R.string.dialog_remove_exercise),
-            message = stringResource(R.string.dialog_remove_exercise_message, exercise.name),
-            confirmText = stringResource(R.string.action_remove),
-            dismissText = stringResource(R.string.action_cancel),
-            onConfirm = {
-                onRemoveExercise()
-                showDeleteConfirmation = false
-            },
-            type = IMFITDialogType.DESTRUCTIVE
-        )
-    }
-
-    val dismissState = rememberSwipeToDismissBoxState(
-        confirmValueChange = { false }
-    )
-
-    val scale by animateFloatAsState(
-        targetValue = if (dismissState.targetValue == SwipeToDismissBoxValue.Settled) 1f else 0.95f,
-        animationSpec = tween(150),
-        label = "scale"
-    )
-
-    LaunchedEffect(dismissState.currentValue) {
-        if (dismissState.currentValue == SwipeToDismissBoxValue.EndToStart) {
-            showDeleteConfirmation = true
-            dismissState.reset()
-        }
-    }
-
-    SwipeToDismissBox(
-        state = dismissState,
-        enableDismissFromStartToEnd = false,
-        backgroundContent = {
-            val color by animateColorAsState(
-                targetValue = when (dismissState.targetValue) {
-                    SwipeToDismissBoxValue.EndToStart -> DeletePink
-                    else -> Color.Transparent
-                },
-                label = "bgColor"
-            )
-            Box(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .clip(IMFITShapes.Card)
-                    .background(color)
-                    .padding(horizontal = IMFITSpacing.lg),
-                contentAlignment = Alignment.CenterEnd
-            ) {
-                Icon(
-                    imageVector = Icons.Default.Delete,
-                    contentDescription = stringResource(R.string.action_delete),
-                    tint = Color.White,
-                    modifier = Modifier.size(IMFITSizes.iconMd)
-                )
-            }
-        }
-    ) {
-        Card(
-            modifier = Modifier
-                .fillMaxWidth()
-                .scale(scale),
-            shape = IMFITShapes.Card,
-            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
-            elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
-        ) {
-            Column(
-                modifier = Modifier.padding(IMFITSpacing.cardPadding)
-            ) {
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Box(
-                            modifier = Modifier
-                                .size(40.dp)
-                                .clip(IMFITShapes.IconContainer)
-                                .background(
-                                    Brush.linearGradient(listOf(Primary, PrimaryLight))
-                                ),
-                            contentAlignment = Alignment.Center
-                        ) {
-                            Icon(
-                                imageVector = Icons.Default.FitnessCenter,
-                                contentDescription = null,
-                                tint = Color.White,
-                                modifier = Modifier.size(IMFITSizes.iconSm)
-                            )
-                        }
-                        Spacer(modifier = Modifier.width(IMFITSpacing.md))
-                        Column {
-                            Text(
-                                text = exercise.name,
-                                style = MaterialTheme.typography.titleSmall,
-                                fontWeight = FontWeight.Bold
-                            )
-                            Text(
-                                text = stringResource(id = exercise.exercise.muscleCategory.stringResourceId),
-                                style = MaterialTheme.typography.bodySmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant
-                            )
-                        }
-                    }
-                    IconButton(onClick = { showDeleteConfirmation = true }) {
-                        Icon(
-                            imageVector = Icons.Default.Close,
-                            contentDescription = stringResource(R.string.action_remove),
-                            tint = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                    }
+    LaunchedEffect(exercise.id) { publish(sets, reps, rest) }
+    Surface(color = c.surface, shape = RoundedCornerShape(14.dp), border = BorderStroke(1.dp, c.border)) {
+        Column(Modifier.fillMaxWidth().padding(16.dp), verticalArrangement = Arrangement.spacedBy(16.dp)) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                    Text(exercise.name, color = c.text, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
+                    Text(stringResource(exercise.muscleCategory.stringResourceId), color = c.muted, style = MaterialTheme.typography.bodySmall)
                 }
-
-                Spacer(modifier = Modifier.height(IMFITSpacing.md))
-
-                // Sets, Reps, Rest configuration
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(IMFITSpacing.sm)
-                ) {
-                    ConfigInput(
-                        label = stringResource(R.string.workout_label_sets),
-                        value = exercise.sets.toString(),
-                        onValueChange = { value ->
-                            value.toIntOrNull()?.let { if (it > 0) onUpdateSets(it) }
-                        },
-                        modifier = Modifier.weight(1f)
-                    )
-                    ConfigInput(
-                        label = stringResource(R.string.workout_label_reps),
-                        value = exercise.reps.toString(),
-                        onValueChange = { value ->
-                            value.toIntOrNull()?.let { if (it > 0) onUpdateReps(it) }
-                        },
-                        modifier = Modifier.weight(1f)
-                    )
-                    ConfigInput(
-                        label = stringResource(R.string.workout_label_rest_short),
-                        value = exercise.restSeconds.toString(),
-                        onValueChange = { value ->
-                            value.toIntOrNull()?.let { if (it >= 0) onUpdateRest(it) }
-                        },
-                        modifier = Modifier.weight(1f)
-                    )
-                }
-
-                // Set management
-                Spacer(modifier = Modifier.height(IMFITSpacing.md))
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Text(
-                        text = stringResource(R.string.workout_sets_configured, exercise.sets),
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                    Row {
-                        if (exercise.sets > 1) {
-                            IconButton(
-                                onClick = { onRemoveSet(exercise.sets - 1) },
-                                modifier = Modifier.size(32.dp)
-                            ) {
-                                Icon(
-                                    imageVector = Icons.Default.Delete,
-                                    contentDescription = "Remove set",
-                                    tint = DeletePink,
-                                    modifier = Modifier.size(18.dp)
-                                )
-                            }
-                        }
-                        IconButton(
-                            onClick = onAddSet,
-                            modifier = Modifier.size(32.dp)
-                        ) {
-                            Icon(
-                                imageVector = Icons.Default.Add,
-                                contentDescription = stringResource(R.string.action_add_set),
-                                tint = SetComplete,
-                                modifier = Modifier.size(18.dp)
-                            )
-                        }
-                    }
+                IconButton(onRemove, enabled = enabled, modifier = Modifier.size(48.dp)) {
+                    Icon(Symbols.Default.Close, stringResource(R.string.routine_remove_named, exercise.name), tint = c.muted, modifier = Modifier.size(20.dp))
                 }
             }
+            val fields: @Composable (Modifier) -> Unit = { modifier ->
+                RoutineConfigNumber(stringResource(R.string.workout_label_sets), sets, { sets = it; publish(it, reps, rest) }, enabled, 1, modifier)
+                RoutineConfigNumber(stringResource(R.string.workout_label_reps), reps, { reps = it; publish(sets, it, rest) }, enabled, 1, modifier)
+                RoutineConfigNumber(stringResource(R.string.workout_label_rest_short), rest, { rest = it; publish(sets, reps, it) }, enabled, 0, modifier)
+            }
+            if (LocalDensity.current.fontScale > 1.4f) Column(verticalArrangement = Arrangement.spacedBy(12.dp)) { fields(Modifier.fillMaxWidth()) }
+            else Row(horizontalArrangement = Arrangement.spacedBy(14.dp)) { fields(Modifier.weight(1f)) }
+            if (!valid) RoutineFailure(stringResource(R.string.routine_config_invalid))
+            Text(stringResource(R.string.routine_config_hint), color = c.muted, style = MaterialTheme.typography.bodySmall)
         }
     }
 }
 
 @Composable
-private fun ConfigInput(
-    label: String,
-    value: String,
-    onValueChange: (String) -> Unit,
-    modifier: Modifier = Modifier
-) {
-    Column(modifier = modifier) {
-        Text(
-            text = label,
-            style = MaterialTheme.typography.labelSmall,
-            color = MaterialTheme.colorScheme.onSurfaceVariant
-        )
-        Spacer(modifier = Modifier.height(4.dp))
-        OutlinedTextField(
-            value = value,
-            onValueChange = onValueChange,
-            modifier = Modifier.fillMaxWidth(),
-            singleLine = true,
-            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
-            shape = IMFITShapes.TextField,
-            colors = OutlinedTextFieldDefaults.colors(
-                focusedBorderColor = Primary,
-                unfocusedBorderColor = MaterialTheme.colorScheme.outline.copy(alpha = 0.5f)
-            )
-        )
-    }
-}
-
-@Preview(showBackground = true, showSystemUi = true)
-@Composable
-private fun EditWorkoutScreenPreview() {
-    com.diajarkoding.imfit.theme.IMFITTheme(darkTheme = false) {
-        EditWorkoutScreen(
-            workoutId = "preview-workout",
-            onNavigateBack = {}
-        )
+private fun RoutineConfigNumber(label: String, value: String, onChange: (String) -> Unit, enabled: Boolean, min: Int, modifier: Modifier) {
+    val c = IMFITColors.training
+    val invalid = value.toIntOrNull()?.let { it < min } ?: true
+    val interaction = remember { MutableInteractionSource() }
+    val focused by interaction.collectIsFocusedAsState()
+    val errorText = stringResource(R.string.routine_config_invalid)
+    Column(modifier, verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        Text(label, color = c.muted, style = MaterialTheme.typography.bodySmall)
+        Surface(color = c.background, shape = RoutineControlShape,
+            border = BorderStroke(if (focused) 2.dp else 1.dp, if (invalid) c.error else if (focused) c.primary else MaterialTheme.colorScheme.onSurfaceVariant)) {
+            BasicTextField(value, { onChange(it.filter(Char::isDigit).take(6)) }, enabled = enabled, singleLine = true,
+                interactionSource = interaction,
+                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number), cursorBrush = SolidColor(c.primary),
+                textStyle = MaterialTheme.typography.bodyLarge.copy(color = c.text, textAlign = TextAlign.Center),
+                modifier = Modifier.fillMaxWidth().heightIn(min = 52.dp).semantics { contentDescription = label; if (invalid) error(errorText) },
+                decorationBox = { input -> Box(Modifier.fillMaxWidth().heightIn(min = 52.dp).padding(12.dp), contentAlignment = Alignment.Center) { input() } })
+        }
     }
 }

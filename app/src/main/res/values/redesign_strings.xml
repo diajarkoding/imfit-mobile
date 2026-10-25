@@ -1,0 +1,40 @@
+<resources>
+    <string name="redesign_progress">Progress</string>
+    <string name="redesign_session_volume">Total Volume</string>
+    <string name="redesign_profile">Profile</string>
+    <string name="redesign_hello">Hello!</string>
+    <string name="redesign_greeting">Hello, %1$s!</string>
+    <string name="redesign_ready">Ready for today’s workout?</string>
+    <string name="redesign_latest">LATEST WORKOUT</string>
+    <string name="redesign_no_workout">Your journey starts here</string>
+    <string name="redesign_start_hint">Create a routine to get started.</string>
+    <string name="redesign_workout_meta">%1$s · %2$d exercises</string>
+    <plurals name="redesign_exercise_count">
+        <item quantity="one">%1$d exercise</item>
+        <item quantity="other">%1$d exercises</item>
+    </plurals>
+    <string name="redesign_no_templates">No workouts yet. Add your first workout below.</string>
+    <string name="redesign_resume">Resume workout</string>
+    <string name="redesign_volume">Total Volume · All time</string>
+    <string name="redesign_explore_subtitle">Explore exercises to build your best routine.</string>
+    <string name="redesign_search">Search Exercises</string>
+    <string name="redesign_categories">Muscle Categories</string>
+    <string name="redesign_explore">Explore Exercises</string>
+    <string name="redesign_no_results">No exercises match your search.</string>
+    <string name="redesign_empty_catalog">No exercises available in the local catalog yet.</string>
+    <string name="redesign_error">Unable to load exercises.</string>
+    <string name="redesign_retry">Retry</string>
+    <string name="redesign_month_summary">THIS MONTH’S SUMMARY</string>
+    <string name="redesign_month_count">%1$d workouts completed this month</string>
+    <string name="redesign_week_time">Time This Week</string>
+    <string name="redesign_month_workouts">Workouts This Month</string>
+    <string name="redesign_month_sets">Completed Sets This Month</string>
+    <string name="redesign_calendar">View Calendar</string>
+    <string name="redesign_today">Today</string>
+    <string name="redesign_previous">Previous month</string>
+    <string name="redesign_next">Next month</string>
+    <string name="redesign_day_description">%1$s. %2$d workouts. %3$s</string>
+    <string name="redesign_hours_minutes">%1$dh %2$dm</string>
+    <string name="redesign_kg">%1$s kg</string>
+    <string name="redesign_history">Recent Workouts</string>
+</resources>

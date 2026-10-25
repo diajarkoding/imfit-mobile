@@ -62,4 +62,22 @@ object FakeUserDataSource {
     fun getCurrentUser(): User? = currentUser
 
     fun isLoggedIn(): Boolean = currentUser != null
+
+    fun updateProfile(user: User): Result<User> {
+        val current = currentUser
+            ?: return Result.failure(IllegalStateException("No user is logged in"))
+        if (current.id != user.id) {
+            return Result.failure(IllegalArgumentException("Cannot update another user"))
+        }
+
+        val index = registeredUsers.indexOfFirst { it.user.id == user.id }
+        if (index == -1) {
+            return Result.failure(IllegalStateException("User is not registered"))
+        }
+
+        val existingCredentials = registeredUsers[index]
+        registeredUsers[index] = existingCredentials.copy(user = user)
+        currentUser = user
+        return Result.success(user)
+    }
 }

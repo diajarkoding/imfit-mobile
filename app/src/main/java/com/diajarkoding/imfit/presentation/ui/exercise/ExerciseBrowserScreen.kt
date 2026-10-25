@@ -2,192 +2,87 @@ package com.diajarkoding.imfit.presentation.ui.exercise
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.PaddingValues
-import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.WindowInsets
-import androidx.compose.foundation.layout.aspectRatio
-import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
-import androidx.compose.ui.tooling.preview.Preview
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.FitnessCenter
-import androidx.compose.material3.Card
-import androidx.compose.material3.CardDefaults
-import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.Icon
-import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Scaffold
-import androidx.compose.material3.Text
-import androidx.compose.material3.TopAppBar
-import androidx.compose.material3.TopAppBarDefaults
+import androidx.compose.foundation.lazy.grid.rememberLazyGridState
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.Brush
-import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.rememberTextMeasurer
+import androidx.compose.ui.unit.Constraints
 import androidx.compose.ui.unit.dp
-import com.diajarkoding.imfit.domain.model.MuscleCategory
-import com.diajarkoding.imfit.theme.IMFITShapes
-import com.diajarkoding.imfit.theme.IMFITSizes
-import com.diajarkoding.imfit.theme.IMFITSpacing
-import com.diajarkoding.imfit.theme.Primary
-import com.diajarkoding.imfit.theme.PrimaryLight
+import com.diajarkoding.imfit.R
+import com.diajarkoding.imfit.presentation.components.common.*
+import com.diajarkoding.imfit.theme.*
 
-@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun ExerciseBrowserScreen(
-    onNavigateBack: () -> Unit,
-    onCategorySelected: (MuscleCategory) -> Unit
+    onCategorySelected: (ExerciseCategory) -> Unit
 ) {
-    Scaffold(
-        contentWindowInsets = WindowInsets(0),
-        topBar = {
-            TopAppBar(
-                title = {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Box(
-                            modifier = Modifier
-                                .size(40.dp)
-                                .clip(IMFITShapes.IconContainer)
-                                .background(
-                                    Brush.linearGradient(listOf(Primary, PrimaryLight))
-                                ),
-                            contentAlignment = Alignment.Center
-                        ) {
-                            Icon(
-                                imageVector = Icons.Default.FitnessCenter,
-                                contentDescription = null,
-                                tint = MaterialTheme.colorScheme.onPrimary,
-                                modifier = Modifier.size(IMFITSizes.iconSm)
-                            )
-                        }
-                        Spacer(modifier = Modifier.width(IMFITSpacing.md))
+    val gridState = rememberLazyGridState()
+    val textMeasurer = rememberTextMeasurer()
+    Column(Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background)) {
+        BoxWithConstraints(Modifier.fillMaxWidth().weight(1f)) {
+            val density = LocalDensity.current
+            val columns = if (maxWidth >= IMFITComponentSizes.adaptiveGridWidth && density.fontScale <= IMFITComponentSizes.adaptiveFontScale) 3 else 2
+            val labels = ExerciseCategory.entries.map { stringResource(it.labelRes) }
+            val cellWidth = (maxWidth - IMFITSpacing.screenHorizontal * 2 - IMFITSpacing.lg * (columns - 1)) / columns
+            val labelHeightPx = labels.maxOf {
+                textMeasurer.measure(it, style = IMFITTypography.categoryLabel,
+                    constraints = Constraints(maxWidth = with(density) { cellWidth.roundToPx().coerceAtLeast(1) })).size.height
+            }
+            val layout = with(density) {
+                categoryGridLayout(ExerciseCategory.entries.size, columns, maxHeight.roundToPx(),
+                    IMFITSpacing.headerContentGap.roundToPx(), IMFITSpacing.md.roundToPx(), IMFITSpacing.sm.roundToPx(),
+                    labelHeightPx, minOf(IMFITComponentSizes.categoryArtwork, cellWidth).roundToPx(), 48.dp.roundToPx())
+            }
+            val rowHeight = with(density) { layout.rowHeightPx.toDp() }
+            val artwork = with(density) { layout.artworkPx.toDp() }
+            val labelHeight = with(density) { labelHeightPx.toDp() }
+            LaunchedEffect(layout.fits, columns) { if (layout.fits) gridState.scrollToItem(0) }
+            LazyVerticalGrid(
+                columns = GridCells.Fixed(columns),
+                state = gridState,
+                modifier = Modifier.fillMaxSize().testTag("exercise_category_grid"),
+                userScrollEnabled = !layout.fits,
+                contentPadding = PaddingValues(start = IMFITSpacing.screenHorizontal, top = IMFITSpacing.headerContentGap, end = IMFITSpacing.screenHorizontal, bottom = IMFITSpacing.md),
+                horizontalArrangement = Arrangement.spacedBy(IMFITSpacing.lg),
+                verticalArrangement = Arrangement.spacedBy(IMFITSpacing.sm)
+            ) {
+                items(ExerciseCategory.entries, key = { it.name }) { category ->
+                    Column(
+                        modifier = Modifier.fillMaxWidth()
+                             .height(rowHeight).testTag("category_${category.name}")
+                            .clip(RoundedCornerShape(IMFITCornerRadius.template))
+                             .clickable(role = Role.Button) { onCategorySelected(category) },
+                        horizontalAlignment = Alignment.CenterHorizontally,
+                        verticalArrangement = Arrangement.spacedBy(IMFITSpacing.sm, Alignment.Top)
+                    ) {
+                        MuscleCategoryArtwork(
+                            asset = category.artwork,
+                            modifier = Modifier.size(artwork)
+                        )
                         Text(
-                            text = stringResource(id = com.diajarkoding.imfit.R.string.nav_exercises_title),
-                            style = MaterialTheme.typography.titleLarge,
-                            fontWeight = FontWeight.Bold
+                            text = stringResource(category.labelRes),
+                            modifier = Modifier.fillMaxWidth().heightIn(min = labelHeight),
+                            style = IMFITTypography.categoryLabel,
+                            color = MaterialTheme.colorScheme.onBackground,
+                            textAlign = TextAlign.Center
                         )
                     }
-                },
-                colors = TopAppBarDefaults.topAppBarColors(
-                    containerColor = MaterialTheme.colorScheme.surface
-                ),
-                windowInsets = WindowInsets(0)
-            )
-        }
-    ) { padding ->
-        LazyVerticalGrid(
-            columns = GridCells.Fixed(3),
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(padding),
-            contentPadding = PaddingValues(IMFITSpacing.screenHorizontal),
-            horizontalArrangement = Arrangement.spacedBy(IMFITSpacing.sm),
-            verticalArrangement = Arrangement.spacedBy(IMFITSpacing.sm)
-        ) {
-            items(MuscleCategory.entries, key = { it.name }) { category ->
-                MuscleCategoryCard(
-                    category = category,
-                    onClick = { onCategorySelected(category) }
-                )
-            }
-        }
-    }
-}
-
-@Composable
-private fun MuscleCategoryCard(
-    category: MuscleCategory,
-    onClick: () -> Unit
-) {
-    Card(
-        modifier = Modifier
-            .fillMaxWidth()
-            .aspectRatio(0.85f)
-            .clickable { onClick() },
-        shape = IMFITShapes.Card,
-        colors = CardDefaults.cardColors(
-            containerColor = MaterialTheme.colorScheme.surface
-        ),
-        elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
-    ) {
-        Box(
-            modifier = Modifier
-                .fillMaxSize()
-                .background(
-                    Brush.verticalGradient(
-                        listOf(
-                            Primary.copy(alpha = 0.08f),
-                            Primary.copy(alpha = 0.02f)
-                        )
-                    )
-                )
-                .padding(IMFITSpacing.md),
-            contentAlignment = Alignment.Center
-        ) {
-            Column(
-                horizontalAlignment = Alignment.CenterHorizontally,
-                verticalArrangement = Arrangement.Center
-            ) {
-                Box(
-                    modifier = Modifier
-                        .size(40.dp)
-                        .clip(IMFITShapes.IconContainer)
-                        .background(MaterialTheme.colorScheme.primaryContainer),
-                    contentAlignment = Alignment.Center
-                ) {
-                    Icon(
-                        imageVector = Icons.Default.FitnessCenter,
-                        contentDescription = null,
-                        tint = MaterialTheme.colorScheme.onPrimaryContainer,
-                        modifier = Modifier.size(IMFITSizes.iconSm)
-                    )
                 }
-                Spacer(modifier = Modifier.size(IMFITSpacing.sm))
-                Text(
-                    text = stringResource(id = category.stringResourceId),
-                    style = MaterialTheme.typography.labelMedium,
-                    fontWeight = FontWeight.Bold,
-                    color = MaterialTheme.colorScheme.onSurface,
-                    textAlign = TextAlign.Center,
-                    maxLines = 2
-                )
             }
         }
-    }
-}
-
-@Preview(showBackground = true, showSystemUi = true)
-@Composable
-private fun ExerciseBrowserScreenPreview() {
-    com.diajarkoding.imfit.theme.IMFITTheme(darkTheme = false) {
-        ExerciseBrowserScreen(
-            onNavigateBack = {},
-            onCategorySelected = {}
-        )
-    }
-}
-
-@Preview(showBackground = true, showSystemUi = true)
-@Composable
-private fun ExerciseBrowserScreenPreviewDark() {
-    com.diajarkoding.imfit.theme.IMFITTheme(darkTheme = true) {
-        ExerciseBrowserScreen(
-            onNavigateBack = {},
-            onCategorySelected = {}
-        )
     }
 }

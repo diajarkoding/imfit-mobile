@@ -2,27 +2,26 @@ package com.diajarkoding.imfit.theme
 
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Shapes
-import androidx.compose.ui.unit.dp
 
 val Shapes = Shapes(
-    extraSmall = RoundedCornerShape(6.dp),
-    small = RoundedCornerShape(10.dp),
-    medium = RoundedCornerShape(14.dp),
-    large = RoundedCornerShape(18.dp),
-    extraLarge = RoundedCornerShape(24.dp)
+    extraSmall = RoundedCornerShape(IMFITCornerRadius.xs),
+    small = RoundedCornerShape(IMFITCornerRadius.small),
+    medium = RoundedCornerShape(IMFITCornerRadius.medium),
+    large = RoundedCornerShape(IMFITCornerRadius.large),
+    extraLarge = RoundedCornerShape(IMFITCornerRadius.xlarge)
 )
 
 object IMFITShapes {
-    val ButtonLarge = RoundedCornerShape(16.dp)
-    val Button = RoundedCornerShape(14.dp)
-    val ButtonSmall = RoundedCornerShape(10.dp)
-    val Card = RoundedCornerShape(20.dp)
-    val CardSmall = RoundedCornerShape(14.dp)
-    val TextField = RoundedCornerShape(14.dp)
-    val BottomSheet = RoundedCornerShape(topStart = 28.dp, topEnd = 28.dp)
-    val Dialog = RoundedCornerShape(28.dp)
-    val Chip = RoundedCornerShape(10.dp)
+    val ButtonLarge = RoundedCornerShape(IMFITCornerRadius.listItem)
+    val Button = RoundedCornerShape(IMFITCornerRadius.medium)
+    val ButtonSmall = RoundedCornerShape(IMFITCornerRadius.small)
+    val Card = RoundedCornerShape(IMFITCornerRadius.card)
+    val CardSmall = RoundedCornerShape(IMFITCornerRadius.medium)
+    val TextField = RoundedCornerShape(IMFITCornerRadius.medium)
+    val BottomSheet = RoundedCornerShape(topStart = IMFITCornerRadius.dialog, topEnd = IMFITCornerRadius.dialog)
+    val Dialog = RoundedCornerShape(IMFITCornerRadius.dialog)
+    val Chip = RoundedCornerShape(IMFITCornerRadius.small)
     val Badge = RoundedCornerShape(50)
-    val IconContainer = RoundedCornerShape(14.dp)
-    val ListItem = RoundedCornerShape(16.dp)
+    val IconContainer = RoundedCornerShape(IMFITCornerRadius.medium)
+    val ListItem = RoundedCornerShape(IMFITCornerRadius.listItem)
 }

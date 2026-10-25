@@ -1,631 +1,103 @@
 package com.diajarkoding.imfit.presentation.ui.progress
 
 import androidx.compose.foundation.background
-import androidx.compose.foundation.clickable
-import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.PaddingValues
-import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.shape.CircleShape
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.ExitToApp
-import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
-import androidx.compose.material.icons.filled.FitnessCenter
-import androidx.compose.material.icons.filled.Person
-import androidx.compose.material.icons.filled.Schedule
-import androidx.compose.material3.Card
-import androidx.compose.material3.CardDefaults
-import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
-import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Scaffold
-import androidx.compose.material3.SnackbarHost
-import androidx.compose.material3.SnackbarHostState
-import androidx.compose.ui.tooling.preview.Preview
-import androidx.compose.material3.Text
-import androidx.compose.runtime.Composable
-import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.collectAsState
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.remember
-import androidx.compose.runtime.rememberCoroutineScope
-import androidx.compose.ui.Alignment
+import androidx.compose.material3.*
+import androidx.compose.runtime.*
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
-import androidx.compose.ui.draw.shadow
-import androidx.compose.ui.graphics.Brush
-import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.vector.ImageVector
-import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.style.TextAlign
-import androidx.compose.ui.unit.dp
-import androidx.hilt.navigation.compose.hiltViewModel
-import com.diajarkoding.imfit.presentation.components.common.ShimmerCalendarCard
-import com.diajarkoding.imfit.presentation.components.common.ShimmerProfileHeader
-import com.diajarkoding.imfit.presentation.components.common.ShimmerBox
-import com.diajarkoding.imfit.theme.IMFITShapes
-import com.diajarkoding.imfit.theme.IMFITSizes
-import com.diajarkoding.imfit.theme.IMFITSpacing
-import com.diajarkoding.imfit.theme.Primary
-import com.diajarkoding.imfit.theme.PrimaryLight
-import com.diajarkoding.imfit.R
-import com.diajarkoding.imfit.presentation.components.common.IMFITProfilePhoto
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.stringResource
-import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.ui.unit.dp
+import androidx.hilt.navigation.compose.hiltViewModel
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.diajarkoding.imfit.R
+import com.diajarkoding.imfit.presentation.components.common.ShimmerStatCard
+import com.diajarkoding.imfit.presentation.components.common.ShimmerWelcomeSection
+import com.diajarkoding.imfit.theme.*
+import java.time.Instant
 import java.time.LocalDate
 import java.time.YearMonth
-import java.time.format.TextStyle
-import java.util.Locale
-import kotlinx.coroutines.launch
+import java.time.ZoneId
+import kotlinx.coroutines.delay
 
-@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun ProgressScreen(
     onNavigateToWorkoutHistory: (LocalDate) -> Unit = {},
-    onNavigateToYearlyCalendar: () -> Unit = {},
+    onNavigateToYearlyCalendar: (YearMonth) -> Unit = {},
     onNavigateToProfile: () -> Unit = {},
+    refreshKey: Long? = null,
     viewModel: ProgressViewModel = hiltViewModel()
 ) {
-    val state by viewModel.state.collectAsState()
-    val snackbarHostState = remember { SnackbarHostState() }
-    val scope = rememberCoroutineScope()
-
-    LaunchedEffect(Unit) {
-        viewModel.loadData()
+    val state by viewModel.state.collectAsStateWithLifecycle()
+    LaunchedEffect(refreshKey) { viewModel.loadData() }
+    val now by produceState(initialValue = Instant.now()) {
+        while (true) { value = Instant.now(); delay(60_000) }
     }
+    ProgressOverview(state, now, onNavigateToWorkoutHistory, onNavigateToYearlyCalendar,
+        onNavigateToProfile, viewModel::loadData)
+}
 
-    // Show error via snackbar
-    LaunchedEffect(state.error) {
-        state.error?.let { error ->
-            scope.launch {
-                snackbarHostState.showSnackbar(error)
-                viewModel.clearError()
-            }
-        }
-    }
-
-    Scaffold(
-        snackbarHost = { SnackbarHost(hostState = snackbarHostState) }
-    ) { padding ->
+@Composable
+internal fun ProgressOverview(
+    state: ProgressState,
+    now: Instant,
+    onWorkoutHistory: (LocalDate) -> Unit,
+    onYearlyCalendar: (YearMonth) -> Unit,
+    onProfile: () -> Unit,
+    onRetry: () -> Unit
+) {
+    val colors = IMFITColors.training
+    val today = now.atZone(ZoneId.systemDefault()).toLocalDate()
+    val month = YearMonth.from(today)
+    var selectedText by rememberSaveable(month.toString()) { mutableStateOf<String?>(null) }
+    val selectedDate = selectedText?.let(LocalDate::parse) ?: today
+    val logs = state.workoutLogsByDate.values.flatten().distinctBy { it.id }
+    val metrics = progressMetrics(logs, now, ZoneId.systemDefault(), month)
+    Column(Modifier.fillMaxSize().background(colors.background)) {
         LazyColumn(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(padding),
-            contentPadding = PaddingValues(IMFITSpacing.screenHorizontal),
-            verticalArrangement = Arrangement.spacedBy(IMFITSpacing.lg)
+            Modifier.fillMaxWidth().weight(1f),
+            contentPadding = PaddingValues(start = IMFITSpacing.screenHorizontal, top = IMFITSpacing.headerContentGap,
+                end = IMFITSpacing.screenHorizontal, bottom = IMFITSpacing.screenVertical),
+            verticalArrangement = Arrangement.spacedBy(IMFITSpacing.xl)
         ) {
-            if (state.isLoading) {
-                item {
-                    Spacer(modifier = Modifier.height(IMFITSpacing.sm))
-                    ShimmerProfileHeader()
+            item(key = "profile") {
+                Box(Modifier.testTag("main_first_content")) {
+                    if (state.isLoading && state.userName.isBlank()) ShimmerWelcomeSection()
+                    else ProgressProfileRow(state, onProfile)
                 }
-                item {
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.spacedBy(IMFITSpacing.md)
-                    ) {
-                        Card(
-                            modifier = Modifier.weight(1f),
-                            shape = IMFITShapes.Card,
-                            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
-                        ) {
-                            Column(
-                                modifier = Modifier.padding(IMFITSpacing.cardPadding),
-                                horizontalAlignment = Alignment.CenterHorizontally
-                            ) {
-                                ShimmerBox(width = 40.dp, height = 40.dp, shape = RoundedCornerShape(12.dp))
-                                Spacer(modifier = Modifier.height(IMFITSpacing.sm))
-                                ShimmerBox(width = 60.dp, height = 18.dp)
-                                Spacer(modifier = Modifier.height(IMFITSpacing.xxs))
-                                ShimmerBox(width = 80.dp, height = 12.dp)
-                            }
-                        }
-                        Card(
-                            modifier = Modifier.weight(1f),
-                            shape = IMFITShapes.Card,
-                            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
-                        ) {
-                            Column(
-                                modifier = Modifier.padding(IMFITSpacing.cardPadding),
-                                horizontalAlignment = Alignment.CenterHorizontally
-                            ) {
-                                ShimmerBox(width = 40.dp, height = 40.dp, shape = RoundedCornerShape(12.dp))
-                                Spacer(modifier = Modifier.height(IMFITSpacing.sm))
-                                ShimmerBox(width = 60.dp, height = 18.dp)
-                                Spacer(modifier = Modifier.height(IMFITSpacing.xxs))
-                                ShimmerBox(width = 80.dp, height = 12.dp)
-                            }
+            }
+            when {
+                state.isLoading -> {
+                    item(key = "loading_metrics") { ShimmerStatCard() }
+                    item(key = "loading_calendar") { ShimmerStatCard() }
+                }
+                state.hasError -> item(key = "load_error") {
+                    Column(verticalArrangement = Arrangement.spacedBy(IMFITSpacing.sm)) {
+                        Text(stringResource(R.string.progress_overview_load_error), color = colors.text,
+                            style = IMFITTypography.bodyMedium)
+                        TextButton(onClick = onRetry, modifier = Modifier.heightIn(min = IMFITSizes.buttonHeight)) {
+                            Text(stringResource(R.string.redesign_retry))
                         }
                     }
                 }
-                item { ShimmerCalendarCard() }
-            } else {
-                item {
-                    Spacer(modifier = Modifier.height(IMFITSpacing.sm))
-                    ProfileHeader(
-                        name = state.userName,
-                        email = state.userEmail,
-                        profilePhotoUri = state.userProfilePhotoUri,
-                        onProfileClick = onNavigateToProfile
-                    )
-                }
-
-                item {
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.spacedBy(IMFITSpacing.md)
-                    ) {
-                        StatCard(
-                            icon = Icons.Default.FitnessCenter,
-                            title = stringResource(R.string.progress_total_volume),
-                            value = "${state.totalVolume.toInt()} kg",
-                            modifier = Modifier.weight(1f)
-                        )
-                        StatCard(
-                            icon = Icons.Default.Schedule,
-                            title = stringResource(R.string.progress_weekly_time),
-                            value = "${state.weeklyWorkoutTimeMinutes} min",
-                            modifier = Modifier.weight(1f)
-                        )
+                else -> {
+                    item(key = "metrics") { ProgressMetricOverview(metrics) }
+                    item(key = "calendar") {
+                        ProgressMonthCalendar(month, today, selectedDate, state.workoutLogsByDate,
+                            onSelect = { date ->
+                                selectedText = date.toString()
+                                if (state.workoutLogsByDate[date].orEmpty().isNotEmpty()) onWorkoutHistory(date)
+                            },
+                            onYearlyCalendar = { onYearlyCalendar(month) })
                     }
-                }
-
-                item {
-                    WorkoutCalendar(
-                        workoutDates = state.workoutDates,
-                        onDateSelected = onNavigateToWorkoutHistory,
-                        onNavigateToYearlyCalendar = onNavigateToYearlyCalendar
-                    )
-                }
-            }
-
-            item {
-                Spacer(modifier = Modifier.height(IMFITSpacing.huge))
-            }
-        }
-    }
-}
-
-@Composable
-private fun ProgressScreenContent(
-    userName: String,
-    userEmail: String,
-    userProfilePhotoUri: String?,
-    totalVolume: Float,
-    weeklyWorkoutTimeMinutes: Int,
-    workoutDates: Set<LocalDate>,
-    isLoading: Boolean,
-    onNavigateToWorkoutHistory: (LocalDate) -> Unit,
-    onNavigateToYearlyCalendar: () -> Unit,
-    onNavigateToProfile: () -> Unit
-) {
-    LazyColumn(
-        modifier = Modifier.fillMaxSize(),
-        contentPadding = PaddingValues(IMFITSpacing.screenHorizontal),
-        verticalArrangement = Arrangement.spacedBy(IMFITSpacing.lg)
-    ) {
-        if (isLoading) {
-            item {
-                Spacer(modifier = Modifier.height(IMFITSpacing.sm))
-                ShimmerProfileHeader()
-            }
-            item {
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(IMFITSpacing.md)
-                ) {
-                    Card(
-                        modifier = Modifier.weight(1f),
-                        shape = IMFITShapes.Card,
-                        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
-                    ) {
-                        Column(
-                            modifier = Modifier.padding(IMFITSpacing.cardPadding),
-                            horizontalAlignment = Alignment.CenterHorizontally
-                        ) {
-                            ShimmerBox(width = 40.dp, height = 40.dp, shape = RoundedCornerShape(12.dp))
-                            Spacer(modifier = Modifier.height(IMFITSpacing.sm))
-                            ShimmerBox(width = 60.dp, height = 18.dp)
-                            Spacer(modifier = Modifier.height(IMFITSpacing.xxs))
-                            ShimmerBox(width = 80.dp, height = 12.dp)
-                        }
-                    }
-                    Card(
-                        modifier = Modifier.weight(1f),
-                        shape = IMFITShapes.Card,
-                        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
-                    ) {
-                        Column(
-                            modifier = Modifier.padding(IMFITSpacing.cardPadding),
-                            horizontalAlignment = Alignment.CenterHorizontally
-                        ) {
-                            ShimmerBox(width = 40.dp, height = 40.dp, shape = RoundedCornerShape(12.dp))
-                            Spacer(modifier = Modifier.height(IMFITSpacing.sm))
-                            ShimmerBox(width = 60.dp, height = 18.dp)
-                            Spacer(modifier = Modifier.height(IMFITSpacing.xxs))
-                            ShimmerBox(width = 80.dp, height = 12.dp)
-                        }
-                    }
-                }
-            }
-            item { ShimmerCalendarCard() }
-        } else {
-            item {
-                Spacer(modifier = Modifier.height(IMFITSpacing.sm))
-                ProfileHeader(
-                    name = userName,
-                    email = userEmail,
-                    profilePhotoUri = userProfilePhotoUri,
-                    onProfileClick = onNavigateToProfile
-                )
-            }
-
-            item {
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(IMFITSpacing.md)
-                ) {
-                    StatCard(
-                        icon = Icons.Default.FitnessCenter,
-                        title = stringResource(R.string.progress_total_volume),
-                        value = "${totalVolume.toInt()} kg",
-                        modifier = Modifier.weight(1f)
-                    )
-                    StatCard(
-                        icon = Icons.Default.Schedule,
-                        title = stringResource(R.string.progress_weekly_time),
-                        value = "$weeklyWorkoutTimeMinutes min",
-                        modifier = Modifier.weight(1f)
-                    )
-                }
-            }
-
-            item {
-                WorkoutCalendar(
-                    workoutDates = workoutDates,
-                    onDateSelected = onNavigateToWorkoutHistory,
-                    onNavigateToYearlyCalendar = onNavigateToYearlyCalendar
-                )
-            }
-        }
-
-        item {
-            Spacer(modifier = Modifier.height(IMFITSpacing.huge))
-        }
-    }
-}
-
-@Composable
-private fun ProfileHeader(
-    name: String,
-    email: String,
-    profilePhotoUri: String?,
-    onProfileClick: () -> Unit
-) {
-    Card(
-        modifier = Modifier
-            .fillMaxWidth()
-            .shadow(6.dp, IMFITShapes.Card, spotColor = Primary.copy(alpha = 0.15f))
-            .clickable { onProfileClick() },
-        shape = IMFITShapes.Card,
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
-    ) {
-        Box(
-            modifier = Modifier
-                .fillMaxWidth()
-                .background(
-                    Brush.horizontalGradient(
-                        listOf(Primary.copy(alpha = 0.08f), PrimaryLight.copy(alpha = 0.04f))
-                    )
-                )
-        ) {
-            Row(
-                verticalAlignment = Alignment.CenterVertically,
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(IMFITSpacing.cardPaddingLarge)
-            ) {
-                IMFITProfilePhoto(
-                    profilePhotoUri = profilePhotoUri,
-                    size = 64.dp
-                )
-                Spacer(modifier = Modifier.width(IMFITSpacing.lg))
-                Column(modifier = Modifier.weight(1f)) {
-                    Text(
-                        text = name,
-                        style = MaterialTheme.typography.titleLarge,
-                        fontWeight = FontWeight.Bold
-                    )
-                    Spacer(modifier = Modifier.height(IMFITSpacing.xs))
-                    Text(
-                        text = email,
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                }
-                Icon(
-                    imageVector = Icons.AutoMirrored.Filled.KeyboardArrowRight,
-                    contentDescription = stringResource(R.string.desc_go_to_profile),
-                    tint = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-            }
-        }
-    }
-}
-
-@Composable
-private fun StatCard(
-    icon: ImageVector,
-    title: String,
-    value: String,
-    modifier: Modifier = Modifier
-) {
-    Card(
-        modifier = modifier,
-        shape = IMFITShapes.Card,
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
-        elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
-    ) {
-        Column(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(IMFITSpacing.cardPadding),
-            horizontalAlignment = Alignment.CenterHorizontally
-        ) {
-            Box(
-                modifier = Modifier
-                    .size(40.dp)
-                    .clip(IMFITShapes.IconContainer)
-                    .background(MaterialTheme.colorScheme.primaryContainer),
-                contentAlignment = Alignment.Center
-            ) {
-                Icon(
-                    imageVector = icon,
-                    contentDescription = null,
-                    tint = MaterialTheme.colorScheme.onPrimaryContainer,
-                    modifier = Modifier.size(IMFITSizes.iconSm)
-                )
-            }
-            Spacer(modifier = Modifier.height(IMFITSpacing.sm))
-            Text(
-                text = value,
-                style = MaterialTheme.typography.titleMedium,
-                fontWeight = FontWeight.Bold,
-                color = MaterialTheme.colorScheme.onSurface
-            )
-            Spacer(modifier = Modifier.height(IMFITSpacing.xxs))
-            Text(
-                text = title,
-                style = MaterialTheme.typography.labelSmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
-            )
-        }
-    }
-}
-
-@Composable
-private fun WorkoutCalendar(
-    workoutDates: Set<LocalDate>,
-    onDateSelected: (LocalDate) -> Unit,
-    onNavigateToYearlyCalendar: () -> Unit
-) {
-    val currentMonth = YearMonth.now()
-    val daysInMonth = currentMonth.lengthOfMonth()
-    val firstDayOfWeek = currentMonth.atDay(1).dayOfWeek.value
-    val today = LocalDate.now()
-
-    Card(
-        modifier = Modifier.fillMaxWidth(),
-        shape = IMFITShapes.Card,
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
-        elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
-    ) {
-        Column(modifier = Modifier.padding(IMFITSpacing.cardPaddingLarge)) {
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(bottom = IMFITSpacing.lg),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Text(
-                    text = "${
-                        currentMonth.month.getDisplayName(
-                            TextStyle.FULL,
-                            Locale.getDefault()
-                        )
-                    } ${currentMonth.year}",
-                    style = MaterialTheme.typography.titleMedium,
-                    fontWeight = FontWeight.Bold
-                )
-                IconButton(
-                    onClick = onNavigateToYearlyCalendar,
-                    modifier = Modifier.size(32.dp)
-                ) {
-                    Icon(
-                        imageVector = Icons.AutoMirrored.Filled.KeyboardArrowRight,
-                        contentDescription = stringResource(R.string.calendar_view_yearly),
-                        tint = Primary
-                    )
-                }
-            }
-
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween
-            ) {
-                listOf("M", "T", "W", "T", "F", "S", "S").forEach { day ->
-                    Text(
-                        text = day,
-                        style = MaterialTheme.typography.labelSmall,
-                        fontWeight = FontWeight.Medium,
-                        modifier = Modifier.width(36.dp),
-                        textAlign = TextAlign.Center,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                }
-            }
-
-            Spacer(modifier = Modifier.height(IMFITSpacing.md))
-
-            val weeks = buildCalendarWeeks(daysInMonth, firstDayOfWeek)
-
-            Column(verticalArrangement = Arrangement.spacedBy(IMFITSpacing.sm)) {
-                weeks.forEach { week ->
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.SpaceBetween
-                    ) {
-                        week.forEach { day ->
-                            if (day != null) {
-                                val date = currentMonth.atDay(day)
-                                val isWorkoutDay = workoutDates.contains(date)
-                                val isToday = date == today
-                                val isClickable = isWorkoutDay
-
-                                Box(
-                                    modifier = Modifier
-                                        .size(36.dp)
-                                        .clip(CircleShape)
-                                        .background(
-                                            when {
-                                                isWorkoutDay -> Primary
-                                                isToday -> Primary.copy(alpha = 0.15f)
-                                                else -> Color.Transparent
-                                            }
-                                        )
-                                        .then(
-                                            if (isClickable) Modifier.clickable {
-                                                onDateSelected(
-                                                    date
-                                                )
-                                            }
-                                            else Modifier
-                                        ),
-                                    contentAlignment = Alignment.Center
-                                ) {
-                                    Text(
-                                        text = day.toString(),
-                                        style = MaterialTheme.typography.bodySmall,
-                                        fontWeight = if (isWorkoutDay || isToday) FontWeight.Bold else FontWeight.Normal,
-                                        color = when {
-                                            isWorkoutDay -> Color.White
-                                            isToday -> Primary
-                                            else -> MaterialTheme.colorScheme.onSurface
-                                        }
-                                    )
-                                }
-                            } else {
-                                Box(modifier = Modifier.size(36.dp))
-                            }
+                    item(key = "selected_day") {
+                        ProgressSelectedDay(selectedDate, state.workoutLogsByDate[selectedDate].orEmpty()) {
+                            onWorkoutHistory(selectedDate)
                         }
                     }
                 }
             }
         }
-    }
-}
-
-private fun buildCalendarWeeks(daysInMonth: Int, firstDayOfWeek: Int): List<List<Int?>> {
-    val weeks = mutableListOf<List<Int?>>()
-    var currentWeek = mutableListOf<Int?>()
-    var currentDay = 1
-
-    for (i in 1 until firstDayOfWeek) {
-        currentWeek.add(null)
-    }
-
-    while (currentDay <= daysInMonth) {
-        currentWeek.add(currentDay)
-        currentDay++
-        if (currentWeek.size == 7) {
-            weeks.add(currentWeek)
-            currentWeek = mutableListOf()
-        }
-    }
-
-    if (currentWeek.isNotEmpty()) {
-        while (currentWeek.size < 7) {
-            currentWeek.add(null)
-        }
-        weeks.add(currentWeek)
-    }
-
-    return weeks
-}
-
-@Preview(showBackground = true, showSystemUi = true)
-@Composable
-private fun ProgressScreenPreviewLight() {
-    com.diajarkoding.imfit.theme.IMFITTheme(darkTheme = false) {
-        ProgressScreenContent(
-            userName = "John Doe",
-            userEmail = "john@example.com",
-            userProfilePhotoUri = null,
-            totalVolume = 15250f,
-            weeklyWorkoutTimeMinutes = 180,
-            workoutDates = setOf(
-                LocalDate.now(),
-                LocalDate.now().minusDays(2),
-                LocalDate.now().minusDays(5)
-            ),
-            isLoading = false,
-            onNavigateToWorkoutHistory = {},
-            onNavigateToYearlyCalendar = {},
-            onNavigateToProfile = {}
-        )
-    }
-}
-
-@Preview(showBackground = true, showSystemUi = true)
-@Composable
-private fun ProgressScreenPreviewDark() {
-    com.diajarkoding.imfit.theme.IMFITTheme(darkTheme = true) {
-        ProgressScreenContent(
-            userName = "John Doe",
-            userEmail = "john@example.com",
-            userProfilePhotoUri = null,
-            totalVolume = 15250f,
-            weeklyWorkoutTimeMinutes = 180,
-            workoutDates = setOf(
-                LocalDate.now(),
-                LocalDate.now().minusDays(2),
-                LocalDate.now().minusDays(5)
-            ),
-            isLoading = false,
-            onNavigateToWorkoutHistory = {},
-            onNavigateToYearlyCalendar = {},
-            onNavigateToProfile = {}
-        )
-    }
-}
-
-@Preview(showBackground = true, showSystemUi = true)
-@Composable
-private fun ProgressScreenPreviewLoading() {
-    com.diajarkoding.imfit.theme.IMFITTheme(darkTheme = false) {
-        ProgressScreenContent(
-            userName = "",
-            userEmail = "",
-            userProfilePhotoUri = null,
-            totalVolume = 0f,
-            weeklyWorkoutTimeMinutes = 0,
-            workoutDates = emptySet(),
-            isLoading = true,
-            onNavigateToWorkoutHistory = {},
-            onNavigateToYearlyCalendar = {},
-            onNavigateToProfile = {}
-        )
     }
 }

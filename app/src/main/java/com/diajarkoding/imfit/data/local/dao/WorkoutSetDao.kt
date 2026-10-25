@@ -53,14 +53,13 @@ interface WorkoutSetDao {
         WHERE ws.exercise_id = :exerciseId
             AND wl.user_id = :userId
             AND wl.deleted_at IS NULL
-            AND ws.weight > 0
             AND ws.is_completed = 1
         ORDER BY wl.date DESC, ws.set_number ASC
     """)
     suspend fun getLastSetsForExercise(exerciseId: String, userId: String): List<WorkoutSetEntity>
 
     /**
-     * Gets a map of set_number to weight for the last workout of a specific exercise.
+     * Gets a map of set_number to weight and reps for the last workout of a specific exercise.
      * Uses a subquery to get only sets from the most recent workout log.
      */
     @Query("""
@@ -71,16 +70,29 @@ interface WorkoutSetDao {
             WHERE ws2.exercise_id = :exerciseId
                 AND wl.user_id = :userId
                 AND wl.deleted_at IS NULL
-                AND ws2.weight > 0
                 AND ws2.is_completed = 1
-            ORDER BY wl.date DESC
+            ORDER BY wl.end_time DESC, wl.id DESC
             LIMIT 1
         )
         AND ws.exercise_id = :exerciseId
+        AND ws.is_completed = 1
         ORDER BY ws.set_number ASC
     """)
     suspend fun getLastWorkoutSetsForExercise(exerciseId: String, userId: String): List<WorkoutSetEntity>
 
+    // Sync methods
+    @Query("SELECT * FROM workout_sets WHERE sync_status != 'SYNCED'")
+    suspend fun getPendingWorkoutSets(): List<WorkoutSetEntity>
+
     @Query("SELECT * FROM workout_sets WHERE workout_log_id = :workoutLogId ORDER BY set_number")
     suspend fun getSetsByWorkoutLogId(workoutLogId: String): List<WorkoutSetEntity>
+
+    @Query("UPDATE workout_sets SET sync_status = 'SYNCED', pending_operation = NULL WHERE id = :id")
+    suspend fun markAsSynced(id: String)
+
+    @Query("UPDATE workout_sets SET sync_status = :status WHERE id = :id")
+    suspend fun updateSyncStatus(id: String, status: String)
+
+    @Query("UPDATE workout_sets SET sync_status = 'SYNCED', pending_operation = NULL WHERE workout_log_id = :workoutLogId")
+    suspend fun markWorkoutSetsAsSynced(workoutLogId: String)
 }

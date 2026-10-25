@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="workout_background_service_error">The background workout service couldn’t start. Your session remains available in the app.</string>
+    <string name="workout_alarm_settings_error">Unable to open alarm settings.</string>
+</resources>

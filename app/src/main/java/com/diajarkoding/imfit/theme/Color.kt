@@ -10,7 +10,7 @@ val PrimaryContainer = Color(0xFFD6E4FF)
 val OnPrimary = Color(0xFFFFFFFF)
 
 // Light Theme Colors
-val BackgroundLight = Color(0xFFFFFFFF)
+val BackgroundLight = Color(0xFFF7F9FC)
 val BackgroundSecondaryLight = Color(0xFFF3F4F8)
 val SurfaceLight = Color(0xFFFFFFFF)
 val SurfaceVariantLight = Color(0xFFF3F4F8)
@@ -84,3 +84,56 @@ val TimerWarning = Color(0xFFF59E0B)
 
 // Delete Action Color
 val DeletePink = Color(0xFFE91E63)
+
+// Special-purpose colors are still owned here, not by individual screens.
+val TrainingMutedLight = Color(0xFF5F6878)
+val TrainingMutedDark = Color(0xFFB0B7C3)
+val TrainingOnPrimaryDark = Color(0xFF101D34)
+val PrimaryContainerDark = Color(0xFF19345E)
+val OnPrimaryContainerLight = Color(0xFF1746A2)
+val OnPrimaryContainerDark = Color(0xFFC6DCFF)
+val SuccessForegroundLight = Color(0xFF15803D)
+val SuccessForegroundDark = Color(0xFF4ADE80)
+val SuccessContainerDark = Color(0xFF143523)
+val WarningForegroundLight = Color(0xFF92400E)
+val WarningForegroundDark = Color(0xFFFBBF24)
+val WarningContainerDark = Color(0xFF382B13)
+val ErrorForegroundLight = Color(0xFFB91C1C)
+val ErrorForegroundDark = Color(0xFFFCA5A5)
+val ErrorContainerDark = Color(0xFF421E20)
+val BannerDeepNavy = Color(0xFF142342)
+val BannerMidnightBlue = Color(0xFF182E60)
+val BannerMediumBlue = Color(0xFF1D438C)
+val BannerRoyalBlue = Color(0xFF234AA8)
+val BannerCyanGlow = Color(0xFF3484CD)
+val BannerStrengthStart = BannerDeepNavy
+val BannerStrengthEnd = BannerRoyalBlue
+val BannerStrengthForeground = OnPrimary
+val BannerStrengthCaption = PrimaryContainer
+val AlarmIllustrationLight = Color(0xFFEDF5FF)
+val AlarmIllustrationDark = Color(0xFF182D47)
+val ShadowLight = Color(0x1A000000)
+val ShadowDark = Color(0x33000000)
+val Scrim = Color.Black
+val OverlayForeground = OnPrimary
+
+data class IMFITPalette(
+    val background: Color, val surface: Color, val raised: Color,
+    val text: Color, val muted: Color, val border: Color,
+    val primary: Color, val onPrimary: Color, val primaryContainer: Color, val onPrimaryContainer: Color,
+    val success: Color, val successContainer: Color, val warning: Color, val warningContainer: Color,
+    val error: Color, val errorContainer: Color
+)
+
+val TrainingLightPalette = IMFITPalette(
+    BackgroundLight, SurfaceLight, SurfaceVariantLight, OnSurfaceLight, TrainingMutedLight, CardBorderLight,
+    PrimaryDark, OnPrimary, PrimaryContainer, OnPrimaryContainerLight,
+    SuccessForegroundLight, SuccessContainer, WarningForegroundLight, WarningContainer,
+    ErrorForegroundLight, ErrorContainer
+)
+val TrainingDarkPalette = IMFITPalette(
+    BackgroundDark, SurfaceDark, SurfaceVariantDark, OnSurfaceDark, TrainingMutedDark, CardBorderDark,
+    PrimaryLight, TrainingOnPrimaryDark, PrimaryContainerDark, OnPrimaryContainerDark,
+    SuccessForegroundDark, SuccessContainerDark, WarningForegroundDark, WarningContainerDark,
+    ErrorForegroundDark, ErrorContainerDark
+)

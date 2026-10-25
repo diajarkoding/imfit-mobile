@@ -1,0 +1,31 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="workout_history_app_bar_title">Ringkasan Hari</string>
+    <string name="workout_history_date_context">RIWAYAT LATIHAN</string>
+    <string name="workout_history_totals_heading">Total hari ini</string>
+    <plurals name="workout_history_sessions_count">
+        <item quantity="one">%1$d sesi</item>
+        <item quantity="other">%1$d sesi</item>
+    </plurals>
+    <string name="workout_history_metric_duration">Durasi</string>
+    <string name="workout_history_metric_volume">Volume</string>
+    <string name="workout_history_metric_exercises">Gerakan</string>
+    <string name="workout_history_metric_sets">Set selesai</string>
+    <string name="workout_history_duration_minutes_format">%1$d menit</string>
+    <string name="workout_history_volume_kg_format">%1$s kg</string>
+    <string name="workout_history_sessions_section_title">Rincian sesi</string>
+    <string name="workout_history_session_ordinal_format">Sesi %1$d dari %2$d</string>
+    <string name="workout_history_session_default_name">Latihan</string>
+    <plurals name="workout_history_exercise_sets_count">
+        <item quantity="one">%1$d set selesai</item>
+        <item quantity="other">%1$d set selesai</item>
+    </plurals>
+    <string name="workout_history_loading_status">Memuat riwayat latihan…</string>
+    <string name="workout_history_empty_title">Belum ada sesi latihan</string>
+    <string name="workout_history_empty_message">Tidak ada latihan yang tercatat pada tanggal ini.</string>
+    <string name="workout_history_error_title">Riwayat belum dapat dimuat</string>
+    <string name="workout_history_error_message">Coba lagi untuk melihat riwayat latihan pada tanggal ini.</string>
+    <string name="workout_history_retry_action">Coba lagi</string>
+    <string name="workout_history_banner_error_title">Pembaruan riwayat gagal</string>
+    <string name="workout_history_banner_error_message">Data yang sudah dimuat tetap ditampilkan.</string>
+</resources>

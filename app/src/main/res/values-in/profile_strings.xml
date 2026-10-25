@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="profile_information_title">Informasi profil</string>
+    <string name="profile_preferences_title">Pengaturan</string>
+    <string name="profile_name_label">Nama lengkap</string>
+    <string name="profile_birth_date_label">Tanggal lahir</string>
+    <string name="profile_dark_mode_label">Mode gelap</string>
+    <string name="profile_error_title">Profil belum dapat dimuat</string>
+    <string name="profile_error_message">Coba lagi untuk menampilkan informasi akunmu. Pengaturan tetap bisa digunakan.</string>
+    <string name="profile_retry_label">Coba lagi</string>
+    <string name="profile_loading">Memuat profil</string>
+    <string name="profile_logout_label">Keluar</string>
+</resources>

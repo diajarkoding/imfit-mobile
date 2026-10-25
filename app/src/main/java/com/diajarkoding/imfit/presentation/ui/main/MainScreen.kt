@@ -1,16 +1,21 @@
 package com.diajarkoding.imfit.presentation.ui.main
 
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
+
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.WindowInsetsSides
+import androidx.compose.foundation.layout.consumeWindowInsets
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.navigationBars
+import androidx.compose.foundation.layout.only
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.safeDrawing
 import androidx.compose.foundation.layout.windowInsetsPadding
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.CalendarMonth
-import androidx.compose.material.icons.filled.FitnessCenter
-import androidx.compose.material.icons.filled.Home
-import androidx.compose.material.icons.outlined.CalendarMonth
-import androidx.compose.material.icons.outlined.FitnessCenter
-import androidx.compose.material.icons.outlined.Home
+import com.diajarkoding.imfit.presentation.components.common.CalendarMonth
+import com.diajarkoding.imfit.presentation.components.common.FitnessCenter
+import com.diajarkoding.imfit.presentation.components.common.Home
+import com.diajarkoding.imfit.presentation.components.common.Symbols
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.NavigationBar
@@ -20,34 +25,53 @@ import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.remember
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalConfiguration
+import androidx.compose.ui.platform.LocalResources
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
-import androidx.navigation.NavDestination.Companion.hierarchy
-import androidx.navigation.NavGraph.Companion.findStartDestination
-import androidx.navigation.NavHostController
-import androidx.navigation.compose.NavHost
-import androidx.navigation.compose.composable
-import androidx.navigation.compose.currentBackStackEntryAsState
-import androidx.navigation.compose.rememberNavController
+import androidx.hilt.navigation.compose.hiltViewModel
+import androidx.lifecycle.viewmodel.navigation3.rememberViewModelStoreNavEntryDecorator
+import androidx.navigation3.runtime.NavKey
+import androidx.navigation3.runtime.entryProvider
+import androidx.navigation3.runtime.rememberNavBackStack
+import androidx.navigation3.runtime.rememberSaveableStateHolderNavEntryDecorator
+import androidx.navigation3.ui.NavDisplay
+import com.diajarkoding.imfit.R
+import com.diajarkoding.imfit.presentation.components.common.ImfitMainAppBar
+import com.diajarkoding.imfit.presentation.components.common.SyncProgressDialog
 import com.diajarkoding.imfit.presentation.ui.exercise.ExerciseBrowserScreen
 import com.diajarkoding.imfit.presentation.ui.home.HomeScreen
+import com.diajarkoding.imfit.presentation.ui.home.HomeViewModel
 import com.diajarkoding.imfit.presentation.ui.progress.ProgressScreen
 import com.diajarkoding.imfit.theme.Primary
+import com.diajarkoding.imfit.theme.IMFITColors
+import com.diajarkoding.imfit.theme.IMFITBottomNavDimensions
+import com.diajarkoding.imfit.theme.LocaleManager
 import java.time.LocalDate
+import kotlinx.serialization.Serializable
 
-sealed class BottomNavItem(
-    val route: String, 
-    val title: String, 
+private data class BottomNavItem(
+    val key: NavKey,
+    @androidx.annotation.StringRes val titleRes: Int,
     val selectedIcon: ImageVector,
     val unselectedIcon: ImageVector
-) {
-    object Home : BottomNavItem("home_tab", "Home", Icons.Filled.Home, Icons.Outlined.Home)
-    object Exercise : BottomNavItem("exercise_tab", "Exercise", Icons.Filled.FitnessCenter, Icons.Outlined.FitnessCenter)
-    object Progress : BottomNavItem("progress_tab", "Progress", Icons.Filled.CalendarMonth, Icons.Outlined.CalendarMonth)
-}
+)
+
+@Serializable
+private data object HomeTab : NavKey
+
+@Serializable
+private data object ExerciseTab : NavKey
+
+@Serializable
+private data object ProgressTab : NavKey
 
 @Composable
 fun MainScreen(
@@ -55,93 +79,141 @@ fun MainScreen(
     onNavigateToActiveWorkout: (String) -> Unit = {},
     onNavigateToExerciseList: (String) -> Unit,
     onNavigateToWorkoutHistory: (LocalDate) -> Unit = {},
-    onNavigateToYearlyCalendar: () -> Unit = {},
+    onNavigateToYearlyCalendar: (java.time.YearMonth) -> Unit = {},
     onNavigateToProfile: () -> Unit = {},
-    onLogout: () -> Unit,
-    bottomNavController: NavHostController = rememberNavController()
+    homeViewModel: HomeViewModel = hiltViewModel(),
+    onRefreshRemote: () -> Unit = {}
 ) {
     val items = listOf(
-        BottomNavItem.Home,
-        BottomNavItem.Exercise,
-        BottomNavItem.Progress
+        BottomNavItem(HomeTab, com.diajarkoding.imfit.R.string.nav_home, Symbols.Filled.Home, Symbols.Outlined.Home),
+        BottomNavItem(ExerciseTab, com.diajarkoding.imfit.R.string.nav_exercises, Symbols.Filled.FitnessCenter, Symbols.Outlined.FitnessCenter),
+        BottomNavItem(ProgressTab, com.diajarkoding.imfit.R.string.nav_progress, Symbols.Filled.CalendarMonth, Symbols.Outlined.CalendarMonth)
     )
+    val bottomBackStack = rememberNavBackStack(HomeTab)
+    val currentTab = bottomBackStack.lastOrNull()
+    LaunchedEffect(currentTab) { onRefreshRemote() }
+    
+    // Get sync state from HomeViewModel
+    val syncState by homeViewModel.syncState.collectAsStateWithLifecycle()
+    val homeState by homeViewModel.state.collectAsStateWithLifecycle()
+    val appBarTitleRes = when (currentTab) {
+        is ExerciseTab -> R.string.nav_exercises
+        is ProgressTab -> R.string.nav_progress
+        else -> R.string.app_name
+    }
+    val showProfileAction = currentTab is HomeTab
 
-    Scaffold(
-        bottomBar = {
-            NavigationBar(
-                modifier = Modifier.windowInsetsPadding(WindowInsets.navigationBars),
-                containerColor = MaterialTheme.colorScheme.surface,
-                contentColor = Primary,
-                tonalElevation = 0.dp
-            ) {
-                val navBackStackEntry by bottomNavController.currentBackStackEntryAsState()
-                val currentDestination = navBackStackEntry?.destination
-
-                items.forEach { item ->
-                    val selected = currentDestination?.hierarchy?.any { it.route == item.route } == true
-                    
-                    NavigationBarItem(
-                        icon = { 
-                            Icon(
-                                if (selected) item.selectedIcon else item.unselectedIcon, 
-                                contentDescription = item.title
-                            ) 
-                        },
-                        label = { 
-                            Text(
-                                item.title,
-                                fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Normal
-                            ) 
-                        },
-                        selected = selected,
-                        colors = NavigationBarItemDefaults.colors(
-                            selectedIconColor = Primary,
-                            selectedTextColor = Primary,
-                            indicatorColor = Primary.copy(alpha = 0.12f),
-                            unselectedIconColor = MaterialTheme.colorScheme.onSurfaceVariant,
-                            unselectedTextColor = MaterialTheme.colorScheme.onSurfaceVariant
-                        ),
-                        onClick = {
-                            bottomNavController.navigate(item.route) {
-                                popUpTo(bottomNavController.graph.findStartDestination().id) {
-                                    saveState = true
+    // Keep resource locale live without recreating the navigation backstack.
+    // LocalContext stays the Activity context required by the existing Hilt owners.
+    val context = LocalContext.current
+    val configuration = LocalConfiguration.current
+    val localeVersion = LocaleManager.configurationVersion
+    val localizedResources = remember(context, configuration, localeVersion) {
+        LocaleManager.getUpdatedContext(context).resources
+    }
+    CompositionLocalProvider(LocalResources provides localizedResources,
+        LocalConfiguration provides localizedResources.configuration) {
+    // Wrap everything in Box for full-screen overlay capability
+    Box(modifier = Modifier.fillMaxSize()) {
+        Scaffold(
+            topBar = {
+                ImfitMainAppBar(
+                    title = androidx.compose.ui.res.stringResource(appBarTitleRes),
+                    modifier = Modifier.windowInsetsPadding(
+                        WindowInsets.safeDrawing.only(WindowInsetsSides.Top + WindowInsetsSides.Horizontal)
+                    ),
+                    profilePhotoUri = if (showProfileAction) homeState.userProfilePhotoUri else null,
+                    onProfileClick = if (showProfileAction) onNavigateToProfile else null
+                )
+            },
+            bottomBar = {
+                NavigationBar(
+                    modifier = Modifier.windowInsetsPadding(WindowInsets.navigationBars),
+                    containerColor = MaterialTheme.colorScheme.surface,
+                    contentColor = IMFITColors.navActive(),
+                    tonalElevation = 0.dp
+                ) {
+                    items.forEach { item ->
+                        val selected = currentTab == item.key
+                        
+                        NavigationBarItem(
+                            icon = {
+                                Icon(
+                                    if (selected) item.selectedIcon else item.unselectedIcon,
+                                    contentDescription = androidx.compose.ui.res.stringResource(item.titleRes)
+                                )
+                            },
+                            label = {
+                                Text(
+                                    androidx.compose.ui.res.stringResource(item.titleRes),
+                                    fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Normal
+                                )
+                            },
+                            selected = selected,
+                            colors = NavigationBarItemDefaults.colors(
+                                 selectedIconColor = IMFITColors.navActive(),
+                                 selectedTextColor = IMFITColors.navActive(),
+                                indicatorColor = Primary.copy(alpha = 0.12f),
+                                 unselectedIconColor = IMFITColors.navInactive(),
+                                 unselectedTextColor = IMFITColors.navInactive()
+                            ),
+                            onClick = {
+                                bottomBackStack.clear()
+                                bottomBackStack.add(HomeTab)
+                                if (item.key != HomeTab) {
+                                    bottomBackStack.add(item.key)
                                 }
-                                launchSingleTop = true
-                                restoreState = true
                             }
-                        }
-                    )
+                        )
+                    }
                 }
             }
-        }
-    ) { innerPadding ->
-        NavHost(
-            navController = bottomNavController,
-            startDestination = BottomNavItem.Home.route,
-            modifier = Modifier.padding(innerPadding)
-        ) {
-            composable(BottomNavItem.Home.route) {
-                HomeScreen(
-                    onNavigateToWorkoutDetail = onNavigateToWorkoutDetail,
-                    onNavigateToActiveWorkout = onNavigateToActiveWorkout
-                )
-            }
-            composable(BottomNavItem.Exercise.route) {
-                ExerciseBrowserScreen(
-                    onNavigateBack = { },
-                    onCategorySelected = { category ->
-                        onNavigateToExerciseList(category.name)
+        ) { innerPadding ->
+            NavDisplay(
+                backStack = bottomBackStack,
+                onBack = {
+                    if (bottomBackStack.size > 1) {
+                        bottomBackStack.removeLastOrNull()
                     }
-                )
-            }
-            composable(BottomNavItem.Progress.route) {
-                ProgressScreen(
-                    onNavigateToWorkoutHistory = onNavigateToWorkoutHistory,
-                    onNavigateToYearlyCalendar = onNavigateToYearlyCalendar,
-                    onNavigateToProfile = onNavigateToProfile
-                )
-            }
+                },
+                modifier = Modifier
+                    .padding(innerPadding)
+                    .consumeWindowInsets(innerPadding),
+                entryDecorators = listOf(
+                    rememberSaveableStateHolderNavEntryDecorator(),
+                    rememberViewModelStoreNavEntryDecorator()
+                ),
+                entryProvider = entryProvider {
+                    entry<HomeTab> {
+                        HomeScreen(
+                            onNavigateToWorkoutDetail = onNavigateToWorkoutDetail,
+                            onNavigateToActiveWorkout = onNavigateToActiveWorkout,
+                            onNavigateToProfile = onNavigateToProfile,
+                            viewModel = homeViewModel
+                        )
+                    }
+                    entry<ExerciseTab> {
+                        ExerciseBrowserScreen(
+                            onCategorySelected = { category ->
+                                onNavigateToExerciseList(category.name)
+                            }
+                        )
+                    }
+                    entry<ProgressTab> {
+                        ProgressScreen(
+                            refreshKey = syncState.lastSyncTime,
+                            onNavigateToWorkoutHistory = onNavigateToWorkoutHistory,
+                            onNavigateToYearlyCalendar = onNavigateToYearlyCalendar,
+                            onNavigateToProfile = onNavigateToProfile
+                        )
+                    }
+                }
+            )
         }
+        
+        // Full-screen sync overlay - covers entire screen including bottom nav
+        SyncProgressDialog(syncState = syncState)
+    }
     }
 }
 
@@ -155,8 +227,7 @@ private fun MainScreenPreview() {
             onNavigateToExerciseList = {},
             onNavigateToWorkoutHistory = {},
             onNavigateToYearlyCalendar = {},
-            onNavigateToProfile = {},
-            onLogout = {}
+            onNavigateToProfile = {}
         )
     }
 }

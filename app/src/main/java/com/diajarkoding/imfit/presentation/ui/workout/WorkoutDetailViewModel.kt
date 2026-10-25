@@ -1,24 +1,31 @@
 package com.diajarkoding.imfit.presentation.ui.workout
 
-import android.util.Log
 import androidx.lifecycle.SavedStateHandle
+import androidx.annotation.StringRes
+import com.diajarkoding.imfit.R
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.diajarkoding.imfit.domain.model.Exercise
 import com.diajarkoding.imfit.domain.model.TemplateExercise
 import com.diajarkoding.imfit.domain.model.WorkoutTemplate
+import com.diajarkoding.imfit.domain.repository.ExerciseRepository
 import com.diajarkoding.imfit.domain.repository.WorkoutRepository
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.CancellationException
 import javax.inject.Inject
 
 data class WorkoutDetailState(
     val workout: WorkoutTemplate? = null,
     val isLoading: Boolean = true,
     val error: String? = null,
+    @StringRes val errorRes: Int? = null,
+    @StringRes val operationErrorRes: Int? = null,
+    @StringRes val deleteErrorRes: Int? = null,
     val isDeleting: Boolean = false,
     val isUpdating: Boolean = false,
     val isWorkoutActive: Boolean = false,       // True if ANY active session exists
@@ -30,23 +37,41 @@ data class WorkoutDetailState(
 @HiltViewModel
 class WorkoutDetailViewModel @Inject constructor(
     private val workoutRepository: WorkoutRepository,
-    savedStateHandle: SavedStateHandle
+    private val exerciseRepository: ExerciseRepository,
+    private val savedStateHandle: SavedStateHandle
 ) : ViewModel() {
 
-    private val workoutId: String = savedStateHandle.get<String>("workoutId") ?: ""
+    private var workoutId: String? = savedStateHandle["workoutId"]
+    private var initialized = false
+    private var observeJob: Job? = null
+    private var pendingExerciseIds: List<String> = emptyList()
     
     private val _state = MutableStateFlow(WorkoutDetailState())
     val state = _state.asStateFlow()
 
-    init {
+    fun initialize(workoutId: String) {
+        if (workoutId.isBlank()) return
+        if (initialized && this.workoutId == workoutId) {
+            viewModelScope.launch {
+                val active = workoutRepository.getActiveSession()
+                _state.update { it.copy(isWorkoutActive = active != null, isCurrentWorkoutActive = active?.templateId == workoutId) }
+            }
+            return
+        }
+
+        this.workoutId = workoutId
+        savedStateHandle["workoutId"] = workoutId
+        initialized = true
         loadWorkout()
     }
 
     fun loadWorkout() {
-        viewModelScope.launch {
-            _state.update { it.copy(isLoading = true) }
+        val workoutId = workoutId ?: return
+        observeJob?.cancel()
+        observeJob = viewModelScope.launch {
+            _state.update { it.copy(isLoading = it.workout == null, errorRes = null) }
             try {
-                val workout = workoutRepository.getTemplateById(workoutId)
+                workoutRepository.observeTemplate(workoutId).collect { workout ->
                 val activeSession = workoutRepository.getActiveSession()
                 val isCurrentActive = activeSession?.templateId == workoutId
                 val hasAnyActiveSession = activeSession != null
@@ -54,10 +79,14 @@ class WorkoutDetailViewModel @Inject constructor(
                     workout = workout, 
                     isLoading = false, 
                     isWorkoutActive = hasAnyActiveSession,
-                    isCurrentWorkoutActive = isCurrentActive
+                    isCurrentWorkoutActive = isCurrentActive,
+                    errorRes = if (workout == null && !it.isDeleted && !it.isDeleting) R.string.error_routine_not_found else null
                 ) }
+                }
+            } catch (e: CancellationException) {
+                throw e
             } catch (e: Exception) {
-                _state.update { it.copy(error = e.message, isLoading = false) }
+                _state.update { it.copy(errorRes = R.string.error_routine_load, isLoading = false) }
             }
         }
     }
@@ -74,121 +103,71 @@ class WorkoutDetailViewModel @Inject constructor(
     }
 
     fun deleteWorkout() {
+        val workoutId = workoutId ?: return
+        if (_state.value.isDeleting || _state.value.isDeleted || _state.value.isWorkoutActive) return
+        _state.update { it.copy(isDeleting = true, deleteErrorRes = null) }
         viewModelScope.launch {
-            _state.update { it.copy(isDeleting = true, error = null) }
             try {
-                workoutRepository.deleteTemplate(workoutId)
-                _state.update { it.copy(isDeleted = true, isDeleting = false) }
-            } catch (e: Exception) {
-                Log.e("WorkoutDetailViewModel", "Failed to delete workout: ${e.message}", e)
-                _state.update { 
-                    it.copy(
-                        isDeleting = false, 
-                        error = "Failed to delete workout. Please check your connection."
-                    ) 
+                if (workoutRepository.getActiveSession() != null) {
+                    _state.update { it.copy(isDeleting = false, deleteErrorRes = R.string.warning_workout_active) }
+                    return@launch
                 }
-            }
+                check(workoutRepository.deleteTemplate(workoutId)) { "Routine was not deleted" }
+                _state.update { it.copy(isDeleted = true, isDeleting = false) }
+            } catch (e: CancellationException) { throw e }
+            catch (_: Exception) { _state.update { it.copy(isDeleting = false, deleteErrorRes = R.string.routine_delete_failed) } }
         }
     }
+
+    fun clearDeleteError() { _state.update { it.copy(deleteErrorRes = null) } }
 
     fun addExercises(exercises: List<Exercise>) {
+        addExercisesByIds(exercises.map { it.id })
+    }
+
+    fun addExercisesByIds(exerciseIds: List<String>) {
+        val id = workoutId ?: return
+        if (_state.value.isUpdating || _state.value.isDeleting || exerciseIds.isEmpty()) return
+        pendingExerciseIds = exerciseIds.distinct()
+        _state.update { it.copy(isUpdating = true, operationErrorRes = null) }
         viewModelScope.launch {
-            val currentWorkout = _state.value.workout ?: return@launch
-            
-            // Get IDs of exercises already in the template
-            val existingExerciseIds = currentWorkout.exercises.map { it.exercise.id }.toSet()
-            
-            // Filter out exercises that are already in the template
-            val newExercises = exercises.filter { it.id !in existingExerciseIds }
-            
-            if (newExercises.isEmpty()) return@launch
-            
-            val templateExercises = newExercises.map { exercise ->
-                TemplateExercise(exercise = exercise)
-            }
-            val updatedExercises = currentWorkout.exercises + templateExercises
-            
-            // Optimistic update - update UI immediately
-            val optimisticWorkout = currentWorkout.copy(exercises = updatedExercises)
-            _state.update { it.copy(workout = optimisticWorkout, isUpdating = true, error = null) }
-            
             try {
-                workoutRepository.updateTemplateExercises(workoutId, updatedExercises)
-                _state.update { it.copy(isUpdating = false) }
-            } catch (e: Exception) {
-                Log.e("WorkoutDetailViewModel", "Failed to add exercises: ${e.message}", e)
-                // Revert to original state on error
-                _state.update { 
-                    it.copy(
-                        workout = currentWorkout,
-                        isUpdating = false, 
-                        error = "Failed to add exercises. Please check your connection."
-                    ) 
+                if (workoutRepository.getActiveSession() != null) {
+                    _state.update { it.copy(operationErrorRes = R.string.warning_workout_active) }
+                    return@launch
                 }
-            }
+                val current = workoutRepository.getTemplateById(id) ?: error("Routine not found")
+                val existing = current.exercises.map { it.id }.toSet()
+                val additions = pendingExerciseIds.filterNot { it in existing }.map { exerciseId ->
+                    TemplateExercise(exerciseRepository.getExerciseById(exerciseId) ?: error("Exercise not found"))
+                }
+                if (additions.isNotEmpty()) checkNotNull(workoutRepository.updateTemplateExercises(id, current.exercises + additions))
+                pendingExerciseIds = emptyList()
+            } catch (e: CancellationException) { throw e }
+            catch (_: Exception) { _state.update { it.copy(operationErrorRes = R.string.routine_add_failed) } }
+            finally { _state.update { it.copy(isUpdating = false) } }
         }
     }
 
+    fun retryAddExercises() { addExercisesByIds(pendingExerciseIds) }
+
     fun removeExercise(templateExercise: TemplateExercise) {
+        val workoutId = workoutId ?: return
         viewModelScope.launch {
-            val currentWorkout = _state.value.workout ?: return@launch
+            val currentWorkout = workoutRepository.getTemplateById(workoutId) ?: return@launch
             val updatedExercises = currentWorkout.exercises.filter { it.id != templateExercise.id }
             
-            // Optimistic update - update UI immediately
-            val optimisticWorkout = currentWorkout.copy(exercises = updatedExercises)
-            _state.update { it.copy(workout = optimisticWorkout, isUpdating = true, error = null) }
-            
-            try {
-                workoutRepository.updateTemplateExercises(workoutId, updatedExercises)
-                _state.update { it.copy(isUpdating = false) }
-            } catch (e: Exception) {
-                Log.e("WorkoutDetailViewModel", "Failed to remove exercise: ${e.message}", e)
-                // Revert to original state on error
-                _state.update { 
-                    it.copy(
-                        workout = currentWorkout,
-                        isUpdating = false, 
-                        error = "Failed to remove exercise. Please check your connection."
-                    ) 
-                }
-            }
+            workoutRepository.updateTemplateExercises(workoutId, updatedExercises)
+            loadWorkout()
         }
     }
 
     fun updateExerciseConfig(exerciseId: String, sets: Int, reps: Int, restSeconds: Int) {
+        val workoutId = workoutId ?: return
         viewModelScope.launch {
-            val currentWorkout = _state.value.workout ?: return@launch
-            
-            // Optimistic update - update UI immediately
-            val updatedExercises = currentWorkout.exercises.map { exercise ->
-                if (exercise.exercise.id == exerciseId) {
-                    exercise.copy(sets = sets, reps = reps, restSeconds = restSeconds)
-                } else {
-                    exercise
-                }
-            }
-            val optimisticWorkout = currentWorkout.copy(exercises = updatedExercises)
-            _state.update { it.copy(workout = optimisticWorkout, isUpdating = true, error = null) }
-            
-            try {
-                workoutRepository.updateTemplateExercise(workoutId, exerciseId, sets, reps, restSeconds)
-                _state.update { it.copy(isUpdating = false) }
-            } catch (e: Exception) {
-                Log.e("WorkoutDetailViewModel", "Failed to update exercise: ${e.message}", e)
-                // Revert to original state on error
-                _state.update { 
-                    it.copy(
-                        workout = currentWorkout,
-                        isUpdating = false, 
-                        error = "Failed to update exercise. Please check your connection."
-                    ) 
-                }
-            }
+            workoutRepository.updateTemplateExercise(workoutId, exerciseId, sets, reps, restSeconds)
+            loadWorkout()
         }
-    }
-
-    fun clearError() {
-        _state.update { it.copy(error = null) }
     }
 
     val estimatedDuration: Int

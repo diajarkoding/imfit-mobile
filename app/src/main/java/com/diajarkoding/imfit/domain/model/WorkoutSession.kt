@@ -24,7 +24,7 @@ data class WorkoutSession(
         get() = exerciseLogs.getOrNull(currentExerciseIndex)
 
     val isCompleted: Boolean
-        get() = exerciseLogs.all { log -> log.sets.all { it.isCompleted } }
+        get() = exerciseLogs.isNotEmpty() && exerciseLogs.all { log -> log.sets.isNotEmpty() && log.sets.all { it.isCompleted } }
 
     val durationMinutes: Int
         get() = ((System.currentTimeMillis() - startTime) / 60000).toInt()

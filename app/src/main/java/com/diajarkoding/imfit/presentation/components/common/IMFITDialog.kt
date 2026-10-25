@@ -1,22 +1,20 @@
 package com.diajarkoding.imfit.presentation.components.common
 
 import androidx.compose.foundation.background
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
-import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -31,7 +29,6 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
 import com.diajarkoding.imfit.theme.DeletePink
 import com.diajarkoding.imfit.theme.IMFITShapes
@@ -55,7 +52,6 @@ fun IMFITDialog(
     type: IMFITDialogType = IMFITDialogType.DEFAULT,
     confirmText: String = "Confirm",
     dismissText: String = "Cancel",
-    isLoading: Boolean = false,
     onConfirm: () -> Unit,
     onDismiss: (() -> Unit)? = null,
     content: @Composable (() -> Unit)? = null
@@ -68,7 +64,7 @@ fun IMFITDialog(
 
     val iconBackground = when (type) {
         IMFITDialogType.DESTRUCTIVE -> DeletePink.copy(alpha = 0.12f)
-        else -> Brush.linearGradient(listOf(Primary.copy(alpha = 0.15f), PrimaryLight.copy(alpha = 0.1f)))
+        else -> com.diajarkoding.imfit.theme.IMFITGradients.dialogWash
     }
 
     val confirmColor = when (type) {
@@ -76,130 +72,98 @@ fun IMFITDialog(
         else -> Primary
     }
 
-    Dialog(
+    IMFITPlatformDialog(
         onDismissRequest = onDismissRequest,
-        properties = DialogProperties(
-            usePlatformDefaultWidth = false,
-            decorFitsSystemWindows = false
-        )
+        properties = DialogProperties(usePlatformDefaultWidth = false)
     ) {
-        Box(
+        Card(
             modifier = Modifier
-                .fillMaxSize()
-                .background(Color.Black.copy(alpha = 0.5f))
-                .clickable(
-                    interactionSource = androidx.compose.foundation.interaction.MutableInteractionSource(),
-                    indication = null,
-                    onClick = { onDismiss?.invoke() ?: onDismissRequest() }
-                ),
-            contentAlignment = Alignment.Center
+                .fillMaxWidth()
+                .padding(horizontal = IMFITSpacing.xl),
+            shape = IMFITShapes.Dialog,
+            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+            elevation = CardDefaults.cardElevation(defaultElevation = 8.dp)
         ) {
-            Card(
+            Column(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(horizontal = IMFITSpacing.xl)
-                    .clickable(
-                        interactionSource = androidx.compose.foundation.interaction.MutableInteractionSource(),
-                        indication = null,
-                        onClick = {}
-                    ),
-                shape = IMFITShapes.Dialog,
-                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
-                elevation = CardDefaults.cardElevation(defaultElevation = 8.dp)
+                    .padding(IMFITSpacing.xl),
+                horizontalAlignment = Alignment.CenterHorizontally
             ) {
-                Column(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(IMFITSpacing.xl),
-                    horizontalAlignment = Alignment.CenterHorizontally
-                ) {
-                    // Icon
-                    if (icon != null) {
-                        Box(
-                            modifier = Modifier
-                                .size(56.dp)
-                                .clip(CircleShape)
-                                .background(
-                                    if (type == IMFITDialogType.DESTRUCTIVE) 
-                                        DeletePink.copy(alpha = 0.12f)
-                                    else 
-                                        Primary.copy(alpha = 0.12f)
-                                ),
-                            contentAlignment = Alignment.Center
-                        ) {
-                            Icon(
-                                imageVector = icon,
-                                contentDescription = null,
-                                tint = iconColor,
-                                modifier = Modifier.size(IMFITSizes.iconLg)
-                            )
-                        }
-                        Spacer(modifier = Modifier.height(IMFITSpacing.lg))
+                // Icon
+                if (icon != null) {
+                    Box(
+                        modifier = Modifier
+                            .size(56.dp)
+                            .clip(CircleShape)
+                            .background(
+                                if (type == IMFITDialogType.DESTRUCTIVE) 
+                                    DeletePink.copy(alpha = 0.12f)
+                                else 
+                                    Primary.copy(alpha = 0.12f)
+                            ),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Icon(
+                            imageVector = icon,
+                            contentDescription = null,
+                            tint = iconColor,
+                            modifier = Modifier.size(IMFITSizes.iconLg)
+                        )
                     }
+                    Spacer(modifier = Modifier.height(IMFITSpacing.lg))
+                }
 
-                    // Title
+                // Title
+                Text(
+                    text = title,
+                    style = MaterialTheme.typography.titleLarge,
+                    fontWeight = FontWeight.Bold,
+                    textAlign = TextAlign.Center,
+                    color = MaterialTheme.colorScheme.onSurface
+                )
+
+                // Message
+                if (message != null) {
+                    Spacer(modifier = Modifier.height(IMFITSpacing.sm))
                     Text(
-                        text = title,
-                        style = MaterialTheme.typography.titleLarge,
-                        fontWeight = FontWeight.Bold,
+                        text = message,
+                        style = MaterialTheme.typography.bodyMedium,
                         textAlign = TextAlign.Center,
-                        color = MaterialTheme.colorScheme.onSurface
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
+                }
 
-                    // Message
-                    if (message != null) {
-                        Spacer(modifier = Modifier.height(IMFITSpacing.sm))
+                // Custom content
+                if (content != null) {
+                    Spacer(modifier = Modifier.height(IMFITSpacing.lg))
+                    content()
+                }
+
+                Spacer(modifier = Modifier.height(IMFITSpacing.xl))
+
+                // Buttons
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.End
+                ) {
+                    TextButton(
+                        onClick = { onDismiss?.invoke() ?: onDismissRequest() },
+                        modifier = Modifier.heightIn(min = IMFITSizes.buttonHeight)
+                    ) {
                         Text(
-                            text = message,
-                            style = MaterialTheme.typography.bodyMedium,
-                            textAlign = TextAlign.Center,
+                            text = dismissText,
+                            fontWeight = FontWeight.Medium,
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
                     }
-
-                    // Custom content
-                    if (content != null) {
-                        Spacer(modifier = Modifier.height(IMFITSpacing.lg))
-                        content()
-                    }
-
-                    Spacer(modifier = Modifier.height(IMFITSpacing.xl))
-
-                    // Buttons
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.End
-                    ) {
-                        TextButton(
-                            onClick = { onDismiss?.invoke() ?: onDismissRequest() },
-                            enabled = !isLoading
-                        ) {
-                            Text(
-                                text = dismissText,
-                                fontWeight = FontWeight.Medium,
-                                color = if (!isLoading) MaterialTheme.colorScheme.onSurfaceVariant
-                                else MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f)
-                            )
-                        }
-                        Spacer(modifier = Modifier.width(IMFITSpacing.sm))
-                        TextButton(
-                            onClick = onConfirm,
-                            enabled = !isLoading
-                        ) {
-                            if (isLoading) {
-                                CircularProgressIndicator(
-                                    modifier = Modifier.size(20.dp),
-                                    strokeWidth = 2.dp,
-                                    color = Primary
-                                )
-                            } else {
-                                Text(
-                                    text = confirmText,
-                                    fontWeight = FontWeight.SemiBold,
-                                    color = confirmColor
-                                )
-                            }
-                        }
+                    Spacer(modifier = Modifier.width(IMFITSpacing.sm))
+                    TextButton(onClick = onConfirm, modifier = Modifier.heightIn(min = IMFITSizes.buttonHeight)) {
+                        Text(
+                            text = confirmText,
+                            fontWeight = FontWeight.SemiBold,
+                            color = confirmColor
+                        )
                     }
                 }
             }
@@ -216,75 +180,47 @@ fun IMFITInputDialog(
     confirmText: String = "Confirm",
     dismissText: String = "Cancel",
     confirmEnabled: Boolean = true,
-    isLoading: Boolean = false,
     onConfirm: () -> Unit,
     content: @Composable () -> Unit
 ) {
-    Dialog(
+    IMFITPlatformDialog(
         onDismissRequest = onDismissRequest,
-        properties = DialogProperties(
-            usePlatformDefaultWidth = false,
-            decorFitsSystemWindows = false
-        )
+        properties = DialogProperties(usePlatformDefaultWidth = false)
     ) {
-        Box(
+        Card(
             modifier = Modifier
-                .fillMaxSize()
-                .background(Color.Black.copy(alpha = 0.5f))
-                .clickable(
-                    interactionSource = androidx.compose.foundation.interaction.MutableInteractionSource(),
-                    indication = null,
-                    onClick = onDismissRequest
-                ),
-            contentAlignment = Alignment.Center
+                .fillMaxWidth()
+                .padding(horizontal = IMFITSpacing.xl),
+            shape = IMFITShapes.Dialog,
+            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+            elevation = CardDefaults.cardElevation(defaultElevation = 8.dp)
         ) {
-            Card(
+            Column(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(horizontal = IMFITSpacing.xl)
-                    .clickable(
-                        interactionSource = androidx.compose.foundation.interaction.MutableInteractionSource(),
-                        indication = null,
-                        onClick = {}
-                    ),
-                shape = IMFITShapes.Dialog,
-                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
-                elevation = CardDefaults.cardElevation(defaultElevation = 8.dp)
+                    .padding(IMFITSpacing.xl)
             ) {
-                Column(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(IMFITSpacing.xl)
-                ) {
-                    // Header with icon
-                    if (icon != null) {
-                        Row(
-                            verticalAlignment = Alignment.CenterVertically,
-                            modifier = Modifier.fillMaxWidth()
+                // Header with icon
+                if (icon != null) {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Box(
+                            modifier = Modifier
+                                .size(44.dp)
+                                .clip(CircleShape)
+                                .background(Primary.copy(alpha = 0.12f)),
+                            contentAlignment = Alignment.Center
                         ) {
-                            Box(
-                                modifier = Modifier
-                                    .size(44.dp)
-                                    .clip(CircleShape)
-                                    .background(Primary.copy(alpha = 0.12f)),
-                                contentAlignment = Alignment.Center
-                            ) {
-                                Icon(
-                                    imageVector = icon,
-                                    contentDescription = null,
-                                    tint = Primary,
-                                    modifier = Modifier.size(IMFITSizes.iconMd)
-                                )
-                            }
-                            Spacer(modifier = Modifier.width(IMFITSpacing.md))
-                            Text(
-                                text = title,
-                                style = MaterialTheme.typography.titleLarge,
-                                fontWeight = FontWeight.Bold,
-                                color = MaterialTheme.colorScheme.onSurface
+                            Icon(
+                                imageVector = icon,
+                                contentDescription = null,
+                                tint = Primary,
+                                modifier = Modifier.size(IMFITSizes.iconMd)
                             )
                         }
-                    } else {
+                        Spacer(modifier = Modifier.width(IMFITSpacing.md))
                         Text(
                             text = title,
                             style = MaterialTheme.typography.titleLarge,
@@ -292,59 +228,55 @@ fun IMFITInputDialog(
                             color = MaterialTheme.colorScheme.onSurface
                         )
                     }
+                } else {
+                    Text(
+                        text = title,
+                        style = MaterialTheme.typography.titleLarge,
+                        fontWeight = FontWeight.Bold,
+                        color = MaterialTheme.colorScheme.onSurface
+                    )
+                }
 
-                    // Message
-                    if (message != null) {
-                        Spacer(modifier = Modifier.height(IMFITSpacing.sm))
+                // Message
+                if (message != null) {
+                    Spacer(modifier = Modifier.height(IMFITSpacing.sm))
+                    Text(
+                        text = message,
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+
+                Spacer(modifier = Modifier.height(IMFITSpacing.lg))
+
+                // Content (input fields)
+                content()
+
+                Spacer(modifier = Modifier.height(IMFITSpacing.xl))
+
+                // Buttons
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.End
+                ) {
+                    TextButton(onClick = onDismissRequest, modifier = Modifier.heightIn(min = IMFITSizes.buttonHeight)) {
                         Text(
-                            text = message,
-                            style = MaterialTheme.typography.bodyMedium,
+                            text = dismissText,
+                            fontWeight = FontWeight.Medium,
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
                     }
-
-                    Spacer(modifier = Modifier.height(IMFITSpacing.lg))
-
-                    // Content (input fields)
-                    content()
-
-                    Spacer(modifier = Modifier.height(IMFITSpacing.xl))
-
-                    // Buttons
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.End
+                    Spacer(modifier = Modifier.width(IMFITSpacing.sm))
+                    TextButton(
+                        onClick = onConfirm,
+                        enabled = confirmEnabled,
+                        modifier = Modifier.heightIn(min = IMFITSizes.buttonHeight)
                     ) {
-                        TextButton(
-                            onClick = onDismissRequest,
-                            enabled = !isLoading
-                        ) {
-                            Text(
-                                text = dismissText,
-                                fontWeight = FontWeight.Medium,
-                                color = if (!isLoading) MaterialTheme.colorScheme.onSurfaceVariant 
-                                       else MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f)
-                            )
-                        }
-                        Spacer(modifier = Modifier.width(IMFITSpacing.sm))
-                        TextButton(
-                            onClick = onConfirm,
-                            enabled = confirmEnabled && !isLoading
-                        ) {
-                            if (isLoading) {
-                                CircularProgressIndicator(
-                                    modifier = Modifier.size(20.dp),
-                                    strokeWidth = 2.dp,
-                                    color = Primary
-                                )
-                            } else {
-                                Text(
-                                    text = confirmText,
-                                    fontWeight = FontWeight.SemiBold,
-                                    color = if (confirmEnabled) Primary else Primary.copy(alpha = 0.5f)
-                                )
-                            }
-                        }
+                        Text(
+                            text = confirmText,
+                            fontWeight = FontWeight.SemiBold,
+                            color = if (confirmEnabled) Primary else Primary.copy(alpha = 0.5f)
+                        )
                     }
                 }
             }

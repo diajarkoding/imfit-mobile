@@ -42,6 +42,7 @@ class LoginViewModel @Inject constructor(
 
     fun login() {
         val currentState = _state.value
+        if (currentState.isLoading || currentState.loginSuccess) return
 
         var hasError = false
         var emailError: Int? = null
@@ -68,8 +69,8 @@ class LoginViewModel @Inject constructor(
             return
         }
 
+        _state.update { it.copy(isLoading = true, errorMessage = null) }
         viewModelScope.launch {
-            _state.update { it.copy(isLoading = true) }
 
             val result = authRepository.login(currentState.email, currentState.password)
 
@@ -84,11 +85,11 @@ class LoginViewModel @Inject constructor(
                     val errorMessageRes = when (exception) {
                         is AuthException.InvalidCredentials -> R.string.error_invalid_email_password
                         is AuthException.UserNotFound -> R.string.error_invalid_email_password
-                        is AuthException.AccountNotVerified -> R.string.error_login_failed
+                        is AuthException.AccountNotVerified -> R.string.auth_verify_email
                         is AuthException.AccountDisabled -> R.string.error_login_failed
-                        is AuthException.TooManyAttempts -> R.string.error_login_failed
-                        is AuthException.NetworkError -> R.string.error_login_failed
-                        is AuthException.RateLimited -> R.string.error_login_failed
+                        is AuthException.TooManyAttempts -> R.string.auth_rate_limited
+                        is AuthException.NetworkError -> R.string.auth_network_error
+                        is AuthException.RateLimited -> R.string.auth_rate_limited
                         is AuthException.SessionExpired -> R.string.error_login_failed
                         else -> R.string.error_login_failed
                     }

@@ -2,10 +2,13 @@ package com.diajarkoding.imfit.presentation.ui.auth
 
 import android.net.Uri
 import android.util.Log
+import androidx.annotation.StringRes
+import com.diajarkoding.imfit.R
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.diajarkoding.imfit.data.exception.AuthException
 import com.diajarkoding.imfit.domain.repository.AuthRepository
+import com.diajarkoding.imfit.domain.model.RegisterResult
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -20,14 +23,14 @@ data class RegisterState(
     val confirmPassword: String = "",
     val birthDate: String = "",
     val profilePhotoUri: Uri? = null,
-    val nameError: String? = null,
-    val emailError: String? = null,
-    val passwordError: String? = null,
-    val confirmPasswordError: String? = null,
-    val birthDateError: String? = null,
+    @StringRes val nameError: Int? = null,
+    @StringRes val emailError: Int? = null,
+    @StringRes val passwordError: Int? = null,
+    @StringRes val confirmPasswordError: Int? = null,
+    @StringRes val birthDateError: Int? = null,
     val isLoading: Boolean = false,
-    val registerSuccess: Boolean = false,
-    val errorMessage: String? = null
+    val registerResult: RegisterResult? = null,
+    @StringRes val errorMessage: Int? = null
 )
 
 @HiltViewModel
@@ -64,45 +67,46 @@ class RegisterViewModel @Inject constructor(
 
     fun register() {
         val currentState = _state.value
+        if (currentState.isLoading || currentState.registerResult != null) return
 
         var hasError = false
-        var nameError: String? = null
-        var emailError: String? = null
-        var passwordError: String? = null
-        var confirmPasswordError: String? = null
-        var birthDateError: String? = null
+        var nameError: Int? = null
+        var emailError: Int? = null
+        var passwordError: Int? = null
+        var confirmPasswordError: Int? = null
+        var birthDateError: Int? = null
 
         if (currentState.name.isBlank()) {
-            nameError = "Name is required"
+            nameError = R.string.error_name_required
             hasError = true
         }
 
         if (currentState.email.isBlank()) {
-            emailError = "Email is required"
+            emailError = R.string.error_email_required
             hasError = true
         } else if (!android.util.Patterns.EMAIL_ADDRESS.matcher(currentState.email).matches()) {
-            emailError = "Invalid email format"
+            emailError = R.string.error_email_invalid
             hasError = true
         }
 
         if (currentState.password.isBlank()) {
-            passwordError = "Password is required"
+            passwordError = R.string.error_password_required
             hasError = true
-        } else if (currentState.password.length < 6) {
-            passwordError = "Password must be at least 6 characters"
+        } else if (!isStrongPassword(currentState.password)) {
+            passwordError = R.string.auth_password_strength
             hasError = true
         }
 
         if (currentState.confirmPassword.isBlank()) {
-            confirmPasswordError = "Please confirm your password"
+            confirmPasswordError = R.string.error_confirm_password_required
             hasError = true
         } else if (currentState.password != currentState.confirmPassword) {
-            confirmPasswordError = "Passwords do not match"
+            confirmPasswordError = R.string.error_password_mismatch
             hasError = true
         }
 
         if (currentState.birthDate.isBlank()) {
-            birthDateError = "Birth date is required"
+            birthDateError = R.string.error_birthdate_required
             hasError = true
         }
 
@@ -119,8 +123,8 @@ class RegisterViewModel @Inject constructor(
             return
         }
 
+        _state.update { it.copy(isLoading = true, errorMessage = null) }
         viewModelScope.launch {
-            _state.update { it.copy(isLoading = true) }
 
             val result = authRepository.register(
                 name = currentState.name,
@@ -131,21 +135,20 @@ class RegisterViewModel @Inject constructor(
             )
 
             result.fold(
-                onSuccess = { user ->
-                    Log.d("RegisterViewModel", "Registration successful for user: ${user.email}")
-                    _state.update { it.copy(isLoading = false, registerSuccess = true) }
+                onSuccess = { registerResult ->
+                    _state.update { it.copy(isLoading = false, registerResult = registerResult) }
                 },
                 onFailure = { exception ->
                     Log.e("RegisterViewModel", "Registration failed", exception)
 
                     val errorMessage = when (exception) {
-                        is AuthException.EmailAlreadyExists -> "Email is already registered. Please try logging in."
-                        is AuthException.WeakPassword -> "Password is too weak. Please use at least 6 characters."
-                        is AuthException.InvalidEmail -> "Invalid email format. Please enter a valid email."
-                        is AuthException.NetworkError -> "Network connection error. Please check your internet connection."
-                        is AuthException.RateLimited -> "Too many registration attempts. Please try again later."
-                        is AuthException.AccountNotVerified -> "Please verify your email address."
-                        else -> exception.message ?: "Registration failed. Please try again."
+                        is AuthException.EmailAlreadyExists -> R.string.error_email_already_registered
+                        is AuthException.WeakPassword -> R.string.auth_password_strength
+                        is AuthException.InvalidEmail -> R.string.error_email_invalid
+                        is AuthException.NetworkError -> R.string.auth_network_error
+                        is AuthException.RateLimited -> R.string.auth_rate_limited
+                        is AuthException.AccountNotVerified -> R.string.auth_verify_email
+                        else -> R.string.auth_registration_failed
                     }
 
                     _state.update {
@@ -159,4 +162,12 @@ class RegisterViewModel @Inject constructor(
     fun clearError() {
         _state.update { it.copy(errorMessage = null) }
     }
+
+    fun consumeRegisterResult() {
+        _state.update { it.copy(registerResult = null) }
+    }
+
+    private fun isStrongPassword(password: String): Boolean =
+        password.length >= 8 && password.any(Char::isUpperCase) &&
+            password.any(Char::isLowerCase) && password.any(Char::isDigit)
 }

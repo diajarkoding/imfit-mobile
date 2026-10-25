@@ -1,124 +1,45 @@
 package com.diajarkoding.imfit.data.repository
 
-import com.diajarkoding.imfit.domain.model.ExerciseLog
-import com.diajarkoding.imfit.domain.model.TemplateExercise
-import com.diajarkoding.imfit.domain.model.WorkoutLog
-import com.diajarkoding.imfit.domain.model.WorkoutSession
-import com.diajarkoding.imfit.domain.model.WorkoutTemplate
+import com.diajarkoding.imfit.domain.model.*
 import com.diajarkoding.imfit.domain.repository.WorkoutRepository
 import javax.inject.Inject
 import javax.inject.Singleton
 
-/**
- * Facade implementation of WorkoutRepository.
- * Delegates to specialized repositories for better separation of concerns:
- * - WorkoutTemplateRepository: Template CRUD operations
- * - WorkoutSessionManager: Active workout session management
- * - WorkoutLogRepository: Workout history and logs
- * 
- * This refactoring addresses the CRITICAL-1 issue from code review:
- * "Large Repository Class" - original was ~900 LOC with multiple responsibilities.
- */
+/** Public production facade. Local storage alone is never bound as the app repository. */
 @Singleton
 class WorkoutRepositoryImpl @Inject constructor(
-    private val templateRepository: WorkoutTemplateRepository,
-    private val sessionManager: WorkoutSessionManager,
-    private val logRepository: WorkoutLogRepository
+    private val templates: WorkoutTemplateRepository,
+    private val logs: WorkoutLogRepository,
+    private val sessions: WorkoutSessionManager,
 ) : WorkoutRepository {
-
-    // ==================== TEMPLATES ====================
-
-    override suspend fun getTemplates(userId: String): List<WorkoutTemplate> =
-        templateRepository.getTemplates(userId)
-
-    override suspend fun getTemplateById(templateId: String): WorkoutTemplate? =
-        templateRepository.getTemplateById(templateId)
-
-    override suspend fun createTemplate(
-        userId: String, 
-        name: String, 
-        exercises: List<TemplateExercise>
-    ): WorkoutTemplate = templateRepository.createTemplate(userId, name, exercises)
-
-    override suspend fun updateTemplate(
-        templateId: String, 
-        name: String, 
-        exercises: List<TemplateExercise>
-    ): WorkoutTemplate? = templateRepository.updateTemplate(templateId, name, exercises)
-
-    override suspend fun updateTemplateExercises(
-        templateId: String, 
-        exercises: List<TemplateExercise>
-    ): WorkoutTemplate? {
-        val template = templateRepository.getTemplateById(templateId) ?: return null
-        return templateRepository.updateTemplate(templateId, template.name, exercises)
-    }
-
-    override suspend fun updateTemplateExercise(
-        templateId: String, 
-        exerciseId: String, 
-        sets: Int, 
-        reps: Int, 
-        restSeconds: Int
-    ): WorkoutTemplate? = templateRepository.updateTemplateExercise(
-        templateId, exerciseId, sets, reps, restSeconds
-    )
-
-    override suspend fun deleteTemplate(templateId: String): Boolean =
-        templateRepository.deleteTemplate(templateId)
-
-    // ==================== ACTIVE SESSION ====================
-
-    override suspend fun startWorkout(template: WorkoutTemplate): WorkoutSession =
-        sessionManager.startWorkout(template)
-
-    override suspend fun getActiveSession(): WorkoutSession? =
-        sessionManager.getActiveSession()
-
-    override suspend fun updateActiveSession(session: WorkoutSession) =
-        sessionManager.updateActiveSession(session)
-
-    override suspend fun finishWorkout(): WorkoutLog? {
-        val session = sessionManager.getCurrentSession() ?: return null
-        val workoutLog = logRepository.finishWorkout(session)
-        sessionManager.clearActiveSession(session.id)
-        return workoutLog
-    }
-
-    override suspend fun cancelWorkout() =
-        sessionManager.cancelWorkout()
-
-    override suspend fun updateSessionRestOverride(seconds: Int) =
-        sessionManager.updateSessionRestOverride(seconds)
-
-    override suspend fun getSessionRestOverride(): Int? =
-        sessionManager.getSessionRestOverride()
-
-    // ==================== WORKOUT LOGS ====================
-
-    override suspend fun getWorkoutLogs(userId: String): List<WorkoutLog> =
-        logRepository.getWorkoutLogs(userId)
-
-    override suspend fun getWorkoutLogById(logId: String): WorkoutLog? =
-        logRepository.getWorkoutLogById(logId)
-
-    override suspend fun getLastWorkoutLog(userId: String): WorkoutLog? =
-        logRepository.getLastWorkoutLog(userId)
-
-    override suspend fun getLastExerciseLog(exerciseId: String): ExerciseLog? =
-        logRepository.getLastExerciseLog(exerciseId)
-
-    override suspend fun getLastWeightsForExercise(exerciseId: String, userId: String): Map<Int, Float> =
-        logRepository.getLastWeightsForExercise(exerciseId, userId)
-
-    // ==================== PREFERENCES ====================
-
-    override suspend fun setDefaultRestTimer(seconds: Int) =
-        sessionManager.setDefaultRestTimer(seconds)
-
-    override suspend fun getDefaultRestTimer(): Int? =
-        sessionManager.getDefaultRestTimer()
-
-    override suspend fun clearDefaultRestTimer() =
-        sessionManager.clearDefaultRestTimer()
+    override fun observeTemplates(userId: String) = templates.observeTemplates(userId)
+    override fun observeTemplate(templateId: String) = templates.observeTemplate(templateId)
+    override suspend fun getTemplates(userId: String) = templates.getTemplates(userId)
+    override suspend fun getTemplateById(templateId: String) = templates.getTemplateById(templateId)
+    override suspend fun createTemplate(userId: String, name: String, exercises: List<TemplateExercise>) = templates.createTemplate(userId, name, exercises)
+    override suspend fun updateTemplate(templateId: String, name: String, exercises: List<TemplateExercise>) = templates.updateTemplate(templateId, name, exercises)
+    override suspend fun updateTemplateExercises(templateId: String, exercises: List<TemplateExercise>) = templates.updateTemplateExercises(templateId, exercises)
+    override suspend fun updateTemplateExercise(templateId: String, exerciseId: String, sets: Int, reps: Int, restSeconds: Int) = templates.updateTemplateExercise(templateId, exerciseId, sets, reps, restSeconds)
+    override suspend fun deleteTemplate(templateId: String) = templates.deleteTemplate(templateId)
+    override suspend fun startWorkout(template: WorkoutTemplate) = sessions.startWorkout(template)
+    override suspend fun getActiveSession() = sessions.getActiveSession()
+    override suspend fun getActiveSessionForTimer() = sessions.getActiveSessionForTimer()
+    override suspend fun isActiveSessionForTimer(userId: String, workoutId: String) = sessions.isActiveSessionForTimer(userId, workoutId)
+    override suspend fun updateActiveSession(session: WorkoutSession) = sessions.updateActiveSession(session)
+    override suspend fun mutateActiveSession(sessionId: String, transform: (WorkoutSession) -> WorkoutSession) = sessions.mutateActiveSession(sessionId, transform)
+    override fun requestCancelSession(sessionId: String) = sessions.requestCancelSession(sessionId)
+    override suspend fun finishWorkout() = sessions.finishWorkout()
+    override suspend fun cancelWorkout() = sessions.cancelWorkout()
+    override suspend fun updateSessionRestOverride(seconds: Int) = sessions.updateSessionRestOverride(seconds)
+    override suspend fun getSessionRestOverride() = sessions.getSessionRestOverride()
+    override fun observeWorkoutLogs(userId: String) = logs.observeWorkoutLogs(userId)
+    override fun observeLastWorkoutLog(userId: String) = logs.observeLastWorkoutLog(userId)
+    override fun observeWorkoutLog(logId: String) = logs.observeWorkoutLog(logId)
+    override suspend fun getWorkoutLogs(userId: String) = logs.getWorkoutLogs(userId)
+    override suspend fun getWorkoutLogById(logId: String) = logs.getWorkoutLogById(logId)
+    override suspend fun getLastWorkoutLog(userId: String) = logs.getLastWorkoutLog(userId)
+    override suspend fun getLastExerciseLog(exerciseId: String) = logs.getLastExerciseLog(exerciseId)
+    override suspend fun getLastWeightsForExercise(exerciseId: String, userId: String) = logs.getLastWeightsForExercise(exerciseId, userId)
+    override suspend fun getLastPerformanceForExercise(exerciseId: String, userId: String) = logs.getLastPerformanceForExercise(exerciseId, userId)
+    override suspend fun getPrefillForExercise(exerciseId: String, userId: String, defaults: ExerciseInputDefaults) = logs.getPrefillForExercise(exerciseId, userId, defaults)
 }

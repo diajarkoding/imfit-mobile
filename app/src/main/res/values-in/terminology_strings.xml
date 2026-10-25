@@ -1,0 +1,7 @@
+<resources>
+    <string name="routine_create_action">Buat rutinitas</string>
+    <string name="routine_delete_action">Hapus rutinitas</string>
+    <string name="error_routine_load">Tidak dapat memuat rutinitas</string>
+    <string name="unit_hours_short">jam</string>
+    <string name="unit_seconds_short">detik</string>
+</resources>

@@ -25,8 +25,8 @@ import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.windowInsetsPadding
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.FitnessCenter
+import com.diajarkoding.imfit.presentation.components.common.FitnessCenter
+import com.diajarkoding.imfit.presentation.components.common.Symbols
 import androidx.compose.material3.Icon
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.material3.MaterialTheme
@@ -160,9 +160,7 @@ fun SplashScreen(
         modifier = Modifier
             .fillMaxSize()
             .background(
-                Brush.verticalGradient(
-                    listOf(Primary, PrimaryLight)
-                )
+                com.diajarkoding.imfit.theme.IMFITGradients.brandVertical
             )
     ) {
         Column(
@@ -180,7 +178,7 @@ fun SplashScreen(
                     }
             ) {
                 Icon(
-                    imageVector = Icons.Default.FitnessCenter,
+                    imageVector = Symbols.Default.FitnessCenter,
                     contentDescription = stringResource(R.string.desc_logo),
                     modifier = Modifier.size(IMFITSizes.iconHuge),
                     tint = MaterialTheme.colorScheme.onPrimary
@@ -197,11 +195,7 @@ fun SplashScreen(
             ) {
                 Text(
                     text = stringResource(R.string.app_name),
-                    style = MaterialTheme.typography.headlineLarge.copy(
-                        fontWeight = FontWeight.Bold,
-                        fontSize = 42.sp,
-                        letterSpacing = 4.sp
-                    ),
+                    style = com.diajarkoding.imfit.theme.IMFITTypography.splashBrand,
                     color = MaterialTheme.colorScheme.onPrimary
                 )
                 Spacer(modifier = Modifier.height(IMFITSpacing.sm))
@@ -253,9 +247,7 @@ private fun SplashScreenContent() {
         modifier = Modifier
             .fillMaxSize()
             .background(
-                Brush.verticalGradient(
-                    listOf(Primary, PrimaryLight)
-                )
+                com.diajarkoding.imfit.theme.IMFITGradients.brandVertical
             )
     ) {
         Column(
@@ -272,7 +264,7 @@ private fun SplashScreenContent() {
                     }
             ) {
                 Icon(
-                    imageVector = Icons.Default.FitnessCenter,
+                    imageVector = Symbols.Default.FitnessCenter,
                     contentDescription = stringResource(R.string.desc_logo),
                     modifier = Modifier.size(IMFITSizes.iconHuge),
                     tint = MaterialTheme.colorScheme.onPrimary
@@ -286,11 +278,7 @@ private fun SplashScreenContent() {
             ) {
                 Text(
                     text = stringResource(R.string.app_name),
-                    style = MaterialTheme.typography.headlineLarge.copy(
-                        fontWeight = FontWeight.Bold,
-                        fontSize = 42.sp,
-                        letterSpacing = 4.sp
-                    ),
+                    style = com.diajarkoding.imfit.theme.IMFITTypography.splashBrand,
                     color = MaterialTheme.colorScheme.onPrimary
                 )
                 Spacer(modifier = Modifier.height(IMFITSpacing.sm))

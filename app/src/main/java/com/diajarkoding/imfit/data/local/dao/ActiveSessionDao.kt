@@ -5,8 +5,15 @@ import com.diajarkoding.imfit.data.local.entity.ActiveSessionEntity
 
 @Dao
 interface ActiveSessionDao {
-    @Query("SELECT * FROM active_sessions WHERE user_id = :userId LIMIT 1")
+    @Query("SELECT * FROM active_sessions WHERE user_id = :userId ORDER BY updated_at DESC LIMIT 1")
     suspend fun getActiveSession(userId: String): ActiveSessionEntity?
+
+    // Identity-only validation must not load/decode the entire workout JSON on the alarm path.
+    @Query("SELECT id FROM active_sessions WHERE user_id = :userId ORDER BY updated_at DESC LIMIT 1")
+    suspend fun getActiveSessionId(userId: String): String?
+
+    @Query("SELECT * FROM active_sessions WHERE id = :sessionId")
+    suspend fun getSessionById(sessionId: String): ActiveSessionEntity?
 
     @Query("SELECT * FROM active_sessions LIMIT 1")
     suspend fun getAnyActiveSession(): ActiveSessionEntity?
@@ -21,7 +28,7 @@ interface ActiveSessionDao {
     suspend fun deleteSession(userId: String)
 
     @Query("DELETE FROM active_sessions WHERE id = :sessionId")
-    suspend fun deleteSessionById(sessionId: String)
+    suspend fun deleteSessionById(sessionId: String): Int
 
     @Query("DELETE FROM active_sessions")
     suspend fun deleteAllSessions()

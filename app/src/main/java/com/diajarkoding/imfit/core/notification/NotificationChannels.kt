@@ -10,7 +10,9 @@
      const val WORKOUT_ACTIVE_CHANNEL_ID = "workout_active_channel"
      const val WORKOUT_REST_TIMER_CHANNEL_ID = "workout_rest_timer_channel"
      
-     const val WORKOUT_NOTIFICATION_ID = 1001
+      const val WORKOUT_NOTIFICATION_ID = 1001
+      const val REST_FINISHED_CHANNEL_ID = "rest_finished_v1"
+      const val REST_FINISHED_NOTIFICATION_ID = 1002
      
      fun createNotificationChannels(context: Context) {
          if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
@@ -41,7 +43,15 @@
              }
              
              notificationManager.createNotificationChannel(workoutActiveChannel)
-             notificationManager.createNotificationChannel(restTimerChannel)
+              notificationManager.createNotificationChannel(restTimerChannel)
+              notificationManager.createNotificationChannel(NotificationChannel(
+                  REST_FINISHED_CHANNEL_ID,
+                  context.getString(com.diajarkoding.imfit.R.string.channel_rest_finished),
+                  NotificationManager.IMPORTANCE_HIGH
+              ).apply {
+                  setSound(null, null)
+                  enableVibration(false)
+              })
          }
      }
     

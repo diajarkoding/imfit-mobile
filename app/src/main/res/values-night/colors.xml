@@ -1,0 +1,4 @@
+<resources>
+    <!-- BackgroundDark in Color.kt. Brand splash color is theme independent. -->
+    <color name="imfit_window_background">#FF121212</color>
+</resources>

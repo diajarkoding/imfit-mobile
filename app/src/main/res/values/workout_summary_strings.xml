@@ -1,0 +1,16 @@
+<resources>
+    <string name="summary_set_details_formatted">%1$s kg × %2$d reps</string>
+    <string name="summary_screen_title">Session summary</string>
+    <string name="summary_saved_title">Session complete!</string>
+    <string name="summary_volume_meaning">Volume includes completed sets only.</string>
+    <string name="summary_exercise_breakdown_title">Exercise breakdown</string>
+    <string name="summary_no_completed_sets">No completed sets recorded.</string>
+    <string name="summary_loading">Loading session summary…</string>
+    <string name="summary_unavailable_title">Summary unavailable</string>
+    <string name="summary_unavailable_desc">Details for this session cannot be displayed.</string>
+    <string name="summary_back_to_home">Back to Home</string>
+    <plurals name="summary_completed_sets_count">
+        <item quantity="one">%1$d completed set</item>
+        <item quantity="other">%1$d completed sets</item>
+    </plurals>
+</resources>

@@ -15,7 +15,7 @@ interface WorkoutLogDao {
     fun getActiveWorkoutLogsByUser(userId: String): Flow<List<WorkoutLogEntity>>
 
     // Get last active workout log
-    @Query("SELECT * FROM workout_logs WHERE user_id = :userId AND deleted_at IS NULL ORDER BY date DESC LIMIT 1")
+    @Query("SELECT * FROM workout_logs WHERE user_id = :userId AND deleted_at IS NULL ORDER BY end_time DESC, start_time DESC, id DESC LIMIT 1")
     suspend fun getLastWorkoutLog(userId: String): WorkoutLogEntity?
 
     @Query("SELECT * FROM workout_logs WHERE id = :id")
@@ -39,13 +39,58 @@ interface WorkoutLogDao {
     @Query("DELETE FROM workout_logs")
     suspend fun deleteAllWorkoutLogs()
 
-    // Soft delete - marks record as deleted
-    @Query("UPDATE workout_logs SET deleted_at = :timestamp, updated_at = :timestamp WHERE id = :logId")
+    // Soft delete - marks record as deleted and sets pending sync
+    @Query("""
+        UPDATE workout_logs 
+        SET deleted_at = :timestamp,
+            sync_status = 'PENDING_SYNC',
+            pending_operation = 'DELETE',
+            updated_at = :timestamp
+        WHERE id = :logId
+    """)
     suspend fun softDeleteLog(logId: String, timestamp: Long = System.currentTimeMillis())
 
-    // Hard delete
+    // Hard delete - only used after sync is complete
     @Query("DELETE FROM workout_logs WHERE id = :logId")
     suspend fun hardDeleteLog(logId: String)
+
+    // Sync-aware queries
+    @Query("SELECT * FROM workout_logs WHERE sync_status = :syncStatus")
+    suspend fun getWorkoutLogsBySyncStatus(syncStatus: String): List<WorkoutLogEntity>
+
+    // Get all pending logs for sync (including soft deleted)
+    @Query("SELECT * FROM workout_logs WHERE user_id = :userId AND pending_operation IS NOT NULL")
+    suspend fun getPendingLogs(userId: String): List<WorkoutLogEntity>
+
+    @Query("""
+        SELECT COUNT(*) FROM workout_logs w WHERE w.user_id = :userId AND (
+            w.sync_status != 'SYNCED' OR w.pending_operation IS NOT NULL OR
+            EXISTS (SELECT 1 FROM exercise_logs e WHERE e.workout_log_id = w.id AND
+                (e.sync_status != 'SYNCED' OR e.pending_operation IS NOT NULL)) OR
+            EXISTS (SELECT 1 FROM workout_sets s WHERE s.workout_log_id = w.id AND
+                (s.sync_status != 'SYNCED' OR s.pending_operation IS NOT NULL)))
+    """)
+    suspend fun countRecoveryAggregates(userId: String): Int
+
+    @Query("UPDATE workout_logs SET sync_status = :syncStatus WHERE id = :id")
+    suspend fun updateSyncStatus(id: String, syncStatus: String)
+
+    // Mark as synced and clear pending operation
+    @Query("UPDATE workout_logs SET sync_status = 'SYNCED', pending_operation = NULL WHERE id = :id")
+    suspend fun markAsSynced(id: String)
+
+    @Query("""
+        UPDATE workout_logs
+        SET sync_status = 'SYNCED', pending_operation = NULL
+        WHERE id = :id
+          AND updated_at = :expectedUpdatedAt
+          AND pending_operation = :expectedOperation
+    """)
+    suspend fun markAsSyncedIfUnchanged(
+        id: String,
+        expectedUpdatedAt: Long,
+        expectedOperation: String
+    ): Int
 
     @Query("SELECT * FROM workout_logs WHERE user_id = :userId AND deleted_at IS NULL ORDER BY date DESC")
     suspend fun getWorkoutLogsByUserList(userId: String): List<WorkoutLogEntity>

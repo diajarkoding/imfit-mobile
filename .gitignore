@@ -16,6 +16,7 @@
 # Build Files (Gradle)
 # ==========================================
 .gradle/
+.kotlin/
 build/
 **/build/
 app/build/
@@ -145,6 +146,11 @@ $RECYCLE.BIN/
 *.war
 *.ear
 
+# Node / Supabase CLI
+node_modules/
+supabase/.branches/
+supabase/.temp/
+
 # ==========================================
 # Virtual Machine Crash Logs
 # ==========================================
@@ -244,12 +250,6 @@ fastlane/readme.md
 *.swp
 *~.nib
 *.temp
-
-# ==========================================
-# Documentation Folder
-# ==========================================
-docs/
-**/docs/
 
 # ==========================================
 # Misc

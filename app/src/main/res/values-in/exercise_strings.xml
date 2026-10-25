@@ -1,0 +1,9 @@
+<resources>
+    <string name="exercise_library_title">Pustaka gerakan</string>
+    <string name="exercise_category_forearms">Lengan bawah</string>
+    <string name="exercise_category_thighs">Paha</string>
+    <string name="exercise_category_glutes">Glutes</string>
+    <string name="exercise_category_calves">Betis</string>
+    <string name="exercise_category_all">Semua otot</string>
+    <string name="exercise_subgroup_empty">Belum ada gerakan yang dipetakan untuk kelompok otot ini.</string>
+</resources>

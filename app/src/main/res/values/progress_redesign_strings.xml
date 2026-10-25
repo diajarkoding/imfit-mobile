@@ -1,0 +1,28 @@
+<resources>
+    <string name="progress_overview_title">Progress</string>
+    <string name="progress_overview_volume">Workout volume</string>
+    <!-- Legacy key retained; the metric now uses the displayed calendar month. -->
+    <string name="progress_overview_weekly_time">Workout duration</string>
+    <string name="progress_overview_all_history">All history</string>
+    <string name="progress_overview_this_week">This week</string>
+    <string name="progress_overview_has_workout">Workout logged</string>
+    <string name="progress_overview_selected">Selected date</string>
+    <string name="progress_overview_empty_day">No workouts logged on this date yet.</string>
+    <string name="progress_overview_load_error">Unable to load your workout history.</string>
+    <string name="progress_overview_guest">Guest</string>
+    <plurals name="progress_overview_day_description">
+        <item quantity="one">%1$s. %2$d workout logged. %3$s</item>
+        <item quantity="other">%1$s. %2$d workouts logged. %3$s</item>
+    </plurals>
+    <plurals name="progress_overview_minutes">
+        <item quantity="one">%1$d minute</item>
+        <item quantity="other">%1$d minutes</item>
+    </plurals>
+    <plurals name="progress_overview_day_workouts">
+        <item quantity="one">%1$d workout logged · %2$s · %3$s</item>
+        <item quantity="other">%1$d workouts logged · %2$s · %3$s</item>
+    </plurals>
+    <string-array name="progress_overview_weekdays">
+        <item>Mo</item><item>Tu</item><item>We</item><item>Th</item><item>Fr</item><item>Sa</item><item>Su</item>
+    </string-array>
+</resources>

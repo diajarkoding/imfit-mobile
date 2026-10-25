@@ -37,11 +37,26 @@ interface ExerciseLogDao {
         SELECT e.* FROM exercise_logs e
         INNER JOIN workout_logs w ON e.workout_log_id = w.id
         WHERE e.exercise_id = :exerciseId
+          AND w.user_id = :userId
+          AND w.deleted_at IS NULL
         ORDER BY w.date DESC
         LIMIT 1
     """)
-    suspend fun getLastExerciseLog(exerciseId: String): ExerciseLogEntity?
+    suspend fun getLastExerciseLog(exerciseId: String, userId: String): ExerciseLogEntity?
+
+    // Sync methods
+    @Query("SELECT * FROM exercise_logs WHERE sync_status != 'SYNCED'")
+    suspend fun getPendingExerciseLogs(): List<ExerciseLogEntity>
 
     @Query("SELECT * FROM exercise_logs WHERE workout_log_id = :workoutLogId ORDER BY order_index")
     suspend fun getExerciseLogsByWorkoutLogId(workoutLogId: String): List<ExerciseLogEntity>
+
+    @Query("UPDATE exercise_logs SET sync_status = 'SYNCED', pending_operation = NULL WHERE id = :id")
+    suspend fun markAsSynced(id: String)
+
+    @Query("UPDATE exercise_logs SET sync_status = :status WHERE id = :id")
+    suspend fun updateSyncStatus(id: String, status: String)
+
+    @Query("UPDATE exercise_logs SET sync_status = 'SYNCED', pending_operation = NULL WHERE workout_log_id = :workoutLogId")
+    suspend fun markWorkoutExerciseLogsAsSynced(workoutLogId: String)
 }

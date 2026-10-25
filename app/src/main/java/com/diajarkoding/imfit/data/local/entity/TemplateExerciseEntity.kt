@@ -2,6 +2,7 @@ package com.diajarkoding.imfit.data.local.entity
 
 import androidx.room.ColumnInfo
 import androidx.room.Entity
+import com.diajarkoding.imfit.data.local.sync.SyncStatus
 
 @Entity(
     tableName = "template_exercises",
@@ -18,6 +19,10 @@ data class TemplateExerciseEntity(
     val reps: Int,
     @ColumnInfo(name = "rest_seconds")
     val restSeconds: Int,
+    @ColumnInfo(name = "sync_status")
+    val syncStatus: String = SyncStatus.PENDING_SYNC.name,
+    @ColumnInfo(name = "pending_operation")
+    val pendingOperation: String? = null,
     @ColumnInfo(name = "created_at")
     val createdAt: Long = System.currentTimeMillis(),
     @ColumnInfo(name = "updated_at")

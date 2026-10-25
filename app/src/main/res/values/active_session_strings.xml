@@ -1,0 +1,45 @@
+<resources>
+    <string name="rest_reduce">−30 seconds</string>
+    <string name="active_session_saving">Saving session…</string>
+    <string name="active_session_weight_input">%1$s, set %2$d, weight in kg</string>
+    <string name="active_session_reps_input">%1$s, set %2$d, reps</string>
+    <string name="active_session_complete_set">Complete %1$s, set %2$d</string>
+    <string name="active_session_delete_set">Delete %1$s, set %2$d</string>
+    <string name="active_session_add_exercises">Add Exercise</string>
+    <string name="active_session_remove_exercise">Remove %1$s from this session</string>
+    <string name="active_session_empty">No exercises in this session. Add exercises to continue, or discard the workout.</string>
+
+    <!-- Overview -->
+    <string name="active_session_sets_completed">Completed sets</string>
+    <string name="active_session_volume_meaning">Volume includes completed sets only.</string>
+
+    <!-- State Banners -->
+    <string name="active_session_pause_explanation">Session is paused. Resume to complete the next set.</string>
+    <string name="active_session_finish_reminder">All sets completed. Tap Finish workout to save to history.</string>
+    <string name="active_session_empty_title">No exercises yet</string>
+    <string name="active_session_empty_description">Add exercises to continue this workout.</string>
+    <string name="active_session_loading">Loading workout…</string>
+
+    <!-- Table Columns -->
+    <string name="active_session_column_set">Set</string>
+    <string name="active_session_column_kg">kg</string>
+    <string name="active_session_column_reps">Reps</string>
+    <string name="active_session_column_done">Done</string>
+
+    <!-- Cancel Dialog Messages -->
+    <string name="active_session_cancel_title">Cancel session?</string>
+    <string name="active_session_cancel_message_zero">No completed sets. If cancelled, this session will not be recorded in history.</string>
+    <string name="active_session_cancel_message_one">1 of %1$d sets completed. If cancelled, progress will be lost and not recorded in history.</string>
+    <string name="active_session_cancel_message_some">%1$d of %2$d sets completed. If cancelled, progress will be lost and not recorded in history.</string>
+    <string name="active_session_cancel_message_all">All %1$d sets completed, but the session has not been saved to history yet. If cancelled, this progress will be lost.</string>
+    <string name="active_session_cancel_continue">Continue session</string>
+    <string name="active_session_cancel_confirm">Cancel session</string>
+
+    <!-- Rest Timer Settings & Countdown -->
+    <string name="rest_timer_scope_desc">Duration applies to this entire session.</string>
+    <string name="rest_timer_remaining_label">Remaining time</string>
+    <string name="rest_timer_unit_hours">Hours</string>
+    <string name="rest_timer_unit_minutes">Minutes</string>
+    <string name="rest_timer_unit_seconds">Seconds</string>
+    <string name="rest_timer_minus_30">−30 seconds</string>
+</resources>

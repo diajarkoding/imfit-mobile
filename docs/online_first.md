@@ -1,14 +1,16 @@
 # IMFIT - Migrasi dari Offline-First ke Online-First
 
-## Integrasi development → online-first — 25 Oktober 2026
+## Integrasi development → online-only (dahulu online-first) — 25 Oktober 2026
 
-Bagian berikut mencatat integrasi source melalui `integration/online-first-development`
-ke branch lokal `online-first`, dengan parent asal `online-first@3c62465` dan `development@5129c53`.
+Bagian berikut mencatat integrasi source melalui branch historis `integration/online-first-development`
+ke branch lokal `online-only`, dengan parent asal `online-only@3c62465` dan `development@5129c53`.
 Isi rencana di bawah bagian ini adalah konteks historis, bukan bukti arsitektur sudah selesai.
+
+**Catatan rename:** branch `online-first` di-rename menjadi `online-only` pada 27 Oktober 2026. Nama branch integrasi historis (`integration/online-first-development`) dan path evidence lama dipertahankan agar catatan historis tetap dapat ditelusuri.
 
 ### Keputusan pengguna
 
-- Integrasikan `development` ke kandidat berbasis `online-first`, tanpa menulis ulang history.
+- Integrasikan `development` ke kandidat berbasis `online-only`, tanpa menulis ulang history.
 - **Retry manual:** workout yang gagal diunggah tetap tersimpan, dengan status belum terunggah;
   reconnect, route refresh, dan Worker tidak mengunggahnya otomatis.
 - **Logout: simpan pending per akun.** Logout tetap boleh. Data pending, seluruh anak aggregate,
@@ -86,9 +88,9 @@ Isi rencana di bawah bagian ini adalah konteks historis, bukan bukti arsitektur 
 ### Finalisasi merge source dan batas release
 
 Wiring dan adaptasi source telah diselesaikan. Merge commit lokal mempertahankan dua parent
-asal dan `online-first` dimajukan secara fast-forward ke hasil integrasi setelah regresi/review.
+asal dan `online-only` dimajukan secara fast-forward ke hasil integrasi setelah regresi/review.
 `development` tidak dimajukan atau ditulis ulang. History tidak di-rebase/reset, branch fitur
-refresh/paging tidak digabungkan, dan **belum push**. Hash commit final dapat diperiksa melalui
+refresh/paging tidak digabungkan, dan **saat itu belum push**. Hash commit final dapat diperiksa melalui
 Git log; evidence ancestry/publikasi lokal disimpan di folder evidence integrasi yang sama.
 
 **Deployment prerequisite:** terapkan dan uji
@@ -733,4 +735,4 @@ Dengan mengikuti fase-fase implementasi yang telah direncanakan, migrasi dapat d
 ---
 
 *Dokumen ini dibuat pada: 7 Januari 2026*
-*Branch: online-first*
+*Branch: online-only*

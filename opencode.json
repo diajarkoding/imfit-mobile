@@ -1,4 +1,12 @@
 {
   "$schema": "https://opencode.ai/config.json",
-  "skills": ["./docs/skills"]
+  "skills": ["./docs/skills"],
+  "mcp": {
+    "servers": {
+      "supabase": {
+        "type": "remote",
+        "url": "https://mcp.supabase.com/mcp?project_ref=ltcxltahkrjnsjaxndsa&read_only=true&features=database"
+      }
+    }
+  }
 }

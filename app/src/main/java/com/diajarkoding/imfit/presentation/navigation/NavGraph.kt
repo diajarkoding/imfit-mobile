@@ -41,11 +41,8 @@ fun NavGraph(
     onActiveWorkoutOpened: () -> Unit = {},
     authenticatedFromDeepLink: Boolean = false,
     onAuthenticatedFromDeepLinkConsumed: () -> Unit = {},
-    remoteRefresh: RemoteRefreshViewModel = hiltViewModel(),
 ) {
     val backStack = rememberNavBackStack(Splash)
-    LifecycleEventEffect(Lifecycle.Event.ON_RESUME) { remoteRefresh.refresh() }
-    LaunchedEffect(backStack.lastOrNull()) { remoteRefresh.refresh() }
     var exerciseSelectionResult by rememberSaveable {
         mutableStateOf<ArrayList<String>?>(null)
     }
@@ -121,7 +118,6 @@ fun NavGraph(
 
             entry<Main> {
                         MainScreen(
-                            onRefreshRemote = remoteRefresh::refresh,
                     onNavigateToWorkoutDetail = { workoutId ->
                         backStack.add(WorkoutDetail(workoutId))
                     },

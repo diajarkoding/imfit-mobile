@@ -70,7 +70,7 @@ internal fun WorkoutDetailContent(state: WorkoutDetailState, estimatedMinutes: I
     val c = IMFITColors.training
     val workout = state.workout
     val exercises = workout?.exercises.orEmpty()
-    val editable = workout != null && !state.isWorkoutActive && !state.isDeleting && !state.isUpdating
+    val editable = workout != null && !state.isWorkoutActive && !state.isDeleting && !state.isUpdating && !state.stale && !state.refreshing
     Scaffold(containerColor = c.background, contentWindowInsets = WindowInsets(0),
         topBar = {
             RoutineAppBar(stringResource(R.string.routine_detail_title), onBack, enabled = !state.isDeleting) {
@@ -82,10 +82,11 @@ internal fun WorkoutDetailContent(state: WorkoutDetailState, estimatedMinutes: I
                 if (workout != null && exercises.isEmpty()) Text(stringResource(R.string.routine_start_requirement), color = c.muted, style = MaterialTheme.typography.bodySmall)
                 if (state.isWorkoutActive && !state.isCurrentWorkoutActive) Text(stringResource(R.string.warning_workout_active), color = c.muted, style = MaterialTheme.typography.bodySmall)
                 RoutineButton(stringResource(if (state.isCurrentWorkoutActive) R.string.routine_resume else R.string.action_start_workout), onStart,
-                    enabled = !startPending && workout != null && exercises.isNotEmpty() && !state.isLoading && !state.isDeleting && !state.isUpdating && (!state.isWorkoutActive || state.isCurrentWorkoutActive))
+                    enabled = !startPending && workout != null && exercises.isNotEmpty() && !state.isLoading && !state.stale && !state.refreshing && !state.isDeleting && !state.isUpdating && (!state.isWorkoutActive || state.isCurrentWorkoutActive))
             }
         }) { padding ->
-        LazyColumn(Modifier.fillMaxSize().padding(padding).testTag("routine_detail_list"), contentPadding = PaddingValues(start = 20.dp, end = 20.dp, top = IMFITSpacing.headerContentGap, bottom = 12.dp),
+        RemoteRefreshBox(state.refreshing, onRetry, Modifier.fillMaxSize().padding(padding)) {
+        LazyColumn(Modifier.fillMaxSize().testTag("routine_detail_list"), contentPadding = PaddingValues(start = 20.dp, end = 20.dp, top = IMFITSpacing.headerContentGap, bottom = 12.dp),
             verticalArrangement = Arrangement.spacedBy(12.dp)) {
             if (state.isLoading && workout == null) item { RoutineLoading(stringResource(R.string.routine_loading), topPadding = 0.dp) }
             state.errorRes?.let { error -> item { RoutineFailure(stringResource(error), onRetry) } }
@@ -108,6 +109,7 @@ internal fun WorkoutDetailContent(state: WorkoutDetailState, estimatedMinutes: I
                 }
                 if (state.isUpdating) item { RoutineLoading(stringResource(R.string.routine_adding)) }
             }
+        }
         }
     }
 }

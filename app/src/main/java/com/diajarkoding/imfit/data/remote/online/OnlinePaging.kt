@@ -9,7 +9,7 @@ import kotlinx.coroutines.flow.*
 /** Query identity includes all filters, not the opaque cursor or current loaded page. */
 sealed interface QueryKey {
     data class History(val window: DateWindow) : QueryKey
-    data class Catalog(val search: String, val categoryId: Int?) : QueryKey {
+    data class Catalog(val search: String, val categoryId: Int?, val exerciseIds: List<String>? = null) : QueryKey {
         init { require(search == normalizeSearch(search) && search.length <= 100) }
     }
     data object Templates : QueryKey

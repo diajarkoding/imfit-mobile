@@ -100,7 +100,7 @@ internal fun ProgressMetricOverview(metrics: ProgressMetrics) {
 }
 
 @Composable
-private fun ProgressMetricCard(value: String, caption: String, period: String, icon: ImageVector, modifier: Modifier = Modifier) {
+internal fun ProgressMetricCard(value: String, caption: String, period: String, icon: ImageVector, modifier: Modifier = Modifier) {
     val colors = IMFITColors.training
     Surface(modifier.fillMaxWidth().heightIn(min = IMFITProgress.metricHeight),
         shape = IMFITShapes.CardSmall, color = colors.surface, border = BorderStroke(IMFITComponentSizes.border, colors.border)) {
@@ -123,7 +123,8 @@ internal fun ProgressMonthCalendar(
     workouts: Map<LocalDate, List<WorkoutLog>>,
     onSelect: (LocalDate) -> Unit,
     onYearlyCalendar: (() -> Unit)? = null,
-    enabled: Boolean = true
+    enabled: Boolean = true,
+    markerCounts: Map<LocalDate, Long>? = null
 ) {
     val colors = IMFITColors.training
     val locale = LocalConfiguration.current.locales[0] ?: Locale.ROOT
@@ -158,7 +159,7 @@ internal fun ProgressMonthCalendar(
                                 Spacer(Modifier.weight(1f).height(IMFITSizes.minimumInteractiveTarget))
                             } else {
                                 val date = month.atDay(day)
-                                val count = workouts[date].orEmpty().size
+                                val count = (markerCounts?.get(date) ?: workouts[date].orEmpty().size.toLong()).coerceAtMost(Int.MAX_VALUE.toLong()).toInt()
                                 val isSelected = date == selectedDate
                                 val description = pluralStringResource(R.plurals.progress_overview_day_description, count,
                                     date.format(DateTimeFormatter.ofPattern("EEEE, d MMMM yyyy", locale)), count,

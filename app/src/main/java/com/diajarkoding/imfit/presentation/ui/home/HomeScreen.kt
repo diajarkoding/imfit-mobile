@@ -4,6 +4,7 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.background
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.runtime.saveable.rememberSaveable
@@ -33,12 +34,8 @@ fun HomeScreen(
     val syncState by viewModel.syncState.collectAsStateWithLifecycle()
     var showDialog by rememberSaveable { mutableStateOf(false) }
     var name by rememberSaveable { mutableStateOf("") }
-    var previousSync by remember { mutableStateOf(syncState.status) }
-    LaunchedEffect(Unit) { viewModel.refresh() }
-    LaunchedEffect(syncState.status) {
-        if (previousSync == SyncState.SyncStatus.SYNCING && syncState.status == SyncState.SyncStatus.SYNCED) viewModel.refresh()
-        previousSync = syncState.status
-    }
+    val list = rememberLazyListState()
+    RemotePagingViewport(list, state.templateSummaries.map { it.id }, viewModel::access)
     LaunchedEffect(state.newlyCreatedWorkoutId) {
         state.newlyCreatedWorkoutId?.let {
             showDialog = false
@@ -60,9 +57,10 @@ fun HomeScreen(
         RoutineNameField(name, { name = it; viewModel.clearCreateError() }, enabled = !state.isCreating,
             errorMessage = state.createNameErrorRes?.let { stringResource(it) }, onDone = { viewModel.createWorkout(name) }, requestFocus = true)
     }
-    Column(Modifier.fillMaxSize().background(homePalette().background)) {
+    RemoteRefreshBox(state.refreshing, viewModel::refresh, Modifier.fillMaxSize().background(homePalette().background)) {
         LazyColumn(
-            modifier = Modifier.fillMaxWidth().weight(1f),
+            state = list,
+            modifier = Modifier.fillMaxSize(),
             contentPadding = PaddingValues(start = IMFITSpacing.screenHorizontal, top = IMFITSpacing.headerContentGap,
                 end = IMFITSpacing.screenHorizontal, bottom = IMFITSpacing.screenVertical),
             verticalArrangement = Arrangement.spacedBy(IMFITSpacing.itemSpacing)
@@ -77,9 +75,10 @@ fun HomeScreen(
             }
             item(key = "last_workout") {
                 Box(Modifier.padding(bottom = IMFITSpacing.sm)) {
-                    if (state.isLoading) ShimmerStatCard() else HomeLastWorkout(state.lastWorkout)
+                    if (state.isLoading) ShimmerStatCard() else if (state.homeLoaded) HomeRemoteLastWorkout(state.remoteLastWorkout)
                 }
             }
+            if (state.hasReadError) item("remote_error") { RemoteReadFailure(state.stale, viewModel::refresh) }
             if (syncState.pendingCount > 0 ||
                 syncState.status == SyncState.SyncStatus.SYNCING ||
                 syncState.status == SyncState.SyncStatus.FAILED
@@ -96,15 +95,16 @@ fun HomeScreen(
             if (state.isLoading) {
                 items(3, key = { "loading_$it" }) { ShimmerWorkoutCard() }
             } else {
-                if (state.templates.isEmpty()) {
+                if (state.templateSummaries.isEmpty() && !state.hasReadError) {
                     item(key = "empty_templates") { ImfitEmptyMessage(stringResource(R.string.home_empty_templates)) }
                 }
-                items(state.templates, key = { "template_${it.id}" }) { template ->
+                items(state.templateSummaries, key = { "template_${it.id}" }) { template ->
                     val active = state.activeWorkoutTemplateId == template.id
-                    HomeWorkoutCard(template, active) {
+                    HomeRemoteWorkoutCard(template, active) {
                         if (active) onNavigateToActiveWorkout(template.id) else onNavigateToWorkoutDetail(template.id)
                     }
                 }
+                item("page_footer") { RemotePageFooter(state.appending, state.appendError, state.endReached, viewModel::retryPage, viewModel::more) }
             }
         }
     }

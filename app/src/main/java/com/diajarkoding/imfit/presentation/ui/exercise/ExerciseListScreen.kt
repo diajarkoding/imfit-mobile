@@ -5,6 +5,8 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
@@ -39,9 +41,10 @@ fun ExerciseListScreen(
     onNavigateBack: () -> Unit,
     viewModel: ExerciseBrowserViewModel = hiltViewModel()
 ) {
-    androidx.lifecycle.compose.LifecycleEventEffect(androidx.lifecycle.Lifecycle.Event.ON_RESUME) { viewModel.refresh() }
+    LaunchedEffect(categoryName) { viewModel.initialize(ExerciseCategory.fromRoute(categoryName)) }
     val state by viewModel.state.collectAsStateWithLifecycle()
-    ExerciseListContent(ExerciseCategory.fromRoute(categoryName), state, onNavigateBack, viewModel::setQuery, viewModel::refresh)
+    ExerciseListContent(ExerciseCategory.fromRoute(categoryName), state, onNavigateBack, viewModel::setQuery, viewModel::retry,
+        onRefresh = viewModel::refresh, onAccess = viewModel::access, onMore = viewModel::loadMore)
 }
 
 /** Read-only catalog: unlike the picker, rows do not select or navigate to a detail page. */
@@ -52,10 +55,15 @@ internal fun ExerciseListContent(
     onBack: () -> Unit,
     onSearch: (String) -> Unit,
     onRetry: () -> Unit,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    onRefresh: () -> Unit = onRetry,
+    onAccess: (String) -> Unit = {},
+    onMore: () -> Unit = {}
 ) {
     val colors = IMFITColors.training
     val exercises = remember(state.results, category) { state.results.filter(category::includes).distinctBy { it.id } }
+    val list = rememberLazyListState()
+    RemotePagingViewport(list, exercises.map { it.id }, onAccess)
     Scaffold(
         modifier = modifier.imePadding(),
         containerColor = colors.background,
@@ -65,8 +73,10 @@ internal fun ExerciseListContent(
         Column(Modifier.fillMaxSize().padding(padding).consumeWindowInsets(padding)
             .padding(horizontal = IMFITSpacing.screenHorizontal)) {
             ExerciseListSearch(state.query, onSearch)
+            RemoteRefreshBox(state.refreshing, onRefresh, Modifier.weight(1f).fillMaxWidth()) {
             LazyColumn(
-                modifier = Modifier.weight(1f).fillMaxWidth().testTag("exercise_list"),
+                state = list,
+                modifier = Modifier.fillMaxSize().testTag("exercise_list"),
                 contentPadding = PaddingValues(top = IMFITSpacing.md, bottom = IMFITSpacing.xl),
                 verticalArrangement = Arrangement.spacedBy(IMFITSpacing.sm)
             ) {
@@ -76,7 +86,7 @@ internal fun ExerciseListContent(
                             RoutineLoading(stringResource(R.string.routine_catalog_loading))
                         }
                     }
-                    state.hasError -> item(key = "error") {
+                    state.hasError && exercises.isEmpty() -> item(key = "error") {
                         Box(Modifier.testTag("exercise_list_error")) {
                             RoutineFailure(stringResource(R.string.redesign_error), onRetry)
                         }
@@ -88,6 +98,9 @@ internal fun ExerciseListContent(
                         ExerciseListRow(exercise)
                     }
                 }
+                if (state.hasError && exercises.isNotEmpty()) item("stale") { RemoteReadFailure(true, onRetry) }
+                item("page_footer") { RemotePageFooter(state.appending, state.appendError, state.endReached, onRetry, onMore) }
+            }
             }
         }
     }

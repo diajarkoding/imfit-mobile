@@ -20,6 +20,7 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.CancellationException
 import javax.inject.Inject
+import com.diajarkoding.imfit.data.remote.online.*
 
 data class HomeState(
     val userName: String = "User",
@@ -34,6 +35,15 @@ data class HomeState(
     @StringRes val createNameErrorRes: Int? = null,
     val retryingUploads: Boolean = false,
     val uploadRetryFailed: Boolean = false,
+    val templateSummaries: List<TemplateSummary> = emptyList(),
+    val remoteLastWorkout: WorkoutSummary? = null,
+    val homeLoaded: Boolean = false,
+    val hasReadError: Boolean = false,
+    val refreshing: Boolean = false,
+    val stale: Boolean = false,
+    val appending: Boolean = false,
+    val appendError: Boolean = false,
+    val endReached: Boolean = false,
 )
 
 @HiltViewModel
@@ -42,6 +52,8 @@ class HomeViewModel @Inject constructor(
     private val workoutRepository: WorkoutRepository,
     syncStateProvider: SyncStateProvider,
     private val syncRunner: com.diajarkoding.imfit.data.sync.SyncRunner,
+    private val reads: RemoteReadGateway,
+    private val edits: TemplateEditBridge,
 ) : ViewModel() {
 
     private val _state = MutableStateFlow(HomeState())
@@ -51,62 +63,44 @@ class HomeViewModel @Inject constructor(
     val syncState = syncStateProvider.syncState
     private var loadJob: Job? = null
     private var displayedOwner: String? = null
+    private val templates = reads.templateFeed(viewModelScope)
+    private val profile = RemoteResource<RemoteProfile>(reads.auth, viewModelScope)
+    private val summary = RemoteResource<HomeSummary>(reads.auth, viewModelScope)
+    private val ownerListener = reads.auth.onIdentityChanged { _state.value = HomeState() }
 
     init {
-        loadData()
+        viewModelScope.launch { combine(templates.state, profile.state, summary.state) { page, user, home ->
+            Triple(page, user, home)
+        }.collect { (page, user, home) ->
+            reads.auth.synchronizedState {
+            val identity = reads.auth.identity.value ?: return@synchronizedState
+            if (page.identity != identity || user.identity != identity || home.identity != identity) return@synchronizedState
+            _state.update { it.copy(userName = user.data?.name.orEmpty(), userProfilePhotoUri = user.data?.avatarUrl,
+                templateSummaries = page.items, remoteLastWorkout = home.data?.lastWorkout, homeLoaded = home.data != null,
+                hasReadError = page.refreshError != null || home.error != null || user.error != null,
+                isLoading = (!page.hasLoaded && page.refreshing) || (home.data == null && home.loading),
+                refreshing = page.refreshing || home.loading || user.loading, stale = page.stale || home.stale || user.stale,
+                appending = page.appending, appendError = page.appendError != null, endReached = page.endReached) }
+            }
+        } }
+        viewModelScope.launch { reads.auth.identity.collectLatest { if (it != null) loadData() } }
+        viewModelScope.launch { edits.changes.collect { if (reads.auth.isCurrent(it.identity)) templates.refresh() } }
+        runCatching { reads.auth.capture() }
     }
 
     private fun loadData() {
-        loadJob?.cancel()
-        loadJob = viewModelScope.launch {
-            _state.update { it.copy(isLoading = true) }
-
+        if (reads.auth.identity.value == null) return
+        templates.select(QueryKey.Templates)
+        profile.load("profile") { loadProfile() }
+        summary.load("home") { reads.read(OnlineRpc.homeSummary()) }
+        // Explicitly retained legacy recovery ONLY; not the source for templates/history/profile.
+        viewModelScope.launch {
+            val identity = reads.auth.capture().identity
             try {
-                authRepository.observeCurrentUser().collectLatest { user ->
-                if (user == null) {
-                    displayedOwner = null
-                    _state.update { it.copy(
-                        userName = "Guest", userProfilePhotoUri = null, templates = emptyList(),
-                        lastWorkout = null, isLoading = false, activeWorkoutTemplateId = null
-                    ) }
-                    return@collectLatest
-                }
-
-                val userId = user.id
-                if (displayedOwner != userId) {
-                    displayedOwner = userId
-                    _state.update { it.copy(userName = user.name, userProfilePhotoUri = null,
-                        templates = emptyList(), lastWorkout = null, activeWorkoutTemplateId = null,
-                        newlyCreatedWorkoutId = null, uploadRetryFailed = false) }
-                }
-                val userName = user.name
-                // Avatar failures must not hide locally saved workout history.
-                val signedAvatarUrl = try {
-                    authRepository.getSignedAvatarUrl(user.profilePhotoUri)
-                } catch (e: CancellationException) { throw e }
-                catch (_: Exception) { null }
-
-                val activeSession = workoutRepository.getActiveSession()
-
-                _state.update {
-                    it.copy(
-                        userName = userName,
-                        userProfilePhotoUri = signedAvatarUrl,
-                        activeWorkoutTemplateId = activeSession?.templateId
-                    )
-                }
-                combine(workoutRepository.observeTemplates(userId), workoutRepository.observeLastWorkoutLog(userId)) { templates, last ->
-                    templates to last
-                }.collect { (templates, last) ->
-                    _state.update { it.copy(templates = templates, lastWorkout = last, isLoading = false) }
-                }
-                }
-            } catch (e: CancellationException) {
-                throw e
-            } catch (e: Exception) {
-                Log.e("HomeViewModel", "Unable to observe local Home data", e)
-                _state.update { it.copy(isLoading = false) }
-            }
+                val legacy = workoutRepository.getActiveSession()
+                if (reads.auth.isCurrent(identity)) _state.update { it.copy(activeWorkoutTemplateId = legacy?.templateId) }
+            } catch (cancelled: CancellationException) { throw cancelled }
+            catch (_: Exception) { /* Recovery remains unavailable, never fabricate a server session. */ }
         }
     }
 
@@ -117,7 +111,9 @@ class HomeViewModel @Inject constructor(
     }
 
     fun refresh() {
-        loadData()
+        templates.refresh()
+        profile.load("profile", true) { loadProfile() }
+        summary.load("home", true) { reads.read(OnlineRpc.homeSummary()) }
     }
 
     fun retryPendingUploads() {
@@ -140,19 +136,14 @@ class HomeViewModel @Inject constructor(
         _state.update { it.copy(isCreating = true, createErrorRes = null, createNameErrorRes = null) }
         viewModelScope.launch {
             try {
-            val user = authRepository.getCurrentUser()
+            val user = reads.auth.identity.value
             if (user == null) {
                 _state.update { it.copy(isCreating = false, createErrorRes = R.string.routine_create_failed) }
                 return@launch
             }
 
-                val newWorkout = workoutRepository.createTemplate(
-                    userId = user.id,
-                    name = name.trim(),
-                    exercises = emptyList()
-                )
-                _state.update { it.copy(newlyCreatedWorkoutId = newWorkout.id, isCreating = false) }
-                refresh()
+                val receipt = edits.save(null, name.trim(), emptyList())
+                _state.update { it.copy(newlyCreatedWorkoutId = receipt.templateId, isCreating = false) }
             } catch (e: CancellationException) { throw e }
             catch (e: Exception) {
                 _state.update { it.copy(isCreating = false, createErrorRes = R.string.routine_create_failed) }
@@ -166,4 +157,15 @@ class HomeViewModel @Inject constructor(
     fun clearNewlyCreatedWorkoutId() {
         _state.update { it.copy(newlyCreatedWorkoutId = null) }
     }
+    fun retryPage() = templates.retry()
+    fun access(id: String) { templates.state.value.items.indexOfFirst { it.id == id }.takeIf { it >= 0 }?.let(templates::access) }
+    fun more() { templates.state.value.items.lastOrNull()?.let { access(it.id) } }
+    private suspend fun loadProfile(): RemoteProfile {
+        val profile = reads.profile()
+        val avatar = try { authRepository.getSignedAvatarUrl(profile.avatarUrl) }
+        catch (cancelled: CancellationException) { throw cancelled }
+        catch (_: Exception) { null }
+        return profile.copy(avatarUrl = avatar)
+    }
+    override fun onCleared() { templates.close(); profile.close(); summary.close(); ownerListener.close() }
 }

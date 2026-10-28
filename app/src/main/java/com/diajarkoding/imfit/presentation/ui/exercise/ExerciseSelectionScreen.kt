@@ -5,6 +5,7 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.selection.selectable
 import androidx.compose.foundation.selection.selectableGroup
@@ -47,14 +48,18 @@ fun ExerciseSelectionScreen(templateId: String, onNavigateBack: () -> Unit, onEx
         viewModel::toggleExercise, viewModel::resetSelection, viewModel::clearFilters, viewModel::retry,
         onFilter = { filterSheet = true }, onConfirm = {
             if (!confirmed && state.selectedExercises.isNotEmpty()) { confirmed = true; onExercisesSelected(state.selectedExercises) }
-        }, enabled = !confirmed)
+        }, enabled = !confirmed,
+        onRefresh = viewModel::refresh, onAccess = viewModel::access, onMore = viewModel::loadMore)
 }
 
 @Composable
 internal fun ExercisePickerContent(state: ExerciseSelectionState, onBack: () -> Unit, onSearch: (String) -> Unit,
     onCategory: (ExerciseCategory) -> Unit, onToggle: (Exercise) -> Unit, onReset: () -> Unit,
-    onClearFilters: () -> Unit, onRetry: () -> Unit, onFilter: () -> Unit, onConfirm: () -> Unit, enabled: Boolean = true) {
+    onClearFilters: () -> Unit, onRetry: () -> Unit, onFilter: () -> Unit, onConfirm: () -> Unit, enabled: Boolean = true,
+    onRefresh: () -> Unit = onRetry, onAccess: (String) -> Unit = {}, onMore: () -> Unit = {}) {
     val c = IMFITColors.training
+    val list = rememberLazyListState()
+    RemotePagingViewport(list, state.filteredExercises.map { it.id }, onAccess)
     Scaffold(modifier = Modifier.imePadding(), containerColor = c.background, contentWindowInsets = WindowInsets(0),
         topBar = { RoutineAppBar(stringResource(R.string.routine_picker_title), onBack,
             subtitle = if (state.routineName.isBlank()) stringResource(R.string.routine_picker_context_generic)
@@ -67,7 +72,7 @@ internal fun ExercisePickerContent(state: ExerciseSelectionState, onBack: () -> 
             }
             RoutineButton(if (state.selectedExercises.isEmpty()) stringResource(R.string.routine_add_selected)
                 else stringResource(R.string.routine_add_count, state.selectedExercises.size), onConfirm,
-                enabled = enabled && !state.isLoading && state.selectedExercises.isNotEmpty())
+                enabled = enabled && !state.isLoading && !state.stale && state.errorRes == null && state.selectedExercises.isNotEmpty())
         } }) { padding ->
         Column(Modifier.fillMaxSize().padding(padding).padding(horizontal = 20.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
             OutlinedTextField(state.searchQuery, onSearch, enabled = enabled, singleLine = true,
@@ -97,22 +102,26 @@ internal fun ExercisePickerContent(state: ExerciseSelectionState, onBack: () -> 
             }
             Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
                 Text(stringResource(R.string.routine_available_exercises), Modifier.weight(1f), color = c.text, fontWeight = FontWeight.SemiBold)
-                Text(stringResource(R.string.routine_result_count, state.filteredExercises.size), color = c.muted, style = MaterialTheme.typography.bodySmall)
+                Text(stringResource(R.string.remote_read_loaded, state.filteredExercises.size), color = c.muted, style = MaterialTheme.typography.bodySmall)
             }
-            LazyColumn(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(8.dp), contentPadding = PaddingValues(bottom = 12.dp)) {
+            RemoteRefreshBox(state.refreshing, onRefresh, Modifier.weight(1f).fillMaxWidth()) {
+            LazyColumn(Modifier.fillMaxSize(), state = list, verticalArrangement = Arrangement.spacedBy(8.dp), contentPadding = PaddingValues(bottom = 12.dp)) {
                 if (state.isLoading) item { RoutineLoading(stringResource(R.string.routine_catalog_loading)) }
-                state.errorRes?.let { error -> item { RoutineFailure(stringResource(error), onRetry) } }
+                state.errorRes?.let { error -> item { RemoteReadFailure(state.stale, onRetry) } }
                 if (!state.isLoading && state.errorRes == null && state.filteredExercises.isEmpty()) item {
                     Column(Modifier.padding(vertical = 24.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
                         Text(stringResource(R.string.routine_search_empty), color = c.text, style = MaterialTheme.typography.titleMedium)
-                        Text(stringResource(if (state.allExercises.isEmpty()) R.string.routine_catalog_empty else R.string.routine_search_empty_hint), color = c.muted)
-                        if (state.allExercises.isNotEmpty()) TextButton(onClearFilters) { Text(stringResource(R.string.routine_clear_filters), color = c.primary) }
+                         val filtered = state.searchQuery.isNotBlank() || state.selectedCategory != ExerciseCategory.ALL
+                         Text(stringResource(if (filtered) R.string.routine_search_empty_hint else R.string.routine_catalog_empty), color = c.muted)
+                         if (filtered) TextButton(onClearFilters) { Text(stringResource(R.string.routine_clear_filters), color = c.primary) }
                         else TextButton(onRetry) { Text(stringResource(R.string.routine_retry), color = c.primary) }
                     }
                 }
                 items(state.filteredExercises, key = { it.id }) { exercise ->
                     ExercisePickerRow(exercise, state.selectedExercises.any { it.id == exercise.id }, enabled && !state.isLoading) { onToggle(exercise) }
                 }
+                item("page_footer") { RemotePageFooter(state.appending, state.appendError, state.endReached, onRetry, onMore) }
+            }
             }
         }
     }

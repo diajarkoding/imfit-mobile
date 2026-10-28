@@ -123,27 +123,37 @@ class WorkoutRepositoryRoomFirstTest {
         assertTrue(scheduler.enqueuedUsers.isEmpty())
     }
 
-    @Test fun cleanEditorReceivesUpdatesButRemoteRefreshCannotOverwriteAnUnsavedDraft() = runBlocking {
+    @Test fun remoteEditorRefreshesCleanSourceButCannotOverwriteAnUnsavedDraft() = runBlocking {
         val sample = sampleTemplate()
-        sample.exercises.forEach { item -> database.exerciseDao().insertExercise(
-            com.diajarkoding.imfit.data.local.entity.ExerciseEntity(item.id, item.name, item.muscleCategory.ordinal + 1, item.description)) }
-        val template = repository.createTemplate(user.id, "Initial", sample.exercises)
-        val catalog = ExerciseRepositoryImpl(database.exerciseDao(), object : com.diajarkoding.imfit.data.sync.SyncRunner {
-            override suspend fun run(expectedUserId: String?) = com.diajarkoding.imfit.data.sync.SyncRunResult.SUCCESS
-        })
+        var remoteName = "Initial"
+        var revision = 1L
+        val reads = object : com.diajarkoding.imfit.data.remote.online.RemoteReadGateway {
+            override val auth = com.diajarkoding.imfit.data.remote.online.OnlineAuth().also { it.signIn(user.id, "synthetic-token") }
+            override suspend fun profile(): com.diajarkoding.imfit.data.remote.online.RemoteProfile = error("Not needed")
+            override suspend fun exercises(ids: List<String>) = sample.exercises.map { it.exercise }.filter { it.id in ids }
+            override suspend fun saveTemplate(request: com.diajarkoding.imfit.data.remote.TemplateWriteRequest): com.diajarkoding.imfit.data.remote.TemplateWriteReceipt = error("Not needed")
+            override suspend fun <T> read(call: com.diajarkoding.imfit.data.remote.online.RpcCall<T>): T {
+                check(call.name == "get_template_detail")
+                val detail = com.diajarkoding.imfit.data.remote.online.TemplateDetail(sample.id, remoteName, revision, "2026-10-01T00:00:00Z",
+                    sample.exercises.mapIndexed { index, child -> com.diajarkoding.imfit.data.remote.online.TemplateChild("child-$index", child.id, index, child.sets, child.reps, child.restSeconds) })
+                val json = com.diajarkoding.imfit.data.remote.online.onlineJson
+                return json.decodeFromString(call.serializer, json.encodeToString(com.diajarkoding.imfit.data.remote.online.TemplateDetail.serializer(), detail))
+            }
+        }
         val vm = withContext(Dispatchers.Main) { com.diajarkoding.imfit.presentation.ui.workout.EditWorkoutViewModel(
-            repository, catalog, androidx.lifecycle.SavedStateHandle()).also { it.initialize(template.id) } }
+            androidx.lifecycle.SavedStateHandle(), reads, com.diajarkoding.imfit.data.remote.online.TemplateEditBridge(reads,
+                com.diajarkoding.imfit.data.remote.online.LegacyTemplateGuard { _, _ -> })).also { it.initialize(sample.id) } }
         try {
             withTimeout(5000) { vm.state.first { it.hasLoaded } }
-            repository.updateTemplate(template.id, "Remote clean", template.exercises)
+            remoteName = "Remote clean"; revision++
+            withContext(Dispatchers.Main) { vm.loadWorkout() }
             assertEquals("Remote clean", withTimeout(5000) { vm.state.first { it.workoutName == "Remote clean" } }.workoutName)
             withContext(Dispatchers.Main) { vm.updateWorkoutName("Unsaved local draft") }
-            repository.updateTemplate(template.id, "Another remote", emptyList())
-            // Let the source observer process the revision without relying on a fixed sleep.
-            withTimeout(5000) { repository.observeTemplate(template.id).first { it?.name == "Another remote" } }
+            remoteName = "Another remote"; revision++
             withContext(Dispatchers.Main) {
+                vm.loadWorkout()
                 assertEquals("Unsaved local draft", vm.state.value.workoutName)
-                assertEquals(template.exercises, vm.state.value.exercises)
+                assertEquals(sample.exercises, vm.state.value.exercises)
             }
         } finally { withContext(Dispatchers.Main) { vm.viewModelScope.cancel() } }
     }

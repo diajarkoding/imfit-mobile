@@ -63,7 +63,8 @@ class ActiveWorkoutViewModel @Inject constructor(
     private val authRepository: AuthRepository,
     private val timer: RestTimerCoordinator,
     private val timerRuntime: com.diajarkoding.imfit.core.timer.RestTimerAndroidRuntime,
-    private val exerciseRepository: ExerciseRepository
+    private val exerciseRepository: ExerciseRepository,
+    private val remoteReads: com.diajarkoding.imfit.data.remote.online.RemoteReadGateway
 ) : ViewModel() {
 
     private val _state = MutableStateFlow(ActiveWorkoutState())
@@ -149,7 +150,8 @@ class ActiveWorkoutViewModel @Inject constructor(
             }
             
             // No existing session - create a new one
-            val template = workoutRepository.getTemplateById(templateId) ?: return@launch
+            // G3 bounded read only. The legacy session/timer engine is intentionally unchanged until G4/G5.
+            val template = remoteReads.template(templateId).second
             
             val session = workoutRepository.startWorkout(template)
             
@@ -321,7 +323,7 @@ class ActiveWorkoutViewModel @Inject constructor(
             try {
                 val userId = authRepository.getLocalUserId() ?: return@launch
                 val additions = exerciseIds.distinct().mapNotNull { id ->
-                    exerciseRepository.getExerciseById(id)?.let { exercise ->
+                    remoteReads.exercises(listOf(id)).singleOrNull()?.let { exercise ->
                         val config = TemplateExercise(exercise)
                         val lastPerf = workoutRepository.getPrefillForExercise(id, userId, config.inputDefaults())
                         ExerciseLog(

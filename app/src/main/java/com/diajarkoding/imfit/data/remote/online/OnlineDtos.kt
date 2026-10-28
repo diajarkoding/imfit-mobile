@@ -223,4 +223,7 @@ data class OperationReceipt(
 enum class OperationState { COMMITTED, NOT_FOUND }
 
 @Serializable
+data class HomeSummary(@SerialName("last_workout") val lastWorkout: WorkoutSummary?)
+
+@Serializable
 data class OperationLookup(val state: OperationState, val receipt: OperationReceipt?)

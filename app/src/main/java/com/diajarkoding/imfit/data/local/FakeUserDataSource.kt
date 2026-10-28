@@ -3,6 +3,8 @@ package com.diajarkoding.imfit.data.local
 import com.diajarkoding.imfit.domain.model.User
 
 object FakeUserDataSource {
+    private val sessionEpochMutable = kotlinx.coroutines.flow.MutableStateFlow(0L)
+    val sessionEpoch: kotlinx.coroutines.flow.StateFlow<Long> = sessionEpochMutable
 
     private val registeredUsers = mutableListOf(
         UserCredentials(
@@ -39,6 +41,7 @@ object FakeUserDataSource {
 
         registeredUsers.add(UserCredentials(newUser, password))
         currentUser = newUser
+        sessionEpochMutable.value++
         return Result.success(newUser)
     }
 
@@ -49,6 +52,7 @@ object FakeUserDataSource {
 
         return if (credentials != null) {
             currentUser = credentials.user
+            sessionEpochMutable.value++
             Result.success(credentials.user)
         } else {
             Result.failure(Exception("Invalid email or password"))
@@ -57,6 +61,7 @@ object FakeUserDataSource {
 
     fun logout() {
         currentUser = null
+        sessionEpochMutable.value++
     }
 
     fun getCurrentUser(): User? = currentUser

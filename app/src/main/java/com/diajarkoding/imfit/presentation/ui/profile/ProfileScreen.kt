@@ -26,7 +26,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.diajarkoding.imfit.R
 import com.diajarkoding.imfit.presentation.components.common.RoutineAppBar
 import com.diajarkoding.imfit.presentation.ui.progress.ProgressState
-import com.diajarkoding.imfit.presentation.ui.progress.ProgressViewModel
+import com.diajarkoding.imfit.presentation.components.common.RemoteRefreshBox
 import com.diajarkoding.imfit.theme.IMFITColors
 import com.diajarkoding.imfit.theme.IMFITSpacing
 import com.diajarkoding.imfit.theme.IMFITTheme
@@ -40,19 +40,24 @@ fun ProfileScreen(
     onToggleTheme: () -> Unit,
     isIndonesian: Boolean,
     onToggleLanguage: () -> Unit,
-    viewModel: ProgressViewModel = hiltViewModel()
+    viewModel: ProfileViewModel = hiltViewModel()
 ) {
     val state by viewModel.state.collectAsStateWithLifecycle()
+    RemoteRefreshBox(state.loading, viewModel::refresh, Modifier.fillMaxSize()) {
     ProfileScreenContent(
-        state = state,
+        state = ProgressState(userName = state.data?.name.orEmpty(), userEmail = state.data?.email.orEmpty(),
+            userBirthDate = state.data?.birthDate, userProfilePhotoUri = state.data?.avatarUrl,
+            isLoading = state.loading && state.data == null, hasError = state.error != null),
         isDarkMode = isDarkMode,
         isIndonesian = isIndonesian,
         onNavigateBack = onNavigateBack,
         onLogout = { viewModel.logout(onLogout) },
         onToggleTheme = onToggleTheme,
         onToggleLanguage = onToggleLanguage,
-        onRetry = viewModel::loadData
+        onRetry = viewModel::refresh,
+        stale = state.stale && state.error != null
     )
+    }
 }
 
 /** One renderer shared by the route, previews and synthetic UI fixtures. */
@@ -66,7 +71,8 @@ internal fun ProfileScreenContent(
     onToggleTheme: () -> Unit,
     onToggleLanguage: () -> Unit,
     onRetry: () -> Unit,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    stale: Boolean = false
 ) {
     val colors = IMFITColors.training
     val presentation = profileDataPresentation(state)
@@ -87,6 +93,7 @@ internal fun ProfileScreenContent(
             ),
             verticalArrangement = Arrangement.spacedBy(IMFITSpacing.sectionSpacing)
         ) {
+            if (stale) item("stale") { com.diajarkoding.imfit.presentation.components.common.RemoteReadFailure(true, onRetry) }
             if (presentation != ProfileDataPresentation.Unavailable) {
                 item(key = "identity") {
                     if (presentation == ProfileDataPresentation.Loading) ProfileIdentityLoading()

@@ -15,6 +15,7 @@ import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.CancellationException
 import javax.inject.Inject
+import com.diajarkoding.imfit.data.remote.online.*
 
 data class EditWorkoutState(
     val workoutName: String = "",
@@ -27,14 +28,16 @@ data class EditWorkoutState(
     val invalidConfigIds: Set<String> = emptySet(),
     @StringRes val nameErrorRes: Int? = null,
     @StringRes val errorRes: Int? = null,
-    val sourceRevision: Int = 0
+    val sourceRevision: Int = 0,
+    val refreshing: Boolean = false,
+    val stale: Boolean = false
 )
 
 @HiltViewModel
 class EditWorkoutViewModel @Inject constructor(
-    private val workoutRepository: WorkoutRepository,
-    private val exerciseRepository: ExerciseRepository,
-    private val savedStateHandle: SavedStateHandle
+    private val savedStateHandle: SavedStateHandle,
+    private val reads: RemoteReadGateway,
+    private val edits: TemplateEditBridge
 ) : ViewModel() {
 
     private var workoutId: String? = savedStateHandle["workoutId"]
@@ -42,9 +45,11 @@ class EditWorkoutViewModel @Inject constructor(
     private var observedSource: com.diajarkoding.imfit.domain.model.WorkoutTemplate? = null
     private var observeJob: kotlinx.coroutines.Job? = null
     private var pendingExerciseIds: List<String> = emptyList()
+    private var remoteSource: TemplateDetail? = null
 
     private val _state = MutableStateFlow(EditWorkoutState())
     val state = _state.asStateFlow()
+    private val authListener = reads.auth.onIdentityChanged { observeJob?.cancel(); observedSource = null; remoteSource = null; _state.value = EditWorkoutState() }
 
     fun initialize(workoutId: String) {
         if (workoutId.isBlank() || (initialized && this.workoutId == workoutId)) return
@@ -57,32 +62,34 @@ class EditWorkoutViewModel @Inject constructor(
 
     fun loadWorkout() {
         val workoutId = workoutId ?: return
+        val current = _state.value
+        val adopted = observedSource
+        // Refresh must never replace an edited or invalid draft (including while picker is open).
+        if (adopted != null && (current.workoutName != adopted.name || current.exercises != adopted.exercises || current.invalidConfigIds.isNotEmpty() || current.isAdding || current.isSaving)) return
         observeJob?.cancel()
         observeJob = viewModelScope.launch {
-            _state.update { it.copy(isLoading = !it.hasLoaded, errorRes = null) }
+            _state.update { it.copy(isLoading = !it.hasLoaded, refreshing = true, errorRes = null) }
             try {
-                workoutRepository.observeTemplate(workoutId).collect { workout ->
+                val (snapshot, workout) = reads.template(workoutId)
                 val draft = _state.value
                 val source = observedSource
                 val dirty = source != null && (draft.workoutName != source.name || draft.exercises != source.exercises ||
                     draft.invalidConfigIds.isNotEmpty() || draft.isAdding || draft.isSaving)
-                if (dirty) return@collect
-                if (workout != null) {
+                if (dirty) { _state.update { it.copy(refreshing = false) }; return@launch }
                     observedSource = workout
+                    remoteSource = snapshot
                     _state.update {
                         it.copy(
                             workoutName = workout.name,
                             exercises = workout.exercises,
-                            isLoading = false, hasLoaded = true, sourceRevision = it.sourceRevision + 1
+                            isLoading = false, hasLoaded = true, refreshing = false, stale = false, sourceRevision = it.sourceRevision + 1
                         )
                     }
-                } else _state.update { it.copy(errorRes = R.string.error_routine_not_found, isLoading = false) }
-                }
             } catch (e: CancellationException) {
                 throw e
             } catch (e: Exception) {
                 android.util.Log.e("EditWorkoutVM", "Routine load failed", e)
-                _state.update { it.copy(errorRes = R.string.error_routine_load, isLoading = false) }
+                _state.update { it.copy(errorRes = R.string.error_routine_load, isLoading = false, refreshing = false, stale = it.hasLoaded) }
             }
         }
     }
@@ -163,7 +170,7 @@ class EditWorkoutViewModel @Inject constructor(
     }
 
     fun saveChanges() {
-        if (_state.value.isLoading || _state.value.isSaving || _state.value.isAdding || _state.value.isSaved || !_state.value.hasLoaded) return
+        if (_state.value.isLoading || _state.value.refreshing || _state.value.stale || _state.value.isSaving || _state.value.isAdding || _state.value.isSaved || !_state.value.hasLoaded) return
         if (_state.value.workoutName.isBlank()) {
             _state.update { it.copy(nameErrorRes = R.string.error_template_name_required) }
             return
@@ -174,16 +181,8 @@ class EditWorkoutViewModel @Inject constructor(
         _state.update { it.copy(isSaving = true, errorRes = null) }
         viewModelScope.launch {
             try {
-                val saved = workoutRepository.updateTemplate(
-                    templateId = workoutId,
-                    name = draft.workoutName.trim(),
-                    exercises = draft.exercises
-                )
-                if (saved == null) {
-                    _state.update { it.copy(errorRes = R.string.error_routine_not_found, isSaving = false) }
-                } else {
-                    _state.update { it.copy(isSaved = true, isSaving = false) }
-                }
+                edits.save(remoteSource ?: error("Reload source revision first"), draft.workoutName.trim(), draft.exercises)
+                _state.update { it.copy(isSaved = true, isSaving = false) }
             } catch (e: CancellationException) {
                 throw e
             } catch (e: Exception) {
@@ -210,7 +209,8 @@ class EditWorkoutViewModel @Inject constructor(
         _state.update { it.copy(isAdding = true, errorRes = null) }
         viewModelScope.launch {
             try {
-                val additions = pendingExerciseIds.map { id -> TemplateExercise(exerciseRepository.getExerciseById(id) ?: error("Exercise not found")) }
+                val records = reads.exercises(pendingExerciseIds).associateBy { it.id }
+                val additions = pendingExerciseIds.map { id -> TemplateExercise(records[id] ?: error("Exercise not found")) }
                 _state.update { state -> state.copy(exercises = (state.exercises + additions).distinctBy { it.id }, isAdding = false) }
                 pendingExerciseIds = emptyList()
             } catch (e: CancellationException) { throw e }
@@ -219,4 +219,5 @@ class EditWorkoutViewModel @Inject constructor(
     }
 
     fun retryAddExercises() { addExercisesByIds(pendingExerciseIds) }
+    override fun onCleared() { authListener.close() }
 }

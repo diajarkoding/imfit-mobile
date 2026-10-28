@@ -39,6 +39,9 @@ import com.diajarkoding.imfit.theme.IMFITColors
 import com.diajarkoding.imfit.theme.IMFITSpacing
 import com.diajarkoding.imfit.theme.IMFITTheme
 import java.util.Locale
+import com.diajarkoding.imfit.presentation.components.common.*
+import androidx.compose.foundation.layout.Column
+import androidx.compose.material3.CircularProgressIndicator
 
 @Composable
 fun WorkoutSummaryScreen(
@@ -52,15 +55,28 @@ fun WorkoutSummaryScreen(
         viewModel.loadWorkoutLog(workoutLogId)
     }
 
-    val presentation = workoutSummaryPresentation(
-        log = state.workoutLog,
-        isLoading = state.isLoading
-    )
-
-    WorkoutSummaryScreenContent(
-        presentation = presentation,
-        onNavigateToHome = onNavigateToHome
-    )
+    Scaffold(topBar = { WorkoutSummaryTopBar() }, bottomBar = { WorkoutSummaryFooter(onDoneClick = onNavigateToHome) }) { padding ->
+        RemoteRefreshBox(state.loading, viewModel::refresh, Modifier.fillMaxSize().padding(padding)) {
+            LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(IMFITSpacing.screenHorizontal), verticalArrangement = Arrangement.spacedBy(IMFITSpacing.md)) {
+                if (state.loading && state.data == null) item("loading") { CircularProgressIndicator() }
+                if (state.error != null) item("error") { RemoteReadFailure(state.stale, viewModel::refresh) }
+                state.data?.let { log ->
+                    item("summary") {
+                        Column {
+                            Text(log.templateName, style = MaterialTheme.typography.headlineSmall)
+                            Text(stringResource(R.string.remote_read_session_totals, log.totalVolume, log.durationSeconds / 60, log.totalSets))
+                        }
+                    }
+                    items(log.exerciseLogs, key = { it.id }) { exercise ->
+                        Column {
+                            Text(exercise.exerciseName, style = MaterialTheme.typography.titleMedium)
+                            exercise.sets.forEach { set -> Text(stringResource(R.string.remote_read_set, set.setNumber, set.weight, set.reps)) }
+                        }
+                    }
+                }
+            }
+        }
+    }
 }
 
 @Composable

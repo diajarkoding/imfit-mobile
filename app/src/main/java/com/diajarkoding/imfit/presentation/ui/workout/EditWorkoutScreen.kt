@@ -61,18 +61,20 @@ internal fun EditWorkoutContent(state: EditWorkoutState, onBack: () -> Unit = {}
     onValidity: (String, Boolean) -> Unit = { _, _ -> }, onSave: () -> Unit = {}, onRetryLoad: () -> Unit = {},
     onRetryAdd: () -> Unit = {}, onAdd: () -> Unit = {}) {
     val c = IMFITColors.training
-    val editable = state.hasLoaded && !state.isLoading && !state.isSaving && !state.isAdding
+    val editable = state.hasLoaded && !state.isLoading && !state.refreshing && !state.stale && !state.isSaving && !state.isAdding
     Scaffold(modifier = Modifier.imePadding(), containerColor = c.background, contentWindowInsets = WindowInsets(0),
         topBar = { RoutineAppBar(stringResource(R.string.workout_edit_title), onBack, enabled = !state.isSaving) },
         bottomBar = { RoutineFooter {
             RoutineButton(stringResource(if (state.isSaving) R.string.routine_saving else R.string.action_save_changes), onSave,
                 enabled = editable && state.workoutName.isNotBlank() && state.invalidConfigIds.isEmpty(), loading = state.isSaving)
         } }) { padding ->
-        LazyColumn(Modifier.fillMaxSize().padding(padding).testTag("routine_edit_list"), contentPadding = PaddingValues(start = 20.dp, end = 20.dp, top = IMFITSpacing.headerContentGap, bottom = 16.dp),
+        RemoteRefreshBox(state.refreshing, onRetryLoad, Modifier.fillMaxSize().padding(padding)) {
+        LazyColumn(Modifier.fillMaxSize().testTag("routine_edit_list"), contentPadding = PaddingValues(start = 20.dp, end = 20.dp, top = IMFITSpacing.headerContentGap, bottom = 16.dp),
             verticalArrangement = Arrangement.spacedBy(12.dp)) {
             if (state.isLoading) item { RoutineLoading(stringResource(R.string.routine_loading), topPadding = 0.dp) }
             state.errorRes?.let { message -> item {
-                RoutineFailure(stringResource(message), if (!state.hasLoaded) onRetryLoad else if (message == R.string.routine_add_failed && !state.isAdding) onRetryAdd else null)
+                if (state.stale) RemoteReadFailure(true, onRetryLoad)
+                else RoutineFailure(stringResource(message), if (!state.hasLoaded) onRetryLoad else if (message == R.string.routine_add_failed && !state.isAdding) onRetryAdd else null)
             } }
             if (state.hasLoaded) {
                 item { RoutineNameField(state.workoutName, onName, enabled = editable,
@@ -89,6 +91,7 @@ internal fun EditWorkoutContent(state: EditWorkoutState, onBack: () -> Unit = {}
                     modifier = Modifier.padding(vertical = 12.dp)) }
                 if (state.isAdding) item { RoutineLoading(stringResource(R.string.routine_adding)) }
             }
+        }
         }
     }
 }

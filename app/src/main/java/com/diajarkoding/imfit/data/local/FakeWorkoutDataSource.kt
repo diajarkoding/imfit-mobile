@@ -199,6 +199,12 @@ object FakeWorkoutDataSource {
         return template
     }
 
+    /** Demo remote contract fixture: stable caller-supplied identity, not generated on replay. */
+    fun createTemplateWithId(id: String, userId: String, name: String, exercises: List<TemplateExercise>): WorkoutTemplate {
+        require(templates.none { it.id == id })
+        return WorkoutTemplate(id, userId, name, exercises).also { templates.add(it) }
+    }
+
     fun updateTemplate(templateId: String, name: String, exercises: List<TemplateExercise>): WorkoutTemplate? {
         val index = templates.indexOfFirst { it.id == templateId }
         if (index == -1) return null

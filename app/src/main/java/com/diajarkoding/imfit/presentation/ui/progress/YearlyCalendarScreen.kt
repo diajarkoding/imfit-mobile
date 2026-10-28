@@ -35,6 +35,7 @@ fun YearlyCalendarScreen(
     }
     val colors = IMFITColors.training
     var year by rememberSaveable { mutableIntStateOf(initialYear.coerceIn(1, today.year)) }
+    LaunchedEffect(year) { viewModel.selectYear(year) }
     var selectedText by rememberSaveable { mutableStateOf(today.toString()) }
     val listState = rememberLazyListState(initialFirstVisibleItemIndex = initialMonth.coerceIn(1, 12) - 1)
     val months = remember(year) { (1..12).map { YearMonth.of(year, it) } }
@@ -68,19 +69,21 @@ fun YearlyCalendarScreen(
                 Text(stringResource(R.string.progress_overview_load_error), Modifier.padding(horizontal = IMFITSpacing.lg).padding(bottom = IMFITSpacing.lg), color = colors.text)
                 TextButton(onClick = viewModel::loadData) { Text(stringResource(R.string.redesign_retry)) }
             }
+            RemoteRefreshBox(state.refreshing, viewModel::loadData, Modifier.fillMaxWidth().weight(1f)) {
             LazyColumn(
                 state = listState,
-                modifier = Modifier.fillMaxWidth().weight(1f),
+                modifier = Modifier.fillMaxSize(),
                 contentPadding = PaddingValues(start = IMFITSpacing.screenHorizontal, end = IMFITSpacing.screenHorizontal, bottom = IMFITSpacing.screenHorizontal),
                 verticalArrangement = Arrangement.spacedBy(IMFITSpacing.xl)
             ) {
-                items(months, key = { it.toString() }) { month ->
+                if (state.markersLoaded) items(months, key = { it.toString() }) { month ->
                     ProgressMonthCalendar(month, today, LocalDate.parse(selectedText), state.workoutLogsByDate,
                         onSelect = { date ->
                             selectedText = date.toString()
-                            if (state.workoutLogsByDate[date].orEmpty().isNotEmpty()) onDateSelected(date)
-                        }, enabled = !state.isLoading && !state.hasError)
+                             if ((state.markerCounts[date] ?: 0) > 0) onDateSelected(date)
+                         }, enabled = !state.isLoading, markerCounts = state.markerCounts)
                 }
+            }
             }
         }
     }

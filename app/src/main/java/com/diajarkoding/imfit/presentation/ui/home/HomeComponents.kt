@@ -254,6 +254,42 @@ internal fun HomeWorkoutCard(template: WorkoutTemplate, active: Boolean, onClick
 }
 
 @Composable
+internal fun HomeRemoteWorkoutCard(template: com.diajarkoding.imfit.data.remote.online.TemplateSummary, active: Boolean, onClick: () -> Unit) {
+    val colors = homePalette()
+    Surface(onClick = onClick, modifier = Modifier.fillMaxWidth().heightIn(min = IMFITSizes.cardMinHeight),
+        shape = RoundedCornerShape(IMFITCornerRadius.template), color = colors.surface,
+        border = BorderStroke(IMFITComponentSizes.border, colors.border)) {
+        Row(Modifier.padding(IMFITSpacing.cardPadding), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(IMFITSpacing.md)) {
+            MuscleCategoryArtwork(categoryArtAsset(null), Modifier.size(IMFITComponentSizes.templateThumbnail))
+            Column(Modifier.weight(1f)) {
+                Text(template.name, style = IMFITTypography.templateTitle)
+                Text(pluralStringResource(R.plurals.redesign_exercise_count, template.exerciseCount, template.exerciseCount) +
+                    if (active) " · " + stringResource(R.string.home_resume) else "", style = IMFITTypography.caption)
+            }
+            Icon(Symbols.AutoMirrored.Filled.KeyboardArrowRight, null)
+        }
+    }
+}
+
+@Composable
+internal fun HomeRemoteLastWorkout(log: com.diajarkoding.imfit.data.remote.online.WorkoutSummary?) {
+    if (log == null) { HomeLastWorkout(null); return }
+    val colors = homePalette()
+    val locale = LocalConfiguration.current.locales[0] ?: Locale.ROOT
+    Surface(Modifier.fillMaxWidth(), shape = IMFITShapes.CardSmall, color = colors.surface,
+        border = BorderStroke(IMFITComponentSizes.border, colors.border)) {
+        Column(Modifier.padding(IMFITSpacing.cardPadding), verticalArrangement = Arrangement.spacedBy(IMFITSpacing.sm)) {
+            Text(stringResource(R.string.home_summary_heading, log.templateName.uppercase(locale)), style = IMFITTypography.historyHeading)
+            Text(java.time.OffsetDateTime.parse(log.startTime).atZoneSameInstant(ZoneId.systemDefault()).format(DateTimeFormatter.ofPattern("d MMM yyyy", locale)))
+            Row(horizontalArrangement = Arrangement.spacedBy(IMFITSpacing.md)) {
+                HomeSummaryMetric(stringResource(R.string.remote_read_minutes, log.durationSeconds / 60), stringResource(R.string.home_total_duration), R.drawable.msr_timer_filled, Modifier.weight(1f))
+                HomeSummaryMetric(java.text.NumberFormat.getNumberInstance(locale).format(log.totalVolume.toBigDecimal()) + " kg", stringResource(R.string.home_total_volume), R.drawable.ic_home_weight, Modifier.weight(1f))
+            }
+        }
+    }
+}
+
+@Composable
 internal fun HomeSyncStatusCard(state: SyncState, modifier: Modifier = Modifier,
     onRetryUploads: (() -> Unit)? = null, retrying: Boolean = false, retryFailed: Boolean = false) {
     val colors = homePalette()

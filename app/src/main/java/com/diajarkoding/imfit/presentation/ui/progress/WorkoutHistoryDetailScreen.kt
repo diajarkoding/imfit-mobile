@@ -38,26 +38,68 @@ import com.diajarkoding.imfit.theme.IMFITSpacing
 import com.diajarkoding.imfit.theme.IMFITTheme
 import java.time.LocalDate
 import java.util.Locale
+import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.material3.*
+import com.diajarkoding.imfit.presentation.components.common.*
 
 @Composable
 fun WorkoutHistoryDetailScreen(
     date: String,
     onNavigateBack: () -> Unit,
-    viewModel: ProgressViewModel = hiltViewModel()
+    viewModel: RemoteHistoryViewModel = hiltViewModel()
 ) {
-    val state by viewModel.state.collectAsStateWithLifecycle()
+    val state by viewModel.page.collectAsStateWithLifecycle()
+    val totals by viewModel.totals.collectAsStateWithLifecycle()
+    val selected by viewModel.selected.collectAsStateWithLifecycle()
     val localDate = runCatching { LocalDate.parse(date) }.getOrDefault(LocalDate.now())
 
-    LaunchedEffect(Unit) {
-        viewModel.loadData()
+    LaunchedEffect(localDate) {
+        viewModel.initialize(localDate)
     }
 
-    WorkoutHistoryDetailScreenContent(
-        localDate = localDate,
-        state = state,
-        onNavigateBack = onNavigateBack,
-        onRetry = viewModel::loadData
-    )
+    val list = rememberLazyListState()
+    RemotePagingViewport(list, state.items.map { it.id }, viewModel::access)
+    Scaffold(topBar = { RoutineAppBar(stringResource(R.string.workout_history_app_bar_title), onNavigateBack) }) { padding ->
+        RemoteRefreshBox(state.refreshing, viewModel::refresh, Modifier.fillMaxSize().padding(padding)) {
+            LazyColumn(state = list, modifier = Modifier.fillMaxSize().testTag("workout_history_list"),
+                contentPadding = PaddingValues(IMFITSpacing.screenHorizontal), verticalArrangement = Arrangement.spacedBy(IMFITSpacing.md)) {
+                item("date") { WorkoutHistoryDateHeader(localDate, Locale.getDefault()) }
+                if (totals.data != null) item("totals") { RemotePeriodTotals(totals.data!!) }
+                if (totals.error != null) item("totals_error") { RemoteReadFailure(totals.stale, viewModel::refresh) }
+                if (state.refreshing && !state.hasLoaded) item("loading") { WorkoutHistoryLoadingSkeleton() }
+                if (state.refreshError != null) item("error") { RemoteReadFailure(state.stale, viewModel::refresh) }
+                if (state.hasLoaded && state.items.isEmpty()) item("empty") { WorkoutHistoryEmptyState() }
+                itemsIndexed(state.items, key = { _, row -> row.id }) { _, row ->
+                    Card(Modifier.fillMaxWidth()) {
+                        Column(Modifier.padding(IMFITSpacing.cardPadding), verticalArrangement = Arrangement.spacedBy(IMFITSpacing.sm)) {
+                            Text(row.templateName, style = MaterialTheme.typography.titleMedium)
+                            Text(java.time.OffsetDateTime.parse(row.startTime).atZoneSameInstant(java.time.ZoneId.systemDefault()).toLocalTime().toString())
+                            Text(stringResource(R.string.remote_read_session_totals, row.totalVolume, row.durationSeconds / 60, row.totalSets))
+                            TextButton({ viewModel.open(row.id) }) { Text(stringResource(R.string.workout_day_card_view_details)) }
+                            if (selected.key == row.id) {
+                                if (selected.loading) CircularProgressIndicator()
+                                if (selected.error != null) RemoteReadFailure(selected.stale) { viewModel.open(row.id, true) }
+                                selected.data?.exerciseLogs?.forEach { exercise ->
+                                    Text(exercise.exerciseName, style = MaterialTheme.typography.titleSmall)
+                                    exercise.sets.forEach { set -> Text(stringResource(R.string.remote_read_set, set.setNumber, set.weight, set.reps)) }
+                                }
+                            }
+                        }
+                    }
+                }
+                item("footer") { RemotePageFooter(state.appending, state.appendError != null, state.endReached, viewModel::retry, viewModel::more) }
+            }
+        }
+    }
+}
+
+@Composable
+internal fun RemotePeriodTotals(summary: com.diajarkoding.imfit.data.remote.online.ProgressSummary) {
+    Column {
+        Text(stringResource(R.string.remote_read_workouts, summary.workoutCount), style = MaterialTheme.typography.titleMedium)
+        Text(stringResource(R.string.remote_read_session_totals, summary.totalVolume, summary.durationSeconds / 60, summary.totalSets))
+    }
 }
 
 /** Stateless renderer shared by route, previews and synthetic UI tests. */

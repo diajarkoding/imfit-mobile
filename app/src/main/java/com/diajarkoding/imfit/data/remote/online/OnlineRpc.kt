@@ -80,6 +80,7 @@ class RpcCall<T> internal constructor(
 )
 
 object OnlineRpc {
+    fun homeSummary() = read<HomeSummary>("get_home_summary", buildJsonObject {})
     private inline fun <reified T> read(name: String, body: JsonObject, noinline validate: (T) -> Unit = {}) =
         RpcCall(name, body, serializer<T>(), validate = validate)
 

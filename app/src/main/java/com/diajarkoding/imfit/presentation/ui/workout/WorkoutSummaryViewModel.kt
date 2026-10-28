@@ -12,6 +12,7 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.CancellationException
 import javax.inject.Inject
+import com.diajarkoding.imfit.data.remote.online.*
 
 data class WorkoutSummaryState(
     val workoutLog: WorkoutLog? = null,
@@ -20,23 +21,15 @@ data class WorkoutSummaryState(
 
 @HiltViewModel
 class WorkoutSummaryViewModel @Inject constructor(
-    private val workoutRepository: WorkoutRepository
+    private val reads: RemoteReadGateway
 ) : ViewModel() {
 
-    private val _state = MutableStateFlow(WorkoutSummaryState())
-    val state = _state.asStateFlow()
-    private var observeJob: Job? = null
+    private val resource = RemoteResource<WorkoutDetail>(reads.auth, viewModelScope)
+    val state = resource.state
 
     fun loadWorkoutLog(workoutLogId: String) {
-        observeJob?.cancel()
-        observeJob = viewModelScope.launch {
-            _state.update { it.copy(isLoading = true) }
-            try {
-                workoutRepository.observeWorkoutLog(workoutLogId).collect { log ->
-                    _state.update { it.copy(workoutLog = log, isLoading = false) }
-                }
-            } catch (e: CancellationException) { throw e }
-            catch (_: Exception) { _state.update { it.copy(isLoading = false) } }
-        }
+        resource.load(workoutLogId) { reads.read(OnlineRpc.workoutDetail(workoutLogId)) }
     }
+    fun refresh() { state.value.key?.let { id -> resource.load(id, true) { reads.read(OnlineRpc.workoutDetail(id)) } } }
+    override fun onCleared() = resource.close()
 }

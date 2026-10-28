@@ -461,4 +461,11 @@
     <string name="manual_upload_retry">Retry upload</string>
     <string name="manual_upload_running">Uploading…</string>
     <string name="manual_upload_failed">Some records remain on this device. Check your connection and retry. Older unverified records require review.</string>
+    <string name="remote_read_stale">Could not update data. Showing the last successful result.</string>
+    <string name="remote_read_more">Load more</string>
+    <string name="remote_read_loaded">%1$d loaded</string>
+    <string name="remote_read_session_totals">%1$s kg · %2$d min · %3$d sets</string>
+    <string name="remote_read_set">Set %1$d: %2$s kg × %3$d reps</string>
+    <string name="remote_read_workouts">%1$d workouts</string>
+    <string name="remote_read_minutes">%1$d min</string>
 </resources>

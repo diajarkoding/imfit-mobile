@@ -23,6 +23,9 @@ class RequestCredential(val identity: AuthIdentity, internal val accessToken: St
 
 /** Identity comes from authenticated session, not profile fetch. Not installed in runtime DI in F2. */
 class OnlineAuth {
+    // Runtime bridges synchronise the SDK status before capture AND before accepting a response.
+    // The bridge must use identity.value/signIn/refreshToken, never recurse through capture.
+    internal var synchronizeSession: () -> Unit = {}
     private var nextEpoch = 0L
     private var credential: RequestCredential? = null
     private val mutableIdentity = MutableStateFlow<AuthIdentity?>(null)
@@ -48,9 +51,16 @@ class OnlineAuth {
         if (credential?.identity != identity) throw StaleAuthException()
         credential = RequestCredential(identity, accessToken)
     }
-    @Synchronized fun capture(): RequestCredential = credential ?: throw OnlineFailure(RemoteError.Unauthenticated)
-    @Synchronized fun isCurrent(identity: AuthIdentity): Boolean = credential?.identity == identity
+    @Synchronized fun capture(): RequestCredential {
+        synchronizeSession()
+        return credential ?: throw OnlineFailure(RemoteError.Unauthenticated)
+    }
+    @Synchronized fun isCurrent(identity: AuthIdentity): Boolean {
+        synchronizeSession()
+        return credential?.identity == identity
+    }
     @Synchronized internal fun <T> withCurrent(identity: AuthIdentity, action: () -> T): T {
+        synchronizeSession()
         if (credential?.identity != identity) throw StaleAuthException()
         return action()
     }

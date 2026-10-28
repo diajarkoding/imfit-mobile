@@ -81,8 +81,7 @@ fun MainScreen(
     onNavigateToWorkoutHistory: (LocalDate) -> Unit = {},
     onNavigateToYearlyCalendar: (java.time.YearMonth) -> Unit = {},
     onNavigateToProfile: () -> Unit = {},
-    homeViewModel: HomeViewModel = hiltViewModel(),
-    onRefreshRemote: () -> Unit = {}
+    homeViewModel: HomeViewModel = hiltViewModel()
 ) {
     val items = listOf(
         BottomNavItem(HomeTab, com.diajarkoding.imfit.R.string.nav_home, Symbols.Filled.Home, Symbols.Outlined.Home),
@@ -91,10 +90,8 @@ fun MainScreen(
     )
     val bottomBackStack = rememberNavBackStack(HomeTab)
     val currentTab = bottomBackStack.lastOrNull()
-    LaunchedEffect(currentTab) { onRefreshRemote() }
     
     // Get sync state from HomeViewModel
-    val syncState by homeViewModel.syncState.collectAsStateWithLifecycle()
     val homeState by homeViewModel.state.collectAsStateWithLifecycle()
     val appBarTitleRes = when (currentTab) {
         is ExerciseTab -> R.string.nav_exercises
@@ -201,7 +198,6 @@ fun MainScreen(
                     }
                     entry<ProgressTab> {
                         ProgressScreen(
-                            refreshKey = syncState.lastSyncTime,
                             onNavigateToWorkoutHistory = onNavigateToWorkoutHistory,
                             onNavigateToYearlyCalendar = onNavigateToYearlyCalendar,
                             onNavigateToProfile = onNavigateToProfile
@@ -212,7 +208,6 @@ fun MainScreen(
         }
         
         // Full-screen sync overlay - covers entire screen including bottom nav
-        SyncProgressDialog(syncState = syncState)
     }
     }
 }

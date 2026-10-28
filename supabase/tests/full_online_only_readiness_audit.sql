@@ -80,5 +80,17 @@ select jsonb_build_object(
        or has_table_privilege('authenticated', t.oid, 'UPDATE')
        or has_table_privilege('authenticated', t.oid, 'DELETE')
   ),
-  'limitations', 'Metadata only; required routine names are proposed contracts. Presence does not verify signatures, HTTP exposure, transactions, isolation, or runtime security.'
+  'authenticated_column_writes', (
+    select coalesce(jsonb_agg(jsonb_build_object('table', table_name, 'column', column_name,
+      'privilege', privilege_type) order by table_name, column_name, privilege_type), '[]'::jsonb)
+    from information_schema.column_privileges
+    where table_schema = 'public' and grantee = 'authenticated'
+      and privilege_type in ('INSERT', 'UPDATE')
+  ),
+  'private_operation_receipt_rls', exists (
+    select 1 from pg_catalog.pg_class c
+    join pg_catalog.pg_namespace n on n.oid = c.relnamespace
+    where n.nspname = 'imfit_private' and c.relname = 'operation_receipts' and c.relrowsecurity
+  ),
+  'limitations', 'Metadata only; target routine names do not verify signatures, HTTP exposure, transactions, isolation, or runtime security. Table and column grants must both be reviewed.'
 ) as audit;

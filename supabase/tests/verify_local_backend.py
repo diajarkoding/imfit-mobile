@@ -22,7 +22,7 @@ def verify(phase):
     if phase in ("reads", "final"):
         expected.append("20261028000300")
     if phase == "final":
-        expected.extend(["20261028000400", "20261028000500", "20261028000600", "20261028042753", "20261028043417"])
+        expected.extend(["20261028000400", "20261028000500", "20261028000600", "20261028042753", "20261028043417", "20261028090758"])
     if versions != expected:
         raise RuntimeError("Unexpected migration inventory for selected phase; refusing fixture")
     sql((ROOT / "supabase/tests/online_only_operation_receipts.sql").read_text(encoding="utf-8"))
@@ -33,6 +33,7 @@ def verify(phase):
     if phase == "final":
         sql((ROOT / "supabase/tests/online_only_final_security.sql").read_text(encoding="utf-8"))
         sql((ROOT / "supabase/tests/online_only_query_plans.sql").read_text(encoding="utf-8"))
+        sql((ROOT / "supabase/tests/online_only_home_summary.sql").read_text(encoding="utf-8"))
         audit = json.loads(sql("begin read only;\n" +
             (ROOT / "supabase/tests/full_online_only_readiness_audit.sql").read_text(encoding="utf-8") + "\nrollback;"))
         expected_columns = [

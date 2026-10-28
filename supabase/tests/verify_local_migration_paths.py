@@ -81,7 +81,7 @@ def run():
             fixture(fresh, "online_only_session_lifecycle.sql")
         elif position == 6:
             fixture(fresh, "online_only_remote_reads.sql")
-    for name in ("online_only_operation_receipts.sql", "online_only_remote_reads.sql", "online_only_final_security.sql"):
+    for name in ("online_only_operation_receipts.sql", "online_only_remote_reads.sql", "online_only_final_security.sql", "online_only_home_summary.sql"):
         fixture(fresh, name)
 
     create(upgrade)

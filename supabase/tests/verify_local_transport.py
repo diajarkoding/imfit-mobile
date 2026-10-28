@@ -34,7 +34,7 @@ def run(phase):
     versions = json.loads(sql("select jsonb_agg(version order by version) from supabase_migrations.schema_migrations;"))
     expected = MIGRATIONS + ["20261028000100", "20261028000200", "20261028000300"]
     if phase == "final":
-        expected.extend(["20261028000400", "20261028000500", "20261028000600", "20261028042753", "20261028043417"])
+        expected.extend(["20261028000400", "20261028000500", "20261028000600", "20261028042753", "20261028043417", "20261028090758"])
     if versions != expected:
         raise RuntimeError("Unexpected migration inventory for transport phase")
     env = dict(os.environ)
@@ -257,6 +257,8 @@ def run(phase):
         summary = ok("get_progress_summary", window, token)
         check(summary["workout_count"] in (2, 3), "period summary includes committed workouts only")
         check(len(ok("get_workout_history_page", dict(window, p_limit=20), token)["data"]) == summary["workout_count"], "history wire envelope")
+        if phase == "final":
+            check(ok("get_home_summary", {}, token)["last_workout"]["total_volume"] is not None, "G3 all-time Home summary")
         markers = ok("get_workout_date_markers", window, token)["dates"]
         check(sum(item["workout_count"] for item in markers) == summary["workout_count"], "date markers wire envelope")
         check(ok("get_exercise_prefill", {"p_exercise_id": exercise, "p_input_defaults": {"sets": 3, "reps": 10}}, token)["source"] == "HISTORY", "prefill wire envelope")

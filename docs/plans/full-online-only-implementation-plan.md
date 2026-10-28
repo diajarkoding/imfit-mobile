@@ -4,13 +4,14 @@
 
 | Item | Nilai |
 | --- | --- |
-| Status | G0 selesai; audit live G1 selesai; implementasi backend/Android belum dimulai |
-| Tanggal dibuat / diperbarui | 26 / 27 Oktober 2026 |
-| Versi dokumen | 1.2 |
+| Status | F1a/F1b lokal dan F2/G2 foundation selesai/teruji; runtime layar/DI tidak diganti; deployment/cutoff utama belum diizinkan |
+| Tanggal dibuat / diperbarui | 26 / 28 Oktober 2026 |
+| Versi dokumen | 1.5 |
 | Baseline commit | `fb96784d3164a700250e7032d6565779d288029d` |
+| Baseline eksekusi F1a/F1b | `online-only@c0be6b823c6e8350a4a0f1c157d239dcdfd28e57`; tidak mengubah baseline audit historis |
 | Scope | Modul `:app`, source bersama `main`, binding `production`, pembanding `demo`, migration SQL, test terkait, dan metadata Supabase live |
 | Pasangan dokumen | [Feature spec](full-online-only-feature-spec.md) · [Laporan implementasi berkelanjutan](full-online-only-implementation-report.md) |
-| Metode | Inspeksi statis source/config/test + audit metadata Supabase read-only 27 Oktober 2026 + perbandingan git ref; bukan pengujian runtime |
+| Metode | Audit baseline source/live metadata 27 Oktober + perbandingan git ref; F1b menambahkan verifikasi runtime SQL/Auth/HTTP hanya pada Docker lokal 28 Oktober (laporan §7.3) |
 
 **Tidak dilakukan pada audit ini:** build/Gradle test, instalasi perangkat, DDL/DML, pemanggilan RPC aplikasi, pembacaan row bisnis, deployment, commit, atau push. Audit live memakai role `supabase_read_only_user` dengan `transaction_read_only=on`. Keberadaan SQL di repository tidak membuktikan deployment backend; sebaliknya, ketiadaan RPC pada schema live adalah bukti deployment untuk snapshot 27 Oktober 2026, bukan bukti perilaku runtime. Hasil test historis dalam dokumen lama tidak dianggap hasil pengujian audit ini.
 
@@ -34,7 +35,7 @@ Keputusan utama yang direkomendasikan:
 
 ### 1.1 Status kesiapan setelah review 27 Oktober 2026
 
-**G0 SELESAI DAN AUDIT LIVE G1 SELESAI; IMPLEMENTASI PENUH/AKTIVASI PRODUCTION BELUM SIAP.** “Siap secara konsep” bukan berarti source target sudah selesai, backend sudah deployed, atau pengujian sudah lulus. Audit live 27 Oktober 2026 hanya membaca metadata; runtime, RLS attack test, dan integration pada environment terisolasi belum dijalankan.
+**Snapshot 27 Oktober: G0 dan audit live G1 selesai; implementasi penuh/production belum siap.** Saat audit itu runtime/RLS attack/integration belum dijalankan. Pembaruan 28 Oktober: backend lokal F1b terimplementasi/teruji (bagian F1b dan laporan §7.3), tetapi Android dan deployment utama tetap belum siap. Hasil lokal tidak mengubah snapshot live historis berikut.
 
 | Area | Kesiapan konsep/persiapan | Kesiapan implementasi target |
 | --- | --- | --- |
@@ -194,7 +195,7 @@ Baseline memiliki `UNIQUE(user_id)` pada `active_sessions`, FK template `NOT NUL
 
 ## 4. Urutan implementasi, deliverable, dan exit gate
 
-Semua checklist berikut **belum dikerjakan**. Peran PIC adalah usulan, bukan penugasan orang. Estimasi kalender menunggu ukuran data, environment uji terisolasi, dan kapasitas tim.
+Status mengikuti checkbox dan bukti per fase (F1 lokal selesai; F2/G2 lihat laporan §7.4); checklist yang belum ditandai tetap roadmap. Peran PIC adalah usulan, bukan penugasan orang. Estimasi kalender menunggu environment uji dan kapasitas tim.
 
 Label **F0–F7 adalah fase**, sedangkan **P0/P1/P2 adalah prioritas**. Urutan tabel berikut adalah fokus pengerjaan; dependensi, bukan nomor urut atau prioritas saja, menentukan kapan pekerjaan dapat berjalan.
 
@@ -218,8 +219,8 @@ PIC: Product + Android + Backend + QA.
 - [x] Setujui batas kehilangan input unconfirmed, offline mutation lock, timer cold-start, dan logout semantics (D01/D02/D06).
 - [x] Inventaris versi aplikasi/database yang pernah ada dan tetapkan scope legacy (D04): Room 9 baseline, Room 6/7 bridge/review, schema lain blocked.
 - [x] Tetapkan TTL sesi 30 hari dan receipt lengkap 90 hari (D03).
-- [ ] Konfirmasi definisi tanggal/timezone, durasi history, dan precision volume sebelum UI/statistik terkait.
-- [ ] Putuskan scope feed history global/dedicated templates; kebutuhan existing per-tanggal tetap wajib berjalan.
+- [x] Konfirmasi definisi tanggal/timezone, durasi history, dan precision volume sebelum UI/statistik terkait (K01/K02, 28 Oktober).
+- [x] Putuskan scope feed history global/dedicated templates; kebutuhan existing per-tanggal tetap wajib berjalan (K03: tidak menambah route, 28 Oktober).
 - [ ] Rancang protokol legacy import dan discovery operasi; tetapkan kontrak error serta API version/capabilities.
 - [x] Catat keputusan G0 di feature spec dan laporan implementasi berkelanjutan.
 - [x] Audit metadata backend read-only dan bandingkan dengan kontrak target.
@@ -228,34 +229,81 @@ PIC: Product + Android + Backend + QA.
 
 ### F1 — Backend ready, additive terlebih dahulu
 
-PIC: Backend + QA. Tergantung G0. **Status: audit read-only selesai 27 Oktober 2026; implementasi migration/RPC belum dimulai.**
+PIC: Backend + QA. Tergantung G0. **Status 28 Oktober 2026: F1a desain dan F1b implementasi/verification lokal selesai. Tidak ada deployment utama atau perubahan source Android.**
+
+#### F1a — Finalisasi kontrak 16 RPC
+
+- [x] Verifikasi branch/HEAD `online-only@c0be6b8` dan working tree awal bersih tanpa fetch.
+- [x] Perinci signature, DTO wire, validation, CAS/idempotency/discovery, error mapping, dan expiry review di Feature Spec §5.4.F (bukan dokumen baru).
+- [x] Konfirmasi K01–K05 melalui pertanyaan keputusan pengguna 28 Oktober: timezone/durasi, numeric 2 desimal/string wire, scope UI, profile, dan tahapan compatibility.
+- [x] Kunci bounds payload/jumlah child, aturan prefill per set, expiry review nondestruktif, serta mapping SQLSTATE/HTTP target yang akan diuji.
+- [x] Review compatibility signature/receipt `save_template_revision` terhadap source/DTO existing; semua koreksi memakai follow-up migration setelah `20261025000100`, bukan duplikasi migration revision.
+- [x] Tetapkan kontrak desain dan contoh payload untuk 16 RPC sebagai acuan implementasi lokal; tidak mengklaim DTO Kotlin/backend sudah tersedia.
+
+**Exit F1a desain: TERCAPAI 28 Oktober 2026.** Keputusan K01–K05 dikonfirmasi, 16 request/response/validation/protocol dan contoh payload terdokumentasi untuk implementasi lokal. Ini bukan bukti runtime/SQLSTATE/HTTP atau persetujuan rollout; perubahan yang ditemukan oleh F1b harus merevisi kontrak di tempat. Product rollout cutoff dan release compatibility tetap terpisah dari exit kontrak lokal.
+
+#### F1b — Implementasi dan pengujian Supabase lokal
+
+Environment dipilih pengguna: **Supabase lokal dengan fixture sintetis**. Tidak menggunakan project bersama sebagai pengganti ketika Docker/MCP bermasalah. Urutan sesudah exit F1a:
+
+1. Verifikasi Node dan Supabase CLI **2.116.0** dari manifest/lockfile existing (`npm ci`, tanpa upgrade dependency), Docker CLI/daemon Linux sehat, port lokal tidak konflik. Pengguna mengizinkan agent menyiapkan Docker; prefer per-user WSL2 tanpa admin. Kebutuhan elevasi, perubahan Windows features/reboot, dan penerimaan lisensi harus dikonfirmasi sebelum tindakan terkait; tidak bypass verifikasi paket/TLS atau mengubah resolver/proxy sistem.
+2. Config seed sudah diselaraskan pada 28 Oktober: `enabled=false`, `sql_paths=[]`; catalog seed tetap migration existing, bukan seed.sql baru. Fixture akun/data sintetis hanya di database uji lokal. Pin versi CLI/image yang dipakai dan catat PostgreSQL major; kecocokan backend live tidak diasumsikan.
+3. Verifikasi target CLI eksplisit lokal, tanpa `link`, `db push`, remote DB URL, atau credential production. Bootstrap database baru tanpa reset volume lama. Reset/purge tetap memerlukan persetujuan eksplisit untuk target yang jelas; backup/restore diuji sebelum migration berisiko pada data lokal yang sudah ada.
+4. Replay tiga migration Agustus, kemudian migration revision existing. Jalankan fixture template existing untuk membuktikan kondisi awal; semua kegagalan baseline harus dicatat sebelum menambah migration.
+5. Tambahkan follow-up additive untuk receipt metadata/registry, session lifecycle/CAS, read RPC/index/provenance, constraint/RLS. Perubahan FK/unique memerlukan expand–validate–cutover; deteksi data inkonsisten sebelum constraint divalidasi, tanpa silent delete. Pisahkan compatibility dan final-lockdown gate; additive tidak berarti tidak dapat memblokir writer lama.
+6. Jalankan integration, dua koneksi concurrency, transaction rollback, HTTP/PostgREST error mapping, JWT owner/anon/security bypass, pagination/precision/timezone, expiry dan retention. Test tidak boleh hanya menjalankan SECURITY DEFINER sebagai postgres lalu dianggap bukti authenticated/RLS.
+7. Catat SHA/dirty snapshot, migration versions, toolchain, target lokal, command, jumlah assertion, PASS/FAIL/BLOCKED/NOT_TESTED di Implementation Report existing. Jangan membuat laporan atau dokumen kontrak baru.
+
+**Exit F1b lokal: TERCAPAI 28 Oktober 2026.** Empat migration baseline dan delapan follow-up diterapkan lokal; 16 RPC/wire/error, CAS/idempotency/atomic finish, owner isolation dan final write protection teruji. Final transport runner lulus 57 pemeriksaan nyata melalui Auth/PostgREST, terpisah dari 6 unit test target guard/mock. SQL mencakup 602 workout paginated, DST/precision/provenance, 10k-row history index plan, expiry, snapshot/pause invariant, serta rollback aggregate. Backup/restore dan replay schema app kosong/upgrade dump baseline lulus; bukan cluster/CI/device/hosted recovery proof. Detail command, fingerprint dan hasil ada di laporan §7.3.
+
+Migration `20261028000400_online_only_final_write_lockdown.sql` adalah **cutoff eksplisit**, bukan perubahan compatibility netral. Delapan follow-up tidak boleh di-push/deploy ke project utama tanpa review dan izin terpisah. Additive schema tidak menghapus draft lama: version/schema legacy dibiarkan null dan memblokir start sampai review. Receipt lama dipertahankan/replayed; tidak ada scheduler/purge otomatis.
+
+Perintah verifikasi ulang pada database lokal yang sudah mencapai seluruh 12 migration:
+
+```powershell
+$env:PYTHONDONTWRITEBYTECODE='1'
+python -m unittest discover -s supabase/tests -p test_verify_local_baseline.py -v
+python supabase/tests/verify_local_backend.py --phase final
+python supabase/tests/verify_local_transport.py --phase final
+python supabase/tests/verify_local_migration_paths.py
+```
+
+Runner migration paths membutuhkan backup lokal pra-additive `/tmp/imfit-f1b-baseline-c0be6b8.dump`; jangan menggantinya dengan dump/data/credential production. Runner baseline/phase compatibility hanya untuk snapshot migration yang sesuai, bukan dijalankan sembarang pada tip final. Semua runner menolak target Docker non-local; verification databases baru dipertahankan tanpa reset/drop. Tidak ada jaminan reproducible CI sampai environment/backup/toolchain CI disiapkan.
+
+**Diagnosis MCP terpisah:** pada 28 Oktober `opencode mcp list` melaporkan `supabase` gagal `getaddrinfo ENOTFOUND mcp.supabase.com`; Windows/Node dapat resolve hostname saat dicek kemudian. Node HTTPS timeout, sedangkan curl IPv4 ke endpoint tanpa credential memperoleh HTTP 401 (expected untuk request tanpa autentikasi). Masalah proses/resolver/transport service belum terbukti akar penyebabnya; ini bukan bukti OAuth expired atau bukti MCP sehat. Jangan mengubah endpoint read-only, meminta service_role, atau restart service bersama tanpa izin. Kegagalan MCP sendiri tidak memblokir CLI lokal, tetapi Docker tetap prasyarat.
 
 - [x] Cocokkan schema target, grants, policies, functions, dan applied migrations dengan repository secara read-only. Hasil: 3 migration, 5 routine, 9 tabel RLS, 29 policy; 16 RPC target absen.
-- [ ] Verifikasi/deploy migration revision template melalui proses deployment terpisah yang disetujui; jalankan fixture SQL terisolasi.
-- [ ] Tambahkan migration sesi versioned, status terminal, operation receipts, unique session→log, dan partial unique owner aktif.
-- [ ] Perbaiki FK template cascade, konsistensi `workout_sets.workout_log_id`/`exercise_id`, serta policy child; terapkan expiry 30 hari/receipt 90 hari tanpa silent purge.
-- [ ] Implementasikan create/get/update/pause/resume/cancel/finish RPC beserta receipt discovery. Validasi JSONB schema, ukuran payload, owner, exercise, set identity, dan numeric bounds.
-- [ ] Sediakan read summary cursor, detail aggregate konsisten dalam satu snapshot transaksi, calendar markers, statistics, dan prefill provenance.
-- [ ] Tambahkan indeks history `(user_id, end_time DESC, id DESC)` dengan kondisi record visible; indeks filter lain harus dibuktikan dengan EXPLAIN pada data representatif.
-- [ ] Sediakan keyset catalog/template dan search yang sesuai query; jangan menganggap B-tree biasa mempercepat semua pencarian substring.
-- [ ] Uji dua koneksi bersamaan: update/update, finish/finish, finish/cancel, replay sesudah timeout, dan cross-account.
-- [ ] Tentukan fase pencabutan direct CRUD/legacy RPC agar CAS tidak dapat dilewati; jangan merusak client lama sebelum cutoff resmi.
+- [x] Verifikasi migration revision template existing dan fixture SQL di lokal; tidak membuat revision migration duplikat.
+- [x] Tambahkan migration sesi versioned, status terminal, operation receipts, unique session→log, dan partial unique owner aktif di lokal.
+- [x] Perbaiki FK template cascade dan composite child consistency; expiry/review 30 hari, receipt minimal 90 hari, tanpa silent purge.
+- [x] Implementasikan create/get/update/pause/resume/cancel/finish dan discovery; typed payload, numeric bounds, stable identity, snapshot/pause invariants diuji lokal.
+- [x] Sediakan read summary cursor, consistent detail, calendar markers, statistics, dan prefill provenance di lokal.
+- [x] Tambahkan indeks history `(user_id, end_time DESC, id DESC)` visible; query plan teruji pada 10k row sintetis (bukan benchmark production).
+- [x] Sediakan keyset catalog/template dan literal normalized substring search; tidak mengklaim B-tree mempercepat substring search.
+- [x] Uji dua koneksi: template/update/create CAS, finish/finish, finish/cancel, same-request replay, commit-response-loss, dan cross-account lokal.
+- [x] Uji compatibility dan final RPC-only lokal secara terpisah, termasuk column grants profil dan penolakan legacy RPC.
+- [ ] Review target patch PostgreSQL/API/TLS, backup/rollback hosted, minimum-client cutoff dan deployment utama; menunggu persetujuan terpisah.
 
-**Exit G1:** SQL integration/concurrency/RLS test lulus di database terisolasi; contract target cocok dengan DTO; migration backward compatibility dan rollback operasional direview. Source SQL saja tidak memenuhi gate. Karena belum ada staging terpisah (D06), pengujian berisiko memakai schema terisolasi atau Supabase lokal.
+**Exit G1 release tetap terpisah:** F1b membuktikan backend lokal, bukan DTO/repository Kotlin, distribusi client lama, versi hosted, atau backup/rollback production. B02/B04/B05 memiliki bukti lokal tetapi belum ditutup untuk aktivasi production; B03 Room/device belum diuji. F2/G2 dapat dimulai dengan fake/local API tanpa mengaktifkan sesi remote untuk instalasi lama.
 
 ### F2 — Android remote foundation dan paging spike
 
 PIC: Android + QA. Contract fake dapat dikerjakan sebelum G1; integrasi menunggu G1.
 
-- [ ] Definisikan model usulan `RemotePage`, `QueryKey`, `RemoteError`, receipt, session version, dan auth epoch.
-- [ ] Pisahkan identity session dari fetch profile; cancellation harus dilempar ulang sebelum generic catch/error mapping.
-- [ ] Buat remote repositories tanpa DAO dan tanpa fallback data sintetis production. Adapter kompatibilitas hanya sementara dan jelas batasnya.
-- [ ] Tambah Paging dependency dan spike bagian 3.2; dokumentasikan keputusan library sebelum mengganti semua layar.
-- [ ] Implementasikan query normalization, debounce search 300 ms, refresh generation, append error latch, cursor validation, dan dedup stable ID.
-- [ ] Siapkan fake transport yang dapat menahan respons, membalik urutan, timeout setelah commit, serta berpindah akun A→B→A.
-- [ ] Bedakan connectivity hint dari request outcome; status online tidak membuktikan backend reachable dan tidak boleh menjadi syarat tunggal kebenaran data.
+- [x] Definisikan `RemotePage`, `QueryKey`, `RemoteError`, receipt, session version Long, typed DTO/request untuk 16 RPC, dan auth epoch.
+- [x] Identity session terpisah dari profile; captured credential + epoch; cancellation dilempar ulang, bukan empty/network.
+- [x] Tambahkan `OnlineRepository` RPC-only tanpa DAO atau fabricated fallback; runtime repository existing tidak diganti.
+- [x] Tambah Paging common 3.3.6 + adapter PagingDataPresenter; tanpa RemoteMediator/Paging Compose/custom paginator paralel (Spec §5.4.H).
+- [x] Implementasikan normalisasi query, search debounce 300 ms, refresh generation, append error latch, cursor-chain validation dan stable-ID dedup.
+- [x] Tambahkan fake transport yang menahan respons, reverse completion, response-loss sesudah modeled commit dan auth A→B→A.
+- [x] Foundation tidak memakai connectivity boolean sebagai bukti request berhasil; authoritative empty hanya dari response valid.
+- [ ] Hubungkan identity lifecycle SDK, DI dan consumer layar di F3/F4 setelah gate terkait; belum diaktifkan pada F2.
 
 **Exit G2:** kontrak read/state dan race tests lulus; refresh tidak memanggil importer/Room; tidak ada respons akun lama yang masuk state baru.
+
+**Status G2: PASS foundation/spike lokal.** 37 test baru per flavor, keseluruhan 275 production/281 demo, dan assemble kedua APK debug lulus pada source dibekukan. Hasil/identitas input serta batas bukti ada di laporan §7.4; integrasi SDK auth/DI/layar tetap gate F3/F4, bukan sudah diaktifkan karena unit test lulus.
+
+**Bukti/keputusan F2:** source terisolasi `data/remote/online`, test di package yang sama, laporan §7.4. Mutasi memakai original JSON/ID/CAS, conservative repository mutex, owner-wide unknown gate dan discovery sebelum menerima write berbeda (juga mencegah retry create dengan resource ID baru). Tidak ada auto-generated retry request atau durable queue; ini bukan refactor manager F4. SDK 3.0.3 menghilangkan `code` error sehingga adapter RPC memakai Ktor raw-envelope terpisah, bukan mengubah exception handler existing. Exit G2 hanya untuk foundation/spike yang diuji, bukan acceptance perangkat/layar atau izin production.
 
 ### F3 — Remote read migration per irisan fitur
 
@@ -458,7 +506,7 @@ Rollback berarti hentikan rollout atau nonaktifkan pembuatan sesi baru, tetapi *
 
 ## 10. Evidence map dan confidence
 
-**Verified** berarti diamati dalam source/config atau metadata live read-only, bukan runtime. **Partial** berarti source/fixture ada tetapi deployment atau hasil eksekusi belum dibuktikan. **NOT_TESTED** berarti belum ada pengujian runtime/attack/integration.
+Evidence E01–E23/L01–L09 berikut adalah **audit baseline historis**, Verified source/config/live metadata read-only dan bukan runtime. **Partial** berarti bukti dalam scope itu belum lengkap; **NOT_TESTED** hanya untuk lapisan yang disebut. Evidence lokal F1b dicatat terpisah sebagai LOCAL01 di bawah dan laporan §7.3; jangan menganggap semua runtime/device lulus karena SQL lokal lulus.
 
 | Evidence | Claim / sumber | Jenis | Confidence |
 | --- | --- | --- | --- |
@@ -494,8 +542,10 @@ Rollback berarti hentikan rollout atau nonaktifkan pembuatan sesi baru, tetapi *
 | L07 | Branch/Room: `online-only` 9 (fb96784, 7→9 via `OnlineRecoveryMigration`), `origin/development` 7 (5129c53), `development` lokal 6 (a31fbf7), `main`/`offline-first` 4; semua `versionCode=1`, `versionName=1.0`; migration SQL per branch berbeda | git refs | Verified source; device upgrade NOT_TESTED |
 | L08 | Constraint/index: `workout_sets` memiliki FK terpisah ke `exercise_logs` dan `workout_logs`, tanpa composite consistency; index history/catalog/template tersedia | live metadata | Verified |
 | L09 | `supabase/tests/full_online_only_readiness_audit.sql` — audit metadata read-only, bukan migration/attack test | audit script | Verified source; query setara dijalankan read-only via MCP, belum menjadi gate integration |
+| LOCAL01 | Delapan follow-up migration dan runner SQL/Auth/PostgREST/replay/upgrade di `supabase/tests`; command/fingerprint scope di laporan §7.3 | local runtime + source | Verified lokal 28 Oktober; bukan backend utama/Android/CI |
+| LOCAL02 | Lima file foundation dan lima host-test di `data/remote/online`, dependency Paging/MockEngine; laporan §7.4 | host unit/spike + debug build | 37 foundation tests per flavor; total 275 production/281 demo dan dua assemble debug PASS; bukan UI/device/SDK lifecycle/production |
 
-Coverage audit: data/repository/sync, production DI, schema/RPC, ViewModel utama, route/caller, timer hot path, serta test kritis ditelusuri. UI visual, seluruh resource/seluruh test individual, Android runtime migration, performa query aktual, dan distribusi versi terpasang tetap **Partial/Unverified**. Live backend metadata sudah diverifikasi read-only, tetapi runtime, RLS attack test, dan integration test tetap **NOT_TESTED**. Ini audit arsitektur mendalam, bukan sertifikasi seluruh project.
+Coverage audit baseline mencakup data/repository/sync, DI, route/ViewModel, timer dan selected tests; bukan sertifikasi seluruh project. F1b kemudian membuktikan SQL/Auth/HTTP/concurrency/security lokal. UI visual, Android/device/Room upgrade, seluruh test individual, distribusi versi terpasang, benchmark production serta deployment utama tetap **Partial/NOT_TESTED**. Query-plan history pada 10k row sintetis bukan performa production.
 
 ## 11. Referensi dan changelog
 
@@ -510,3 +560,6 @@ Coverage audit: data/repository/sync, production DI, schema/RPC, ViewModel utama
 | 1.0 | 2026-10-26 | Audit baseline source, analisis gap, urutan implementasi, recovery/rollout gates, dan evidence map |
 | 1.1 | 2026-10-27 | Integrasi review pengguna: matriks kesiapan, lima blocker, prioritas/dependensi, serta legacy preflight wajib sebelum create sesi remote |
 | 1.2 | 2026-10-27 | G0 D01–D06, audit metadata Supabase read-only (3 migration, 16 RPC absen, direct-write exposure), matriks backend live, inventaris Room 9/6/7/4, dan koreksi status B01–B05 |
+| 1.3 | 2026-10-28 | F1a kontrak desain selesai setelah keputusan K01–K05; F1b backend lokal dipisahkan, F2/G2 tetap Android; baseline c0be6b8, CLI pinned dipulihkan, prasyarat Docker/MCP dan verification gates tanpa deployment |
+| 1.4 | 2026-10-28 | Exit F1b lokal: 12 migration, 16 RPC, 57 transport checks, SQL/security/replay/upgrade/restore dan lint/advisors; batas produksi/Android dan gate F2/G2 dipertahankan |
+| 1.5 | 2026-10-28 | Implementasi foundation F2 dan gate G2: typed wire/RPC, auth epoch, CAS/receipt/unknown resolution, fake API, Paging common spike terisolasi; runtime activation tetap F3/F4 |

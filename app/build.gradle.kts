@@ -138,6 +138,8 @@ dependencies {
     ksp(libs.room.compiler)
     implementation(libs.room.ktx)
     implementation(libs.datastore.preferences)
+    // F2 network-only spike; no RemoteMediator or runtime screen migration yet.
+    implementation(libs.androidx.paging.common)
 
     // --- SUPABASE ---
     implementation(platform(libs.supabase.bom))
@@ -159,6 +161,7 @@ dependencies {
     testImplementation(libs.mockk)
     testImplementation(libs.kotlinx.coroutines.test)
     testImplementation(libs.turbine)
+    testImplementation(libs.ktor.client.mock)
     // Host SQLite migration execution, using the driver version already used by Room tooling.
     testRuntimeOnly("org.xerial:sqlite-jdbc:3.41.2.2")
     testImplementation(libs.androidx.work.testing)

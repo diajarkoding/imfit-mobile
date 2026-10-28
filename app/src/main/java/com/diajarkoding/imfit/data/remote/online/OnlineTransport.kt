@@ -29,22 +29,24 @@ class OnlineAuth {
     private var nextEpoch = 0L
     private var credential: RequestCredential? = null
     private val mutableIdentity = MutableStateFlow<AuthIdentity?>(null)
-    private val identityListeners = mutableListOf<() -> Unit>()
+    private val identityListeners = mutableListOf<(AuthIdentity?) -> Unit>()
     val identity = mutableIdentity.asStateFlow()
 
     @Synchronized fun signIn(ownerId: String, accessToken: String): AuthIdentity {
         require(ownerId.isNotBlank() && accessToken.isNotBlank())
         val id = AuthIdentity(ownerId, ++nextEpoch)
         credential = RequestCredential(id, accessToken)
+        // Main.immediate/Unconfined collectors may resume inside StateFlow.value's setter.
+        // Finish every synchronous reset before exposing the new epoch to async loaders.
+        identityListeners.toList().forEach { it(id) }
         mutableIdentity.value = id
-        identityListeners.forEach { it() }
         return id
     }
     @Synchronized fun signOut() {
         ++nextEpoch
         credential = null
+        identityListeners.toList().forEach { it(null) }
         mutableIdentity.value = null
-        identityListeners.forEach { it() }
     }
     @Synchronized fun refreshToken(identity: AuthIdentity, accessToken: String) {
         require(accessToken.isNotBlank())
@@ -65,7 +67,7 @@ class OnlineAuth {
         return action()
     }
     @Synchronized internal fun <T> synchronizedState(action: () -> T): T = action()
-    @Synchronized internal fun onIdentityChanged(listener: () -> Unit): AutoCloseable {
+    @Synchronized internal fun onIdentityChanged(listener: (AuthIdentity?) -> Unit): AutoCloseable {
         identityListeners += listener
         return AutoCloseable { synchronized(this) { identityListeners -= listener } }
     }

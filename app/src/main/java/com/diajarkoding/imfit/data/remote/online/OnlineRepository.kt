@@ -23,7 +23,7 @@ class OnlineRepository(private val transport: OnlineTransport, val auth: OnlineA
     private val confirmedMutable = MutableStateFlow<Map<String, SessionSnapshot>>(emptyMap())
     private val closed = AtomicBoolean(false)
     val confirmedSessions = confirmedMutable.asStateFlow()
-    private val authSubscription = auth.onIdentityChanged { resetFor(auth.identity.value) }
+    private val authSubscription = auth.onIdentityChanged { identity -> resetFor(identity) }
     override fun close() = auth.synchronizedState {
         closed.set(true)
         authSubscription.close()
@@ -32,8 +32,9 @@ class OnlineRepository(private val transport: OnlineTransport, val auth: OnlineA
         confirmedMutable.value = emptyMap()
     }
 
-    suspend fun <T> execute(call: RpcCall<T>): T {
+    suspend fun <T> execute(call: RpcCall<T>, expectedIdentity: AuthIdentity? = null): T {
         val credential = auth.capture()
+        if (expectedIdentity != null && credential.identity != expectedIdentity) throw StaleAuthException()
         return if (call.mutation == null) request(call, credential) else mutex.withLock {
             val mutation = call.mutation
             val resource = Resource(credential.identity, mutation.resourceType, mutation.resourceId)

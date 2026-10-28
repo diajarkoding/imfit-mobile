@@ -187,6 +187,7 @@ data class SessionExercise(
     @SerialName("rest_seconds") val restSeconds: Int,
     @SerialName("input_defaults") val inputDefaults: InputDefaults,
     val sets: List<WorkoutSet>,
+    @SerialName("muscle_category") val muscleCategory: String = "",
 )
 
 @Serializable

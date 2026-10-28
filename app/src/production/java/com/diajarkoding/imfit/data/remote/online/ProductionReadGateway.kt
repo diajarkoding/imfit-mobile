@@ -26,7 +26,7 @@ class ProductionReadGateway @Inject constructor(private val supabase: SupabaseCl
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
     private var observed: SessionStatus? = null
     private val client = HttpClient(Android) { install(HttpTimeout) { requestTimeoutMillis = 20_000 } }
-    private val repository by lazy {
+    internal val repository by lazy {
         if (BuildConfig.SUPABASE_URL.isBlank()) throw OnlineFailure(RemoteError.ContractUnavailable)
         OnlineRepository(KtorOnlineTransport(client, BuildConfig.SUPABASE_URL, BuildConfig.SUPABASE_ANON_KEY), auth)
     }
@@ -54,6 +54,10 @@ class ProductionReadGateway @Inject constructor(private val supabase: SupabaseCl
     override suspend fun <T> read(call: RpcCall<T>): T {
         require(call.mutation == null) { "G3 gateway is read-only" }
         return repository.execute(call)
+    }
+    override suspend fun <T> readFor(identity: AuthIdentity, call: RpcCall<T>): T {
+        require(call.mutation == null)
+        return repository.execute(call, expectedIdentity = identity)
     }
     override suspend fun saveTemplate(request: com.diajarkoding.imfit.data.remote.TemplateWriteRequest) = repository.execute(OnlineRpc.saveTemplate(request))
     override suspend fun profile() = tables.profile()

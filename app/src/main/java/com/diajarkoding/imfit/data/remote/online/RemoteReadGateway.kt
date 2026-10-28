@@ -5,6 +5,8 @@ import com.diajarkoding.imfit.domain.model.MuscleCategory
 import com.diajarkoding.imfit.domain.model.TemplateExercise
 import com.diajarkoding.imfit.domain.model.WorkoutTemplate
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.currentCoroutineContext
+import kotlinx.coroutines.ensureActive
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
 
@@ -12,6 +14,11 @@ import kotlinx.serialization.Serializable
 interface RemoteReadGateway {
     val auth: OnlineAuth
     suspend fun <T> read(call: RpcCall<T>): T
+    /** Compound recovery workflows bind each read to the original login, not a later account. */
+    suspend fun <T> readFor(identity: AuthIdentity, call: RpcCall<T>): T {
+        if (!auth.isCurrent(identity)) throw StaleAuthException()
+        return read(call).also { if (!auth.isCurrent(identity)) throw StaleAuthException() }
+    }
     suspend fun profile(): RemoteProfile
     suspend fun exercises(ids: List<String>): List<Exercise>
     /** Existing template mutation only; session mutations are NOT exposed by the G3 gateway. */
@@ -39,6 +46,7 @@ interface RemoteReadGateway {
         val identity = auth.capture().identity
         val detail = read(OnlineRpc.templateDetail(id))
         val records = exercises(detail.exercises.map { it.exerciseId }).associateBy { it.id }
+        currentCoroutineContext().ensureActive()
         if (!auth.isCurrent(identity)) throw StaleAuthException()
         val children = detail.exercises.map { child ->
             TemplateExercise(records[child.exerciseId] ?: throw OnlineFailure(RemoteError.Conflict("LEGACY_REVIEW_REQUIRED", null)),

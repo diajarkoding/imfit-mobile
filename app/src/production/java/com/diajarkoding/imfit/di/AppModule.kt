@@ -44,7 +44,7 @@ abstract class AppModule {
 
     @Binds
     @Singleton
-    abstract fun bindWorkoutRepository(impl: WorkoutRepositoryImpl): WorkoutRepository
+    abstract fun bindWorkoutRepository(impl: com.diajarkoding.imfit.data.repository.OnlineWorkoutRepository): WorkoutRepository
 
     @Binds
     @Singleton

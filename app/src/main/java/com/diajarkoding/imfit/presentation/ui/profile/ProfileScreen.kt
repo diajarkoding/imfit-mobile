@@ -40,7 +40,8 @@ fun ProfileScreen(
     onToggleTheme: () -> Unit,
     isIndonesian: Boolean,
     onToggleLanguage: () -> Unit,
-    viewModel: ProfileViewModel = hiltViewModel()
+    viewModel: ProfileViewModel = hiltViewModel(),
+    onRecovery: () -> Unit = {},
 ) {
     val state by viewModel.state.collectAsStateWithLifecycle()
     RemoteRefreshBox(state.loading, viewModel::refresh, Modifier.fillMaxSize()) {
@@ -55,7 +56,8 @@ fun ProfileScreen(
         onToggleTheme = onToggleTheme,
         onToggleLanguage = onToggleLanguage,
         onRetry = viewModel::refresh,
-        stale = state.stale && state.error != null
+        stale = state.stale && state.error != null,
+        onRecovery = onRecovery
     )
     }
 }
@@ -72,7 +74,8 @@ internal fun ProfileScreenContent(
     onToggleLanguage: () -> Unit,
     onRetry: () -> Unit,
     modifier: Modifier = Modifier,
-    stale: Boolean = false
+    stale: Boolean = false,
+    onRecovery: () -> Unit = {},
 ) {
     val colors = IMFITColors.training
     val presentation = profileDataPresentation(state)
@@ -117,6 +120,10 @@ internal fun ProfileScreenContent(
                 ProfileSection(stringResource(R.string.profile_preferences_title)) {
                     ProfilePreferences(isDarkMode, isIndonesian, onToggleTheme, onToggleLanguage)
                 }
+            }
+            item(key = "recovery") {
+                com.diajarkoding.imfit.presentation.components.common.RoutineButton(
+                    stringResource(R.string.legacy_recovery_title), onRecovery, outlined = true)
             }
             item(key = "logout") { ProfileLogout(onLogout) }
         }

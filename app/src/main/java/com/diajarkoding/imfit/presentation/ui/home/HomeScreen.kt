@@ -35,7 +35,8 @@ fun HomeScreen(
     var showDialog by rememberSaveable { mutableStateOf(false) }
     var name by rememberSaveable { mutableStateOf("") }
     val list = rememberLazyListState()
-    RemotePagingViewport(list, state.templateSummaries.map { it.id }, viewModel::access)
+    RemotePagingViewport(list, state.templateSummaries.associate { "template_${it.id}" to it.id }, viewModel::access,
+        enabled = !state.refreshing && !state.stale)
     LaunchedEffect(state.newlyCreatedWorkoutId) {
         state.newlyCreatedWorkoutId?.let {
             showDialog = false
@@ -57,7 +58,8 @@ fun HomeScreen(
         RoutineNameField(name, { name = it; viewModel.clearCreateError() }, enabled = !state.isCreating,
             errorMessage = state.createNameErrorRes?.let { stringResource(it) }, onDone = { viewModel.createWorkout(name) }, requestFocus = true)
     }
-    RemoteRefreshBox(state.refreshing, viewModel::refresh, Modifier.fillMaxSize().background(homePalette().background)) {
+    RemoteRefreshBox(state.refreshing, viewModel::refresh,
+        Modifier.fillMaxSize().background(homePalette().background).testTag("home_refresh")) {
         LazyColumn(
             state = list,
             modifier = Modifier.fillMaxSize(),

@@ -18,6 +18,7 @@ import com.diajarkoding.imfit.data.local.database.IMFITDatabase
 abstract class RemoteReadModule {
     @Binds @Singleton abstract fun reads(implementation: ProductionReadGateway): RemoteReadGateway
     companion object {
+        @Provides @Singleton fun onlineRepository(reads: ProductionReadGateway): com.diajarkoding.imfit.data.remote.online.OnlineRepository = reads.repository
         @Provides @Singleton fun legacyGuard(database: IMFITDatabase) = LegacyTemplateGuard { owner, id ->
             // Read-only legacy inventory. Never acknowledge/delete/import old intents as a side effect.
             if (database.templateWriteIntentDao().count(owner) > 0) throw OnlineFailure(RemoteError.Conflict("LEGACY_REVIEW_REQUIRED", null))

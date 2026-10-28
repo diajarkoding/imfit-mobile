@@ -27,6 +27,14 @@ class RestTimerBackgroundTest {
         withTimeout(timeoutMs) { while (!condition()) delay(50) }
     }
 
+    /** Templates come from remote paging after the Room cutover; bulk list reads are fail-loud. */
+    private suspend fun firstRemoteTemplate(reads: com.diajarkoding.imfit.data.remote.online.RemoteReadGateway):
+        com.diajarkoding.imfit.domain.model.WorkoutTemplate {
+        val summary = reads.read(com.diajarkoding.imfit.data.remote.online.OnlineRpc.templates(cursor = null, limit = 30))
+            .data.first { it.exerciseCount > 0 }
+        return reads.template(summary.id).second
+    }
+
     /** A negative assertion needs an observation interval, not a sleep followed by one snapshot. */
     private suspend fun observeFor(durationMs: Long, assertion: suspend () -> Unit) {
         val until = android.os.SystemClock.elapsedRealtime() + durationMs
@@ -60,7 +68,7 @@ class RestTimerBackgroundTest {
         val timer = ports.timer()
         val repository = ports.workouts()
         val user = requireNotNull(ports.auth().getLocalUserId())
-        val session = repository.startWorkout(repository.getTemplates(user).first())
+        val session = repository.startWorkout(firstRemoteTemplate(ports.reads()))
         val exercise = session.exerciseLogs.first().exercise
         val manager = context.getSystemService(NotificationManager::class.java)
         try {
@@ -111,7 +119,7 @@ class RestTimerBackgroundTest {
         val timer = ports.timer()
         val repository = ports.workouts()
         val user = requireNotNull(ports.auth().getLocalUserId())
-        val session = repository.startWorkout(repository.getTemplates(user).first())
+        val session = repository.startWorkout(firstRemoteTemplate(ports.reads()))
         val exercise = session.exerciseLogs.first().exercise
         val manager = context.getSystemService(NotificationManager::class.java)
         try {
@@ -158,7 +166,7 @@ class RestTimerBackgroundTest {
         val timer = ports.timer()
         val repository = ports.workouts()
         val userId = requireNotNull(ports.auth().getLocalUserId())
-        val template = repository.getTemplates(userId).first()
+        val template = firstRemoteTemplate(ports.reads())
         context.startActivity(Intent(context, MainActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
         val session = repository.startWorkout(template)
         val exercise = session.exerciseLogs.first().exercise

@@ -59,7 +59,8 @@ internal fun ExercisePickerContent(state: ExerciseSelectionState, onBack: () -> 
     onRefresh: () -> Unit = onRetry, onAccess: (String) -> Unit = {}, onMore: () -> Unit = {}) {
     val c = IMFITColors.training
     val list = rememberLazyListState()
-    RemotePagingViewport(list, state.filteredExercises.map { it.id }, onAccess)
+    RemotePagingViewport(list, state.filteredExercises.associate { it.id to it.id }, onAccess,
+        enabled = !state.refreshing && !state.stale)
     Scaffold(modifier = Modifier.imePadding(), containerColor = c.background, contentWindowInsets = WindowInsets(0),
         topBar = { RoutineAppBar(stringResource(R.string.routine_picker_title), onBack,
             subtitle = if (state.routineName.isBlank()) stringResource(R.string.routine_picker_context_generic)
@@ -114,7 +115,7 @@ internal fun ExercisePickerContent(state: ExerciseSelectionState, onBack: () -> 
                          val filtered = state.searchQuery.isNotBlank() || state.selectedCategory != ExerciseCategory.ALL
                          Text(stringResource(if (filtered) R.string.routine_search_empty_hint else R.string.routine_catalog_empty), color = c.muted)
                          if (filtered) TextButton(onClearFilters) { Text(stringResource(R.string.routine_clear_filters), color = c.primary) }
-                        else TextButton(onRetry) { Text(stringResource(R.string.routine_retry), color = c.primary) }
+                         else TextButton(onRefresh) { Text(stringResource(R.string.routine_retry), color = c.primary) }
                     }
                 }
                 items(state.filteredExercises, key = { it.id }) { exercise ->

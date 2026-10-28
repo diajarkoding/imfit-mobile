@@ -161,14 +161,22 @@ class RedesignNavigationTest {
         try {
             val finished = runBlocking {
                 val session = repository.startWorkout(template)
+                // One versioned command per intent: edits fly first, completions second.
                 repository.mutateActiveSession(session.id) { current -> current.copy(exerciseLogs = current.exerciseLogs.map { log ->
-                    log.copy(sets = log.sets.map { it.copy(weight = 20f, reps = 8, isCompleted = true) })
+                    log.copy(sets = log.sets.map { it.copy(weight = 20f, reps = 8) })
+                }) }
+                repository.mutateActiveSession(session.id) { current -> current.copy(exerciseLogs = current.exerciseLogs.map { log ->
+                    log.copy(sets = log.sets.map { it.copy(isCompleted = true) })
                 }) }
                 requireNotNull(repository.finishWorkout())
             }
             val localized = LocaleManager.getUpdatedContext(rule.activity)
             val locale = localized.resources.configuration.locales[0]
             val heading = localized.getString(R.string.home_summary_heading, name.uppercase(locale))
+            // Shipped contract: Home picks up the confirmed terminal receipt on the explicit
+            // refresh path (pull-to-refresh); silent related-query invalidation stays an open plan item.
+            rule.onNodeWithText(text(R.string.nav_home)).performClick()
+            rule.onNodeWithTag("home_refresh").performTouchInput { swipeDown() }
             waitForText(heading)
             rule.onNodeWithText(heading).assertIsDisplayed()
             rule.onNodeWithText(String.format(locale, "%,.0f kg", finished.totalVolume)).assertIsDisplayed()

@@ -66,8 +66,10 @@ fun YearlyCalendarScreen(
             .padding(top = IMFITSpacing.headerContentGap).testTag("year_calendar_content")) {
             if (state.isLoading) LinearProgressIndicator(Modifier.fillMaxWidth())
             if (state.hasError) {
-                Text(stringResource(R.string.progress_overview_load_error), Modifier.padding(horizontal = IMFITSpacing.lg).padding(bottom = IMFITSpacing.lg), color = colors.text)
-                TextButton(onClick = viewModel::loadData) { Text(stringResource(R.string.redesign_retry)) }
+                Box(Modifier.padding(horizontal = IMFITSpacing.lg).padding(bottom = IMFITSpacing.lg)) {
+                    if (state.stale) RemoteReadFailure(true, viewModel::loadData)
+                    else RoutineFailure(stringResource(R.string.progress_overview_load_error), viewModel::loadData)
+                }
             }
             RemoteRefreshBox(state.refreshing, viewModel::loadData, Modifier.fillMaxWidth().weight(1f)) {
             LazyColumn(

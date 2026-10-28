@@ -46,10 +46,20 @@ class EditWorkoutViewModel @Inject constructor(
     private var observeJob: kotlinx.coroutines.Job? = null
     private var pendingExerciseIds: List<String> = emptyList()
     private var remoteSource: TemplateDetail? = null
+    private var sourceGeneration = 0
 
     private val _state = MutableStateFlow(EditWorkoutState())
     val state = _state.asStateFlow()
-    private val authListener = reads.auth.onIdentityChanged { observeJob?.cancel(); observedSource = null; remoteSource = null; _state.value = EditWorkoutState() }
+    private val authListener = reads.auth.onIdentityChanged {
+        observeJob?.cancel(); observedSource = null; remoteSource = null
+        _state.value = EditWorkoutState(sourceRevision = ++sourceGeneration)
+    }
+
+    init {
+        viewModelScope.launch { reads.auth.identity.collect { identity ->
+            if (identity != null && initialized && !_state.value.hasLoaded && observeJob?.isActive != true) loadWorkout()
+        } }
+    }
 
     fun initialize(workoutId: String) {
         if (workoutId.isBlank() || (initialized && this.workoutId == workoutId)) return
@@ -57,6 +67,9 @@ class EditWorkoutViewModel @Inject constructor(
         this.workoutId = workoutId
         savedStateHandle["workoutId"] = workoutId
         initialized = true
+        observedSource = null
+        remoteSource = null
+        _state.value = EditWorkoutState(sourceRevision = ++sourceGeneration)
         loadWorkout()
     }
 
@@ -82,7 +95,7 @@ class EditWorkoutViewModel @Inject constructor(
                         it.copy(
                             workoutName = workout.name,
                             exercises = workout.exercises,
-                            isLoading = false, hasLoaded = true, refreshing = false, stale = false, sourceRevision = it.sourceRevision + 1
+                             isLoading = false, hasLoaded = true, refreshing = false, stale = false, sourceRevision = ++sourceGeneration
                         )
                     }
             } catch (e: CancellationException) {

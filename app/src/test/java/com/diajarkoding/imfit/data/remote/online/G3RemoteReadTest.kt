@@ -48,7 +48,7 @@ class G3RemoteReadTest {
     private val store = ViewModelStore()
     private val reads = ScriptedReadGateway()
     @Before fun main() { Dispatchers.setMain(dispatcher) }
-    @After fun cleanup() { store.clear(); reads.repository.close(); Dispatchers.resetMain() }
+    @After fun cleanup() { store.clear(); reads.repository.close(); Dispatchers.setMain(Dispatchers.Unconfined) }
     private fun <T : ViewModel> keep(vm: T): T { store.put(vm.javaClass.name, vm); return vm }
     private fun FakeOnlineApi.Request.catalog(ids: List<String>, next: String? = null) = reply(onlineJson.encodeToString(
         RemotePage(ids.map { ExerciseSummary(it, 1, "Fixture $it", null, null, null) }, PageInfo(next, next != null, body.getValue("p_limit").jsonPrimitive.int))))

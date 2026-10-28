@@ -63,7 +63,8 @@ internal fun ExerciseListContent(
     val colors = IMFITColors.training
     val exercises = remember(state.results, category) { state.results.filter(category::includes).distinctBy { it.id } }
     val list = rememberLazyListState()
-    RemotePagingViewport(list, exercises.map { it.id }, onAccess)
+    RemotePagingViewport(list, exercises.associate { "exercise_${it.id}" to it.id }, onAccess,
+        enabled = !state.refreshing && !state.stale)
     Scaffold(
         modifier = modifier.imePadding(),
         containerColor = colors.background,

@@ -80,7 +80,13 @@ class WorkoutService : Service() {
             ACTION_SKIP_REST -> scope.launch { timer.skip() }
             ACTION_PAUSE_WORKOUT -> scope.launch { setPaused(true) }
             ACTION_RESUME_WORKOUT -> scope.launch { setPaused(false) }
-            ACTION_STOP_WORKOUT -> scope.launch { workouts.cancelWorkout(); stopWorkout() }
+            ACTION_STOP_WORKOUT -> scope.launch {
+                try { workouts.cancelWorkout() }
+                catch (e: CancellationException) { throw e }
+                catch (e: Exception) { RestTimerTrace.event("service_cancel_failed", timer.state.value,
+                    "source=fgs_stop exception=${e.javaClass.simpleName}") }
+                stopWorkout()
+            }
             WorkoutActions.EXPIRE -> playback?.let { runtime.reportServiceResult(it, true) }
         }
         return START_STICKY

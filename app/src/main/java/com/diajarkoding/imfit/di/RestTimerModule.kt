@@ -18,6 +18,7 @@ interface RestTimerEntryPoint {
     fun workouts(): WorkoutRepository
     fun auth(): AuthRepository
     fun runtime(): RestTimerAndroidRuntime
+    fun reads(): com.diajarkoding.imfit.data.remote.online.RemoteReadGateway
 }
 
 @Module

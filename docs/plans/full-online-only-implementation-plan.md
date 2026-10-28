@@ -4,9 +4,9 @@
 
 | Item | Nilai |
 | --- | --- |
-| Status | F1a/F1b dan F2/G2 teruji serta dipush dengan izin; G3 runtime readers dalam verifikasi (§F3/laporan §7.5); deployment/cutoff utama belum diizinkan |
+| Status | G3 dan foundation F6.1 PASS lokal: 345 + 351 unit, 25 emulator tests (laporan §7.8); review/import dan integrasi Start belum selesai, G6a/G6b serta deployment/cutoff utama belum ditutup |
 | Tanggal dibuat / diperbarui | 26 / 28 Oktober 2026 |
-| Versi dokumen | 1.6 |
+| Versi dokumen | 1.9 |
 | Baseline commit | `fb96784d3164a700250e7032d6565779d288029d` |
 | Baseline eksekusi F1a/F1b | `online-only@c0be6b823c6e8350a4a0f1c157d239dcdfd28e57`; tidak mengubah baseline audit historis |
 | Scope | Modul `:app`, source bersama `main`, binding `production`, pembanding `demo`, migration SQL, test terkait, dan metadata Supabase live |
@@ -319,47 +319,61 @@ Urutan disarankan:
 
 **Pelaksanaan G3:** reader runtime/DI production+demo dan SDK auth epoch bridge sudah ada di working tree. Home last-workout all-time mendapat satu additive bounded RPC lokal `get_home_summary()` (17 RPC total), bukan pembatasan 366 hari atau full-pull. Minimum template CAS bridge memakai snapshot remote yang diedit dan guard legacy fail-closed; bukan migrasi session writer G4. Catalog/picker → history/detail → aggregates/markers → Home/template → Profile dihubungkan tanpa route baru. Bukti final/race/UI belum diklaim sampai laporan §7.5 ditutup; ponsel fisik tidak digunakan.
 
-- [ ] Pada setiap layar sediakan loading awal, legitimate empty, no-results, initial error, refresh error dengan data lama, dan append error bila relevan.
-- [ ] Refresh tersedia di empty/error melalui scroll container full-size; bukan hanya saat list berisi.
-- [ ] Hapus global full refresh di `NavGraph`, `MainScreen`, dan `RemoteRefreshViewModel` setelah semua consumer terkait memiliki load/invalidation sendiri.
-- [ ] Simpan state memori saat kembali ke route yang ViewModel-nya masih hidup; recomposition tidak memicu fetch.
-- [ ] Pertahankan desain IMFIT dan navigasi existing; route baru harus diberi nama/entry/caller/test secara eksplisit.
+**Kelanjutan G3 pada baseline `8abf100`:** mapping viewport diperbaiki menjadi stable item key → ID pada keempat consumer; header/footer tidak lagi diperlakukan sebagai posisi data. Hint ditahan saat refreshing/stale dan dikirim ulang setelah refresh dengan ID yang sama. **PASS** 297 production + 303 demo unit tests, kedua APK debug, APK instrumentation demo, dan 7 acceptance demo terarah pada emulator API 34 macOS. Matriks lengkap tetap pending; bukti/batas di laporan §7.6. Tidak mengaktifkan G4/G5 atau deployment utama.
+
+- [x] Pada reader yang dimigrasikan sediakan loading awal, legitimate empty, no-results, initial error, refresh error dengan data lama, dan append error bila relevan (matriks/N/A §7.7 laporan; bukan semua release combinations).
+- [x] Refresh tersedia di empty/error melalui scroll container full-size dan CTA; bukan hanya saat list berisi (picker compact/font150 memakai explicit refresh CTA; gesture teruji pada font100).
+- [x] Hapus global full refresh di `NavGraph`, `MainScreen`, dan `RemoteRefreshViewModel` setelah semua consumer terkait memiliki load/invalidation sendiri.
+- [x] Simpan state memori saat kembali ke route yang ViewModel-nya masih hidup; recomposition tidak memicu fetch (host retained-query dan runtime no-fetch tests §7.7).
+- [x] Pertahankan desain IMFIT dan navigasi existing; route baru harus diberi nama/entry/caller/test secara eksplisit (tidak ada route baru; regresi navigasi terarah §7.6 PASS).
 
 **Exit G3:** layar membaca remote langsung, statistik benar untuk dataset > satu halaman, dan tidak ada hidden full snapshot pull pada route/tab/foreground.
+
+**Status exit G3: PASS lokal** pada source final §7.7: 310 production + 316 demo unit, kedua APK debug/instrumentation, 17 UI demo. Perbaikan meliputi picker context/owner retry, publication reset→identity sebelum collector Main.immediate, source/saveable key editor dan stale detail/year calendar. Bukti backend lokal tetap terpisah dari fixture Android; SDK/HTTP production, manual accessibility penuh, installed-data upgrade dan release-minified belum dibuktikan. Tahap berikutnya inventory/preflight F6, bukan aktivasi G4/G5 atau cleanup Room.
 
 ### F4 — Remote write dan sesi aktif
 
 PIC: Android + Backend + QA. Tergantung G1–G2; sebelum menonaktifkan local session. Aktivasi start sesi remote juga mensyaratkan preflight legacy bagian 6; implementasi dengan fixture dapat dikerjakan lebih awal.
 
-- [ ] Refactor `WorkoutSessionManager` menjadi owner confirmed snapshot application-scoped dan serializer command remote.
-- [ ] Ganti kontrak lambda `mutateActiveSession(transform)` dengan typed commands atau adapter sementara yang menghasilkan command versioned; jangan mengirim lambda/whole stale snapshot tanpa CAS.
-- [ ] Start hanya menampilkan sesi berhasil setelah server acknowledgement; existing session mengarah ke recovery, bukan overwrite diam-diam.
-- [ ] Sebelum mengirim create sesi baru, jalankan preflight legacy untuk owner current; blokir start jika inventory/conflict/outcome ambigu belum diselesaikan. Akun lain tetap terisolasi dan datanya tidak dibuang.
-- [ ] Implementasikan dirty-vs-confirmed state, debounce/flush, request replay, conflict reload, dan offline lock.
-- [ ] Finish/cancel tidak bernavigasi atau menghapus sesi berdasarkan local success. Timeout hasil ambigu memicu resolve/retry, bukan membuat workout/sesi baru.
-- [ ] Template write tetap menggunakan revision dan removed IDs eksplisit; pindahkan durable intent recovery ke server discovery sebelum Room intent dilepas.
+- [x] Refactor `WorkoutSessionManager` menjadi owner confirmed snapshot application-scoped dan serializer command remote. *(G4-sebagian: `OnlineSessionStore` state memori per login + pending replay immutable; writer legacy tetap ada untuk recovery, belum dihapus)*
+- [x] Ganti kontrak lambda `mutateActiveSession(transform)` dengan typed commands atau adapter sementara yang menghasilkan command versioned; jangan mengirim lambda/whole stale snapshot tanpa CAS. *(adapter `SessionDomainAdapter.commandFor`, satu intent per call)*
+- [x] Start hanya menampilkan sesi berhasil setelah server acknowledgement; existing session mengarah ke recovery, bukan overwrite diam-diam. *(store.start → receipt only; active remote → `LegacyStartBlocked`)*
+- [x] Sebelum mengirim create sesi baru, jalankan preflight legacy untuk owner current; blokir start jika inventory/conflict/outcome ambigu belum diselesaikan. Akun lain tetap terisolasi dan datanya tidak dibuang. *(guardedStart.create + receipt terminal recognition)*
+- [ ] Implementasikan dirty-vs-confirmed state, debounce/flush, request replay, conflict reload, dan offline lock. *(replay/CAS/CAS-conflict ada; debounce/flush UI tidak ada — online-only tanpa draft)*
+- [x] Finish/cancel tidak bernavigasi atau menghapus sesi berdasarkan local success. Timeout hasil ambigu memicu resolve/retry, bukan membuat workout/sesi baru. *(VM cancel menunggu receipt; store.terminal idempotent, bukan request baru)*
+- [x] Template write tetap menggunakan revision dan removed IDs eksplisit; pindahkan durable intent recovery ke server discovery sebelum Room intent dilepas. *(TemplateEditBridge + preflight discovery; Room intent tetap read-only)*
 - [ ] Profile update harus memeriksa hasil server dan owner; bedakan field omitted dari explicit null. Avatar storage gagal tidak boleh memalsukan keberhasilan update metadata.
 - [ ] Invalidate hanya query terkait setelah receipt; invalidation dibedakan dari data mutation/retry upload.
 
 **Exit G4:** sesi dapat dipulihkan pada device lain/proses baru dari server; repeat finish menghasilkan workout yang sama; draft belum acknowledged tidak dilabeli Saved.
 
+**Status runtime F4/F5 (28 Oktober, laporan §7.9): teruji lokal.** Binding kedua flavor di-cutover ke `OnlineWorkoutRepository` (Room keluar jalur bisnis; kelas impl legacy dipertahankan untuk recovery). Writer sesi versi via `OnlineSessionStore` + `SessionDomainAdapter` (satu intent per call, CAS `p_expected_version`), start guarded preflight, cancel await-receipt dengan contract idempotent-terminal (in-memory retained terminal → no-op, cold → reload confirm), ticker peek memori murni. Bukti: unit kedua flavor 387/395 PASS, smoke REST `42501`-RLS-safe SMOKE_OK, rerun connected final di laporan. Tetap terbuka: dirty-vs-confirmed/offline-lock UI (tidak dibutuhkan pada online-only tanpa draft), profile-update result check, invalidation hanya query terkait (Home memakai refresh eksplisit), proof G4 multi-device/process-death.
+
 ### F5 — Timer, service, notification decoupling
 
 PIC: Android + QA. Wajib selesai bersama F4, bukan cleanup opsional.
 
-- [ ] Ticker `ActiveWorkoutViewModel` dan `WorkoutService` hanya membaca confirmed snapshot memori/clock lokal; **nol request periodik per detik**.
-- [ ] Pisahkan remote verification dari `getActiveSessionForTimer()`/validator hot path; ubah contract timeout/null agar network failure menjadi Unknown, bukan sesi tidak ada.
-- [ ] Remote reload dilakukan pada cold recovery, explicit reload, dan resume/reconnect sesuai kebijakan terbatas; bukan setiap reconcile alarm.
-- [ ] Pertahankan alarm generation, monotonic deadline, boot identity, skip/extend/reduce, sound/vibration, dan permission handling.
-- [ ] Pause/resume/cancel dari notification melewati serializer yang sama dengan UI, dengan error teramati; tidak boleh optimistic success yang tidak confirmed.
-- [ ] Cold process tanpa network tidak merekonstruksi workout dari timer store; timer-only behavior harus sesuai feature spec.
-- [ ] Jangan menghapus WorkManager secara keseluruhan: recovery timer masih membutuhkannya.
+- [x] Ticker `ActiveWorkoutViewModel` dan `WorkoutService` hanya membaca confirmed snapshot memori/clock lokal; **nol request periodik per detik**. *(getActiveSessionForTimer → `OnlineSessionStore.peek()`, memori; bukti unit: 10.000 tick tanpa transport request)*
+- [x] Pisahkan remote verification dari `getActiveSessionForTimer()`/validator hot path; ubah contract timeout/null agar network failure menjadi Unknown, bukan sesi tidak ada. *(peek cold → throw OnlineFailure(Network), bukan null-absence)*
+- [x] Remote reload dilakukan pada cold recovery, explicit reload, dan resume/reconnect sesuai kebijakan terbatas; bukan setiap reconcile alarm. *(reload di Start VM/Home/WorkoutDetail explicit; ticker tidak me-reload)*
+- [x] Pertahankan alarm generation, monotonic deadline, boot identity, skip/extend/reduce, sound/vibration, dan permission handling. *(coordinator/runtime tidak diubah)*
+- [x] Pause/resume/cancel dari notification melewati serializer yang sama dengan UI, dengan error teramati; tidak boleh optimistic success yang tidak confirmed. *(service mutasi via store; cancel failure dicatat dan service tetap stop)*
+- [ ] Cold process tanpa network tidak merekonstruksi workout dari timer store; timer-only behavior harus sesuai feature spec. *(butuh bukti device)*
+- [x] Jangan menghapus WorkManager secara keseluruhan: recovery timer masih membutuhkannya. *(RecoveryWorker/timer store DataStore tetap; Room tidak dipakai timer)*
 
 **Exit G5:** regression timer lintas API/background/process death lulus; tidak ada Room atau network per-tick dependency; action notification tidak dapat melewati session version guard.
 
 ### F6 — Legacy recovery dan cleanup bertahap
 
 PIC: Android + Backend + QA + Product. Desain dimulai pada F0; inventory/preflight tersedia sebelum aktivasi start sesi F4; transfer/cleanup mengikuti checkpoint upgrade.
+
+**F6.1 — foundation lokal (28 Oktober, laporan §7.8): PASS**, bukan exit G6a/G6b. Reader standalone `data/legacy` menginspeksi file existing secara OPEN_READONLY dengan no-delete corruption handler, exact schema 6/7/9 + stability fence, owner inventory/parentage/dependencies dan cap fail-closed. Checkpoint atomik/fsync di no-backup storage menyimpan evidence saja. Preflight active/discovery/intent → Ready/RecoveryRequired/Unknown dan guarded-create seam tersedia; semua request memakai auth epoch asli serta second inventory. Binding production hanya reader/checkpoint/preflight, **belum consumer Start atau remote session writer**. Existing Room startup/writers tetap perlu cutover terkoordinasi.
+
+- [x] Foundation reader/query inventory dan synthetic schema/owner/parentage tests, tanpa migrasi/DDL/DML pada database lama.
+- [x] Foundation preflight dan no-create tests untuk Unknown/review/conflict/checkpoint failure/account switch/restore; bukan bukti Start runtime sudah memakai guard.
+- [x] Durable checkpoint **inventory evidence** dan isolated Android file/WAL/corrupt/restart-store checks; bukan mapping/receipt confirmation untuk import.
+
+**Berikutnya F6 review/resolution:** layout 6/7 yang dikenal tetap bridge/review; layout alternatif/unknown blocked. Cap 10.000 owned rows dan satu discovery page 100/90 hari tidak dibypass. Recent SESSION receipts dan pending historis masih memerlukan workflow review/arsip/acknowledgement; jangan aktifkan create pada instalasi pengguna sebelum itu siap. Checkpoint Ready selalu di-inventory ulang, tidak boleh diubah menjadi durable draft/offline queue.
 
 - [ ] Pisahkan adapter recovery yang hanya membaca format lama dan mencatat checkpoint transisi; jangan menulis workout baru ke database legacy.
 - [ ] Jalankan inventory owner-scoped untuk pending logs/children, template/profile REVIEW, template intents, active JSON, dan dependensi katalog/template.
@@ -565,3 +579,7 @@ Coverage audit baseline mencakup data/repository/sync, DI, route/ViewModel, time
 | 1.3 | 2026-10-28 | F1a kontrak desain selesai setelah keputusan K01–K05; F1b backend lokal dipisahkan, F2/G2 tetap Android; baseline c0be6b8, CLI pinned dipulihkan, prasyarat Docker/MCP dan verification gates tanpa deployment |
 | 1.4 | 2026-10-28 | Exit F1b lokal: 12 migration, 16 RPC, 57 transport checks, SQL/security/replay/upgrade/restore dan lint/advisors; batas produksi/Android dan gate F2/G2 dipertahankan |
 | 1.5 | 2026-10-28 | Implementasi foundation F2 dan gate G2: typed wire/RPC, auth epoch, CAS/receipt/unknown resolution, fake API, Paging common spike terisolasi; runtime activation tetap F3/F4 |
+| 1.6 | 2026-10-28 | Runtime readers G3, bounded Home RPC lokal, template CAS bridge dan verification gates (§7.5 laporan) |
+| 1.7 | 2026-10-28 | Perbaikan stable-key viewport/refresh re-hint; 297 + 303 unit tests dan 7 acceptance demo terarah PASS pada emulator macOS; matriks lengkap dan G4–G6 tetap terbuka |
+| 1.8 | 2026-10-28 | Kelanjutan state/error lintas reader, picker context/owner guard dan editor saveable-key isolation; regression/lifecycle dan acceptance compact di laporan §7.7 |
+| 1.9 | 2026-10-28 | Foundation F6.1 inventory/read-only schema, owner/epoch preflight dan evidence checkpoint teruji lokal; review/import/Start integration dan G6a/G6b tetap terbuka (§7.8 laporan) |

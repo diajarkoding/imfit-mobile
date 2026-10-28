@@ -30,12 +30,26 @@ fun RemotePageFooter(loading: Boolean, error: Boolean, end: Boolean, onRetry: ()
     }
 }
 
-/** Viewport access hints only; no repository/network calls from the composable. */
+/** Viewport access hints only. Non-data rows must never advance the paging presenter. */
 @Composable
-fun RemotePagingViewport(list: LazyListState, ids: List<String>, onAccess: (String) -> Unit) {
+fun RemotePagingViewport(
+    list: LazyListState,
+    itemIdsByKey: Map<String, String>,
+    onAccess: (String) -> Unit,
+    enabled: Boolean = true,
+) {
     val callback by rememberUpdatedState(onAccess)
-    LaunchedEffect(list, ids) {
-        if (ids.isNotEmpty()) snapshotFlow { list.layoutInfo.visibleItemsInfo.lastOrNull()?.index }
-            .distinctUntilChanged().collect { index -> index?.let { callback(ids[it.coerceIn(ids.indices)]) } }
+    // Re-send the viewport after refresh, even when the new first page has identical IDs.
+    LaunchedEffect(list, itemIdsByKey, enabled) {
+        if (!enabled) return@LaunchedEffect
+        snapshotFlow {
+            val layout = list.layoutInfo
+            lastVisibleRemoteItem(layout.visibleItemsInfo.filter {
+                it.offset < layout.viewportEndOffset && it.offset + it.size > layout.viewportStartOffset
+            }.map { it.key }, itemIdsByKey)
+        }.distinctUntilChanged().collect { id -> id?.let(callback) }
     }
 }
+
+internal fun lastVisibleRemoteItem(visibleKeys: List<Any>, itemIdsByKey: Map<String, String>): String? =
+    visibleKeys.asReversed().firstNotNullOfOrNull { itemIdsByKey[it] }

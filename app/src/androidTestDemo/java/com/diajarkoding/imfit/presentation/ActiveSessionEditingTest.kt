@@ -54,17 +54,26 @@ class ActiveSessionEditingTest {
             rule.onNode(hasScrollToNodeAction()).performScrollToNode(hasText(text(R.string.active_session_add_exercises)))
             rule.onNodeWithText(text(R.string.active_session_add_exercises)).performClick()
             rule.onNode(hasSetTextAction()).performTextInput(added.name)
-            waitForText(added.name)
+            // Remote search renders via paging; the field text alone is not the result row.
+            rule.waitUntil(15_000) {
+                rule.onAllNodes(hasText(added.name) and hasClickAction() and !hasSetTextAction()).fetchSemanticsNodes().isNotEmpty()
+            }
             rule.onNode(hasText(added.name) and hasClickAction() and !hasSetTextAction()).performClick()
             val addOne = text(R.string.routine_add_count, 1)
             rule.onNodeWithText(addOne).performClick()
             rule.waitUntil(15_000) { runBlocking { repository.getActiveSession()?.exerciseLogs?.any { it.exercise.id == added.id } == true } }
             assertEquals(original.id, runBlocking { repository.getActiveSession()?.id })
             assertEquals(1, runBlocking { repository.getTemplateById(template.id)?.exercises?.size })
-            runBlocking {
+            val completed = runBlocking {
                 repository.mutateActiveSession(original.id) { current -> current.copy(exerciseLogs = current.exerciseLogs.map { log ->
                     if (log.exercise.id != first.id) log else log.copy(sets = log.sets.mapIndexed { index, set ->
-                        if (index == 0) set.copy(isCompleted = true, weight = 20f) else set
+                        if (index == 0) set.copy(weight = 20f) else set
+                    })
+                }) }
+                // One versioned command per intent: the edit and the completion must be separate calls.
+                repository.mutateActiveSession(original.id) { current -> current.copy(exerciseLogs = current.exerciseLogs.map { log ->
+                    if (log.exercise.id != first.id) log else log.copy(sets = log.sets.mapIndexed { index, set ->
+                        if (index == 0) set.copy(isCompleted = true) else set
                     })
                 }) }
             }
@@ -82,7 +91,11 @@ class ActiveSessionEditingTest {
             rule.waitUntil(15_000) { runBlocking { repository.getActiveSession() == null } }
             rule.waitForIdle()
             rule.onNodeWithText(text(R.string.active_workout_cancel_title)).assertDoesNotExist()
-            runBlocking { repository.updateActiveSession(original) }
+            // Whole-session restore is refused loudly by the online contract; it must not resurrect anything.
+            runBlocking {
+                val refused = runCatching { repository.updateActiveSession(original) }.exceptionOrNull()
+                assertTrue(refused is IllegalStateException)
+            }
             assertNull(runBlocking { repository.getActiveSession() })
         } finally {
             runBlocking { repository.cancelWorkout(); repository.deleteTemplate(template.id) }

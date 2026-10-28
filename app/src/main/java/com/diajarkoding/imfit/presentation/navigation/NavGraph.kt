@@ -256,8 +256,12 @@ fun NavGraph(
                     isDarkMode = isDarkMode,
                     onToggleTheme = onToggleTheme,
                     isIndonesian = isIndonesian,
-                    onToggleLanguage = onToggleLanguage
+                    onToggleLanguage = onToggleLanguage,
+                    onRecovery = { backStack.add(LegacyRecovery) }
                 )
+            }
+            entry<LegacyRecovery> {
+                com.diajarkoding.imfit.presentation.ui.recovery.LegacyRecoveryScreen(onBack = { backStack.removeLastOrNull() })
             }
         }
     )

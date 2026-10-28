@@ -80,7 +80,9 @@ internal fun EditWorkoutContent(state: EditWorkoutState, onBack: () -> Unit = {}
                 item { RoutineNameField(state.workoutName, onName, enabled = editable,
                     errorMessage = state.nameErrorRes?.let { stringResource(it) }) }
                 item { RoutineExerciseHeading(state.exercises.size) }
-                itemsIndexed(state.exercises, key = { _, exercise -> exercise.id }) { index, exercise ->
+                // Lazy saveable-state restoration does not validate rememberSaveable inputs.
+                // Scope the row registry itself to the adopted source, not only the field inputs.
+                itemsIndexed(state.exercises, key = { _, exercise -> "${state.sourceRevision}:${exercise.id}" }) { index, exercise ->
                     RoutineExerciseEditor(exercise, editable,
                         onRemove = { onRemove(index) },
                         onConfig = { sets, reps, rest -> onConfig(exercise.id, sets, reps, rest) },
@@ -112,7 +114,7 @@ internal fun RoutineExerciseEditor(exercise: TemplateExercise, enabled: Boolean,
         onValidity(validConfig)
         if (validConfig) onConfig(requireNotNull(setCount), requireNotNull(repCount), requireNotNull(restSeconds))
     }
-    LaunchedEffect(exercise.id) { publish(sets, reps, rest) }
+    LaunchedEffect(exercise.id, sourceRevision) { publish(sets, reps, rest) }
     Surface(color = c.surface, shape = RoundedCornerShape(14.dp), border = BorderStroke(1.dp, c.border)) {
         Column(Modifier.fillMaxWidth().padding(16.dp), verticalArrangement = Arrangement.spacedBy(16.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically) {

@@ -400,8 +400,18 @@ class ActiveWorkoutViewModel @Inject constructor(
         if (snapshot.isFinishing || snapshot.isCancelling) return false
         val session = snapshot.session ?: return false
         _state.update { it.copy(isCancelling = true, showCancelDialog = false, isRestTimerActive = false) }
-        elapsedTimeJob?.cancel()
-        workoutRepository.requestCancelSession(session.id)
+        viewModelScope.launch {
+            try {
+                workoutRepository.cancelWorkout()
+                timer.cancel("SESSION_CANCELLED")
+                elapsedTimeJob?.cancel()
+                _state.update { it.copy(sessionEnded = true, isCancelling = false) }
+            } catch (e: CancellationException) { throw e }
+            catch (e: Exception) {
+                android.util.Log.e("ActiveWorkoutVM", "Session cancel failed", e)
+                _state.update { it.copy(isCancelling = false, mutationErrorRes = R.string.error_session_cancel) }
+            }
+        }
         return true
     }
 

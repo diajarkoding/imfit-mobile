@@ -81,9 +81,10 @@ class ExerciseListScreenTest {
         capture("loading")
 
         rule.runOnIdle { scene.value = Scene(state = ExerciseBrowserState(hasError = true, query = "bench", results = listOf(bench))) }
-        rule.onNodeWithTag("exercise_list_error").assertExists()
+        // Stale failure keeps rows visible with an explicit retry; empty and error blocks stay distinct.
+        rule.onNodeWithText(text(R.string.remote_read_stale)).assertExists()
+        rule.onNodeWithTag("exercise_list_row_bench").assertExists()
         rule.onNodeWithTag("exercise_list_empty").assertDoesNotExist()
-        rule.onNodeWithTag("exercise_list_row_bench").assertDoesNotExist()
         rule.onNodeWithText(text(R.string.routine_retry)).performClick()
         rule.runOnIdle { assertEquals(1, retryCalls); assertEquals("bench", scene.value.state.query) }
         capture("failure-retains-query")

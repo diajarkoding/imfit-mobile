@@ -48,3 +48,6 @@ data class YearlyCalendar(val year: Int, val month: Int) : NavKey
 
 @Serializable
 data object Profile : NavKey
+
+@Serializable
+data object LegacyRecovery : NavKey

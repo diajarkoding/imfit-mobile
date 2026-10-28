@@ -454,6 +454,7 @@
     <string name="error_exercise_remove">Unable to remove exercise</string>
     <string name="error_exercise_add">Unable to add exercises</string>
     <string name="error_session_finish">Unable to finish workout</string>
+    <string name="error_session_cancel">Unable to discard workout</string>
     <string name="error_rest_pause">Skip the rest timer before pausing</string>
     <string name="error_routine_save">Unable to save routine</string>
     <string name="error_routine_not_found">Routine not found</string>
@@ -468,4 +469,23 @@
     <string name="remote_read_set">Set %1$d: %2$s kg × %3$d reps</string>
     <string name="remote_read_workouts">%1$d workouts</string>
     <string name="remote_read_minutes">%1$d min</string>
+    <string name="legacy_recovery_title">Legacy data recovery</string>
+    <string name="legacy_recovery_explanation">Data from earlier versions stays on this device. Review records for this account here. Nothing is uploaded or deleted automatically. Active drafts and uncertain template requests still require resolution before starting a new session.</string>
+    <string name="legacy_recovery_failed">Recovery could not read or validate the data. Retry; do not clear app storage or uninstall.</string>
+    <string name="legacy_recovery_empty">No legacy records found for this account.</string>
+    <string name="legacy_recovery_schema">Legacy format: %1$d</string>
+    <string name="legacy_keep_history">Keep history in recovery</string>
+    <string name="legacy_keep_confirmation">Keep these historical records on this device, accessible from this recovery screen, without uploading or marking them synced. This does not resolve active drafts, uncertain requests, or damaged records. Changed or restored records will require review again.</string>
+    <string name="legacy_keep_confirm">Confirm keeping records</string>
+    <string name="legacy_kept_not_uploaded">Kept in recovery · not uploaded</string>
+    <string name="legacy_review_pending">Awaiting review · source preserved</string>
+    <string name="legacy_record_details">Original record fields (read-only)</string>
+    <string name="legacy_kind_profile">Profile</string>
+    <string name="legacy_kind_template">Routine</string>
+    <string name="legacy_kind_template_exercise">Routine exercise</string>
+    <string name="legacy_kind_workout">Completed workout</string>
+    <string name="legacy_kind_exercise_log">Workout exercise</string>
+    <string name="legacy_kind_set">Workout set</string>
+    <string name="legacy_kind_active">Active draft — resolution required</string>
+    <string name="legacy_kind_intent">Uncertain routine request — resolution required</string>
 </resources>

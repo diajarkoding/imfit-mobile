@@ -89,7 +89,9 @@ internal fun WorkoutDetailContent(state: WorkoutDetailState, estimatedMinutes: I
         LazyColumn(Modifier.fillMaxSize().testTag("routine_detail_list"), contentPadding = PaddingValues(start = 20.dp, end = 20.dp, top = IMFITSpacing.headerContentGap, bottom = 12.dp),
             verticalArrangement = Arrangement.spacedBy(12.dp)) {
             if (state.isLoading && workout == null) item { RoutineLoading(stringResource(R.string.routine_loading), topPadding = 0.dp) }
-            state.errorRes?.let { error -> item { RoutineFailure(stringResource(error), onRetry) } }
+            state.errorRes?.let { error -> item {
+                if (state.stale) RemoteReadFailure(true, onRetry) else RoutineFailure(stringResource(error), onRetry)
+            } }
             state.operationErrorRes?.let { error -> item { RoutineFailure(stringResource(error), if (!state.isUpdating) onRetryAdd else null) } }
             if (workout != null) {
                 item {

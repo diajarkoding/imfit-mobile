@@ -6,18 +6,18 @@
 | --- | --- |
 | Nama fitur | Full Online-Only Data Architecture |
 | Feature ID / ticket | N/A — belum diberikan |
-| Status | **F1a/F1b dan F2/G2 teruji; G3 runtime reader dalam verifikasi**; sesi/timer remote dan deployment utama belum diaktifkan |
-| Versi dokumen | 1.6 |
+| Status | **G3 dan fondasi inventory/preflight F6.1 PASS lokal (345 + 351 unit, 25 emulator tests)**; review/import legacy, aktivasi sesi/timer remote dan production/release belum selesai |
+| Versi dokumen | 1.9 |
 | Tanggal dibuat / diperbarui | 26 / 28 Oktober 2026 |
 | Target rilis | TODO/VERIFY — setelah product, backend, migration, dan release gates |
 | Platform / topology | Android native; single application module `:app` |
 | Source scope | Shared `app/src/main`, production/demo DI, SQL migration, test terkait |
 | Baseline commit | `fb96784d3164a700250e7032d6565779d288029d` |
 | Baseline eksekusi F1a/F1b | `online-only@c0be6b823c6e8350a4a0f1c157d239dcdfd28e57`; baseline audit source di atas tetap historis |
-| Confidence | Baseline/live metadata historis Verified; backend lokal Verified (§5.4.G); foundation Kotlin/Paging host tests §5.4.H, device/activation dan deployment utama NOT_TESTED |
+| Confidence | Baseline/live metadata historis Verified; backend lokal Verified (§5.4.G); foundation Kotlin/Paging §5.4.H dan G3 host/demo emulator Verified (laporan §7.7); physical device/activation dan deployment utama NOT_TESTED |
 | Dokumen pasangan | [Plan implementasi, gap analysis, dan evidence map](full-online-only-implementation-plan.md) · [Laporan implementasi berkelanjutan](full-online-only-implementation-report.md) |
 
-**Aturan membaca:** **Baseline** menjelaskan snapshot audit 27 Oktober; backend lokal F1b (§5.4.G) dan foundation Android (§5.4.H) sudah teruji. Runtime reader G3 (§5.4.I) dalam verifikasi; target write/session/timer belum diaktifkan. Keberhasilan lokal bukan bukti deployment atau acceptance aplikasi penuh. Spec tetap di `docs/plans`; tidak membuat dokumen kontrak/laporan baru.
+**Aturan membaca:** **Baseline** menjelaskan snapshot audit 27 Oktober; backend lokal F1b (§5.4.G) dan foundation Android (§5.4.H) sudah teruji. Runtime reader G3 (§5.4.I) lulus matriks state/race lokal (laporan §7.7); target write/session/timer belum diaktifkan. Keberhasilan lokal bukan bukti deployment atau acceptance aplikasi penuh. Spec tetap di `docs/plans`; tidak membuat dokumen kontrak/laporan baru.
 
 Path Kotlin pendek relatif terhadap `app/src/main/java/com/diajarkoding/imfit/`. Revisi 1.2 menambahkan audit metadata Supabase live secara **read-only** pada 27 Oktober 2026: tidak membaca row bisnis, tidak memanggil RPC aplikasi, dan tidak melakukan DDL/DML. Audit ini membuktikan schema/grants/policy yang terlihat oleh role read-only, bukan perilaku runtime, hasil serangan RLS, atau kesiapan environment uji. Tidak ada persetujuan visual yang diasumsikan.
 
@@ -540,6 +540,9 @@ Implementasi working tree mengintegrasikan foundation melalui `RemoteReadGateway
 - Tambahan bounded all-time read: `public.get_home_summary()` tanpa parameter → `{"last_workout": WorkoutSummary|null}`. Hanya owner authenticated, nondeleted, urutan `end_time DESC,id DESC`, `LIMIT 1`; tidak mengubah aturan last-workout menjadi 366 hari. Migration additive `20261028090758_online_only_home_summary.sql` diterapkan/diuji hanya lokal, bukan deployed utama. Jumlah kontrak lokal menjadi 17 RPC; 16 kontrak F1/F2 tidak berubah.
 - Direct table read hanya Profile dengan owner filter/kolom minimum (K04), dan bounded lookup exercise IDs untuk detail/taxonomy existing. Tidak ada read fallback/full snapshot import dari layar.
 - Global route/tab/foreground pull dilepas; initial load/invalidation/explicit refresh dimiliki reader. Aktivasi sesi remote dan timer tetap gate G4/G5, bukan konsekuensi memasang reader.
+- Viewport paging dipetakan melalui **stable lazy-item key → data ID**, bukan indeks layout yang mencakup header/footer/error/loading. Baris nondata tidak mengirim hint; refresh/stale menahan hint, lalu viewport dikirim ulang setelah refresh walaupun ID halaman tidak berubah. Regression/acceptance iterasi lanjutan dicatat di laporan §7.6.
+- Context error picker tetap berbeda dari no-results/page error: search/filter tidak menghapus kegagalan exclusions, retry/refresh memuat ulang konteks dahulu, dan halaman baru boleh dipublish setelah context owner/generation valid. Caller name/exclusions tidak diwariskan otomatis ke akun lain. Retained editor/detail memuat ulang saat epoch login berubah; source-generation serta saveable key baris editor berubah ketika snapshot baru diadopsi agar input lama tidak mem-publish ulang lintas akun/query. Bukti state/race/compact di laporan §7.7; bukan proof SDK/HTTP production atau proses mati.
+- Auth epoch dipublish ke collector **setelah seluruh synchronous reset listener selesai**. Collector Main.immediate dapat berjalan reentrant di setter StateFlow; mem-publish dahulu lalu reset dapat menghapus respons epoch baru yang selesai cepat. Listener ledger menerima identity transisi secara eksplisit; refresh token dalam login sama tetap mempertahankan epoch sesuai kontrak §H.
 
 ### 5.5 Routing / navigation
 
@@ -603,6 +606,14 @@ Logout lokal dapat diteruskan setelah pengguna memahami kehilangan input memori.
 **Preflight upgrade wajib:** inventory schema/data lama dan cek sesi/hasil ambigu remote sebelum create sesi baru. Local active draft, completion belum jelas, atau konflik lokal–remote harus masuk review/resolution terlebih dahulu. Read failure tidak berarti database kosong, fresh install, atau sesi tidak ada. Hanya hasil `Ready` yang terikat owner/auth epoch current dapat memanggil create; `RecoveryRequired` dan `Unknown/Blocked` tidak dapat melewatinya. Ini pemeriksaan client instalasi upgrade, bukan bukti bahwa device lain tidak memiliki draft lokal.
 
 Data historis pending yang sudah diklasifikasi tidak berkonflik dapat tetap berada di recovery terisolasi; tidak dianggap synced. Owner lain tidak dipaksa menyelesaikan data untuk membuka sesi akun current. Checkpoint transisi durable menyimpan hasil inventory/resolution, bukan antrean workout baru; restore, perubahan owner, atau data baru yang belum direview mengharuskan preflight ulang. Constraint unique session/idempotency server tetap wajib walaupun preflight client sukses.
+
+#### Implementasi foundation F6.1 (28 Oktober)
+
+`data/legacy` kini menyediakan inventory standalone read-only, owner metadata/disposition/dependencies, checkpoint evidence atomik/no-backup, dan preflight `READY`/`RECOVERY_REQUIRED`/`UNKNOWN`. Schema diverifikasi melalui user_version + Room identity + digest kolom; export 6/7/9 dikenali tanpa migrasi, 6/7 tetap bridge/review dan layout unknown/4/8 blocked. Corrupt file tidak dihapus oleh corruption handler Android; absent tidak disimpulkan dari read error. Scan memakai data/schema-version dan file-identity stability fence, bukan write transaction terhadap legacy.
+
+`SYNCED_CACHE_CANDIDATE` bukan bukti receipt/izin cleanup. Active JSON, pending/review/problem, intent ambigu, sesi remote aktif/expired, dan recent SESSION operation masuk review. Discovery dibatasi satu page 100/window 90 hari; page lanjutan atau failure menjadi Unknown. Checkpoint menyimpan evidence/count/reason, bukan draft/queue/receipt acknowledgement, dan Ready lama selalu di-inventory ulang. Compound reads/create mengikat original auth epoch; inventory diulang sebelum guarded create.
+
+**Batas:** seam guard belum dipasang pada Start runtime, tidak ada session writer remote baru yang diaktifkan. Review UI/persetujuan manual, resolution, bridge/import dengan mapping durable, installed-data upgrade/restore dan koordinasi startup/writer Room masih pekerjaan F6/G4. Tidak ada RPC/migration/backend baru pada irisan ini. Bukti/batas device/host ada pada laporan §7.8; G6a/G6b tetap terbuka.
 
 ### 6.3 Invariants yang dipertahankan / diangkat ke server
 
@@ -793,6 +804,10 @@ Risiko runtime utama adalah write outcome ambigu, stale cross-account response, 
 | 1.3 | 2026-10-28 | Baseline eksekusi c0be6b8; kontrak desain F1a untuk 16 signature/DTO/contoh request, CAS/discovery/error/expiry review; K01–K05 dikonfirmasi pengguna, belum implementation proof | Repository review |
 | 1.4 | 2026-10-28 | Backend 16 RPC diimplementasikan/diuji lokal; security cutoff dua tahap, replay/upgrade/restore, pause/snapshot invariants dan batas bukti; Android/production tetap belum diaktifkan | Local backend implementation |
 | 1.5 | 2026-10-28 | Fondasi Android terisolasi: typed RPC/DTO, Ktor error envelope, auth epoch, memory-only mutation resolution dan Paging spike; belum mengganti DI/runtime | Android remote foundation |
+| 1.6 | 2026-10-28 | Runtime readers G3 dan bounded Home summary lokal; minimum template CAS bridge, sesi/timer legacy tetap terpisah | Android remote readers |
+| 1.7 | 2026-10-28 | Stable-key viewport dan refresh re-hint; scope/bukti acceptance demo terarah dicatat di laporan §7.6, bukan full production readiness | G3 regression verification |
+| 1.8 | 2026-10-28 | Picker context/owner lifecycle, cancellation child lookup, editor source/saveable isolation dan konsistensi stale detail/calendar; matriks state/error lokal di laporan §7.7 | G3 state and race verification |
+| 1.9 | 2026-10-28 | Foundation F6.1 read-only inventory/schema/owner guards, evidence checkpoint dan preflight; belum review/import atau aktivasi session writer | Legacy foundation |
 
 ## 15. Referensi
 

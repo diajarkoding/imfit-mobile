@@ -241,7 +241,7 @@ fun ActiveWorkoutScreen(
             completedSets = state.session?.totalCompletedSets ?: 0,
             totalSets = state.session?.totalSets ?: 0,
             onConfirm = {
-                if (viewModel.cancelWorkout()) onNavigateBack()
+                viewModel.cancelWorkout()
             },
             onDismiss = { viewModel.dismissCancelDialog() }
         )

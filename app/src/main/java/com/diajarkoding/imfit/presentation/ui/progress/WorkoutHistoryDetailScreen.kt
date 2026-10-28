@@ -59,7 +59,8 @@ fun WorkoutHistoryDetailScreen(
     }
 
     val list = rememberLazyListState()
-    RemotePagingViewport(list, state.items.map { it.id }, viewModel::access)
+    RemotePagingViewport(list, state.items.associate { it.id to it.id }, viewModel::access,
+        enabled = !state.refreshing && !state.stale)
     Scaffold(topBar = { RoutineAppBar(stringResource(R.string.workout_history_app_bar_title), onNavigateBack) }) { padding ->
         RemoteRefreshBox(state.refreshing, viewModel::refresh, Modifier.fillMaxSize().padding(padding)) {
             LazyColumn(state = list, modifier = Modifier.fillMaxSize().testTag("workout_history_list"),

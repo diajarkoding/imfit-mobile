@@ -15,6 +15,7 @@ import com.diajarkoding.imfit.data.remote.online.LegacyTemplateGuard
 abstract class RemoteReadModule {
     @Binds @Singleton abstract fun reads(implementation: DemoReadGateway): RemoteReadGateway
     companion object {
+        @Provides @Singleton fun onlineRepository(reads: DemoReadGateway): com.diajarkoding.imfit.data.remote.online.OnlineRepository = reads.repository
         @Provides @Singleton fun legacyGuard() = LegacyTemplateGuard { _, _ -> }
     }
 }

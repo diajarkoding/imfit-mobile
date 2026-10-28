@@ -18,6 +18,10 @@ class DemoReadGateway @Inject constructor(authRepository: AuthRepository) : Remo
     private val revisions = mutableMapOf<String, Long>()
     private val receipts = mutableMapOf<String, Pair<com.diajarkoding.imfit.data.remote.TemplateWriteRequest, com.diajarkoding.imfit.data.remote.TemplateWriteReceipt>>()
     override val auth = OnlineAuth()
+    private val sessions = DemoSessionApi()
+    internal val repository: OnlineRepository = OnlineRepository(OnlineTransport { name, body, credential ->
+        sessions.post(credential.identity.ownerId, name, body)
+    }, auth)
     private var observedEpoch = -1L
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
     init {
@@ -83,7 +87,12 @@ class DemoReadGateway @Inject constructor(authRepository: AuthRepository) : Remo
                         exercise.sets.filter { it.isCompleted }.map { WorkoutSet("${log.id}-$index-${it.setNumber}", it.setNumber, it.weight.toString(), it.reps, true) }))
                 })))
             }
-            "get_active_session" -> onlineJson.encodeToJsonElement(SessionLookup(false, null)) // Demo sessions remain the explicitly separate legacy manager in G3.
+            "get_active_session", "get_operation_status", "list_recent_operations" -> sessions.read(owner, call.name, p)
+            "get_exercise_prefill" -> {
+                val defaults = onlineJson.decodeFromJsonElement<InputDefaults>(p.getValue("p_input_defaults"))
+                onlineJson.encodeToJsonElement(ExercisePrefill(PrefillSource.DEFAULTS, null, defaults,
+                    (1..defaults.sets).map { PrefillSet(it, "0.00", defaults.reps) }))
+            }
             "get_home_summary" -> onlineJson.encodeToJsonElement(HomeSummary(FakeWorkoutDataSource.getWorkoutLogs(owner)
                 .maxWithOrNull(compareBy<WorkoutLog> { it.endTime }.thenBy { it.id })?.let { onlineJson.decodeFromJsonElement<WorkoutSummary>(summary(it)) }))
             else -> throw OnlineFailure(RemoteError.ContractUnavailable)

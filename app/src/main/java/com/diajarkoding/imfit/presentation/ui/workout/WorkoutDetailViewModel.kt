@@ -17,6 +17,7 @@ import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.ensureActive
 import javax.inject.Inject
 import com.diajarkoding.imfit.data.remote.online.*
 
@@ -55,6 +56,9 @@ class WorkoutDetailViewModel @Inject constructor(
     val state = _state.asStateFlow()
     private val authListener = reads.auth.onIdentityChanged { observeJob?.cancel(); source = null; _state.value = WorkoutDetailState() }
     init {
+        viewModelScope.launch { reads.auth.identity.collect { identity ->
+            if (identity != null && initialized && _state.value.workout == null && observeJob?.isActive != true) loadWorkout()
+        } }
         viewModelScope.launch { edits.changes.collect { change ->
             if (change.templateId == workoutId && reads.auth.isCurrent(change.identity)) loadWorkout()
         } }
@@ -73,6 +77,8 @@ class WorkoutDetailViewModel @Inject constructor(
         this.workoutId = workoutId
         savedStateHandle["workoutId"] = workoutId
         initialized = true
+        source = null
+        _state.value = WorkoutDetailState()
         loadWorkout()
     }
 
@@ -85,6 +91,7 @@ class WorkoutDetailViewModel @Inject constructor(
                 val identity = reads.auth.capture().identity
                 val (snapshot, workout) = reads.template(workoutId)
                 val activeSession = workoutRepository.getActiveSession()
+                kotlinx.coroutines.currentCoroutineContext().ensureActive()
                 if (!reads.auth.isCurrent(identity)) throw StaleAuthException()
                 source = snapshot
                 val isCurrentActive = activeSession?.templateId == workoutId

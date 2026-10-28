@@ -298,6 +298,12 @@ object FakeWorkoutDataSource {
         return workoutLogs.filter { it.userId == userId }.sortedByDescending { it.date }
     }
 
+    /** Demo server receipt projection only; no production storage or offline queue. */
+    fun addConfirmedWorkout(log: WorkoutLog) {
+        require(workoutLogs.none { it.id == log.id })
+        workoutLogs.add(0, log)
+    }
+
     fun getWorkoutLogById(logId: String): WorkoutLog? {
         return workoutLogs.find { it.id == logId }
     }

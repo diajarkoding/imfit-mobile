@@ -451,6 +451,7 @@
     <string name="error_exercise_remove">Tidak dapat menghapus gerakan</string>
     <string name="error_exercise_add">Tidak dapat menambahkan gerakan</string>
     <string name="error_session_finish">Tidak dapat menyelesaikan sesi</string>
+    <string name="error_session_cancel">Tidak dapat membatalkan sesi</string>
     <string name="error_rest_pause">Lewati timer istirahat sebelum menjeda</string>
     <string name="error_routine_save">Tidak dapat menyimpan rutinitas</string>
     <string name="error_routine_not_found">Rutinitas tidak ditemukan</string>
@@ -465,4 +466,23 @@
     <string name="remote_read_set">Set %1$d: %2$s kg × %3$d repetisi</string>
     <string name="remote_read_workouts">%1$d sesi</string>
     <string name="remote_read_minutes">%1$d mnt</string>
+    <string name="legacy_recovery_title">Pemulihan data lama</string>
+    <string name="legacy_recovery_explanation">Data versi sebelumnya tetap tersimpan di perangkat ini. Tinjau catatan akun ini di sini. Tidak ada unggahan atau penghapusan otomatis. Draft aktif dan permintaan rutinitas yang belum pasti tetap perlu diselesaikan sebelum memulai sesi baru.</string>
+    <string name="legacy_recovery_failed">Data pemulihan tidak dapat dibaca atau divalidasi. Coba lagi; jangan hapus penyimpanan aplikasi atau mencopot aplikasi.</string>
+    <string name="legacy_recovery_empty">Tidak ditemukan catatan lama untuk akun ini.</string>
+    <string name="legacy_recovery_schema">Format lama: %1$d</string>
+    <string name="legacy_keep_history">Simpan riwayat di pemulihan</string>
+    <string name="legacy_keep_confirmation">Simpan catatan historis ini di perangkat dan tetap dapat diakses dari halaman pemulihan, tanpa mengunggah atau menandainya tersinkron. Ini tidak menyelesaikan draft aktif, permintaan yang belum pasti, atau catatan rusak. Catatan yang berubah atau dipulihkan perlu ditinjau ulang.</string>
+    <string name="legacy_keep_confirm">Konfirmasi penyimpanan catatan</string>
+    <string name="legacy_kept_not_uploaded">Disimpan di pemulihan · belum diunggah</string>
+    <string name="legacy_review_pending">Menunggu tinjauan · sumber dipertahankan</string>
+    <string name="legacy_record_details">Kolom catatan asli (hanya baca)</string>
+    <string name="legacy_kind_profile">Profil</string>
+    <string name="legacy_kind_template">Rutinitas</string>
+    <string name="legacy_kind_template_exercise">Gerakan rutinitas</string>
+    <string name="legacy_kind_workout">Latihan selesai</string>
+    <string name="legacy_kind_exercise_log">Gerakan latihan</string>
+    <string name="legacy_kind_set">Set latihan</string>
+    <string name="legacy_kind_active">Draft aktif — perlu diselesaikan</string>
+    <string name="legacy_kind_intent">Permintaan rutinitas belum pasti — perlu diselesaikan</string>
 </resources>

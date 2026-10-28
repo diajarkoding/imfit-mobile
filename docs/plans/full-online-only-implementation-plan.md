@@ -4,9 +4,9 @@
 
 | Item | Nilai |
 | --- | --- |
-| Status | F1a/F1b lokal dan F2/G2 foundation selesai/teruji; runtime layar/DI tidak diganti; deployment/cutoff utama belum diizinkan |
+| Status | F1a/F1b dan F2/G2 teruji serta dipush dengan izin; G3 runtime readers dalam verifikasi (§F3/laporan §7.5); deployment/cutoff utama belum diizinkan |
 | Tanggal dibuat / diperbarui | 26 / 28 Oktober 2026 |
-| Versi dokumen | 1.5 |
+| Versi dokumen | 1.6 |
 | Baseline commit | `fb96784d3164a700250e7032d6565779d288029d` |
 | Baseline eksekusi F1a/F1b | `online-only@c0be6b823c6e8350a4a0f1c157d239dcdfd28e57`; tidak mengubah baseline audit historis |
 | Scope | Modul `:app`, source bersama `main`, binding `production`, pembanding `demo`, migration SQL, test terkait, dan metadata Supabase live |
@@ -316,6 +316,8 @@ Urutan disarankan:
 3. Progress/calendar: aggregate periode terpisah; jangan mengganti seluruh history dengan halaman pertama lalu mempertahankan rumus lokal.
 4. Template/Home: bounded summary, detail lengkap dan revision; pagination template hanya pada permukaan list yang benar.
 5. Profile dan summary: dedicated remote state; tidak lagi berbagi kebutuhan history lewat ProgressViewModel.
+
+**Pelaksanaan G3:** reader runtime/DI production+demo dan SDK auth epoch bridge sudah ada di working tree. Home last-workout all-time mendapat satu additive bounded RPC lokal `get_home_summary()` (17 RPC total), bukan pembatasan 366 hari atau full-pull. Minimum template CAS bridge memakai snapshot remote yang diedit dan guard legacy fail-closed; bukan migrasi session writer G4. Catalog/picker → history/detail → aggregates/markers → Home/template → Profile dihubungkan tanpa route baru. Bukti final/race/UI belum diklaim sampai laporan §7.5 ditutup; ponsel fisik tidak digunakan.
 
 - [ ] Pada setiap layar sediakan loading awal, legitimate empty, no-results, initial error, refresh error dengan data lama, dan append error bila relevan.
 - [ ] Refresh tersedia di empty/error melalui scroll container full-size; bukan hanya saat list berisi.

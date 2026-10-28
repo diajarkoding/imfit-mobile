@@ -4,15 +4,15 @@
 
 | Item | Nilai |
 | --- | --- |
-| Status | **F1a/F1b lokal dan F2/G2 foundation selesai/teruji**; runtime layar/DI/Room tidak diganti; production tidak diaktifkan |
-| Versi laporan | 1.3 |
+| Status | **F1a/F1b dan F2/G2 teruji; G3 runtime remote reads terpasang dengan build/unit test kedua flavor PASS, acceptance UI/emulator pending**; Room/recovery dan session/timer legacy dipertahankan; tanpa deployment utama |
+| Versi laporan | 1.5 |
 | Tanggal diperbarui | 28 Oktober 2026 |
 | Baseline commit | `fb96784d3164a700250e7032d6565779d288029d` (`online-only`) |
 | Baseline eksekusi | `c0be6b823c6e8350a4a0f1c157d239dcdfd28e57` — branch `online-only`, awal iterasi clean; tidak fetch/commit/push |
 | Project Supabase | `ltcxltahkrjnsjaxndsa` — database bersama development/testing/production |
-| Dokumen acuan | [Feature Spec v1.5](full-online-only-feature-spec.md) · [Plan Implementasi v1.5](full-online-only-implementation-plan.md) |
+| Dokumen acuan | [Feature Spec v1.6](full-online-only-feature-spec.md) · [Plan Implementasi v1.6](full-online-only-implementation-plan.md) |
 | Metode audit live | Supabase MCP, project-scoped, `read_only=true`, `features=database`; role `supabase_read_only_user`; `transaction_read_only=on` |
-| Batas | Audit utama 27 Oktober metadata-only; F1b 28 Oktober menjalankan DDL/DML/SQL/Auth/HTTP hanya pada Docker lokal dengan fixture sintetis; tanpa deployment utama atau build/device Android |
+| Batas | Audit utama 27 Oktober metadata-only; backend hanya Docker lokal/sintetis; Android foundation dan G3 build/unit test kedua flavor sudah lulus, acceptance emulator masih pending; ponsel fisik tidak disentuh |
 | Identitas snapshot backend teruji | HEAD c0be6b8 + dirty working tree; 27 input backend, fingerprint SHA256 `abc44bea440f906335864a654e1ac588f8553d35fac2f74d6737a6f9bed40994` (§7.3); bukan verified commit/CI |
 
 **Aturan:** file ini adalah **satu-satunya laporan implementasi** dan diperbarui di tempat. Jangan membuat laporan baru setiap iterasi. Klaim harus berlabel **Verified** dengan scope source/live metadata/runtime lokal yang jelas, **Proposed** (desain), atau **NOT_TESTED**. Keberadaan SQL atau PASS lokal bukan bukti deployment, CI, atau perangkat.
@@ -27,11 +27,11 @@
 | F1b — implementasi backend lokal | **Exit lokal tercapai 28 Oktober** | 12 migration lokal (4 existing + 8 follow-up), 16 RPC; baseline/replay/upgrade/restore dan final checks lulus (§7.3) |
 | G1 — integration/concurrency/security test | **PASS lokal** | SQL + real JWT/Auth/PostgREST, 57 pemeriksaan transport, race dua koneksi, response loss setelah commit, final-lockdown; bukan production/device proof |
 | F2/G2 — Android Remote Foundation | **PASS foundation/spike lokal** | 37 test baru per flavor; regresi 275 production/281 demo dan kedua APK debug lulus (§7.4); belum mengganti DI/runtime |
-| G2 — Android remote foundation | **Belum mulai** | Boleh paralel dengan fake transport setelah kontrak disetujui |
-| Migrasi fitur Android | **Belum mulai** | Menunggu G1 dan G2 |
+| G2 — Android remote foundation | **Selesai untuk foundation** | Actual commit `2ba4f82` diuji dari checkout bersih; bukan session/timer migration |
+| G3 — migrasi fitur Android | **Build/unit test PASS; acceptance UI pending** | DI/auth bridge, catalog/picker, history/detail, aggregates/markers, template/Home dan Profile remote; 292 production + 298 demo test lulus; §7.5 |
 | Aktivasi production | **Terblokir** | B02–B05 belum ditutup |
 
-**Kesimpulan:** backend lokal F1b dan foundation/spike F2/G2 memenuhi gate yang diuji. Runtime Android tetap hybrid existing; belum memasang foundation pada DI/layar atau menghapus Room. Project utama tidak diubah/diaudit ulang; §3 tetap snapshot live 27 Oktober. Berikutnya F3 per irisan, sementara Start remote tetap menunggu preflight/integrasi legacy dan gate F4–F6.
+**Kesimpulan:** backend lokal F1b dan foundation F2/G2 sudah teruji dan di-push dengan izin eksplisit. G3 memasang remote readers pada runtime; build/unit test kedua flavor lulus, tetapi acceptance UI/emulator belum ditutup dan patch masih WIP. Room/recovery dan sesi/timer existing tidak dihapus. Project utama tidak diubah/diaudit ulang; §3 tetap snapshot 27 Oktober. Start sesi remote tetap menunggu preflight/integrasi G4–G6.
 
 ## 2. Keputusan G0 yang sudah final
 
@@ -152,12 +152,23 @@ Catatan: schema JSON yang tersedia di `online-only` adalah 6, 7, dan 9; **schema
 
 ### G2 — Android
 
-- [ ] Remote repository contracts + fake transport
-- [ ] Paging 3/cursor spike
+- [x] Remote repository contracts + fake transport
+- [x] Paging 3/cursor spike
 - [ ] Pull-to-refresh/infinite scroll/error states
-- [ ] Cancellation dan account-switch tests
+- [x] Cancellation dan account-switch tests (foundation; runtime G3 diverifikasi terpisah)
 - [ ] Legacy Room 9/6/7 inventory dan preflight
 - [ ] Timer adapter terpisah dari Room
+
+### G3 — remote reads (gate belum ditutup)
+
+- [x] Production/demo read gateway + auth epoch bridge tanpa profile sebagai sumber autentikasi
+- [x] Catalog/picker remote Paging; selection/exclusion ID tidak dipruning oleh halaman/filter
+- [x] History summary per tanggal + detail on-demand; agregat/marker terpisah dari loaded pages
+- [x] Template Home paginated + detail/editor remote; CAS dari snapshot yang diedit, guard legacy fail-closed
+- [x] Home last-workout all-time bounded RPC lokal; Profile dedicated remote state
+- [x] Lepas global full-pull pada route/tab/foreground; tidak menambah route
+- [ ] Semua state/retry/refresh/race/regresi/UI diverifikasi pada input final kedua flavor
+- [ ] Review readiness G4/G5; patch G3 WIP di-commit/dipush dengan izin pengguna, bukan deployment/acceptance
 
 ## 7. Perubahan yang sudah dilakukan
 
@@ -170,7 +181,7 @@ Catatan: schema JSON yang tersedia di `online-only` adalah 6, 7, dan 9; **schema
 | `opencode.json` | Selesai | MCP Supabase project-scoped, read-only, database features |
 | Branch | Selesai | `online-first` → `online-only`; branch remote diselaraskan ke `origin/online-only` |
 | Migration/deployment utama | **Tidak dilakukan** | DDL/DML hanya pada Docker lokal; delapan migration follow-up diterapkan lokal (§7.3) |
-| Perubahan aplikasi Android | **Tidak dilakukan** | Tidak ada perubahan source aplikasi |
+| Perubahan aplikasi Android | **F2 selesai; G3 berjalan** | Foundation §7.4, migrasi reader runtime §7.5; bukan aktivasi sesi remote |
 
 ### 7.1 Iterasi F1a / prasyarat F1b — 28 Oktober 2026
 
@@ -305,7 +316,32 @@ Runner `supabase/tests/verify_local_baseline.py` memakai Docker exec ke database
 
 **SHA backend terisolasi:** `65309e83c9e7bb93f50ee590f32878336b5b7fc9`, tree `74ffb8da7314c4619997d998a63b3ba66f41cf79`, `feat(backend): add locally verified online-only RPC contracts`. Checkout bersih `%LOCALAPPDATA%\Temp\opencode\imfit-backend-65309e8`, tanpa menyalin source/secret/node_modules workspace utama. `npm ci --no-audit --no-fund` memasang toolchain dari lock yang sama; 6 guard tests, final SQL, 57 HTTP checks serta fresh/upgrade replay lulus dari SHA itu; status akhir bersih dan lock tidak berubah. Database verifikasi `imfit_f1b_fresh_96283cd2`/`imfit_f1b_upgrade_96283cd2` dipertahankan. Fingerprint 27 backend input dengan LF normalization `7ff09db133c73a5b77b2e9e0c31f723198ba655a3a753a9d35163738d0403dab`; empat SQL original tidak diubah meskipun raw SHA Windows/checkout LF berbeda.
 
-Bukti foundation pada tabel merujuk fingerprint input, bukan menyematkan SHA commit yang memuat laporan ini (menghindari self-reference). Setelah commit seri kedua dibuat, actual SHA/tree wajib diperiksa dan keempat task Gradle dijalankan ulang pada checkout bersih sebelum meminta push; hasil per-SHA dilaporkan pada respons akhir eksekusi Git. Tidak menyalin local.properties/credential atau build output source utama ke checkout tersebut.
+Bukti foundation pada tabel merujuk fingerprint input agar tidak self-reference. **Tindak lanjut Verified:** commit `2ba4f828ceedf4185fc95725b54c143e6b9d7da1` (`feat(android): add online-only remote foundation and paging spike`) diuji dari checkout bersih tanpa `local.properties`: 275 production + 281 demo unit tests dan kedua APK debug lulus. Pengguna kemudian mengizinkan push kedua commit; `origin/online-only` diverifikasi melalui `git ls-remote` menunjuk `2ba4f82`, dengan backend `65309e8` sebagai ancestor. Tidak ada izin deployment utama dari push ini. Worktree registration sudah dilepas; sebagian build files temporary foundation tersisa karena Windows filename-too-long, tidak dibersihkan luas.
+
+### 7.5 G3 — runtime remote reads, 28 Oktober 2026
+
+**Baseline/scope:** HEAD dan remote terverifikasi `2ba4f82`; `.idea/misc.xml` pre-existing tidak disentuh/stage. Pengguna meminta melanjutkan seluruh G3 dan menjawab “lanjutkan” setelah proposal Home summary bounded lokal dan bridge minimum CAS. Implementasi/pengujian backend tetap lokal; tidak memakai akun/data hosted atau mengaktifkan session RPC. Tidak ada queue/draft durable baru, reset/purge database, route feed/template-list baru, atau modifikasi rest-timer engine.
+
+**Implementasi working tree:** `RemoteReadGateway`, production Ktor gateway + SDK session-status bridge, deterministic demo adapter dan DI per flavor. Profile identity tetap berasal dari auth session; token refresh mempertahankan epoch, login/account change menggantinya. `RemoteResource` menahan data stale hanya untuk key/epoch sama dan membatalkan generasi lama. Catalog/picker memakai F2 `RemotePagingFeed`/Paging 3; selection ID terpisah dari snapshot halaman, explicit caller exclusions tetap berlaku. Subgroup taxonomy existing diambil bounded berdasarkan ID, bukan tebak nama. History mempertahankan route per tanggal; child logs di-fetch on-demand. Progress/calendar memakai server aggregate dan marker count, bukan merekayasa log atau menghitung halaman pertama. Home template summaries paginated dan last workout memakai `get_home_summary`; Profile tidak lagi memerlukan history VM. Global route/tab/resume full-pull dilepas. Room/legacy recovery tetap ada, bukan read source layar yang dimigrasikan.
+
+**Interop template:** `TemplateEditBridge` memakai revision Long dan removed exercise IDs dari remote snapshot yang benar-benar diedit; dirty/invalid editor tidak ditimpa reload. Legacy intent/parent/child pending diperiksa read-only dan fail-closed; tidak di-acknowledge/import/delete sebagai efek samping. Request/CAS/ID asli direplay untuk response loss. Ini minimum compatibility G3, bukan pengganti keseluruhan G4 session manager.
+
+**Backend tambahan:** migration `20261028090758_online_only_home_summary.sql`, RPC `get_home_summary()` → `{"last_workout": WorkoutSummary|null}`. Owner-filtered, nondeleted, order `end_time DESC,id DESC LIMIT 1`, stable security-definer dengan search_path kosong dan authenticated-only execute. Mempertahankan last-workout lebih tua dari 366 hari tanpa full-pull atau batas tanggal baru. Draft diuji dalam rollback lalu diterapkan **hanya** via `migration up --local`, tip lokal 13 migration/17 RPC. Fixture `online_only_home_summary.sql` menguji all-time, owner, soft-delete, exact decimal, empty dan anon denial.
+
+| Verifikasi aktual | Status / batas |
+| --- | --- |
+| Compile production + demo pada irisan awal | **PASS setelah koreksi** nama fixture demo dan Box/Column layout scope; bukan acceptance UI |
+| Remote host suite awal (37 F2 + 11 G3) | **FAIL 1/48**: initial auth collector Progress memicu force-refresh ganda dan membatalkan respons awal; lifecycle diperbaiki, rerun final diwajibkan |
+| `verify_local_backend.py --phase final` pada tip 13 migration | **PASS** SQL/security/pagination/aggregate/query-plan + Home fixture rollback; bukan deployment |
+| Full unit kedua flavor + kedua debug APK, snapshot Android 44 changed inputs LF manifest `6e9aba509c3083e02bdb1c6192f2a74a7d37522db6f8456c8e0b5dd085f566b7` | **PASS 290 production + 296 demo**, nol failure/error/skipped; kedua APK debug terbentuk. Task gabungan **FAIL** di compile instrumentation karena satu test Room-editor masih memakai constructor lama; source test diadaptasi ke explicit remote refresh, bukan dihapus/skip. Hardening berikutnya memerlukan rerun baru |
+| Real local Auth/PostgREST transport final | **PASS 59 pemeriksaan**, termasuk 17 RPC; exact synthetic account cleanup, bukan reset database |
+| Fresh replay + upgrade `verify_local_migration_paths.py` pada 13 migration | **PASS**; DB `imfit_f1b_fresh_aa0ff6c5` dan `imfit_f1b_upgrade_aa0ff6c5` dipertahankan; legacy JSON/receipt tetap exact/review-blocked |
+| Host target guards | **PASS 6**; menolak remote context/override/target salah, bukan SQL/device proof |
+| Rerun Android final setelah review | **PASS 292 production + 298 demo**, nol failure/error/skipped; kedua APK debug dan `assembleDemoDebugAndroidTest` berhasil; snapshot Android 47 changed inputs LF manifest `f3eb2463bc02da30cfb4e2b0ec19af6c8b839e7619796da6cf102032431a05c7` |
+| UI/runtime `G3NavigationTest` | **BLOCKED/NOT_TESTED**: emulator disposable `imfit_g3_verify`, API 34, serial `emulator-5580`; proses `qemu-system-x86_64-headless.exe` APPCRASH `0xc0000005` (Windows WER) dua kali, termasuk saat instrumentation. APK androidTest terbaru ter-compile setelah matcher diperbaiki, tetapi skenario end-to-end belum selesai/PASS; ini bukan bukti kegagalan aplikasi |
+| Review statis final | **OPEN**: `RemotePagingViewport` masih memetakan indeks mentah `LazyColumn` (termasuk header/footer/loading) ke data ID sehingga hint prefetch dapat salah pada Home/history; perlu mapping berbasis item key sebelum acceptance. Warning kondisi redundan di `EditWorkoutViewModel` juga belum dibersihkan |
+
+**Gate terbuka:** acceptance UI/route regression/race serta perbaikan mapping viewport perlu ditutup sebelum G3 dinyatakan siap. Production RPC availability masih blocker deployment terpisah: build production bukan izin memasang/menguji terhadap project bersama. Legacy installed-data upgrade dan sesi remote/timer G4/G5 tetap belum dibuktikan.
 
 ## 8. Keputusan yang dibutuhkan
 
@@ -317,11 +353,11 @@ Bukti foundation pada tabel merujuk fingerprint input, bukan menyematkan SHA com
 
 ## 9. Langkah selanjutnya
 
-1. G2/regresi foundation sudah lulus (§7.4); setelah prosedur Git, lanjut F3 per irisan (catalog/picker, history/detail, progress/markers, Home/template) tanpa route baru atau mengaktifkan sesi remote sebelum preflight.
+1. Tutup verifikasi G3 §7.5 pada snapshot final; jangan menyamakan compile dengan acceptance UI/HTTP/device.
 2. Jangan langsung mengerjakan G3–G6 sekaligus; migrasi UI/runtime dan Start remote tetap menunggu contract tests serta preflight legacy terkait.
 3. Pertahankan snapshot/fixture lokal dan ulang final runner bila backend berubah; jangan menjalankan runner baseline/compatibility pada inventory final yang berbeda atau memakai dump production untuk harness.
 4. Siapkan review patch PostgreSQL/API/TLS, hosted backup/rollback, minimum-client policy dan cutoff sebelum meminta izin deployment utama.
-5. Dua commit disetujui; backend SHA sudah terverifikasi terisolasi (§7.4). Foundation harus mengikuti verifikasi SHA terisolasi sebelum meminta izin push; bukan bukti CI/device atau izin deploy.
+5. Dua commit F1b/F2 sudah diverifikasi terisolasi dan dipush dengan izin eksplisit (§7.4). Patch G3 WIP di-commit/dipush dengan izin eksplisit setelah build/unit test lulus; push ini bukan deployment, acceptance UI, atau izin G4/G5.
 6. Perbarui laporan ini pada setiap iterasi; jangan membuat laporan baru.
 
 ## 10. Changelog laporan
@@ -332,3 +368,5 @@ Bukti foundation pada tabel merujuk fingerprint input, bukan menyematkan SHA com
 | 1.1 | 2026-10-28 | Baseline c0be6b8; kontrak desain F1a dan K01–K05 diselesaikan; CLI pinned dipulihkan, setup Docker diizinkan; diagnosis MCP DNS/konektivitas; runtime backend tetap NOT_TESTED |
 | 1.2 | 2026-10-28 | Exit F1b lokal: 12 migration/16 RPC, SQL fixtures, 57 final transport checks, race/response-loss, security cutoff, backup/replay/upgrade dan lint/advisors; production/Android belum diaktifkan |
 | 1.3 | 2026-10-28 | F2 foundation terisolasi: 16 typed RPC/DTO, error adapter Ktor, auth epoch, memory-only mutation recovery, fake API dan Paging common spike; gate regresi/Git dicatat di §7.4 |
+| 1.4 | 2026-10-28 | Rekonsiliasi bukti commit/push F1b/F2 dan checklist G2; implementasi runtime G3, bounded Home RPC lokal, minimum template CAS bridge; gate final masih diverifikasi (§7.5) |
+| 1.5 | 2026-10-28 | Rekonsiliasi hasil final G3: 292 production + 298 demo test, kedua APK debug dan androidTest APK; acceptance UI emulator tercatat BLOCKED karena crash qemu; bug mapping viewport dan warning tersisa dicatat sebagai gate terbuka |

@@ -6,8 +6,8 @@
 | --- | --- |
 | Nama fitur | Full Online-Only Data Architecture |
 | Feature ID / ticket | N/A — belum diberikan |
-| Status | **F1a/F1b lokal dan F2/G2 foundation selesai/teruji**; runtime layar/DI dan deployment utama belum diaktifkan |
-| Versi dokumen | 1.5 |
+| Status | **F1a/F1b dan F2/G2 teruji; G3 runtime reader dalam verifikasi**; sesi/timer remote dan deployment utama belum diaktifkan |
+| Versi dokumen | 1.6 |
 | Tanggal dibuat / diperbarui | 26 / 28 Oktober 2026 |
 | Target rilis | TODO/VERIFY — setelah product, backend, migration, dan release gates |
 | Platform / topology | Android native; single application module `:app` |
@@ -17,7 +17,7 @@
 | Confidence | Baseline/live metadata historis Verified; backend lokal Verified (§5.4.G); foundation Kotlin/Paging host tests §5.4.H, device/activation dan deployment utama NOT_TESTED |
 | Dokumen pasangan | [Plan implementasi, gap analysis, dan evidence map](full-online-only-implementation-plan.md) · [Laporan implementasi berkelanjutan](full-online-only-implementation-report.md) |
 
-**Aturan membaca:** **Baseline** menjelaskan source/live snapshot audit 27 Oktober; **target Android** tetap rancangan; **backend lokal F1b** di §5.4.G sudah diimplementasikan dan diuji. Keberhasilan lokal bukan bukti deployment atau acceptance aplikasi penuh. Spec tetap disimpan di `docs/plans`; tidak membuat dokumen kontrak/laporan baru.
+**Aturan membaca:** **Baseline** menjelaskan snapshot audit 27 Oktober; backend lokal F1b (§5.4.G) dan foundation Android (§5.4.H) sudah teruji. Runtime reader G3 (§5.4.I) dalam verifikasi; target write/session/timer belum diaktifkan. Keberhasilan lokal bukan bukti deployment atau acceptance aplikasi penuh. Spec tetap di `docs/plans`; tidak membuat dokumen kontrak/laporan baru.
 
 Path Kotlin pendek relatif terhadap `app/src/main/java/com/diajarkoding/imfit/`. Revisi 1.2 menambahkan audit metadata Supabase live secara **read-only** pada 27 Oktober 2026: tidak membaca row bisnis, tidak memanggil RPC aplikasi, dan tidak melakukan DDL/DML. Audit ini membuktikan schema/grants/policy yang terlihat oleh role read-only, bukan perilaku runtime, hasil serangan RLS, atau kesiapan environment uji. Tidak ada persetujuan visual yang diasumsikan.
 
@@ -529,6 +529,17 @@ Implementasi terisolasi di `app/src/main/java/com/diajarkoding/imfit/data/remote
 **Batas integrasi:** belum memasang Hilt binding, SDK auth lifecycle bridge, Compose consumer, atau mengganti repository/Room/session manager/timer existing. Pemilik future lifecycle wajib meneruskan signIn/signOut/refreshToken dari identity SDK (bukan profile), menutup repository/feed saat owner lifecycle berakhir, dan menjaga query/generation sebelum publish. Gate unit/spike dan hasil build dicatat di laporan §7.4; Kotlin→backend live/device/SDK token lifecycle belum otomatis terverifikasi oleh fake/MockEngine. Tidak ada deployment/cutoff utama.
 
 **Verified foundation:** 37 host tests per flavor, regresi 275 production/281 demo, kedua APK debug berhasil dibangun pada input F2 yang dibekukan (fingerprint/command/batas dan percobaan gagal sebelum freeze ada di laporan §7.4). Ini exit G2 foundation, bukan acceptance UI/perangkat atau aktivasi data remote.
+
+#### I. G3 runtime reader integration — 28 Oktober 2026
+
+Implementasi working tree mengintegrasikan foundation melalui `RemoteReadGateway` dan binding production/demo, SDK auth epoch bridge, `RemoteResource` untuk detail/agregat, serta Compose consumers. Status test/acceptance aktual hanya di laporan §7.5; foundation §H tetap bukti historis terpisah. Room/recovery dan sesi/timer legacy belum dihapus/diganti.
+
+- History tetap per tanggal, template tetap section Home (K03); tidak ada route feed/list baru.
+- Progress/calendar memakai aggregate penuh dan date-marker count; tidak menghitung page pertama atau membuat workout log palsu.
+- Template editor memakai revision Long dan removed IDs dari remote snapshot yang diadopsi, bukan cache Room. Dirty/invalid draft tidak ditimpa refresh; legacy pending/intent guard tetap fail-closed dan read-only.
+- Tambahan bounded all-time read: `public.get_home_summary()` tanpa parameter → `{"last_workout": WorkoutSummary|null}`. Hanya owner authenticated, nondeleted, urutan `end_time DESC,id DESC`, `LIMIT 1`; tidak mengubah aturan last-workout menjadi 366 hari. Migration additive `20261028090758_online_only_home_summary.sql` diterapkan/diuji hanya lokal, bukan deployed utama. Jumlah kontrak lokal menjadi 17 RPC; 16 kontrak F1/F2 tidak berubah.
+- Direct table read hanya Profile dengan owner filter/kolom minimum (K04), dan bounded lookup exercise IDs untuk detail/taxonomy existing. Tidak ada read fallback/full snapshot import dari layar.
+- Global route/tab/foreground pull dilepas; initial load/invalidation/explicit refresh dimiliki reader. Aktivasi sesi remote dan timer tetap gate G4/G5, bukan konsekuensi memasang reader.
 
 ### 5.5 Routing / navigation
 

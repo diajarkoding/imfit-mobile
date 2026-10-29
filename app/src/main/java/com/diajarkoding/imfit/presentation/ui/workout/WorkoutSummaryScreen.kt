@@ -55,9 +55,10 @@ fun WorkoutSummaryScreen(
         viewModel.loadWorkoutLog(workoutLogId)
     }
 
-    Scaffold(topBar = { WorkoutSummaryTopBar() }, bottomBar = { WorkoutSummaryFooter(onDoneClick = onNavigateToHome) }) { padding ->
+    Scaffold(modifier = Modifier.testTag("workout_summary_screen"),
+        topBar = { WorkoutSummaryTopBar() }, bottomBar = { WorkoutSummaryFooter(onDoneClick = onNavigateToHome) }) { padding ->
         RemoteRefreshBox(state.loading, viewModel::refresh, Modifier.fillMaxSize().padding(padding)) {
-            LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(IMFITSpacing.screenHorizontal), verticalArrangement = Arrangement.spacedBy(IMFITSpacing.md)) {
+            LazyColumn(Modifier.fillMaxSize().testTag("workout_summary_list"), contentPadding = PaddingValues(IMFITSpacing.screenHorizontal), verticalArrangement = Arrangement.spacedBy(IMFITSpacing.md)) {
                 if (state.loading && state.data == null) item("loading") { CircularProgressIndicator() }
                 if (state.error != null) item("error") { RemoteReadFailure(state.stale, viewModel::refresh) }
                 state.data?.let { log ->

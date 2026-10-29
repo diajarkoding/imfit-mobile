@@ -48,7 +48,7 @@ class OnlineOnlyReadyTest {
         compose.waitUntil(30_000) { compose.onAllNodes(matcher).fetchSemanticsNodes().isNotEmpty() }
     }
     private fun clickText(id: Int) {
-        val matcher = hasText(text(id)) and hasClickAction()
+        val matcher = hasText(text(id)) and hasClickAction() and isEnabled()
         waitNode(matcher)
         compose.onNode(matcher).performClick()
     }
@@ -81,20 +81,65 @@ class OnlineOnlyReadyTest {
         assertEquals(fixture.owner, ports.reads().profile().id)
     }
 
-    private suspend fun startAndComplete(): SessionSnapshot {
-        val routine = fixture.routine("UI")
-        // Recreate the actual activity so its initial bounded routine query includes the new fixture.
-        launch()
-        tag("home_refresh")
-        scrollTo(hasText(routine.second))
-        compose.onNodeWithText(routine.second).performClick()
+    private suspend fun routineThroughUi(): Pair<String, String> {
+        val exercise = ports.reads().read(OnlineRpc.catalog(limit = 1)).data.single()
+        val name = "UI routine ${UUID.randomUUID().toString().take(8)}"
+        scrollTo(hasText(text(R.string.home_add_day)) and hasClickAction())
+        clickText(R.string.home_add_day)
+        waitNode(hasSetTextAction() and hasText(text(R.string.home_workout_placeholder)))
+        compose.onNode(hasSetTextAction()).performTextReplacement(name)
+        UiDevice.getInstance(InstrumentationRegistry.getInstrumentation()).pressBack()
+        clickText(R.string.routine_create_action)
         tag("routine_detail_list")
+        clickText(R.string.action_add_exercise)
+        tag("exercise_picker_search")
+        compose.onNodeWithTag("exercise_picker_search").performTextReplacement(exercise.name)
+        val row = hasText(exercise.name) and hasClickAction() and !hasSetTextAction()
+        waitNode(row)
+        compose.onNode(row).performClick()
+        UiDevice.getInstance(InstrumentationRegistry.getInstrumentation()).pressBack()
+        val add = hasText(text(R.string.routine_add_count, 1)) and hasClickAction()
+        waitNode(add)
+        compose.onNode(add).performClick()
+        tag("routine_detail_list")
+        var saved: TemplateSummary? = null
+        fixture.await {
+            saved = ports.reads().read(OnlineRpc.templates()).data.singleOrNull { it.name == name }
+            saved?.exerciseCount == 1
+        }
+        return requireNotNull(saved).id to name
+    }
+
+    private suspend fun openRoutine(throughUi: Boolean = false): SessionSnapshot {
+        val routine = if (throughUi) routineThroughUi() else fixture.routine("UI")
+        // Recreate the actual activity so its initial bounded routine query includes the new fixture.
+        if (!throughUi) {
+            launch()
+            tag("home_refresh")
+            scrollTo(hasText(routine.second))
+            compose.onNodeWithText(routine.second).performClick()
+        }
+        tag("routine_detail_list")
+        compose.waitUntil(30_000) {
+            compose.onAllNodes(hasText(text(R.string.action_start_workout)) and isEnabled()).fetchSemanticsNodes().isNotEmpty()
+        }
         clickText(R.string.action_start_workout)
         tag("active_workout_screen")
         fixture.await { ports.sessions().state.value.snapshot?.templateId == routine.first }
-        val session = requireNotNull(ports.sessions().state.value.snapshot)
+        return requireNotNull(ports.sessions().state.value.snapshot)
+    }
+
+    private suspend fun startAndComplete(throughUi: Boolean = false): SessionSnapshot {
+        val session = openRoutine(throughUi)
         val exercise = session.exercises.single()
-        val set = exercise.sets.single()
+        val set = exercise.sets.first()
+        if (throughUi) {
+            compose.onNodeWithContentDescription(text(R.string.action_pause)).performClick()
+            fixture.await { ports.sessions().state.value.snapshot?.status == SessionStatus.PAUSED }
+            waitNode(hasContentDescription(text(R.string.action_resume)) and isEnabled())
+            compose.onNodeWithContentDescription(text(R.string.action_resume)).performClick()
+            fixture.await { ports.sessions().state.value.snapshot?.status == SessionStatus.ACTIVE }
+        }
         val weightLabel = text(R.string.active_session_weight_input, exercise.name, set.setNumber)
         val repsLabel = text(R.string.active_session_reps_input, exercise.name, set.setNumber)
         scrollTo(hasContentDescription(weightLabel), hasTestTag("active_workout_list"))
@@ -105,11 +150,15 @@ class OnlineOnlyReadyTest {
         waitNode(complete)
         compose.onNode(complete).performClick()
         fixture.await {
-            ports.sessions().state.value.snapshot?.exercises?.single()?.sets?.single()?.let {
+            ports.sessions().state.value.snapshot?.exercises?.single()?.sets?.first()?.let {
                 it.isCompleted && it.weight.toBigDecimal().compareTo("12.25".toBigDecimal()) == 0 && it.reps == 7
             } == true
         }
         assertNull(ports.sessions().state.value.pendingRequestId)
+        if (exercise.restSeconds > 0) {
+            tag("rest_timer_countdown_dialog")
+            clickText(R.string.action_skip)
+        }
         return requireNotNull(ports.sessions().state.value.snapshot)
     }
 
@@ -122,6 +171,8 @@ class OnlineOnlyReadyTest {
         tag("workout_summary_screen")
         scrollTo(hasText("12.25", substring = true), hasTestTag("workout_summary_list"))
         compose.onNode(hasText("12.25", substring = true)).assertIsDisplayed()
+        UiDevice.getInstance(InstrumentationRegistry.getInstrumentation())
+            .takeScreenshot(java.io.File(context.filesDir, "ready-summary.png"))
         val detail = ports.reads().read(OnlineRpc.workoutDetail(requireNotNull(receipt.workoutId)))
         assertEquals(1L, detail.totalSets)
         assertEquals(7L, detail.totalReps)
@@ -132,8 +183,11 @@ class OnlineOnlyReadyTest {
     @Test fun onlineUiJourney() = runBlocking {
         try {
             loginThroughUi()
-            startAndComplete()
+            startAndComplete(throughUi = true)
             val receipt = finishThroughUi()
+            check(context.getSharedPreferences("online_ready_observations", 0).edit()
+                .putString("finishedWorkout", receipt.workoutId).putString("finishedName", receipt.snapshot.templateName)
+                .putInt("finishedPid", Process.myPid()).commit())
             clickText(R.string.action_done)
             clickText(R.string.nav_progress)
             waitNode(hasText(text(R.string.progress_overview_volume)))
@@ -152,11 +206,66 @@ class OnlineOnlyReadyTest {
             assertTrue(history.data.any { it.id == receipt.workoutId })
             UiDevice.getInstance(InstrumentationRegistry.getInstrumentation()).pressBack()
             clickText(R.string.nav_home)
-            waitNode(hasContentDescription(text(R.string.desc_go_to_profile)))
-            compose.onNodeWithContentDescription(text(R.string.desc_go_to_profile)).performClick()
+            waitNode(hasContentDescription(text(R.string.redesign_profile)))
+            compose.onNodeWithContentDescription(text(R.string.redesign_profile)).performClick()
             tag("profile_information")
             waitNode(hasText(fixture.argument("readyEmail")))
             assertEquals(fixture.owner, ports.reads().profile().id)
+        } finally { activity?.close() }
+    }
+
+    @Test fun verifyFinishedRestart() = runBlocking<Unit> {
+        fixture.guard()
+        val marker = context.getSharedPreferences("online_ready_observations", 0)
+        val id = requireNotNull(marker.getString("finishedWorkout", null))
+        val name = requireNotNull(marker.getString("finishedName", null))
+        assertNotEquals(marker.getInt("finishedPid", -1), Process.myPid())
+        fixture.await { ports.auth().getLocalUserId() == fixture.owner }
+        assertEquals(id, ports.reads().read(OnlineRpc.workoutDetail(id)).id)
+        try {
+            launch()
+            tag("home_refresh")
+            clickText(R.string.nav_progress)
+            val today = LocalDate.now()
+            val calendarDate = today.format(java.time.format.DateTimeFormatter.ofPattern("EEEE, d MMMM yyyy", java.util.Locale.ENGLISH))
+            val calendar = hasContentDescription(calendarDate, substring = true) and hasClickAction()
+            scrollTo(calendar)
+            compose.onNode(calendar).performClick()
+            tag("workout_history_list")
+            scrollTo(hasText(name), hasTestTag("workout_history_list"))
+            compose.onNodeWithText(name).assertIsDisplayed()
+        } finally { activity?.close() }
+    }
+
+    @Test fun conflictReloadExposesExplicitReviewWithoutUnlockingMutations() = runBlocking<Unit> {
+        try {
+            loginThroughUi()
+            var session = openRoutine()
+            val exercise = session.exercises.single()
+            val set = exercise.sets.first()
+            for (useServer in listOf(true, false)) {
+                fixture.serverCommand(session, if (session.status == SessionStatus.PAUSED) SessionCommand.Resume else SessionCommand.Pause)
+                val input = hasContentDescription(text(R.string.active_session_weight_input, exercise.name, set.setNumber))
+                scrollTo(input, hasTestTag("active_workout_list"))
+                compose.onNode(input).performTextReplacement("25")
+                UiDevice.getInstance(InstrumentationRegistry.getInstrumentation()).pressBack()
+                fixture.await { ports.sessions().state.value.savePhase == SessionSavePhase.CONFLICT }
+                assertTrue(ports.sessions().state.value.requiresVerification)
+                compose.onAllNodesWithText(text(R.string.session_use_server)).assertCountEquals(0)
+                compose.onAllNodesWithText(text(R.string.session_reapply)).assertCountEquals(0)
+                scrollTo(hasText(text(R.string.session_reload)), hasTestTag("active_workout_list"))
+                clickText(R.string.session_reload)
+                fixture.await { !ports.sessions().state.value.requiresVerification && ports.sessions().state.value.savePhase == SessionSavePhase.CONFLICT }
+                waitNode(hasText(text(R.string.session_use_server)))
+                waitNode(hasText(text(R.string.session_reapply)))
+                val action = if (useServer) R.string.session_use_server else R.string.session_reapply
+                clickText(action)
+                if (useServer) clickText(R.string.action_continue)
+                fixture.await { ports.sessions().state.value.savePhase == SessionSavePhase.CONFIRMED }
+                session = requireNotNull(ports.sessions().state.value.snapshot)
+                assertEquals(if (useServer) "0.00" else "25.00", session.exercises.single().sets.first().weight)
+            }
+            ports.sessions().cancel(session.id)
         } finally { activity?.close() }
     }
 
@@ -257,7 +366,9 @@ internal class ProductionReadyFixture {
     val owner get() = argument("readyOwner")
     fun argument(name: String): String = requireNotNull(InstrumentationRegistry.getArguments().getString(name)) { "Missing fixture argument $name" }
     fun guard() {
-        check(!BuildConfig.DEBUG) { "Minified production release required" }
+        val internalPreview = InstrumentationRegistry.getArguments().getString("readyInternalPreview") == "true" &&
+            BuildConfig.DEBUG && context.packageName == "com.diajarkoding.imfit.modaldiagnostic"
+        check(!BuildConfig.DEBUG || internalPreview) { "Release or explicitly isolated productionDebug preview required" }
         check(argument("allowSyntheticSession") == "true")
         check(Build.FINGERPRINT.contains("generic") || Build.MODEL.contains("sdk_gphone")) { "Emulator only" }
         val user = argument("androidUser").toInt()
@@ -314,6 +425,29 @@ internal class ProductionReadyFixture {
         check(ports.sessions().state.value.pendingRequestId == null)
         check(ports.sessions().state.value.lastReceipt?.version == confirmed.version)
         return confirmed
+    }
+    /** A second real HTTP client changes the server only; it never updates the app's store. */
+    suspend fun serverCommand(session: SessionSnapshot, command: SessionCommand) = withContext(Dispatchers.IO) {
+        fun post(path: String, body: JsonObject, token: String? = null): JsonObject {
+            val connection = URI(argument("readyBackend") + path).toURL().openConnection() as HttpURLConnection
+            try {
+                connection.requestMethod = "POST"
+                connection.connectTimeout = 10_000; connection.readTimeout = 10_000
+                connection.setRequestProperty("apikey", argument("readyAnonKey"))
+                connection.setRequestProperty("Content-Type", "application/json")
+                token?.let { connection.setRequestProperty("Authorization", "Bearer $it") }
+                connection.doOutput = true
+                connection.outputStream.use { it.write(body.toString().toByteArray()) }
+                check(connection.responseCode == 200) { "Synthetic second-client request failed: ${connection.responseCode}" }
+                return Json.parseToJsonElement(connection.inputStream.bufferedReader().use { it.readText() }).jsonObject
+            } finally { connection.disconnect() }
+        }
+        guard()
+        val login = post("/auth/v1/token?grant_type=password", buildJsonObject {
+            put("email", argument("readyEmail")); put("password", argument("readyPassword"))
+        })
+        val call = OnlineRpc.updateSession(UUID.randomUUID().toString(), session.id, session.version, command)
+        post("/rest/v1/rpc/update_active_session", call.parameters, login.getValue("access_token").jsonPrimitive.content)
     }
     suspend fun await(timeoutMs: Long = 30_000, condition: suspend () -> Boolean) {
         withTimeout(timeoutMs) { while (!condition()) delay(50) }

@@ -22,9 +22,6 @@ hiltAndroid = "2.60.1"
 hiltCompiler = "2.60.1"
 hiltNavigationCompose = "1.1.0"
 coil = "3.3.0"
-roomRuntime = "2.8.4"
-roomCompiler = "2.8.4"
-roomKtx = "2.8.4"
 datastorePreferences = "1.0.0"
 hilt = "2.60.1"
 material3Lint = "1.5.0-alpha04"
@@ -61,10 +58,6 @@ androidx-hilt-navigation-compose = { group = "androidx.hilt", name = "hilt-navig
 coil-compose = { group = "io.coil-kt.coil3", name = "coil-compose", version.ref = "coil" }
 coil-svg = { group = "io.coil-kt.coil3", name = "coil-svg", version.ref = "coil" }
 coil-network-okhttp = { group = "io.coil-kt.coil3", name = "coil-network-okhttp", version.ref = "coil" }
-room-runtime = { group = "androidx.room", name = "room-runtime", version.ref = "roomRuntime" }
-room-compiler = { group = "androidx.room", name = "room-compiler", version.ref = "roomCompiler" }
-room-ktx = { group = "androidx.room", name = "room-ktx", version.ref = "roomKtx" }
-room-testing = { group = "androidx.room", name = "room-testing", version.ref = "roomRuntime" }
 datastore-preferences = { group = "androidx.datastore", name = "datastore-preferences", version.ref = "datastorePreferences" }
 junit = { group = "junit", name = "junit", version.ref = "junit" }
 mockk = { group = "io.mockk", name = "mockk", version.ref = "mockk" }

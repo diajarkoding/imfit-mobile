@@ -52,7 +52,7 @@ class HeaderSpacingTest {
                         "active", "active-loading" -> ActiveWorkoutScreenContent(
                             ActiveWorkoutState(session = if (current.page.endsWith("loading")) null
                                 else WorkoutSession("fixture", "fixture", "Synthetic Session", 0, emptyList())),
-                            SnackbarHostState(), {}, {}, {}, {}, {}, {}, { _, _, _, _ -> }, { _, _ -> }, {}, { _, _ -> })
+                            SnackbarHostState(), {}, {}, {}, {}, {}, {}, { _, _, _ -> }, {}, {}, {})
                         "summary-loading", "summary-unavailable" -> WorkoutSummaryScreenContent(
                             if (current.page.endsWith("loading")) WorkoutSummaryPresentation.Loading
                             else WorkoutSummaryPresentation.Unavailable, {})
@@ -71,8 +71,8 @@ class HeaderSpacingTest {
             Triple("detail-loading", "screen_header", "routine_detail_list"),
             Triple("edit", "screen_header", "routine_edit_list"),
             Triple("edit-loading", "screen_header", "routine_edit_list"),
-            Triple("active", "active_workout_top_bar", "active_session_overview"),
-            Triple("active-loading", "active_workout_top_bar", "active_workout_loading"),
+            Triple("active", "active_workout_top_bar", "session_confirmation_status"),
+            Triple("active-loading", "active_workout_top_bar", "session_confirmation_status"),
             Triple("summary-loading", "workout_summary_top_bar", "workout_summary_loading"),
             Triple("summary-unavailable", "workout_summary_top_bar", "workout_summary_unavailable"),
             Triple("history", "screen_header", "workout_history_date_header")

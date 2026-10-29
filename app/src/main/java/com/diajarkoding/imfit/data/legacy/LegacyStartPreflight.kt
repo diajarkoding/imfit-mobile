@@ -5,7 +5,6 @@ import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.ensureActive
 import java.time.Clock
-import java.time.Duration
 
 enum class LegacyStartReason {
     LOCAL_UNAVAILABLE, SCHEMA_BRIDGE_REVIEW, LEGACY_ITEMS_REVIEW, REMOTE_SESSION_REVIEW,
@@ -23,6 +22,7 @@ class LegacyStartPreflight(
     private val reads: RemoteReadGateway,
     private val inventory: LegacyInventoryReader,
     private val checkpoints: LegacyCheckpointStore,
+    private val recovery: LegacyRecoveryCoordinator,
     private val clock: Clock = Clock.systemUTC(),
     private val archive: LegacyArchiveStore = NoLegacyArchive,
 ) {
@@ -42,58 +42,49 @@ class LegacyStartPreflight(
         } catch (cancelled: CancellationException) { throw cancelled }
         catch (_: Exception) { reasons += LegacyStartReason.CHECKPOINT_UNAVAILABLE; null }
         if (!reads.auth.isCurrent(identity)) throw StaleAuthException()
+        val covered = try { recovery.validatedCoverage(identity, local) }
+        catch (cancelled: CancellationException) { throw cancelled }
+        catch (_: Exception) { reasons += LegacyStartReason.CHECKPOINT_UNAVAILABLE; emptySet() }
+        val actions = try { recovery.pendingActions(identity) }
+        catch (cancelled: CancellationException) { throw cancelled }
+        catch (_: Exception) { reasons += LegacyStartReason.CHECKPOINT_UNAVAILABLE; emptyList() }
+        if (!reads.auth.isCurrent(identity)) throw StaleAuthException()
         if (local is LegacyInventory.Unknown) reasons += LegacyStartReason.LOCAL_UNAVAILABLE
         if (local is LegacyInventory.Present) {
-            if (local.schemaVersion != 9 && (archived?.schemaVersion != local.schemaVersion || local.items.any { !archived.covers(it) })) reasons += LegacyStartReason.SCHEMA_BRIDGE_REVIEW
-            if (local.items.any { it.disposition != LegacyDisposition.SYNCED_CACHE_CANDIDATE && archived?.covers(it) != true }) reasons += LegacyStartReason.LEGACY_ITEMS_REVIEW
+            val historical = archived?.coveredItems(local).orEmpty()
+            fun resolved(item: LegacyItem) = item in covered || item in historical
+            if (local.schemaVersion != 9 && local.items.any { !resolved(it) }) {
+                reasons += LegacyStartReason.SCHEMA_BRIDGE_REVIEW
+            }
+            if (local.items.any { it.disposition != LegacyDisposition.SYNCED_CACHE_CANDIDATE && !resolved(it) }) {
+                reasons += LegacyStartReason.LEGACY_ITEMS_REVIEW
+            }
         }
         var sessionId: String? = null
-        val operations = mutableListOf<String>()
+        val operations = linkedSetOf<String>()
+        // Only dispatched unknown actions carry remote ambiguity. A definitively rejected
+        // historical import may remain an owner-accessible archive after explicit review.
+        operations += actions.filter { it.state == LegacyRecoveryState.SUBMITTED }.map { it.requestId }
+        if (local is LegacyInventory.Present) {
+            operations += local.items.filter { it !in covered }.mapNotNull { it.requestId }
+        }
         try {
-            val session = reads.readFor(identity, OnlineRpc.activeSession())
-            if (session.found) {
-                sessionId = session.session!!.id
+            val readiness = reads.readFor(identity, OnlineRpc.startRecoveryStatus())
+            if (!readiness.canCreate || readiness.hasMoreBlockers || readiness.blockers.isNotEmpty()) {
+                sessionId = readiness.blockers.firstOrNull()?.resourceId
                 reasons += LegacyStartReason.REMOTE_SESSION_REVIEW
             }
-            // A bounded, complete recent-operation window is NOT assumed when has_more=true.
-            val until = clock.instant()
-            val recent = reads.readFor(identity, OnlineRpc.recentOperations(until.minus(Duration.ofDays(90)).toString(), until.toString(), limit = 100))
-            if (recent.pageInfo.hasMore || recent.pageInfo.nextCursor != null || recent.pageInfo.limit != 100) {
-                reasons += LegacyStartReason.REMOTE_UNAVAILABLE
-            }
-            val sessionOperations = recent.data.filter { it.resourceType == "SESSION" }
-            for ((session, receipts) in sessionOperations.groupBy { it.resourceId }) {
-                // A historical update receipt is not itself an active session. Validate the tagged
-                // receipt then consult canonical state; never treat arbitrary result JSON as proof.
-                val valid = receipts.all { operation ->
-                    val receipt = runCatching { onlineJson.decodeFromJsonElement(SessionMutationReceipt.serializer(), operation.result) }.getOrNull()
-                    receipt != null && receipt.requestId == operation.requestId && receipt.operation == operation.operation &&
-                        receipt.sessionId == session && receipt.snapshot.id == session && receipt.version == receipt.snapshot.version &&
-                        receipt.status == receipt.snapshot.status && receipt.snapshot.schemaVersion == 1 && receipt.version >= 1 &&
-                        receipt.operation in setOf("create_active_session", "update_active_session", "finish_active_session", "cancel_active_session")
-                }
-                if (!valid) { operations += receipts.map { it.requestId }; continue }
-                val canonical = reads.readFor(identity, OnlineRpc.activeSession(session)).session
-                val terminal = canonical != null && !canonical.reviewRequired && canonical.status == canonical.effectiveStatus &&
-                    (canonical.status == SessionStatus.CANCELLED || (canonical.status == SessionStatus.COMPLETED && canonical.completedWorkoutId != null)) &&
-                    canonical.version >= receipts.maxOf { onlineJson.decodeFromJsonElement(SessionMutationReceipt.serializer(), it.result).version }
-                if (!terminal) operations += receipts.map { it.requestId }
-            }
-            if (operations.isNotEmpty()) reasons += LegacyStartReason.REMOTE_OPERATIONS_REVIEW
-            if (local is LegacyInventory.Present) local.items.mapNotNull { it.requestId }.distinct().forEach { requestId ->
-                // Even COMMITTED does not acknowledge/clean an old intent without payload/receipt review.
+            for (requestId in operations) {
+                // Discovery is targeted evidence, never acknowledgement. Template lookup omits
+                // the original payload; explicit exact replay remains the only confirmation.
                 reads.readFor(identity, OnlineRpc.operationStatus(requestId))
             }
+            if (operations.isNotEmpty()) reasons += LegacyStartReason.REMOTE_OPERATIONS_REVIEW
         } catch (cancelled: CancellationException) { throw cancelled }
-        catch (failure: Exception) {
-            val error = (failure as? OnlineFailure)?.reason
-            if (error is RemoteError.Conflict && error.discriminator in setOf("LEGACY_REVIEW_REQUIRED", "SESSION_REVIEW_REQUIRED")) {
-                reasons += LegacyStartReason.REMOTE_SESSION_REVIEW
-            } else reasons += LegacyStartReason.REMOTE_UNAVAILABLE
-        }
+        catch (_: Exception) { reasons += LegacyStartReason.REMOTE_UNAVAILABLE }
         currentCoroutineContext().ensureActive()
         if (!reads.auth.isCurrent(identity)) throw StaleAuthException()
-        var report = LegacyStartReport(identity, decision(reasons), reasons, local, sessionId, operations)
+        var report = LegacyStartReport(identity, decision(reasons), reasons, local, sessionId, operations.toList())
         try {
             // Stored Ready is audit evidence only; the next call always inventories again.
             checkpoints.load(identity.ownerId)?.let {
@@ -135,7 +126,7 @@ sealed interface GuardedLegacyStart {
     data class Created(val receipt: SessionMutationReceipt) : GuardedLegacyStart
 }
 
-/** F4 integration seam only; deliberately NOT bound to the existing local session manager yet. */
+/** Re-inventories legacy evidence before registering the immutable create request. */
 class LegacyGuardedSessionStart(private val preflight: LegacyStartPreflight, private val repository: OnlineRepository) {
     init { require(preflight.auth === repository.auth) }
     suspend fun create(call: RpcCall<SessionMutationReceipt>, onDispatch: () -> Unit = {}): GuardedLegacyStart {
@@ -144,7 +135,6 @@ class LegacyGuardedSessionStart(private val preflight: LegacyStartPreflight, pri
         if (report.decision != LegacyStartDecision.READY) return GuardedLegacyStart.Blocked(report)
         if (!preflight.unchanged(report)) return GuardedLegacyStart.Blocked(report.copy(
             decision = LegacyStartDecision.UNKNOWN, reasons = setOf(LegacyStartReason.LOCAL_CHANGED)))
-        onDispatch()
-        return GuardedLegacyStart.Created(repository.execute(call, expectedIdentity = report.identity))
+        return GuardedLegacyStart.Created(repository.execute(call, expectedIdentity = report.identity, onRegistered = onDispatch))
     }
 }

@@ -2,415 +2,196 @@ package com.diajarkoding.imfit.data.repository
 
 import android.content.Context
 import android.net.Uri
-import android.util.Log
-import com.diajarkoding.imfit.BuildConfig
+import com.diajarkoding.imfit.core.timer.TimerSessionCleanup
 import com.diajarkoding.imfit.data.exception.AuthException
 import com.diajarkoding.imfit.data.exception.mapSupabaseException
-import com.diajarkoding.imfit.data.remote.dto.ProfileDto
-import com.diajarkoding.imfit.data.remote.dto.toDomain
-import com.diajarkoding.imfit.data.local.database.IMFITDatabase
-import com.diajarkoding.imfit.data.sync.SyncLifecycleController
-import com.diajarkoding.imfit.data.sync.SyncPreferences
-import com.diajarkoding.imfit.data.sync.SyncScheduler
-import com.diajarkoding.imfit.domain.model.RegisterResult
-import com.diajarkoding.imfit.domain.model.User
+import com.diajarkoding.imfit.data.remote.online.*
+import com.diajarkoding.imfit.domain.model.*
 import com.diajarkoding.imfit.domain.repository.AuthRepository
+import com.diajarkoding.imfit.domain.repository.isCanonicalAvatarPath
 import dagger.hilt.android.qualifiers.ApplicationContext
 import io.github.jan.supabase.SupabaseClient
 import io.github.jan.supabase.auth.auth
 import io.github.jan.supabase.auth.providers.builtin.Email
-import io.github.jan.supabase.postgrest.postgrest
 import io.github.jan.supabase.storage.storage
-import kotlin.time.Duration.Companion.seconds
-import kotlinx.serialization.json.buildJsonObject
-import kotlinx.serialization.json.put
 import java.util.UUID
 import javax.inject.Inject
+import javax.inject.Provider
 import javax.inject.Singleton
+import kotlin.time.Duration.Companion.seconds
 import kotlinx.coroutines.CancellationException
-import kotlinx.coroutines.flow.flow
-import kotlinx.coroutines.flow.emitAll
-import kotlinx.coroutines.flow.map
-import kotlinx.coroutines.flow.distinctUntilChanged
-import kotlinx.coroutines.flow.flatMapLatest
-import kotlinx.coroutines.flow.buffer
-import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.flow.*
+import kotlinx.serialization.json.buildJsonObject
+import kotlinx.serialization.json.put
 
-private const val TAG = "AuthRepository"
 private const val AVATARS_BUCKET = "avatars"
 
 @Singleton
 class AuthRepositoryImpl @Inject constructor(
     private val supabaseClient: SupabaseClient,
-    private val syncScheduler: SyncScheduler,
-    private val syncLifecycleController: SyncLifecycleController,
-    private val database: IMFITDatabase,
-    private val syncPreferences: SyncPreferences,
+    private val readsProvider: Provider<RemoteReadGateway>,
+    private val changesProvider: Provider<OnlineMutationChanges>,
     @ApplicationContext private val context: Context,
-    private val timerCleanup: com.diajarkoding.imfit.core.timer.TimerSessionCleanup
+    private val timerCleanup: TimerSessionCleanup,
 ) : AuthRepository {
-
-    private var cachedUser: User? = null
+    private data class CachedProfile(val identity: AuthIdentity, val user: User)
+    private val cached = MutableStateFlow<CachedProfile?>(null)
+    private val reads by lazy {
+        readsProvider.get().also { gateway ->
+            gateway.auth.onIdentityChanged { cached.value = null }
+        }
+    }
 
     override suspend fun register(
-        name: String,
-        email: String,
-        password: String,
-        birthDate: String?,
-        profilePhotoUri: String?
+        name: String, email: String, password: String, birthDate: String?, profilePhotoUri: String?,
     ): Result<RegisterResult> {
+        var accountCreated = false
         return try {
-            // Validate input parameters
-            if (name.isBlank()) {
-                return Result.failure(AuthException.InvalidEmail())
-            }
-            if (email.isBlank() || !android.util.Patterns.EMAIL_ADDRESS.matcher(email).matches()) {
-                return Result.failure(AuthException.InvalidEmail())
-            }
-            if (!isStrongPassword(password)) {
-                return Result.failure(AuthException.WeakPassword())
-            }
-
-            Log.d(TAG, "Starting registration for email: $email")
-
+            if (name.isBlank() || !validEmail(email)) return Result.failure(AuthException.InvalidEmail())
+            if (!isStrongPassword(password)) return Result.failure(AuthException.WeakPassword())
             supabaseClient.auth.signUpWith(Email) {
                 this.email = email
                 this.password = password
-                this.data = buildJsonObject {
+                data = buildJsonObject {
                     put("name", name)
                     birthDate?.let { put("birth_date", it) }
                 }
             }
-
-            val userId = supabaseClient.auth.currentUserOrNull()?.id
+            accountCreated = true
+            val owner = supabaseClient.auth.currentUserOrNull()?.id
                 ?: return Result.success(RegisterResult.CheckEmail)
-
-            Log.d(TAG, "Registration successful for user ID: $userId")
-
-            // Upload profile photo to Supabase Storage if provided
-            var avatarUrl: String? = null
-            if (!profilePhotoUri.isNullOrBlank()) {
-                avatarUrl = uploadProfilePhoto(userId, profilePhotoUri)
-                if (avatarUrl != null) {
-                    Log.d(TAG, "Profile photo uploaded successfully: $avatarUrl")
-                } else {
-                    Log.w(TAG, "Failed to upload profile photo, using placeholder")
-                }
-            }
-
-            // Create profile in profiles table
-            val newUser = User(
-                id = userId,
-                name = name,
-                email = email,
-                birthDate = birthDate,
-                profilePhotoUri = avatarUrl // Use remote URL, not local URI
+            val identity = reads.auth.capture().identity
+            check(identity.ownerId == owner) { "Authenticated owner changed" }
+            val avatar = profilePhotoUri?.takeIf(String::isNotBlank)?.let { uploadProfilePhoto(identity, it) }
+            val patch = ProfilePatch(
+                birthDate = birthDate?.let { ProfileField.Value(it) } ?: ProfileField.Omitted,
+                avatarPath = avatar?.let { ProfileField.Value(it) } ?: ProfileField.Omitted,
             )
-
-            // Update profile with additional data (trigger already created base profile)
-            try {
-                if (birthDate != null || avatarUrl != null) {
-                    supabaseClient.postgrest.from("profiles")
-                        .update(buildJsonObject {
-                            birthDate?.let { put("birth_date", it) }
-                            avatarUrl?.let { put("avatar_url", it) }
-                        }) {
-                            filter { eq("id", userId) }
-                        }
-                    Log.d(TAG, "Profile updated with birth_date/avatar for user ID: $userId")
-                }
-            } catch (e: Exception) {
-                Log.e(TAG, "Failed to update profile: ${e.message}", e)
-            }
-
-            cacheUser(newUser)
-            syncLifecycleController.unblock(userId)
-            syncScheduler.enqueue(userId)
-            Result.success(RegisterResult.Authenticated(newUser))
-        } catch (e: Exception) {
-            Log.e(TAG, "Register error: ${e.message}", e)
-            val authException = mapSupabaseException(e)
-            Result.failure(authException)
+            val user = writeProfile(identity, patch)
+            Result.success(RegisterResult.Authenticated(user))
+        } catch (cancelled: CancellationException) {
+            throw cancelled
+        } catch (failure: Exception) {
+            if (accountCreated) Result.failure(IllegalStateException(
+                "Account may already have been created, but profile setup failed. Sign in to review it; do not register again.", failure))
+            else Result.failure(mapSupabaseException(failure))
         }
     }
 
-    /**
-     * Uploads a profile photo to Supabase Storage and returns the storage path.
-     * The path is stored in the database and used to generate signed URLs.
-     * 
-     * @param userId The user's ID (used as folder name)
-     * @param localUri The local content:// or file:// URI
-     * @return The storage path of the uploaded image, or null if upload fails
-     */
-    private suspend fun uploadProfilePhoto(userId: String, localUri: String): String? {
-        return try {
-            Log.d(TAG, "Uploading profile photo from: $localUri")
-            
-            // Read image bytes from content resolver
-            val uri = Uri.parse(localUri)
-            val inputStream = context.contentResolver.openInputStream(uri)
-                ?: run {
-                    Log.e(TAG, "Failed to open input stream for URI: $localUri")
-                    return null
-                }
-            
-            val imageBytes = inputStream.use { it.readBytes() }
-            Log.d(TAG, "Read ${imageBytes.size} bytes from image")
-            
-            // Generate unique filename
-            val filename = "${UUID.randomUUID()}.jpg"
-            val path = "$userId/$filename"
-            
-            // Upload to Supabase Storage (private bucket)
-            val bucket = supabaseClient.storage.from(AVATARS_BUCKET)
-            bucket.upload(path, imageBytes) {
-                upsert = true
-            }
-            Log.d(TAG, "Image uploaded to Storage: $path")
-            
-            // Return the storage path (not URL) for private bucket
-            path
-        } catch (e: Exception) {
-            Log.e(TAG, "Failed to upload profile photo: ${e.message}", e)
-            null
-        }
+    /** Upload failure is not an instruction to clear the avatar. Never persists a signed URL. */
+    private suspend fun uploadProfilePhoto(identity: AuthIdentity, localUri: String): String {
+        if (!reads.auth.isCurrent(identity)) throw StaleAuthException()
+        val bytes = (context.contentResolver.openInputStream(Uri.parse(localUri))
+            ?: throw IllegalStateException("Unable to read selected photo")).use { it.readBytes() }
+        val path = "${identity.ownerId}/${UUID.randomUUID()}.jpg"
+        supabaseClient.storage.from(AVATARS_BUCKET).upload(path, bytes) { upsert = false }
+        if (!reads.auth.isCurrent(identity)) throw StaleAuthException()
+        return path
     }
 
-    /**
-     * Generates a signed URL for a private avatar image.
-     * The URL is valid for 1 hour.
-     * 
-     * @param storagePath The storage path (e.g., "userId/filename.jpg")
-     * @return The signed URL or null if generation fails
-     */
     override suspend fun getSignedAvatarUrl(storagePath: String?): String? {
         if (storagePath.isNullOrBlank()) return null
-        
+        val identity = reads.auth.capture().identity
+        if (!isCanonicalAvatarPath(storagePath, identity.ownerId)) return null
         return try {
-            val bucket = supabaseClient.storage.from(AVATARS_BUCKET)
-            val signedUrl = bucket.createSignedUrl(storagePath, expiresIn = 3600.seconds)
-            Log.d(TAG, "Generated signed URL for: $storagePath")
-            signedUrl
-        } catch (e: Exception) {
-            Log.e(TAG, "Failed to generate signed URL: ${e.message}", e)
+            val url = supabaseClient.storage.from(AVATARS_BUCKET).createSignedUrl(storagePath, expiresIn = 3600.seconds)
+            if (!reads.auth.isCurrent(identity)) throw StaleAuthException()
+            url
+        } catch (cancelled: CancellationException) {
+            throw cancelled
+        } catch (_: Exception) {
             null
         }
     }
 
-
-    override suspend fun login(email: String, password: String): Result<User> {
-        return try {
-            // Validate input parameters
-            if (email.isBlank() || !android.util.Patterns.EMAIL_ADDRESS.matcher(email).matches()) {
-                return Result.failure(AuthException.InvalidEmail())
-            }
-            if (password.isBlank()) {
-                return Result.failure(AuthException.InvalidCredentials())
-            }
-
-            Log.d("AuthRepository", "Starting login for email: $email")
-
-            supabaseClient.auth.signInWith(Email) {
-                this.email = email
-                this.password = password
-            }
-
-            val userId = supabaseClient.auth.currentUserOrNull()?.id
-                ?: return Result.failure(AuthException.InvalidCredentials())
-
-            Log.d("AuthRepository", "Login successful for user ID: $userId")
-
-            var profile = fetchProfile(userId)
-            if (profile == null) {
-                Log.w("AuthRepository", "User authenticated but no profile found for user ID: $userId")
-                // Create profile if it doesn't exist (fallback for users without trigger)
-                val currentUser = supabaseClient.auth.currentUserOrNull()
-                if (currentUser != null) {
-                    val userName = currentUser.userMetadata.displayNameOrDefault()
-                    val birthDate = currentUser.userMetadata?.get("birth_date")?.toString()?.removeSurrounding("\"")
-                    try {
-                        supabaseClient.postgrest.from("profiles")
-                            .upsert(buildJsonObject {
-                                put("id", userId)
-                                put("name", userName)
-                                put("email", email)
-                                birthDate?.let { put("birth_date", it) }
-                            })
-                        Log.d("AuthRepository", "Profile upserted for user: $userId")
-                        profile = fetchProfile(userId)
-                    } catch (e: Exception) {
-                        Log.e("AuthRepository", "Failed to upsert profile during login: ${e.message}", e)
-                    }
-                }
-            }
-
-            if (profile != null) {
-                cacheUser(profile)
-                syncLifecycleController.unblock(userId)
-                syncScheduler.enqueue(userId)
-                Result.success(profile)
-            } else {
-                val currentUser = supabaseClient.auth.currentUserOrNull()
-                if (currentUser != null) {
-                    val basicUser = User(
-                        id = userId,
-                        name = currentUser.userMetadata.displayNameOrDefault(),
-                        email = email,
-                        birthDate = null,
-                        profilePhotoUri = null
-                    )
-                    cacheUser(basicUser)
-                    syncLifecycleController.unblock(userId)
-                    syncScheduler.enqueue(userId)
-                    Result.success(basicUser)
-                } else {
-                    Result.failure(AuthException.UserNotFound())
-                }
-            }
-        } catch (e: Exception) {
-            Log.e("AuthRepository", "Login error: ${e.message}", e)
-            val authException = mapSupabaseException(e)
-            Result.failure(authException)
+    override suspend fun login(email: String, password: String): Result<User> = try {
+        if (!validEmail(email)) Result.failure(AuthException.InvalidEmail())
+        else if (password.isBlank()) Result.failure(AuthException.InvalidCredentials())
+        else {
+            cached.value = null
+            supabaseClient.auth.signInWith(Email) { this.email = email; this.password = password }
+            Result.success(getCurrentUser() ?: throw AuthException.UserNotFound())
         }
+    } catch (cancelled: CancellationException) {
+        throw cancelled
+    } catch (failure: Exception) {
+        Result.failure(mapSupabaseException(failure))
     }
 
     override suspend fun logout() {
-        val userId = supabaseClient.auth.currentUserOrNull()?.id ?: return
+        cached.value = null
         timerCleanup.stop("LOGOUT")
-        syncScheduler.cancelForUser(userId)
-        syncLifecycleController.blockAndAwaitIdle(userId)
-        try {
-            check(peekLocalUserId() == userId) { "Authenticated owner changed during logout" }
-            // Keep pending aggregates, dependencies and unfinished drafts, not all cached PII.
-            database.pruneSyncedCacheForLogout(userId)
-            syncPreferences.clearForUser(userId)
-            cachedUser = null
-            check(peekLocalUserId() == userId) { "Authenticated owner changed during logout" }
-            supabaseClient.auth.signOut()
-        } catch (failure: Exception) {
-            if (peekLocalUserId() == userId) syncLifecycleController.unblock(userId)
-            throw failure
-        }
+        supabaseClient.auth.signOut()
     }
 
     override suspend fun peekLocalUserId(): String? = supabaseClient.auth.currentUserOrNull()?.id
-
-    override fun observeLocalUserId() = supabaseClient.auth.sessionStatus
+    override fun observeLocalUserId(): Flow<String?> = supabaseClient.auth.sessionStatus
         .map { supabaseClient.auth.currentUserOrNull()?.id }.distinctUntilChanged()
-
     override suspend fun localAuthStatusName(): String =
         supabaseClient.auth.sessionStatus.value::class.simpleName ?: "null"
-
     override suspend fun getLocalUserId(): String? {
-        // A loaded local identity needs no initialization wait (or remote profile lookup).
-        // Do not cache it here: logout/account switches must be visible on every call.
         peekLocalUserId()?.let { return it }
         supabaseClient.auth.awaitInitialization()
-        return supabaseClient.auth.currentUserOrNull()?.id
+        return peekLocalUserId()
     }
 
     override suspend fun getCurrentUser(): User? {
-        return try {
-            val localUserId = getLocalUserId() ?: return null
-            database.userDao().getUserById(localUserId)?.let { return it.toUser().takeIf { peekLocalUserId() == localUserId } }
-            cachedUser?.takeIf { it.id == localUserId && peekLocalUserId() == localUserId }?.let { return it }
-
-            // Check if user is authenticated
-            val currentUser = supabaseClient.auth.currentUserOrNull()
-                ?: return null
-
-            Log.d("AuthRepository", "Fetching current user for user ID: ${currentUser.id}")
-
-            // Try to fetch profile from database
-            val profile = fetchProfile(currentUser.id)
-            if (profile != null) {
-                cacheUser(profile)
-                return profile.takeIf { peekLocalUserId() == localUserId }
-            } else {
-                // Create basic user object from auth metadata
-                val basicUser = User(
-                    id = currentUser.id,
-                    name = currentUser.userMetadata.displayNameOrDefault(),
-                    email = currentUser.email ?: "",
-                    birthDate = null,
-                    profilePhotoUri = null
-                )
-                cacheUser(basicUser)
-                return basicUser.takeIf { peekLocalUserId() == localUserId }
-            }
-        } catch (e: CancellationException) { throw e
-        } catch (e: Exception) {
-            Log.e("AuthRepository", "Get current user error: ${e.message}", e)
-            // Don't throw exception, just return null to indicate no user
-            null
-        }
+        val owner = getLocalUserId() ?: run { cached.value = null; return null }
+        val identity = reads.auth.capture().identity
+        if (identity.ownerId != owner) throw StaleAuthException()
+        cached.value?.takeIf { it.identity == identity && reads.auth.isCurrent(identity) }?.let { return it.user }
+        // Profile failure propagates: it is not auth absence and never creates a fallback profile.
+        return acceptProfile(identity, reads.profile())
     }
 
     @OptIn(ExperimentalCoroutinesApi::class)
-    override fun observeCurrentUser(): kotlinx.coroutines.flow.Flow<User?> = observeLocalUserId().flatMapLatest { userId ->
-        if (userId == null) flowOf(null)
-        else flow<User?> {
-            getCurrentUser() // Ensure a local fallback exists before observing Room.
-            emitAll(database.userDao().observeUser(userId).map {
-                if (peekLocalUserId() == userId) it?.toUser() else null
-            }.distinctUntilChanged())
+    override fun observeCurrentUser(): Flow<User?> = flow {
+        getLocalUserId()
+        // Initialize the lazy gateway before observing its epoch stream.
+        try { reads.auth.capture() } catch (failure: OnlineFailure) {
+            if (failure.reason != RemoteError.Unauthenticated) throw failure
         }
-    }.buffer(0)
+        emitAll(reads.auth.identity.flatMapLatest { identity ->
+            if (identity == null) {
+                cached.value = null
+                flowOf(null)
+            } else flow {
+                emit(getCurrentUser())
+                emitAll(cached.map { entry ->
+                    entry?.takeIf { it.identity == identity && reads.auth.isCurrent(identity) }?.user
+                }.filterNotNull())
+            }
+        })
+    }.distinctUntilChanged().buffer(0)
 
-    private suspend fun cacheUser(user: User) {
-        if (getLocalUserId() != user.id) return
-        database.userDao().insertUser(user.toLocal())
-        cachedUser = user
+    override suspend fun isLoggedIn(): Boolean = getLocalUserId() != null
+
+    override suspend fun updateProfile(patch: ProfilePatch): Result<User> = try {
+        val identity = reads.auth.capture().identity
+        Result.success(writeProfile(identity, patch))
+    } catch (cancelled: CancellationException) {
+        throw cancelled
+    } catch (failure: Exception) {
+        Result.failure(failure)
     }
 
-    override suspend fun isLoggedIn(): Boolean {
-        return try {
-            val currentUser = supabaseClient.auth.currentUserOrNull()
-            val isLoggedIn = currentUser != null
-            Log.d("AuthRepository", "Is user logged in: $isLoggedIn")
-            isLoggedIn
-        } catch (e: Exception) {
-            Log.e("AuthRepository", "Check login status error: ${e.message}", e)
-            false
-        }
+    private suspend fun writeProfile(identity: AuthIdentity, patch: ProfilePatch): User {
+        if (!reads.auth.isCurrent(identity)) throw StaleAuthException()
+        val user = acceptProfile(identity, reads.updateProfile(patch))
+        if (patch != ProfilePatch() && !changesProvider.get().publish(ProfileChanged(identity))) throw StaleAuthException()
+        return user
     }
 
-    override suspend fun updateProfile(user: User): Result<User> {
-        return try {
-            supabaseClient.postgrest.from("profiles")
-                .update({
-                    set("name", user.name)
-                    user.birthDate?.let { set("birth_date", it) }
-                    user.profilePhotoUri?.let { set("avatar_url", it) }
-                }) {
-                    filter { eq("id", user.id) }
-                }
-            cacheUser(user)
-            Result.success(user)
-        } catch (e: Exception) {
-            Log.e("AuthRepository", "Update profile error: ${e.message}", e)
-            Result.failure(e)
-        }
+    private fun acceptProfile(identity: AuthIdentity, row: RemoteProfile): User {
+        if (!reads.auth.isCurrent(identity)) throw StaleAuthException()
+        if (row.id != identity.ownerId) throw OnlineFailure(RemoteError.Protocol)
+        val user = User(row.id, row.name, row.email, row.birthDate, row.avatarUrl)
+        reads.auth.withCurrent(identity) { cached.value = CachedProfile(identity, user) }
+        return user
     }
 
-    private suspend fun fetchProfile(userId: String): User? {
-        return try {
-            val profile = supabaseClient.postgrest.from("profiles")
-                .select {
-                    filter { eq("id", userId) }
-                }
-                .decodeSingleOrNull<ProfileDto>()
-            profile?.toDomain()
-        } catch (e: Exception) {
-            Log.e("AuthRepository", "Fetch profile error: ${e.message}", e)
-            null
-        }
-    }
-
-    private fun isStrongPassword(password: String): Boolean =
-        password.length >= 8 &&
-            password.any(Char::isUpperCase) &&
-            password.any(Char::isLowerCase) &&
-            password.any(Char::isDigit)
+    private fun validEmail(email: String): Boolean = email.isNotBlank() && android.util.Patterns.EMAIL_ADDRESS.matcher(email).matches()
+    private fun isStrongPassword(password: String): Boolean = password.length >= 8 &&
+        password.any(Char::isUpperCase) && password.any(Char::isLowerCase) && password.any(Char::isDigit)
 }

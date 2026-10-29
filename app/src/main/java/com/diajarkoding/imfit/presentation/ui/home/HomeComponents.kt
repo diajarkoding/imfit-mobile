@@ -31,7 +31,6 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.diajarkoding.imfit.R
-import com.diajarkoding.imfit.data.sync.SyncState
 import com.diajarkoding.imfit.domain.model.WorkoutLog
 import com.diajarkoding.imfit.domain.model.WorkoutTemplate
 import com.diajarkoding.imfit.presentation.components.common.*
@@ -284,76 +283,6 @@ internal fun HomeRemoteLastWorkout(log: com.diajarkoding.imfit.data.remote.onlin
             Row(horizontalArrangement = Arrangement.spacedBy(IMFITSpacing.md)) {
                 HomeSummaryMetric(stringResource(R.string.remote_read_minutes, log.durationSeconds / 60), stringResource(R.string.home_total_duration), R.drawable.msr_timer_filled, Modifier.weight(1f))
                 HomeSummaryMetric(java.text.NumberFormat.getNumberInstance(locale).format(log.totalVolume.toBigDecimal()) + " kg", stringResource(R.string.home_total_volume), R.drawable.ic_home_weight, Modifier.weight(1f))
-            }
-        }
-    }
-}
-
-@Composable
-internal fun HomeSyncStatusCard(state: SyncState, modifier: Modifier = Modifier,
-    onRetryUploads: (() -> Unit)? = null, retrying: Boolean = false, retryFailed: Boolean = false) {
-    val colors = homePalette()
-    val pending = state.pendingCount.coerceAtLeast(0)
-    val status = when {
-        state.status == SyncState.SyncStatus.SYNCED && pending > 0 -> SyncState.SyncStatus.IDLE
-        else -> state.status
-    }
-    val (accent, background) = when (status) {
-        SyncState.SyncStatus.OFFLINE -> colors.warning to colors.warningContainer
-        SyncState.SyncStatus.FAILED -> colors.error to colors.errorContainer
-        SyncState.SyncStatus.SYNCED -> colors.success to colors.successContainer
-        SyncState.SyncStatus.IDLE, SyncState.SyncStatus.SYNCING -> colors.primary to colors.primaryContainer
-    }
-    val title = when (status) {
-        SyncState.SyncStatus.IDLE -> if (pending > 0) stringResource(R.string.home_sync_pending, pending)
-            else stringResource(R.string.home_sync_idle)
-        SyncState.SyncStatus.SYNCING -> stringResource(R.string.home_sync_syncing)
-        SyncState.SyncStatus.SYNCED -> stringResource(R.string.home_sync_synced)
-        SyncState.SyncStatus.OFFLINE -> if (pending > 0) stringResource(R.string.home_sync_offline_pending, pending)
-            else stringResource(R.string.home_sync_offline)
-        SyncState.SyncStatus.FAILED -> stringResource(R.string.home_sync_failed)
-    }
-    val description = when (status) {
-        SyncState.SyncStatus.IDLE -> if (pending > 0) R.string.home_sync_local else R.string.home_sync_idle_description
-        SyncState.SyncStatus.SYNCING -> R.string.home_sync_syncing_description
-        SyncState.SyncStatus.SYNCED -> R.string.home_sync_synced_description
-        SyncState.SyncStatus.OFFLINE -> R.string.home_sync_local
-        SyncState.SyncStatus.FAILED -> R.string.home_sync_failed_description
-    }
-    val icon = when (status) {
-        SyncState.SyncStatus.IDLE -> R.drawable.ic_home_cloud
-        SyncState.SyncStatus.SYNCING -> R.drawable.ic_home_refresh
-        SyncState.SyncStatus.SYNCED -> R.drawable.ic_home_cloud_check
-        SyncState.SyncStatus.OFFLINE -> R.drawable.ic_home_cloud_off
-        SyncState.SyncStatus.FAILED -> R.drawable.ic_home_alert
-    }
-    Surface(modifier.fillMaxWidth().semantics(mergeDescendants = true) { liveRegion = LiveRegionMode.Polite },
-        shape = RoundedCornerShape(IMFITCornerRadius.small), color = background) {
-        Row(Modifier.padding(IMFITSpacing.cardPadding), verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(IMFITSpacing.md)) {
-            Icon(painterResource(icon), null, Modifier.size(IMFITSizes.iconSm), tint = accent)
-            Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(IMFITSpacing.xxs)) {
-                Text(title, color = accent, style = IMFITTypography.statusTitle)
-                Text(stringResource(description), color = colors.text, style = IMFITTypography.statusBody)
-                if (pending > 0 && onRetryUploads != null) {
-                    Text(stringResource(R.string.manual_upload_description), color = colors.text, style = IMFITTypography.statusBody)
-                    if (retryFailed) Text(stringResource(R.string.manual_upload_failed), color = colors.error, style = IMFITTypography.statusBody)
-                    TextButton(onRetryUploads, enabled = !retrying && status != SyncState.SyncStatus.SYNCING,
-                        modifier = Modifier.heightIn(min = 48.dp)) {
-                        Text(stringResource(if (retrying) R.string.manual_upload_running else R.string.manual_upload_retry))
-                    }
-                }
-                if (status == SyncState.SyncStatus.SYNCING) {
-                    val progress = state.progress
-                    if (state.isInitialSync && progress.isFinite()) {
-                        LinearProgressIndicator(progress = { progress.coerceIn(0f, 1f) },
-                            modifier = Modifier.fillMaxWidth().padding(top = 6.dp),
-                            color = accent, trackColor = accent.copy(alpha = 0.15f))
-                    } else {
-                        LinearProgressIndicator(Modifier.fillMaxWidth().padding(top = 6.dp),
-                            color = accent, trackColor = accent.copy(alpha = 0.15f))
-                    }
-                }
             }
         }
     }

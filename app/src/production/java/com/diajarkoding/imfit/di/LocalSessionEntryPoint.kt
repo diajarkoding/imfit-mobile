@@ -1,7 +1,6 @@
 package com.diajarkoding.imfit.di
 
 import androidx.annotation.Keep
-import com.diajarkoding.imfit.data.local.database.IMFITDatabase
 import dagger.hilt.EntryPoint
 import dagger.hilt.InstallIn
 import dagger.hilt.components.SingletonComponent
@@ -12,6 +11,5 @@ import io.github.jan.supabase.SupabaseClient
 @EntryPoint
 @InstallIn(SingletonComponent::class)
 interface LocalSessionEntryPoint {
-    fun database(): IMFITDatabase
     fun supabase(): SupabaseClient
 }

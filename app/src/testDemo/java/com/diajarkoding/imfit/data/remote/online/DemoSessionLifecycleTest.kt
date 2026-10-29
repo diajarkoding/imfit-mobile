@@ -26,12 +26,13 @@ class DemoSessionLifecycleTest {
     @Test fun `demo create finishes and a new create is recognized after terminal receipts`() = runTest {
         FakeUserDataSource.login(DemoAuthRepository.DEMO_EMAIL, DemoAuthRepository.DEMO_PASSWORD).getOrThrow()
         val reads = DemoReadGateway(DemoAuthRepository())
-        val preflight = LegacyStartPreflight(reads, LegacyInventoryReader { LegacyInventory.Absent(it) },
+        val inventory = LegacyInventoryReader { LegacyInventory.Absent(it) }
+        val preflight = LegacyStartPreflight(reads, inventory,
             object : LegacyCheckpointStore {
                 override suspend fun load(ownerId: String): LegacyCheckpoint? = null
                 override suspend fun record(checkpoint: LegacyCheckpoint) = Unit
-            })
-        val store = OnlineSessionStore(reads, reads.repository, LegacyGuardedSessionStart(preflight, reads.repository))
+            }, testRecoveryCoordinator(reads, reads.repository, inventory))
+        val store = OnlineSessionStore(reads, reads.repository, LegacyGuardedSessionStart(preflight, reads.repository), scope = backgroundScope)
         val workouts = com.diajarkoding.imfit.data.repository.OnlineWorkoutRepository(reads, store,
             TemplateEditBridge(reads) { _, _ -> })
         val template = FakeWorkoutDataSource.getTemplateById("template_1")!!
@@ -39,23 +40,23 @@ class DemoSessionLifecycleTest {
         val session = workouts.startWorkout(template)
         assertTrue(session.exerciseLogs.isNotEmpty())
 
-        // Confirm one set: weight edit then completion, one intent per call.
-        val setLogged = workouts.mutateActiveSession(session.id) { current -> current.copy(exerciseLogs =
-            current.exerciseLogs.mapIndexed { index, log -> if (index == 0) log.copy(sets = log.sets.mapIndexed { s, set ->
-                if (s == 0) set.copy(weight = 10f) else set } ) else log })}
-        assertEquals(10f, setLogged!!.exerciseLogs.first().sets.first().weight, 0.001f)
-        val completed = workouts.mutateActiveSession(session.id) { current -> current.copy(exerciseLogs =
-            current.exerciseLogs.mapIndexed { index, log -> if (index == 0) log.copy(sets = log.sets.mapIndexed { s, set ->
-                if (s == 0) set.copy(isCompleted = true) else set } ) else log })}
-        assertTrue(completed!!.exerciseLogs.first().sets.first().isCompleted)
+        val child = store.state.value.snapshot!!.exercises.first()
+        val set = child.sets.first()
+        val key = SessionSetKey(child.id, set.id)
+        store.editSet(session.id, key, "10", "8")
+        // Complete flushes raw input before using the acknowledged next CAS version.
+        val completed = store.command(session.id, SessionCommand.CompleteSet(child.id, set.id))
+        assertTrue(completed.exercises.first().sets.first().isCompleted)
+        assertEquals("10.00", completed.exercises.first().sets.first().weight)
 
-        val log = workouts.finishWorkout()!!
-        assertEquals(session.id, log.id)
-        assertEquals(80f, log.exerciseLogs.sumOf { it.totalVolume.toDouble() }.toFloat(), 0.001f) // 10kg x 8 reps
-        assertNotNull(FakeWorkoutDataSource.getWorkoutLogById(session.id))
+        val workoutId = workouts.finishWorkout()!!
+        val log = workouts.getWorkoutLogById(workoutId)
+        assertEquals(session.id, workoutId)
+        assertEquals(80f, log.exerciseLogs.sumOf { it.totalVolume.toDouble() }.toFloat(), 0.001f)
+        assertNotNull(FakeWorkoutDataSource.getWorkoutLogById(workoutId))
         assertNull(workouts.getActiveSessionForTimer())
 
-        // A fresh create is allowed once every historical SESSION receipt is terminal.
+        // Authoritative readiness allows a fresh create despite historical terminal receipts.
         val next = workouts.startWorkout(template)
         assertTrue(next.id != session.id)
         assertTrue(reads.repository.confirmedSessions.value.containsKey(next.id))

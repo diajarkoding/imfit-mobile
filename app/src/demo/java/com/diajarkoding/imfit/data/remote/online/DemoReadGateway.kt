@@ -18,7 +18,7 @@ class DemoReadGateway @Inject constructor(authRepository: AuthRepository) : Remo
     private val revisions = mutableMapOf<String, Long>()
     private val receipts = mutableMapOf<String, Pair<com.diajarkoding.imfit.data.remote.TemplateWriteRequest, com.diajarkoding.imfit.data.remote.TemplateWriteReceipt>>()
     override val auth = OnlineAuth()
-    private val sessions = DemoSessionApi()
+    private val sessions = DemoSessionApi(templateRevision = { revisions[it] ?: 1L })
     internal val repository: OnlineRepository = OnlineRepository(OnlineTransport { name, body, credential ->
         sessions.post(credential.identity.ownerId, name, body)
     }, auth)
@@ -41,6 +41,12 @@ class DemoReadGateway @Inject constructor(authRepository: AuthRepository) : Remo
         val user = FakeUserDataSource.getCurrentUser() ?: throw OnlineFailure(RemoteError.Unauthenticated)
         return RemoteProfile(user.id, user.name, user.email, user.birthDate, user.profilePhotoUri)
     }
+    override suspend fun updateProfile(patch: com.diajarkoding.imfit.domain.model.ProfilePatch): RemoteProfile {
+        val identity = auth.capture().identity
+        FakeUserDataSource.updateProfile(patch).getOrThrow()
+        if (!auth.isCurrent(identity)) throw StaleAuthException()
+        return profile()
+    }
     override suspend fun exercises(ids: List<String>) = ids.distinct().mapNotNull { FakeExerciseDataSource.getExerciseById(it) }
     override suspend fun <T> read(call: RpcCall<T>): T {
         require(call.mutation == null)
@@ -48,11 +54,17 @@ class DemoReadGateway @Inject constructor(authRepository: AuthRepository) : Remo
         val p = call.parameters
         fun text(key: String) = p[key]?.jsonPrimitive?.contentOrNull
         fun number(key: String) = p.getValue(key).jsonPrimitive.int
-        fun window(): List<WorkoutLog> {
+        fun summaries(): List<WorkoutSummary> = FakeWorkoutDataSource.getWorkoutLogs(owner).map {
+            onlineJson.decodeFromJsonElement<WorkoutSummary>(summary(it))
+        } + sessions.importedWorkouts(owner).map {
+            WorkoutSummary(it.id, it.templateId, it.templateName, it.startTime, it.endTime, it.durationSeconds,
+                it.totalVolume, it.totalSets, it.totalReps)
+        }
+        fun window(): List<WorkoutSummary> {
             val zone = ZoneId.of(text("p_timezone"))
-            val start = LocalDate.parse(text("p_start_date")).atStartOfDay(zone).toInstant().toEpochMilli()
-            val end = LocalDate.parse(text("p_end_date")).atStartOfDay(zone).toInstant().toEpochMilli()
-            return FakeWorkoutDataSource.getWorkoutLogs(owner).filter { it.startTime in start until end }
+            val start = LocalDate.parse(text("p_start_date")).atStartOfDay(zone).toInstant()
+            val end = LocalDate.parse(text("p_end_date")).atStartOfDay(zone).toInstant()
+            return summaries().filter { Instant.parse(it.startTime) >= start && Instant.parse(it.startTime) < end }
         }
         val result: JsonElement = when (call.name) {
             "get_exercise_catalog_page" -> page(call, FakeExerciseDataSource.exercises
@@ -67,34 +79,36 @@ class DemoReadGateway @Inject constructor(authRepository: AuthRepository) : Remo
                 onlineJson.encodeToJsonElement(TemplateDetail(template.id, template.name, revisions[template.id] ?: 1, Instant.ofEpochMilli(template.createdAt).toString(),
                     template.exercises.mapIndexed { index, child -> TemplateChild("${template.id}-$index", child.id, index, child.sets, child.reps, child.restSeconds) }))
             }
-            "get_workout_history_page" -> page(call, window().sortedWith(compareByDescending<WorkoutLog> { it.endTime }.thenByDescending { it.id }).map { summary(it) })
+            "get_workout_history_page" -> page(call, window().sortedWith(compareByDescending<WorkoutSummary> { it.endTime }.thenByDescending { it.id }).map { onlineJson.encodeToJsonElement(it) })
             "get_progress_summary" -> {
                 val logs = window()
                 onlineJson.encodeToJsonElement(ProgressSummary(text("p_start_date")!!, text("p_end_date")!!, text("p_timezone")!!,
                     logs.size.toLong(), logs.fold(java.math.BigDecimal.ZERO) { a, l -> a + l.totalVolume.toString().toBigDecimal() }.toPlainString(),
-                    logs.sumOf { it.exerciseLogs.sumOf { e -> e.sets.count { s -> s.isCompleted }.toLong() } },
-                    logs.sumOf { it.exerciseLogs.sumOf { e -> e.sets.filter { s -> s.isCompleted }.sumOf { s -> s.reps.toLong() } } },
-                    logs.sumOf { (it.endTime - it.startTime) / 1000 }))
+                    logs.sumOf { it.totalSets }, logs.sumOf { it.totalReps }, logs.sumOf { it.durationSeconds }))
             }
             "get_workout_date_markers" -> onlineJson.encodeToJsonElement(DateMarkers(text("p_start_date")!!, text("p_end_date")!!, text("p_timezone")!!,
-                window().groupingBy { Instant.ofEpochMilli(it.startTime).atZone(ZoneId.of(text("p_timezone"))).toLocalDate() }.eachCount()
+                window().groupingBy { Instant.parse(it.startTime).atZone(ZoneId.of(text("p_timezone"))).toLocalDate() }.eachCount()
                     .toSortedMap().map { DateMarker(it.key.toString(), it.value.toLong()) }))
             "get_workout_detail" -> {
+                val imported = sessions.importedWorkouts(owner).firstOrNull { it.id == text("p_workout_id") }
+                if (imported != null) onlineJson.encodeToJsonElement(imported) else {
                 val log = FakeWorkoutDataSource.getWorkoutLogById(text("p_workout_id").orEmpty())?.takeIf { it.userId == owner } ?: throw OnlineFailure(RemoteError.NotFound)
                 JsonObject(summary(log).jsonObject + ("exercise_logs" to JsonArray(log.exerciseLogs.mapIndexed { index, exercise ->
                     onlineJson.encodeToJsonElement(ExerciseLog("${log.id}-$index", exercise.exercise.id, exercise.exercise.name, exercise.exercise.muscleCategory.displayName,
                         index, null, exercise.totalVolume.toString(), exercise.sets.count { it.isCompleted }.toLong(), exercise.sets.filter { it.isCompleted }.sumOf { it.reps.toLong() },
                         exercise.sets.filter { it.isCompleted }.map { WorkoutSet("${log.id}-$index-${it.setNumber}", it.setNumber, it.weight.toString(), it.reps, true) }))
                 })))
+                }
             }
-            "get_active_session", "get_operation_status", "list_recent_operations" -> sessions.read(owner, call.name, p)
+            "get_active_session", "get_operation_status", "list_recent_operations",
+            "get_start_recovery_status", "get_legacy_recovery_page" -> sessions.read(owner, call.name, p)
             "get_exercise_prefill" -> {
                 val defaults = onlineJson.decodeFromJsonElement<InputDefaults>(p.getValue("p_input_defaults"))
                 onlineJson.encodeToJsonElement(ExercisePrefill(PrefillSource.DEFAULTS, null, defaults,
                     (1..defaults.sets).map { PrefillSet(it, "0.00", defaults.reps) }))
             }
-            "get_home_summary" -> onlineJson.encodeToJsonElement(HomeSummary(FakeWorkoutDataSource.getWorkoutLogs(owner)
-                .maxWithOrNull(compareBy<WorkoutLog> { it.endTime }.thenBy { it.id })?.let { onlineJson.decodeFromJsonElement<WorkoutSummary>(summary(it)) }))
+            "get_home_summary" -> onlineJson.encodeToJsonElement(HomeSummary(summaries()
+                .maxWithOrNull(compareBy<WorkoutSummary> { it.endTime }.thenBy { it.id })))
             else -> throw OnlineFailure(RemoteError.ContractUnavailable)
         }
         return onlineJson.decodeFromJsonElement(call.serializer, result).also(call.validate)

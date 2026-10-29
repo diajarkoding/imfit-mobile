@@ -35,7 +35,7 @@ data class ExerciseSelection(val templateId: String, val excludedIds: List<Strin
 data class ActiveExerciseSelection(val sessionId: String, val excludedIds: List<String>) : NavKey
 
 @Serializable
-data class ActiveWorkout(val templateId: String) : NavKey
+data class ActiveWorkout(val templateId: String, val sessionId: String? = null, val allowCreate: Boolean = true) : NavKey
 
 @Serializable
 data class WorkoutSummary(val workoutLogId: String) : NavKey

@@ -20,6 +20,7 @@ interface RemoteReadGateway {
         return read(call).also { if (!auth.isCurrent(identity)) throw StaleAuthException() }
     }
     suspend fun profile(): RemoteProfile
+    suspend fun updateProfile(patch: com.diajarkoding.imfit.domain.model.ProfilePatch): RemoteProfile
     suspend fun exercises(ids: List<String>): List<Exercise>
     /** Existing template mutation only; session mutations are NOT exposed by the G3 gateway. */
     suspend fun saveTemplate(request: com.diajarkoding.imfit.data.remote.TemplateWriteRequest): com.diajarkoding.imfit.data.remote.TemplateWriteReceipt

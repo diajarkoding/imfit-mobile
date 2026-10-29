@@ -14,7 +14,7 @@ insert into public.exercise_logs(id,workout_log_id,exercise_id,exercise_name,mus
  ('50000000-0000-0000-0000-000000000001','30000000-0000-0000-0000-000000000001','fixture-alpha','Fixture alpha','Fixture');
 
 do $$
-declare function_count integer;
+declare function_count integer; signature text; function_oid oid;
 begin
  begin
   insert into public.workout_sets(exercise_log_id,workout_log_id,exercise_id,set_number) values
@@ -31,14 +31,39 @@ begin
    ('50000000-0000-0000-0000-000000000001','30000000-0000-0000-0000-000000000001',null,1);
   raise exception 'FAIL partial parent nullability';
  exception when check_violation then null; end;
+ foreach signature in array array[
+  'save_template_revision(uuid,uuid,bigint,text,jsonb,jsonb,boolean,uuid)',
+  'get_workout_history_page(date,date,text,text,integer)',
+  'get_exercise_catalog_page(text,integer,text,integer)','get_template_page(text,integer)',
+  'get_workout_detail(uuid)','get_template_detail(uuid)','get_progress_summary(date,date,text)',
+  'get_workout_date_markers(date,date,text)','get_exercise_prefill(text,jsonb)',
+  'create_active_session(uuid,uuid,uuid,bigint)','get_active_session(uuid)',
+  'update_active_session(uuid,uuid,bigint,jsonb)','cancel_active_session(uuid,uuid,bigint)',
+  'finish_active_session(uuid,uuid,bigint)','get_operation_status(uuid)',
+  'list_recent_operations(timestamp with time zone,timestamp with time zone,text,integer)',
+  'get_home_summary()','get_start_recovery_status(integer)','get_legacy_recovery_page(text,integer)',
+  'resolve_legacy_session(uuid,uuid,text,text)','import_legacy_workout(uuid,jsonb,jsonb,jsonb,jsonb)'
+ ] loop
+  function_oid:=to_regprocedure('public.'||signature);
+  if function_oid is null or not has_function_privilege('authenticated',function_oid,'EXECUTE')
+    or has_function_privilege('anon',function_oid,'EXECUTE')
+    or not exists(select 1 from pg_proc where oid=function_oid and prosecdef
+      and 'search_path=""'=any(proconfig)) then
+    raise exception 'FAIL exact RPC signature/security %',signature;
+  end if;
+ end loop;
  select count(*) into function_count from pg_proc p join pg_namespace n on n.oid=p.pronamespace
  where n.nspname='public' and p.proname=any(array[
   'save_template_revision','get_workout_history_page','get_exercise_catalog_page','get_template_page',
   'get_workout_detail','get_template_detail','get_progress_summary','get_workout_date_markers',
   'get_exercise_prefill','create_active_session','get_active_session','update_active_session',
-  'cancel_active_session','finish_active_session','get_operation_status','list_recent_operations'])
-  and has_function_privilege('authenticated',p.oid,'EXECUTE') and not has_function_privilege('anon',p.oid,'EXECUTE');
- if function_count<>16 then raise exception 'FAIL RPC grant inventory'; end if;
+  'cancel_active_session','finish_active_session','get_operation_status','list_recent_operations',
+  'get_home_summary','get_start_recovery_status','get_legacy_recovery_page','resolve_legacy_session','import_legacy_workout']);
+ if function_count<>21 then raise exception 'FAIL RPC overload inventory'; end if;
+ if exists(select 1 from pg_class c join pg_namespace n on n.oid=c.relnamespace where n.nspname='imfit_private'
+   and c.relkind='r' and (not c.relrowsecurity or has_table_privilege('authenticated',c.oid,'SELECT,INSERT,UPDATE,DELETE')
+     or has_table_privilege('anon',c.oid,'SELECT,INSERT,UPDATE,DELETE'))) then
+  raise exception 'FAIL private table RLS/grants'; end if;
  if has_schema_privilege('authenticated','imfit_private','USAGE')
   or has_function_privilege('authenticated','public.upsert_workout_aggregate(jsonb,jsonb,jsonb)','EXECUTE')
   or has_function_privilege('authenticated','public.upsert_template_aggregate(jsonb,jsonb)','EXECUTE') then

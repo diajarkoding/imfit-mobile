@@ -6,18 +6,22 @@
 | --- | --- |
 | Nama fitur | Full Online-Only Data Architecture |
 | Feature ID / ticket | N/A — belum diberikan |
-| Status | **G3 dan fondasi inventory/preflight F6.1 PASS lokal (345 + 351 unit, 25 emulator tests)**; review/import legacy, aktivasi sesi/timer remote dan production/release belum selesai |
-| Versi dokumen | 1.9 |
-| Tanggal dibuat / diperbarui | 26 / 28 Oktober 2026 |
-| Target rilis | TODO/VERIFY — setelah product, backend, migration, dan release gates |
+| Status | **Checkpoint pengembangan untuk handoff perangkat**, bukan release-ready. Working tree recovery/session/profile/clean cutover memiliki bukti host §7.11; scope transfer dan gate commit terisolasi di §7.12. SQL/HTTP, device/upgrade/UI tetap belum diverifikasi |
+| Versi dokumen | 2.1 |
+| Tanggal dibuat / diperbarui | 26 / 29 Oktober 2026 |
+| Target rilis | Internal release-ready lokal, termasuk normal production release minified; tanpa deployment/cutoff Supabase utama dan bukan publish signing |
 | Platform / topology | Android native; single application module `:app` |
 | Source scope | Shared `app/src/main`, production/demo DI, SQL migration, test terkait |
 | Baseline commit | `fb96784d3164a700250e7032d6565779d288029d` |
 | Baseline eksekusi F1a/F1b | `online-only@c0be6b823c6e8350a4a0f1c157d239dcdfd28e57`; baseline audit source di atas tetap historis |
-| Confidence | Baseline/live metadata historis Verified; backend lokal Verified (§5.4.G); foundation Kotlin/Paging §5.4.H dan G3 host/demo emulator Verified (laporan §7.7); physical device/activation dan deployment utama NOT_TESTED |
+| Confidence | Audit/live/PASS lama tetap historis; bukti host dirty snapshot 29 Oktober ada pada laporan §7.11, bukan bukti backend, perangkat, commit terisolasi atau deployment |
 | Dokumen pasangan | [Plan implementasi, gap analysis, dan evidence map](full-online-only-implementation-plan.md) · [Laporan implementasi berkelanjutan](full-online-only-implementation-report.md) |
 
-**Aturan membaca:** **Baseline** menjelaskan snapshot audit 27 Oktober; backend lokal F1b (§5.4.G) dan foundation Android (§5.4.H) sudah teruji. Runtime reader G3 (§5.4.I) lulus matriks state/race lokal (laporan §7.7); target write/session/timer belum diaktifkan. Keberhasilan lokal bukan bukti deployment atau acceptance aplikasi penuh. Spec tetap di `docs/plans`; tidak membuat dokumen kontrak/laporan baru.
+**Aturan membaca:** **Baseline** adalah snapshot audit 27 Oktober, bukan runtime current. **Source current** mengikuti cutover yang dicatat pada laporan §7.9: kedua flavor memakai `OnlineWorkoutRepository`, `OnlineSessionStore`, dan guarded Start. **Historical runtime PASS** mencakup 387 production/395 demo unit, assemble, connected demo dan smoke REST lokal yang tercatat di §7.9; tidak dijalankan ulang pada revisi dokumentasi 29 Oktober. **Proposed** menandai kontrak tambahan, bukan kemampuan verified; gate implementasi/recovery/UI/upgrade/timer/release baru berstatus **NOT_TESTED** sampai dibuktikan. Keberhasilan historis bukan acceptance aplikasi penuh atau deployment. Spec tetap di `docs/plans`; tidak membuat dokumen kontrak/laporan keempat.
+
+**Pembaruan v2.1:** label source-current/Proposed dan remaining gaps pada bagian v2.0 di bawah mempertahankan snapshot audit step 0 sebelum perubahan implementasi ditinjau. Working tree kini memuat implementasinya, tetapi source presence bukan acceptance PASS. Status terbaru dan batas izin host-only mengikuti [laporan §7.11](full-online-only-implementation-report.md#711-persiapan-commit-host-only--29-oktober-2026); D01–D06 dan AC01–AC34 tidak berubah.
+
+**Scope handoff terbaru:** pengguna meminta commit dan push checkpoint agar pekerjaan dapat dilanjutkan di perangkat lain. [Laporan §7.12](full-online-only-implementation-report.md#712-checkpoint-handoff-perangkat) membedakan gate checkpoint host dari acceptance rilis penuh; tidak ada pengurangan AC atau klaim deployment.
 
 Path Kotlin pendek relatif terhadap `app/src/main/java/com/diajarkoding/imfit/`. Revisi 1.2 menambahkan audit metadata Supabase live secara **read-only** pada 27 Oktober 2026: tidak membaca row bisnis, tidak memanggil RPC aplikasi, dan tidak melakukan DDL/DML. Audit ini membuktikan schema/grants/policy yang terlihat oleh role read-only, bukan perilaku runtime, hasil serangan RLS, atau kesiapan environment uji. Tidak ada persetujuan visual yang diasumsikan.
 
@@ -62,28 +66,28 @@ IMFIT membutuhkan internet untuk mengambil atau mengubah data bisnis. Supabase m
 | D05 | Konflik sesi lokal–remote atau hasil finish ambigu harus **direview sebelum Start**. | Hanya preflight `Ready` untuk owner/auth epoch current yang boleh memanggil create RPC; tidak ada auto-merge atau overwrite. |
 | D06 | Project Supabase `ltcxltahkrjnsjaxndsa` adalah database bersama development/testing/production; **belum ada staging terpisah**. | Pengujian berisiko memakai schema terisolasi atau Supabase lokal. Reset, purge, dan perubahan destruktif memerlukan persetujuan eksplisit; migration harus additive bila memungkinkan. |
 
-### Status kesiapan dan blocker (review 27 Oktober 2026)
+### Status kesiapan dan blocker (29 Oktober 2026)
 
-**Snapshot review 27 Oktober:** G0 dan audit live G1 selesai; saat itu implementasi backend/Android belum dimulai. Pembaruan 28 Oktober: backend lokal F1b selesai (§5.4.G), tetapi Android dan aktivasi production tetap belum siap. Audit metadata historis tidak diganti oleh hasil database lokal.
+Snapshot G0/live 27 Oktober dan hasil fase 28 Oktober tetap evidence historis. Cutover §7.9 sudah memasang facade/session writer/guard Start; pekerjaan berikutnya melengkapi protokol/UI/dependency dan proof, bukan mengulang pemasangan dari nol.
 
-| Area | Status 27 Oktober 2026 | Kriteria siap |
+| Area | Status current / evidence | Kriteria siap lokal |
 | --- | --- | --- |
-| G0 keputusan produk | **Selesai** — D01–D06 | Keputusan tercatat dan acceptance criteria diperbarui |
-| G1 audit backend | **Selesai read-only** — tersedia matriks AVAILABLE/MISSING/NEEDS CHANGE dan evidence | Audit dapat direproduksi; tidak ada mutasi database |
-| Backend final | **Belum siap** | Kontrak RPC/receipt/versioning tersedia dan terdeploy; integration/concurrency/security tests lulus |
-| Active Workout remote | **Belum siap** | Start/update/pause/resume/finish/cancel/recovery terkonfirmasi server; timer tanpa per-tick network; D01/D02 diterapkan |
-| Legacy recovery | **Sebagian** — scope versi ditetapkan, proof perangkat belum ada | Inventory/checkpoint/review aman untuk Room 9/6/7 dan akun; konflik diselesaikan sebelum create; data lain recoverable |
-| Implementasi penuh | **Terblokir** | B02–B05 ditutup sesuai gate, acceptance criteria lulus, tidak ada risiko integritas data terbuka |
+| G0 keputusan produk | **Selesai** — D01–D06 dipertahankan verbatim | Tidak mengubah kehilangan input unconfirmed, cold-offline atau scope database bersama |
+| G1 audit backend | **Selesai read-only historis** — 27 Oktober | Audit live tidak diganti klaim deployment baru |
+| Backend lokal existing | **Historical PASS** — §5.4.G dan laporan §7.9 | Empat RPC recovery Proposed (§5.4.J), replay/migration/security final harus dibuktikan; gate baru NOT_TESTED |
+| Active Workout remote | **Source current** — facade/store/guard terpasang kedua flavor | Dirty/debounce/flush AC13/15, typed UI, pending registration, timer authoritative dan proof production belum selesai; NOT_TESTED |
+| Legacy recovery | Inventory/read-only reader, archive dan route `LegacyRecovery` existing | Selected-item receipt-backed import/resolution, intent/local-active/server-legacy dan installed-data proof NOT_TESTED |
+| Room/runtime cutover | Facade bukan writer Room, tetapi auth/exercise/coordinator/template guard masih membawa graph lama | Migrasikan caller lalu hapus writer/API/dependency obsolete tanpa menghapus database pengguna; NOT_TESTED |
+| Internal release-ready | **Belum siap** | Semua AC01–AC34/T01–T16 dipetakan ke evidence; normal/instrumented minified, HTTP/UI, upgrade/restore dan timer lulus; NOT_TESTED |
+| Hosted rollout | **Deferred / di luar target** | Tidak deploy/cutoff/reset/purge Supabase utama; publish signing gate terpisah |
 
-B01 telah ditutup oleh keputusan D01. Blocker yang masih wajib: **B02 backend final**, **B03 migrasi legacy**, **B04 pengamanan write server**, dan **B05 recovery/transaksi idempotent**. Backend/active/legacy adalah pengelompokan pekerjaan, bukan pengurangan blocker. Detail prioritas dan bukti penutupan ada pada plan bagian 1 dan 4.
-
-Pekerjaan contract/fake transport, Paging spike, refresh state/UI, serta persiapan migration/legacy dapat dimulai tanpa mengaktifkan perubahan pada data pengguna. Penyempurnaan API, Paging, statistik/timezone, timer recovery, dan UX bukan alasan mengganti arah arsitektur, tetapi verifikasinya tetap wajib sebelum fitur terkait dirilis.
+B01 ditutup D01. B02–B05 tetap harus dinilai melalui evidence akhir sesuai scope lokal: backend/recovery/integrity proof tidak boleh dianggap selesai hanya dari dokumen atau facade remote. Database bersama tidak dipakai fixture. Gunakan backend lokal dan emulator disposable; fake/demo bukan proof SQL/RLS atau upgrade production.
 
 **Catatan evidence live:** audit read-only menemukan hanya tiga migration Agustus yang tercatat deployed (baseline, catalog seed, hardening). `save_template_revision`, `template_write_receipts`, kolom `workout_templates.revision`, serta seluruh 16 nama RPC target untuk read/session/receipt **tidak ditemukan**. Public schema memiliki 9 tabel dengan RLS aktif dan 29 policy; `anon` tidak memiliki table grant, tetapi `authenticated` masih memiliki grant tulis langsung (INSERT/UPDATE/DELETE sesuai tabel) pada 7 tabel; `profiles` tidak memiliki DELETE. `active_sessions` belum memiliki `version`/`status` dan FK template masih `ON DELETE CASCADE`. Ini bukti metadata, bukan uji runtime atau uji serangan RLS.
 
 ## 2. User Stories & Acceptance Criteria
 
-Acceptance criteria aplikasi penuh belum diverifikasi end-to-end. Aspek backend CAS, replay/atomic finish, owner isolation, expiry review, pagination/statistik, dan write lockdown diuji lokal (§5.4.G); UI, proses Android, timer perangkat, dan upgrade Room tetap NOT_TESTED.
+Acceptance criteria berikut dipertahankan verbatim. Backend lokal dan runtime Android tertentu memiliki **PASS historis** (§5.4.G–I dan laporan §7.9); acceptance penuh belum dibuktikan end-to-end. Gate tambahan §5.4.J dan §6.1–6.7 tetap **NOT_TESTED**, termasuk installed upgrade/restore, production HTTP/UI dan normal/instrumented minified release. Jangan menggeneralisasi keterbatasan ini menjadi “semua Android belum diuji”.
 
 | ID | User story / Given–When–Then |
 | --- | --- |
@@ -131,7 +135,7 @@ Acceptance criteria aplikasi penuh belum diverifikasi end-to-end. Aspek backend 
 - `WorkoutHistory(date)` membuka `WorkoutHistoryDetailScreen`, daftar/detail sesi per tanggal.
 - `ExerciseList(categoryName)`, `ExerciseSelection(...)`, dan `ActiveExerciseSelection(sessionId, excludedIds)` adalah jalur katalog/picker.
 - `ActiveWorkout(templateId)` dan `WorkoutSummary(workoutLogId)` adalah jalur sesi/hasil.
-- `Profile` saat ini memakai `ProgressViewModel`; pemisahannya merupakan target refactor.
+- `Profile` memiliki state remote terpisah; route `LegacyRecovery`, `LegacyRecoveryViewModel`/`LegacyRecoveryScreen` dan entry Profile → recovery sudah tersedia, bukan UI baru paralel.
 
 ### Target flow daftar
 
@@ -314,7 +318,7 @@ Tabel berikut mempertahankan snapshot baseline/live 27 Oktober; status implement
 | `save_template_revision` | Ada pada source migration dan dipanggil Android; **tidak ditemukan pada schema live 27 Oktober 2026** dan belum terdeploy |
 | `upsert_template_aggregate` | Tersedia live dan di source hardening; bukan kontrak revision/receipt yang dipakai target |
 | `upsert_workout_aggregate` | Tersedia live dan di source hardening; bukan protokol finish-active-session |
-| `active_sessions` | Tersedia live dengan RLS dan `UNIQUE(user_id)`; belum memiliki `version`/`status`/receipt; runtime sesi sekarang tetap lokal |
+| `active_sessions` | Snapshot live 27 Oktober: RLS dan `UNIQUE(user_id)`, tanpa `version`/`status`/receipt; **source current** sudah memakai writer remote versi (§7.9), bukan runtime lokal baseline |
 | `profiles`, `exercises`, `workout_templates`, `workout_logs` | Nama tabel dan RLS terverifikasi live; grants/constraints live berbeda dari kontrak target dan belum diuji runtime |
 
 Pada source migration (belum live), template RPC membawa `p_request_id`, `p_template_id`, `p_expected_revision`, `p_name`, `p_exercises`, `p_removed_exercise_ids`, `p_is_deleted`, dan `p_owner_id`. Receipt membawa request/template ID, revision, exercise count, dan server update time. Revision bersifat monoton; **jangan mengasumsikan selalu naik tepat satu**, karena source memiliki child-trigger revision juga.
@@ -394,7 +398,7 @@ Cancellation milik scope tetap cancellation, bukan kategori error UI. Retry writ
 
 #### F. Kontrak desain F1a — 28 Oktober 2026
 
-**Status: kontrak desain F1a, terimplementasi/teruji di backend lokal F1b (§G); foundation DTO/request Kotlin ditambahkan pada F2 (§H).** Pengguna mengonfirmasi K01–K05 pada 28 Oktober 2026, termasuk precision weight 2 desimal. Signature/receipt template existing dipertahankan. DTO baru belum mengganti writer/DI runtime Android; tidak ada deployment project utama.
+**Status: kontrak desain F1a, terimplementasi/teruji di backend lokal F1b (§G); foundation DTO/request Kotlin F2 (§H), kemudian runtime cutover §7.9.** Pengguna mengonfirmasi K01–K05 pada 28 Oktober 2026, termasuk precision weight 2 desimal. Signature/receipt template existing dipertahankan. Kedua flavor kini memakai facade/store remote; graph Room di luar facade belum seluruhnya dilepas. Tidak ada deployment project utama.
 
 **Aturan wire bersama:** RPC melalui `POST /rest/v1/rpc/<nama>`, request JSON snake_case, response `jsonb`, owner selalu `auth.uid()`. Parameter optional memiliki default SQL eksplisit; jangan membuat overload ambigu bagi PostgREST. UUID berbentuk string; exercise ID tetap text katalog (bukan UUID). Timestamp RFC3339 UTC mempertahankan precision PostgreSQL; date berbentuk `YYYY-MM-DD`. Revision/version adalah `bigint` nonnegatif, dipetakan ke Kotlin `Long`, bukan `Float`. Weight/volume pada wire baru adalah decimal string, tidak melewati floating point. `null` hanya sah pada field nullable yang tertulis; field wajib tidak boleh diam-diam dianggap nol/array kosong. Semua counter/indices integer; flags boolean; ID UUID kecuali exercise ID text dan category ID integer.
 
@@ -526,23 +530,52 @@ Implementasi terisolasi di `app/src/main/java/com/diajarkoding/imfit/data/remote
 
 **Error adapter:** SDK Supabase 3.0.3 `PostgrestImpl.parseErrorResponse` membuang SQLSTATE `code`. Karena itu adapter baru memakai HttpClient Ktor terpisah (future DI: tanpa auth/retry/logging plugin otomatis), Authorization hasil capture eksplisit dan body error raw; adapter existing tidak diubah. Network/timeout/malformed success/gateway ambigu pada write menjadi UnknownOutcome, bukan Saved/absence. NOT_FOUND discovery tidak membatalkan in-flight write atau memberi izin request ID baru. Foundation memakai **owner-wide unknown gate** yang konservatif: mutasi berbeda diblokir sampai resolve/retry, termasuk jika create memakai resource ID baru; bukan hanya lock ID sesi lama. `resolve(original)` hanya untuk original intent dalam memori login itu; sesudah process death, gunakan discovery/read/preflight terpisah, jangan merekonstruksi payload tebakan. Tidak ada durable draft/queue baru.
 
-**Batas integrasi:** belum memasang Hilt binding, SDK auth lifecycle bridge, Compose consumer, atau mengganti repository/Room/session manager/timer existing. Pemilik future lifecycle wajib meneruskan signIn/signOut/refreshToken dari identity SDK (bukan profile), menutup repository/feed saat owner lifecycle berakhir, dan menjaga query/generation sebelum publish. Gate unit/spike dan hasil build dicatat di laporan §7.4; Kotlin→backend live/device/SDK token lifecycle belum otomatis terverifikasi oleh fake/MockEngine. Tidak ada deployment/cutoff utama.
+**Batas historis F2:** pada snapshot fase ini Hilt/SDK bridge/Compose/session belum dipasang. Batas tersebut bukan status current: integrasi reader §I dan facade/store/guard Start pada laporan §7.9 telah menyusul. Guard identity/query/generation tetap wajib; fake tests tidak membuktikan actual SDK/HTTP atau semua acceptance perangkat.
 
 **Verified foundation:** 37 host tests per flavor, regresi 275 production/281 demo, kedua APK debug berhasil dibangun pada input F2 yang dibekukan (fingerprint/command/batas dan percobaan gagal sebelum freeze ada di laporan §7.4). Ini exit G2 foundation, bukan acceptance UI/perangkat atau aktivasi data remote.
 
 #### I. G3 runtime reader integration — 28 Oktober 2026
 
-Implementasi working tree mengintegrasikan foundation melalui `RemoteReadGateway` dan binding production/demo, SDK auth epoch bridge, `RemoteResource` untuk detail/agregat, serta Compose consumers. Status test/acceptance aktual hanya di laporan §7.5; foundation §H tetap bukti historis terpisah. Room/recovery dan sesi/timer legacy belum dihapus/diganti.
+Snapshot G3 mengintegrasikan foundation melalui `RemoteReadGateway`, binding production/demo, SDK auth epoch bridge, `RemoteResource`, dan Compose consumers. Bukti fase ada di laporan §7.5–§7.7. Pada fase berikutnya §7.9, session writer/facade/guard Start remote sudah terpasang; Room/recovery dan dependency runtime obsolete belum seluruhnya dihapus.
 
 - History tetap per tanggal, template tetap section Home (K03); tidak ada route feed/list baru.
 - Progress/calendar memakai aggregate penuh dan date-marker count; tidak menghitung page pertama atau membuat workout log palsu.
 - Template editor memakai revision Long dan removed IDs dari remote snapshot yang diadopsi, bukan cache Room. Dirty/invalid draft tidak ditimpa refresh; legacy pending/intent guard tetap fail-closed dan read-only.
 - Tambahan bounded all-time read: `public.get_home_summary()` tanpa parameter → `{"last_workout": WorkoutSummary|null}`. Hanya owner authenticated, nondeleted, urutan `end_time DESC,id DESC`, `LIMIT 1`; tidak mengubah aturan last-workout menjadi 366 hari. Migration additive `20261028090758_online_only_home_summary.sql` diterapkan/diuji hanya lokal, bukan deployed utama. Jumlah kontrak lokal menjadi 17 RPC; 16 kontrak F1/F2 tidak berubah.
 - Direct table read hanya Profile dengan owner filter/kolom minimum (K04), dan bounded lookup exercise IDs untuk detail/taxonomy existing. Tidak ada read fallback/full snapshot import dari layar.
-- Global route/tab/foreground pull dilepas; initial load/invalidation/explicit refresh dimiliki reader. Aktivasi sesi remote dan timer tetap gate G4/G5, bukan konsekuensi memasang reader.
+- Global route/tab/foreground pull dilepas; initial load/invalidation/explicit refresh dimiliki reader. Cutover sesi remote kemudian tercatat pada laporan §7.9; G4/G5 final tetap memerlukan confirmed/dirty UI, timer recovery dan production/release proof, bukan pemasangan facade ulang.
 - Viewport paging dipetakan melalui **stable lazy-item key → data ID**, bukan indeks layout yang mencakup header/footer/error/loading. Baris nondata tidak mengirim hint; refresh/stale menahan hint, lalu viewport dikirim ulang setelah refresh walaupun ID halaman tidak berubah. Regression/acceptance iterasi lanjutan dicatat di laporan §7.6.
 - Context error picker tetap berbeda dari no-results/page error: search/filter tidak menghapus kegagalan exclusions, retry/refresh memuat ulang konteks dahulu, dan halaman baru boleh dipublish setelah context owner/generation valid. Caller name/exclusions tidak diwariskan otomatis ke akun lain. Retained editor/detail memuat ulang saat epoch login berubah; source-generation serta saveable key baris editor berubah ketika snapshot baru diadopsi agar input lama tidak mem-publish ulang lintas akun/query. Bukti state/race/compact di laporan §7.7; bukan proof SDK/HTTP production atau proses mati.
 - Auth epoch dipublish ke collector **setelah seluruh synchronous reset listener selesai**. Collector Main.immediate dapat berjalan reentrant di setter StateFlow; mem-publish dahulu lalu reset dapat menghapus respons epoch baru yang selesai cepat. Listener ledger menerima identity transisi secara eksplisit; refresh token dalam login sama tetap mempertahankan epoch sesuai kontrak §H.
+
+#### J. Recovery additive — Proposed, 29 Oktober 2026
+
+**Status seluruh kontrak tambahan di bagian ini: Proposed; implementation/runtime/security gates NOT_TESTED.** Tambahkan migration `20261029000100_online_only_legacy_recovery.sql` di atas 13 migration existing, tanpa rewrite atau membuka `upsert_workout_aggregate`. Inventory akhir memuat 17 RPC existing + empat berikut; typed `OnlineDtos`/`OnlineRpc` dan demo harus mengikuti signature yang sama.
+
+```sql
+public.get_start_recovery_status(p_contract_version integer default 1) returns jsonb
+public.get_legacy_recovery_page(p_cursor text default null,p_limit integer default 20) returns jsonb
+public.resolve_legacy_session(p_request_id uuid,p_session_id uuid,p_expected_source_fingerprint text,p_resolution text) returns jsonb
+public.import_legacy_workout(p_request_id uuid,p_source jsonb,p_workout jsonb,p_exercises jsonb,p_sets jsonb) returns jsonb
+```
+
+**Readiness authoritative:** response `{contract_version:1,checked_at:timestamptz,can_create:boolean,blockers:[{kind,resource_id,version,source_fingerprint,reason}],has_more_blockers:boolean}`. `version`/`source_fingerprint` nullable; kind `LEGACY_SESSION`, `ACTIVE_SESSION`, `EXPIRED_SESSION`; reason `LEGACY_REVIEW_REQUIRED` atau `SESSION_REVIEW_REQUIRED`. Satu snapshot query, preview maksimal 20 urut resource ID, `can_create` dari EXISTS seluruh blocker, bukan panjang preview. ACTIVE/PAUSED efektif, expiry unresolved dan legacy null-version/schema belum diakui memblokir; resolved expiry tidak. Receipt terminal historis tidak discan. Contract selain 1 → `PT400/VALIDATION`.
+
+**Legacy page:** envelope `RemotePage`, limit 1–100, keyset `id`, cursor owner/query-bound; explicit UI paging saja. Item `{session_id,source_fingerprint,resolution,raw_source}` mencakup legacy unresolved/archived; resolution null atau `KEEP_ARCHIVED`. Raw null-version/schema bukan `SessionSnapshot` palsu. Helper fingerprint tunggal pada page/readiness/resolve/create memakai lowercase hex SHA-256 UTF-8 JSONB text field asli `id,user_id,template_id,template_name,start_time,current_exercise_index,session_data,last_activity_at,expires_at,created_at`; exclude status/review/updated_at. Original updated_at tetap dalam raw source; timestamp trigger tidak dimatikan.
+
+**Legacy server archive:** hanya resolution `KEEP_ARCHIVED`; private `imfit_private.legacy_session_reviews(user_id,session_id,source_fingerprint,raw_source,request_id,reviewed_at)`, PK `(user_id,session_id)`, RLS/no direct grants. Replay sebelum source/CAS, owner lock + row lock; foreign/missing `PT404/RESOURCE_NOT_FOUND`, fingerprint berubah `PT409/LEGACY_SOURCE_CHANGED`. Simpan raw row utuh sebelum perubahan; review+receipt atomik, status EXPIRED/review_required=false tanpa fabricate version/schema atau delete. Receipt `{request_id,operation:"resolve_legacy_session",session_id,source_fingerprint,resolution:"KEEP_ARCHIVED",committed_at}`, resource SESSION. Latest create/current lookup mengabaikan archived legacy hanya bila review fingerprint cocok; unresolved tetap conflict. Versioned expiry memakai `AcknowledgeExpiry`, bukan RPC legacy.
+
+**Completed import insert-or-exact-match:** `p_source={schema_version:6|7|9,kind:"WORKOUT",id:<original UUID>,fingerprint:<aggregate SHA256>,mapping_version:1}`. Owner token dan `user_id` payload harus cocok; preserve seluruh parent/exercise-log/set UUID; non-UUID masuk blocked review/archive, bukan ID pengganti. `source_session_id=null`; uncompleted sets ikut dikirim. Business allowlist exact:
+
+- Parent: `id,user_id,template_id,template_name,date,start_time,end_time,total_volume,total_sets,total_reps,deleted_at,created_at,updated_at`.
+- Exercise: `id,workout_log_id,exercise_id,exercise_name,muscle_category,order_index,total_volume,total_sets,total_reps,input_defaults,created_at,updated_at`.
+- Set: `id,exercise_log_id,workout_log_id,exercise_id,set_number,weight,reps,is_completed,created_at,updated_at`.
+
+Sync/pending flags bukan kolom bisnis. Epoch-ms → ISO UTC tanpa fallback sekarang; date dari epoch tersimpan dalam UTC. REAL dibaca text → BigDecimal → exact decimal string tanpa Float/Double atau rounding 2 desimal. Schema tanpa input_defaults → null, bukan inferred provenance; metadata tak representable tetap raw archive. Canonical UUID/timestamp/numeric tanpa rounding; exercise urut `(order_index,id)`, set `(exercise_log_id,set_number,id)`. Validasi parentage, identity/order/set uniqueness, dependency owner, bounds DB dan totals completed sets. Totals mismatch `PT409/LEGACY_REVIEW_REQUIRED`; malformed `PT400/VALIDATION`; template missing/foreign masuk review, tidak silently null.
+
+Private `imfit_private.legacy_workout_imports` PK `(user_id,source_schema_version,source_id,mapping_version)` menyimpan source_fingerprint/canonical_payload/payload_digest/workout_id/id_mapping/result; RLS/no direct grants. Digest canonical JSONB dihitung server; source key sama dengan payload/fingerprint berbeda conflict. Extend receipt resource constraint dengan WORKOUT. Reuse request replay/owner lock: parent+children+registry+receipt atomik. Aggregate existing owner dibandingkan seluruh projection, termasuk child IDs/timestamps/flags/provenance; metadata target tak dikirim harus default null/false, bukan dihapus. Exact match → MATCHED tanpa rewrite; beda → `PT409/LEGACY_IMPORT_CONFLICT`. Foreign UUID collision owner-hiding NotFound; partial child collision rollback seluruh transaksi.
+
+Receipt import `{request_id,operation:"import_legacy_workout",workout_id,source_fingerprint,payload_digest,outcome:"IMPORTED"|"MATCHED",id_mapping,exercise_count,set_count,committed_at}`. Same request/different payload → IDEMPOTENCY_MISMATCH; new request/same source → workout/mapping sama. Receipt minimal 90 hari, dedup linkage tetap, tanpa purge. Kedua mutation memakai private `require_owner`, `request_replay`, `record_operation`, `fail`; paging memakai cursor helpers existing. SECURITY DEFINER `search_path=''`, revoke public/anon EXECUTE; authenticated hanya public RPC terdaftar, tanpa direct private table grants.
 
 ### 5.5 Routing / navigation
 
@@ -586,6 +619,18 @@ Dirty → OfflineBlocked → explicit Retry/Reload saat online
 
 Confirmed snapshot dan text input dirty terpisah. Respons save edit A tidak boleh menghapus input B yang diketik sesudah A dikirim. Maksimum satu mutasi in-flight per sesi; command antrean sementara dibatasi dan tidak durable. Setelah outcome ambigu, hentikan mutasi lanjutan sampai resolve; jangan mengirim expected version tebakan.
 
+**Kontrak store lanjutan — Proposed / NOT_TESTED:** reuse application-scoped `OnlineSessionStore`/`OnlineRepository`, bukan manager/command hierarchy baru. Tambahkan `SessionSetKey(exerciseLogId:String,setId:String)`, `SessionSetDraft(weightText:String,repsText:String,editRevision:Long)` dan `SessionSavePhase { CONFIRMED,DIRTY,SAVING,OFFLINE_BLOCKED,UNKNOWN,RESOLVING,CONFLICT,RELOADING }`; state memuat drafts/savePhase/connectivity hint/requiresVerification dan snapshot confirmed-only.
+
+API target: `editSet(sessionId:String,key:SessionSetKey,weightText:String,repsText:String)`; suspend `flushEdits(sessionId):SessionSnapshot`, `resolvePending():SessionMutationReceipt?`, `reload(sessionId:String?=null):SessionSnapshot?`, `acknowledgeExpiry(sessionId:String):SessionSnapshot`. Debounce application scope **400 ms** tetap wajib AC13/15. Reset synchronous/cancel delayed jobs pada epoch change. Draft urut child/set; koma→titik, BigDecimal, weight 0–1000kg maksimal 2 desimal/reps 0–1000; incomplete/invalid tetap draft dan flush validation error, bukan zero. Legacy field tak diedit tidak diround.
+
+Raw text hanya memori, dihoist dari `ActiveSetRow rememberSaveable`; tidak SavedStateHandle/Room/DataStore/file. Receipt edit A clear hanya revision A; input B saat A saving tetap ada. Saved hanya tanpa drafts/pending/error/review/verification. Dependent action satu mutex: freeze staging→private flushLocked→RPC latest version; jangan recursive debounce melalui public command. Cancel delay worker saja, bukan mutation dispatched; failure pertama stop sequence; reconnect tidak auto-write.
+
+Extend `OnlineRepository.execute(call,expectedIdentity=null,onRegistered:()->Unit={})`: callback sesudah immutable ledger/owner gate dan sebelum dispatch; pindahkan pending/store/guardedStart preservation ke boundary ini agar UnresolvedMutation sebelum registration tidak membuat pending sesi palsu. Resolve original call/epoch: COMMITTED acknowledge tanpa downgrade snapshot; NOT_FOUND tetap pending/retry original; read error locked. Reload tidak acknowledge unknown. Conflict definitif perlu authoritative reload/review dan explicit discard/reapply raw; unknown tidak boleh request baru.
+
+Complete flush→positive confirmed values→CompleteSet receipt→rest. Finish flush→atomic receipt→summary ID; `WorkoutRepository.finishWorkout():String?` hanya receipt.workoutId, detail fetch milik summary dan gagal read bukan retry finish. Cancel tidak flush draft dibuang, tetapi tidak bypass pending unknown; clear/navigate hanya terminal receipt. `acknowledgeExpiry` memakai mutex/pending/epoch guard, targeted latest reload dan explicit confirmation; hanya efektif EXPIRED/review, tidak lewat editable ACTIVE/PAUSED atau flush expired; draft lama dibuang sesudah konfirmasi.
+
+UI/service memakai typed `SessionCommand` dengan remote IDs, bukan transform/index/Float setelah suspend. Callback `onSetInput(SessionSetKey,String,String)`, `onSetComplete(SessionSetKey)`, `onSetRemove(SessionSetKey)`, `onExerciseRemove(String)`, `onSetAdd(String)`; keys epoch/session/child/set. AddExercise sequential skip confirmed IDs pada explicit retry, stop failure; rest 0–600 dan partial success tetap partial. Store collector menangani confirmation/raw; ticker hanya clock/peek. Cold entry coalesced reload sekali, Loading/Blocked/Unknown/Confirmed; notification known target tidak create dari template. Known terminal target resolve receipt/summary; tanpa target gunakan explicit paginated recent-operation review. Network validated capabilities hanya hint; reconnect coalesced read verification, bukan retry write. Localized status/Retry/Reload bukan warna saja; Back/logout warn dirty/unknown dan logout tidak cancel server.
+
 ### 6.2 Kebijakan per aksi
 
 | Aksi | Kebijakan target |
@@ -611,9 +656,25 @@ Data historis pending yang sudah diklasifikasi tidak berkonflik dapat tetap bera
 
 `data/legacy` kini menyediakan inventory standalone read-only, owner metadata/disposition/dependencies, checkpoint evidence atomik/no-backup, dan preflight `READY`/`RECOVERY_REQUIRED`/`UNKNOWN`. Schema diverifikasi melalui user_version + Room identity + digest kolom; export 6/7/9 dikenali tanpa migrasi, 6/7 tetap bridge/review dan layout unknown/4/8 blocked. Corrupt file tidak dihapus oleh corruption handler Android; absent tidak disimpulkan dari read error. Scan memakai data/schema-version dan file-identity stability fence, bukan write transaction terhadap legacy.
 
-`SYNCED_CACHE_CANDIDATE` bukan bukti receipt/izin cleanup. Active JSON, pending/review/problem, intent ambigu, sesi remote aktif/expired, dan recent SESSION operation masuk review. Discovery dibatasi satu page 100/window 90 hari; page lanjutan atau failure menjadi Unknown. Checkpoint menyimpan evidence/count/reason, bukan draft/queue/receipt acknowledgement, dan Ready lama selalu di-inventory ulang. Compound reads/create mengikat original auth epoch; inventory diulang sebelum guarded create.
+`SYNCED_CACHE_CANDIDATE` bukan bukti receipt/izin cleanup. Source preflight saat ini memeriksa recent SESSION operations pada satu page 100/window 90 hari; keterbatasan ini dapat memblokir owner dengan >100 receipt terminal dan bukan kontrak final readiness. Proposed penggantinya (§5.4.J/§6.2.1) memakai blocker authoritative, bukan menaikkan cap atau full-pull. Ready selalu memerlukan re-inventory dan original auth epoch sebelum guarded create.
 
-**Batas:** seam guard belum dipasang pada Start runtime, tidak ada session writer remote baru yang diaktifkan. Review UI/persetujuan manual, resolution, bridge/import dengan mapping durable, installed-data upgrade/restore dan koordinasi startup/writer Room masih pekerjaan F6/G4. Tidak ada RPC/migration/backend baru pada irisan ini. Bukti/batas device/host ada pada laporan §7.8; G6a/G6b tetap terbuka.
+**Batas current:** guard Start dan session writer remote **sudah terpasang** pada kedua flavor (laporan §7.9); §7.8 adalah evidence foundation historis. Inventory/read-only reader, archive, route dan Profile recovery existing belum sama dengan selected-item import/receipt resolution. Recovery lengkap, pelepasan graph Room, installed-data upgrade/restore dan proof production/release tetap **NOT_TESTED**.
+
+#### 6.2.1 Selected-item recovery — Proposed / NOT_TESTED
+
+Reuse reader/inventory/checkpoint/archive, `LegacyRecoveryViewModel`/`LegacyRecoveryScreen` dan route existing; tidak upload-all/autosync atau UI paralel. `LegacyAggregateReader` membaca parent+children+dependencies dalam **satu read-only stable snapshot** memakai fence/inventory SQL existing, bukan merakit record dari scan berbeda. Exact schema 6/7/9, cap 10.000 owned rows; overflow/corrupt/unknown/layout/read error blocked, bukan truncated success. `LegacyImportMapper` memetakan raw maps ke §5.4.J, bukan Room entities/WorkoutUploadSnapshot/DTO Double.
+
+`LegacyRecoveryCheckpoint`, `FileLegacyRecoveryCheckpointStore`, `LegacyRecoveryCoordinator` target baru: `noBackupFilesDir/legacy_recovery`, AtomicFile+fsync, owner-hashed filename, maksimum 4 MiB/owner dan 10.000 entries. Foreign/corrupt/unsupported/overflow blocked, tidak overwrite kosong. Durable action berisi `formatVersion=1,ownerId,sourceSchemaVersion,source kind/id/fingerprint,aggregate/dependency fingerprint,actionId,operation,requestId,immutable request JSON,body digest,source→remote mapping,review decision,state,validated receipt`; states `AWAITING_REVIEW,PREPARED,SUBMITTED,CONFIRMED,CONFLICT,BLOCKED`, tanpa auto-clean/delete. Ini transisi legacy saja, bukan durable draft/runtime offline queue.
+
+Coordinator API seluruhnya suspend: `review():LegacyRecoveryReview`, `prepare(identity:AuthIdentity,selection:LegacySelection):LegacyRecoveryAction`, `submit(identity:AuthIdentity,actionId:String):LegacyRecoveryResult`, `resolve(identity:AuthIdentity,actionId:String):LegacyRecoveryResult`. Models memuat displayed identity/evidence, selection dan typed outcome, bukan boolean synced. Prepare revalidasi owner/epoch/displayed evidence sebelum durable PREPARED; submit durable SUBMITTED sebelum network. Crash replay exact request/body/IDs; CONFIRMED hanya validated receipt identity/operation/resource/source/mapping/counts. Simpan server payload_digest dan pastikan replay konsisten, bukan menyamakannya dengan hash serialisasi Android. Source berubah sebelum submit blocked; sesudah dispatch resolve original dahulu. Switch akun tidak publish ke akun baru; owner asal resolve nanti, epoch lama bukan durable authority.
+
+Pending CREATE workout memakai explicit selected aggregate import. UPDATE/DELETE tanpa CAS evidence atau unrepresentable/invalid/mismatch → review+keep-history, bukan disguised create/upsert. Historical profile/template tetap keepHistory; template apply bila dipilih melalui CAS editor existing, tanpa janji child UUID preservation RPC template. Room9 template intent harus memuat full `TemplateWriteRequest`: targeted `get_operation_status`; COMMITTED tetap exact original `save_template_revision` replay karena lookup tidak membawa payload. NOT_FOUND hanya explicit retry original, tidak request/template ID baru. Persist sidecar resolution tanpa delete/mark synced sumber; reuse `OnlineRepository.execute(original,expectedIdentity)`, jangan melemahkan runtime resolve ledger.
+
+Local active JSON hanya selesai sesudah explicit abandonment confirmation **“Simpan sebagai arsip lama, tidak dapat dilanjutkan”**. Sumber tetap utuh, archive non-resumable; tidak import draft versioned dengan provenance/child IDs tebakan. Checkpoint menyimpan fingerprint-bound resolution; generic keepHistory tidak mengakui local-active/intent. Remote ACTIVE/PAUSED → resume atau cancel await receipt; versioned expired → review+AcknowledgeExpiry; server legacy → explicit page+KEEP_ARCHIVED. Tidak auto-merge/replace local/remote.
+
+Layar existing menampilkan inventory/dependencies, local-active/intent, remote session/outcome, historical aggregate dan blocked reason; contextual inspect/keep/resolve/retry-original/import-selected/resume/cancel/acknowledge memakai confirmation. Epoch change cancel job/dialog/selected raw details. Preflight memakai readiness RPC+targeted request IDs checkpoint/intent, bukan all-receipt loop; has_more_blockers → RecoveryRequired, transport/malformed/checkpoint error → Unknown. Resolution hanya valid bila source+aggregate+dependency fingerprints cocok; restore/perubahan wajib review ulang. Pertahankan second inventory/expected-epoch sebelum create.
+
+Production template legacyGuard beralih dari database ke standalone inventory+validated resolutions; resolved intent tidak memblokir template selamanya, unknown fail-closed. Bind reader/store/coordinator pada kedua `LegacyRecoveryModule`; demo default Absent bukan installed-upgrade proof. Home dan error Start menuju route LegacyRecovery; kembali tidak auto-create, Retry preflight baru. Owner A resolved dapat Start meski B pending; B tidak terlihat/diunggah/dihapus.
 
 ### 6.3 Invariants yang dipertahankan / diangkat ke server
 
@@ -647,6 +708,8 @@ Timer adalah fungsi operasional lokal, bukan penyimpanan draft workout offline.
 
 Tidak boleh mengganti fungsi repository yang dibaca ticker menjadi HTTP lalu mempertahankan loop satu detik. VM/service/validator harus dipisahkan antara hot snapshot access dan cold remote verification.
 
+**Penguatan timer — Proposed / NOT_TESTED:** current hot path store.peek sudah tercatat source/historical §7.9, tetapi validitas akhir wajib identity current + verified loaded snapshot + effective ACTIVE/PAUSED + !reviewRequired. Cold Unknown bukan null/false absence. Service cold verification sekali pada entry/recovery, bukan ticker/validator. Pertahankan monotonic/generation/boot/late-window. Cold-offline anchor tetap recoverable tanpa expiry commit/completion/audio/business RPC; setelah online verify, reconcile deadline asli, bukan reset duration. `WorkoutService` memakai typed store pause/resume dengan flush dan caught error; STOP hanya `stopWorkout()` setelah cancel receipt/authoritative absence, failure mempertahankan locked/error notification, bukan success. Demo parity revision conflict/SESSION_REVIEW_REQUIRED/effective expiry/retained set numbering/canonical paused terminal diperlukan, tetapi bukan proof SQL/RLS.
+
 ### 6.6 Error, empty, dan operasi ambigu
 
 | Kasus | Hasil wajib |
@@ -662,6 +725,18 @@ Tidak boleh mengganti fungsi repository yang dibaca ticker menjadi HTTP lalu mem
 | API contract belum deployed | ContractUnavailable, input dipertahankan di memori; tidak fallback protokol write lama |
 | Avatar gagal dimuat | Placeholder; jangan menyembunyikan profil/history yang berhasil dimuat |
 | Upgrade data legacy unresolved | Recovery notice owner-scoped; konflik sesi/hasil ambigu memblokir create sampai resolved; jangan membuang database agar runtime terlihat bersih |
+
+### 6.7 Profil authoritative dan scoped invalidation — Proposed / NOT_TESTED
+
+Tidak menambah profile editor. Ganti kontrak lama dengan `suspend fun updateProfile(patch:ProfilePatch):Result<User>`. `ProfileField<out T>` sealed berisi `Omitted:ProfileField<Nothing>` dan `Value<T>(value:T):ProfileField<T>`; `ProfilePatch(name:ProfileField<String>=Omitted,birthDate:ProfileField<String?>=Omitted,avatarPath:ProfileField<String?>=Omitted)`. Omitted tidak dikirim, Value(null) JSON null.
+
+`KtorReadTables` owner/epoch-bound PATCH, `Prefer: return=representation`, select `id,name,email,birth_date,avatar_url`; writable hanya name/birth_date/avatar_url. Empty patch authoritative GET tanpa PATCH. Tepat satu row valid/owner cocok; zero/wrong/malformed gagal. Return/cache hanya server row, cancellation rethrow. Production/demo `RemoteReadGateway.updateProfile(patch):RemoteProfile`; auth memakai lazy `Provider<RemoteReadGateway>` agar tidak cycle demo. Current/observe user remote+memory per epoch, local identity SDK-only tanpa profile network. Error profile bukan logout/absence auth dan tidak memakai profil owner lama.
+
+Upload helper throwing path-returning: gagal upload bukan metadata avatar-null sukses; upload berhasil/PATCH gagal tidak cache path committed. Registration auth sukses/enrichment gagal mengembalikan failure dengan pesan akun mungkin sudah dibuat, tidak auto signUp ulang atau rollback/delete akun/storage. Canonical avatar storage path; signed URL presentation-only. Satukan helper signing Home/Profile/Progress; failure placeholder tanpa menyembunyikan data lain.
+
+Lepas database/sync/preferences/cache DAO/logout prune dari AuthRepositoryImpl dan scheduler/lifecycle dari deep-link handler. Logout clear memory/PII/timer, bukan legacy/pending. Migrasikan seluruh updateProfile production/demo/fake/stub tanpa alias lama; jangan log email/token/payload/signed URL.
+
+`TemplateEditBridge.changes` hanya template list/detail terkait. Application-scoped `OnlineMutationChanges` typed flow `WorkoutCommitted(identity,requestId,workoutId,startedAt)` dan `ProfileChanged(identity)`; dedup request per login, publish hanya setelah receipt/returned row. Finish resolve/retry emit sekali, import setelah confirmed aggregate; bukan durable event queue. Home workout→summary/session, profile→profile saja; Progress workout→aggregate/markers/selected day bila DateWindow timezone query cocok, profile→profile saja; history feed/totals hanya tanggal cocok, bukan detail lain; ProfileViewModel profile saja. Retained collectors epoch-fenced; VM baru initial load; tidak global route/tab/foreground full-pull.
 
 ## 7. Permissions, Security & Privacy
 
@@ -681,7 +756,7 @@ Manifest memiliki INTERNET, ACCESS_NETWORK_STATE, foreground-service/special-use
 - Receipt server-only dan bound ke owner/request/payload; status/discovery hanya menampilkan operasi owner sendiri.
 - State/cache memori dibersihkan pada logout/owner epoch change; signed avatar URL tidak dipakai lintas owner.
 - Jangan log token, payload workout lengkap, email, atau signed URL sensitif sebagai telemetry normal. Audit logging existing sebelum release.
-- Backup/restore rules harus eksplisit untuk auth secret, timer state, dan legacy recovery; restore tidak membuat operasi ganda atau alarm stale.
+- **Proposed / NOT_TESTED backup boundary:** backup_rules.xml serta cloud-backup/device-transfer data_extraction_rules.xml allowlist domain database `.` dan domain file `datastore/imfit_theme.preferences_pb`, `datastore/imfit_locale.preferences_pb`, `datastore/imfit_workout_preferences.preferences_pb` (DataStore, bukan sharedpref). Tidak include root/file/sharedpref keseluruhan; token/timer/effects/sync/recovery acknowledgement tidak direstore sebagai authority. Restored legacy wajib inventory/review ulang dan server dedup.
 - Tidak ada klaim enkripsi-at-rest lokal tambahan atau kepatuhan UU PDP/GDPR yang diverifikasi pada audit ini; review privacy/retention tetap TODO/VERIFY.
 
 ## 8. Analytics & Tracking
@@ -700,7 +775,7 @@ Request correlation dapat memakai identitas pseudonymous/request ID sesuai polic
 
 ## 9. Testing Plan
 
-Status runtime Android target: **NOT_TESTED**. Backend lokal F1b terverifikasi melalui SQL, Auth/PostgREST, concurrency, security, replay/restore/upgrade (§5.4.G dan laporan §7.3). Audit live 27 Oktober tetap metadata-only; tidak ada pengujian/DDL/DML baru pada project utama. Checklist di bawah tetap roadmap acceptance aplikasi penuh, bukan alasan mengklaim device/production lulus karena backend lokal lulus.
+**Evidence existing:** backend lokal F1b (§5.4.G/laporan §7.3), reader G3 dan cutover Android §7.9 memiliki hasil historis tercatat, termasuk 387 production/395 demo unit dan smoke REST lokal. Tidak ada rerun baru dalam revisi ini. Checklist berikut adalah verification target source final: gate tambahan semuanya **NOT_TESTED**, bukan klaim semua runtime Android belum pernah diuji. Audit live 27 Oktober tetap metadata-only; project utama tidak diuji/diubah.
 
 ### Unit / coroutine / Paging
 
@@ -755,7 +830,7 @@ Fixture existing seperti `TemplateSaveRecoveryTest`, `WorkoutAccountIsolationTes
 | Item | Target usulan |
 | --- | --- |
 | Flag/capability | Contract version/capabilities dan rollout gate; nama key belum ditetapkan/diimplementasikan |
-| Strategi | Backend additive → bridge recovery → remote reads/writes → timer parity → staged rollout → compatibility lockdown |
+| Strategi | Lengkapi recovery additive → selected-item UI → confirmed/dirty/typed session + profile → clean cutover → proof backend/perangkat/minified lokal; hosted rollout/cutoff deferred |
 | Session mode | Dipin saat start; tidak beralih local/remote di tengah sesi karena flag berubah |
 | Start upgrade gate | Inventory/resolution legacy owner current sebelum create; unknown/conflict tidak boleh dilewati oleh rollout flag |
 | Rollback | Hentikan cohort/start baru; tetap layani recovery/finish sesi remote existing |
@@ -808,6 +883,8 @@ Risiko runtime utama adalah write outcome ambigu, stale cross-account response, 
 | 1.7 | 2026-10-28 | Stable-key viewport dan refresh re-hint; scope/bukti acceptance demo terarah dicatat di laporan §7.6, bukan full production readiness | G3 regression verification |
 | 1.8 | 2026-10-28 | Picker context/owner lifecycle, cancellation child lookup, editor source/saveable isolation dan konsistensi stale detail/calendar; matriks state/error lokal di laporan §7.7 | G3 state and race verification |
 | 1.9 | 2026-10-28 | Foundation F6.1 read-only inventory/schema/owner guards, evidence checkpoint dan preflight; belum review/import atau aktivasi session writer | Legacy foundation |
+| 2.0 | 2026-10-29 | Source facade/store/guard Start diselaraskan dengan historical §7.9; empat RPC dan selected-item recovery Proposed, confirmed/dirty/timer/profile, archive local-active non-resumable; target internal tanpa deployment; gate baru NOT_TESTED; AC01–AC34/D01–D06 tetap | Release-ready step 0 |
+| 2.1 | 2026-10-29 | Persiapan commit host-only: koreksi PATCH profil, resume tanpa create, handoff reverse timer dan EOF; bukti host dirty snapshot di laporan §7.11, backend/device/commit terisolasi tetap tidak diklaim lulus | Scoped preparation |
 
 ## 15. Referensi
 
@@ -820,7 +897,7 @@ Risiko runtime utama adalah write outcome ambigu, stale cross-account response, 
 
 ## 16. Evidence Map
 
-Evidence baseline lengkap beserta path/line dan confidence ada pada [plan bagian 10](full-online-only-implementation-plan.md#10-evidence-map-dan-confidence). Ringkasan klaim utama:
+Evidence baseline lengkap beserta path/line dan confidence ada pada [plan bagian 10](full-online-only-implementation-plan.md#10-evidence-map-dan-confidence). Tabel berikut **khusus snapshot baseline 27 Oktober**, bukan klaim source current. Cutover current dan hasil runtime historis terpisah ada pada laporan §7.9; kontrak tambahan §5.4.J/§6.2.1/§6.7 masih Proposed/NOT_TESTED.
 
 | Claim baseline | Sumber | Evidence type | Confidence |
 | --- | --- | --- | --- |
@@ -846,11 +923,11 @@ Evidence baseline lengkap beserta path/line dan confidence ada pada [plan bagian
 | --- | --- | --- |
 | UI screens/widgets | Partial | Caller/route dan screen relevan dibaca; tidak ada screenshot/device audit baru |
 | State management | Verified jalur utama | Home/Progress/catalog/picker/active/editor/summary; bukan seluruh state di seluruh repository |
-| Data/API | Baseline/live metadata historis Verified; backend lokal F1b Verified | 16 RPC SQL/JWT HTTP, concurrency dan security diuji lokal; repository/DTO Android dan backend utama belum diintegrasikan/deploy |
+| Data/API | Baseline/live metadata historis; backend lokal dan REST smoke historical PASS | 17 RPC existing termasuk Home summary; empat RPC recovery Proposed/NOT_TESTED, bukan deployment utama |
 | Routing/navigation | Verified | Routes/NavGraph/MainScreen dan notification entry flow utama |
-| DI/wiring | Verified | Production dan demo binding; runtime target belum diimplementasikan |
+| DI/wiring | Source current: facade/store/guard Start kedua flavor | Graph auth/exercise/coordinator/template guard Room masih harus dilepas; bukan full clean cutover |
 | Localization | Partial | Resource ID/EN upload existing diperiksa; copy target belum dibuat resource |
 | Analytics | Unverified existing coverage | Hanya usulan observability, tidak mengklaim tracker terpasang |
 | Security/privacy | Partial keseluruhan; backend lokal security fixtures Verified | SQL grants/RLS/cross-owner dan JWT HTTP lokal lulus; bukan penetration test menyeluruh, hosted security proof, atau review backup/privacy Android |
-| Tests | Backend lokal SQL/Auth/HTTP/replay/upgrade/lint/advisors Verified; Android NOT_TESTED | Laporan §7.3 mencatat command/snapshot/batas; bukan bukti CI/commit/device atau seluruh acceptance produk |
-| Target feature | Draft | Semua acceptance criteria dan release proof masih harus diimplementasikan/diverifikasi |
+| Tests | Historical backend dan Android lokal PASS | Laporan §7.3–§7.9 termasuk 387/395 unit dan smoke REST; tidak direrun pada revisi ini, bukan production/release readiness |
+| Target feature | Belum release-ready | Gate implementasi baru NOT_TESTED; setiap AC dan proof source final tetap harus dipetakan, bukan mengulang seluruh fase historis |

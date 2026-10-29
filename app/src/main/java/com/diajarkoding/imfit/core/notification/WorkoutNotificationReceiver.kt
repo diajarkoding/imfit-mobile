@@ -34,7 +34,10 @@ class WorkoutNotificationReceiver : BroadcastReceiver() {
             }
         } else if (intent.action in listOf(WorkoutActions.PAUSE, WorkoutActions.RESUME, WorkoutActions.STOP)) {
             try {
-                context.startService(Intent(context, WorkoutService::class.java).apply { action = intent.action })
+                context.startService(Intent(context, WorkoutService::class.java).apply {
+                    action = intent.action
+                    putExtra(WorkoutService.EXTRA_SESSION_ID, intent.getStringExtra(WorkoutNotificationManager.EXTRA_SESSION_ID))
+                })
             } catch (_: RuntimeException) { /* Expiry recovery retains the persisted timer. */ }
         }
     }

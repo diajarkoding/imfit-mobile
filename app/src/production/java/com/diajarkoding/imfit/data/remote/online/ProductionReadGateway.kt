@@ -61,5 +61,6 @@ class ProductionReadGateway @Inject constructor(private val supabase: SupabaseCl
     }
     override suspend fun saveTemplate(request: com.diajarkoding.imfit.data.remote.TemplateWriteRequest) = repository.execute(OnlineRpc.saveTemplate(request))
     override suspend fun profile() = tables.profile()
+    override suspend fun updateProfile(patch: com.diajarkoding.imfit.domain.model.ProfilePatch) = tables.updateProfile(patch)
     override suspend fun exercises(ids: List<String>) = tables.exercises(ids)
 }

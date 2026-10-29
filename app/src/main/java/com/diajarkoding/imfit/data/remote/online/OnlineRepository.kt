@@ -32,7 +32,11 @@ class OnlineRepository(private val transport: OnlineTransport, val auth: OnlineA
         confirmedMutable.value = emptyMap()
     }
 
-    suspend fun <T> execute(call: RpcCall<T>, expectedIdentity: AuthIdentity? = null): T {
+    suspend fun <T> execute(
+        call: RpcCall<T>,
+        expectedIdentity: AuthIdentity? = null,
+        onRegistered: () -> Unit = {},
+    ): T {
         val credential = auth.capture()
         if (expectedIdentity != null && credential.identity != expectedIdentity) throw StaleAuthException()
         return if (call.mutation == null) request(call, credential) else mutex.withLock {
@@ -50,6 +54,7 @@ class OnlineRepository(private val transport: OnlineTransport, val auth: OnlineA
                 intents[key] = pending
                 // Mark before dispatch: cancellation after server commit also leaves outcome ambiguous.
                 unresolved[resource] = pending
+                onRegistered()
             }
             try {
                 val result = request(call, credential)
@@ -71,8 +76,9 @@ class OnlineRepository(private val transport: OnlineTransport, val auth: OnlineA
     }
 
     /** NOT_FOUND never releases the resource. Retry the original call; never mint a new ID. */
-    suspend fun <T> resolve(original: RpcCall<T>): T? = mutex.withLock {
+    suspend fun <T> resolve(original: RpcCall<T>, expectedIdentity: AuthIdentity? = null): T? = mutex.withLock {
         val credential = auth.capture()
+        if (expectedIdentity != null && credential.identity != expectedIdentity) throw StaleAuthException()
         val mutation = requireNotNull(original.mutation)
         val resource = Resource(credential.identity, mutation.resourceType, mutation.resourceId)
         val pending = Pending(original.name, original.parameters, mutation.requestId)

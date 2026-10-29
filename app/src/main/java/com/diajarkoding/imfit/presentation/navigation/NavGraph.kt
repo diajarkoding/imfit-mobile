@@ -38,6 +38,7 @@ fun NavGraph(
     onToggleLanguage: () -> Unit = {},
     openActiveWorkout: Boolean = false,
     activeWorkoutTemplateId: String? = null,
+    activeWorkoutSessionId: String? = null,
     onActiveWorkoutOpened: () -> Unit = {},
     authenticatedFromDeepLink: Boolean = false,
     onAuthenticatedFromDeepLinkConsumed: () -> Unit = {},
@@ -53,14 +54,16 @@ fun NavGraph(
     LaunchedEffect(
         openActiveWorkout,
         activeWorkoutTemplateId,
+        activeWorkoutSessionId,
         backStack.size,
         backStack.lastOrNull()
     ) {
         if (!openActiveWorkout || backStack.none { it is Main }) return@LaunchedEffect
 
-        if (backStack.lastOrNull() !is ActiveWorkout) {
+        val requested = ActiveWorkout(activeWorkoutTemplateId ?: "active", activeWorkoutSessionId, allowCreate = false)
+        if (backStack.lastOrNull() != requested) {
             backStack.trimToMain()
-            backStack.add(ActiveWorkout(activeWorkoutTemplateId ?: "active"))
+            backStack.add(requested)
         }
         onActiveWorkoutOpened()
     }
@@ -122,7 +125,7 @@ fun NavGraph(
                         backStack.add(WorkoutDetail(workoutId))
                     },
                     onNavigateToActiveWorkout = { templateId ->
-                        backStack.add(ActiveWorkout(templateId))
+                        backStack.add(ActiveWorkout(templateId, allowCreate = false))
                     },
                     onNavigateToExerciseList = { categoryName ->
                         backStack.add(ExerciseList(categoryName))
@@ -135,7 +138,8 @@ fun NavGraph(
                     },
                     onNavigateToProfile = {
                         backStack.add(Profile)
-                    }
+                    },
+                    onRecovery = { backStack.add(LegacyRecovery) }
                 )
             }
 
@@ -208,6 +212,9 @@ fun NavGraph(
             entry<ActiveWorkout> { key ->
                 ActiveWorkoutScreen(
                     templateId = key.templateId,
+                    expectedSessionId = key.sessionId,
+                    allowCreate = key.allowCreate,
+                    onRecovery = { backStack.add(LegacyRecovery) },
                     onNavigateBack = { backStack.removeLastOrNull() },
                     selectionSessionId = activeSelectionSessionId,
                     selectedExerciseIds = activeSelectionResult,
@@ -261,7 +268,13 @@ fun NavGraph(
                 )
             }
             entry<LegacyRecovery> {
-                com.diajarkoding.imfit.presentation.ui.recovery.LegacyRecoveryScreen(onBack = { backStack.removeLastOrNull() })
+                com.diajarkoding.imfit.presentation.ui.recovery.LegacyRecoveryScreen(
+                    onBack = { backStack.removeLastOrNull() },
+                    onResumeSession = { sessionId, templateId ->
+                        backStack.removeLastOrNull()
+                        backStack.add(ActiveWorkout(templateId = templateId, sessionId = sessionId, allowCreate = false))
+                    }
+                )
             }
         }
     )

@@ -26,6 +26,12 @@ import com.diajarkoding.imfit.domain.model.ExerciseLog
 import com.diajarkoding.imfit.domain.model.MuscleCategory
 import com.diajarkoding.imfit.domain.model.WorkoutSession
 import com.diajarkoding.imfit.domain.model.WorkoutSet
+import com.diajarkoding.imfit.data.remote.online.SessionSnapshot
+import com.diajarkoding.imfit.data.remote.online.SessionStatus
+import com.diajarkoding.imfit.data.remote.online.SessionExercise
+import com.diajarkoding.imfit.data.remote.online.SessionSavePhase
+import com.diajarkoding.imfit.data.remote.online.InputDefaults
+import com.diajarkoding.imfit.data.remote.online.WorkoutSet as RemoteWorkoutSet
 import org.junit.Assert.assertEquals
 import org.junit.Rule
 import org.junit.Test
@@ -252,10 +258,10 @@ class ActiveWorkoutScreenTest {
                             onFinishClick = { finishClicks++ },
                             onAddExercises = {},
                             onRemoveExercise = {},
-                            onSetUpdate = { _, _, _, _ -> },
-                            onSetComplete = { _, _ -> },
+                            onSetUpdate = { _, _, _ -> },
+                            onSetComplete = {},
                             onAddSet = {},
-                            onRemoveSet = { _, _ -> }
+                            onRemoveSet = {}
                         )
                     }
             }
@@ -281,7 +287,25 @@ class ActiveWorkoutScreenTest {
             )
         )
 
+        private val sampleConfirmed = SessionSnapshot(
+            id = "session_test_1", version = 1, status = SessionStatus.ACTIVE, effectiveStatus = SessionStatus.ACTIVE,
+            reviewRequired = false, templateId = "tmpl_1", templateName = "Chest & Triceps Focus", templateRevision = 1,
+            startedAt = "2026-10-29T10:00:00Z", pausedAt = null, totalPausedMs = 0,
+            lastActivityAt = "2026-10-29T10:00:00Z", expiresAt = "2026-11-28T10:00:00Z", schemaVersion = 1,
+            currentExerciseId = "child-ex_1", completedWorkoutId = null,
+            exercises = sampleExerciseLogs.mapIndexed { index, log ->
+                SessionExercise("child-${log.exercise.id}", log.exercise.id, log.exercise.name, index, 60,
+                    InputDefaults(log.sets.size, 10), log.sets.map {
+                        RemoteWorkoutSet("${log.exercise.id}-${it.setNumber}", it.setNumber, it.weight.toString(), it.reps, it.isCompleted)
+                    }, "Chest")
+            }
+        )
+
         val sampleActiveState = ActiveWorkoutState(
+            confirmed = sampleConfirmed,
+            entryPhase = SessionEntryPhase.CONFIRMED,
+            savePhase = SessionSavePhase.CONFIRMED,
+            requiresVerification = false,
             session = WorkoutSession(
                 id = "session_test_1",
                 templateId = "tmpl_1",

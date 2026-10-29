@@ -71,7 +71,9 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.DialogProperties
 import com.diajarkoding.imfit.R
-import com.diajarkoding.imfit.domain.model.ExerciseLog
+import com.diajarkoding.imfit.data.remote.online.SessionExercise
+import com.diajarkoding.imfit.data.remote.online.SessionSetKey
+import com.diajarkoding.imfit.data.remote.online.SessionSetDraft
 import com.diajarkoding.imfit.presentation.components.common.Add
 import com.diajarkoding.imfit.presentation.components.common.Check
 import com.diajarkoding.imfit.presentation.components.common.CheckCircle
@@ -347,15 +349,17 @@ internal fun ActiveSessionFinishReminderBanner(
 
 @Composable
 internal fun ActiveExerciseCard(
-    exerciseLog: ExerciseLog,
+    exerciseLog: SessionExercise,
+    drafts: Map<SessionSetKey, SessionSetDraft>,
     mutationEnabled: Boolean,
     isPaused: Boolean,
     onRemoveExercise: () -> Unit,
-    onSetUpdate: (setIndex: Int, weight: Float, reps: Int) -> Unit,
-    onSetComplete: (setIndex: Int) -> Unit,
+    onSetUpdate: (SessionSetKey, String, String) -> Unit,
+    onSetComplete: (SessionSetKey) -> Unit,
     onAddSet: () -> Unit,
-    onRemoveSet: (setIndex: Int) -> Unit,
-    modifier: Modifier = Modifier
+    onRemoveSet: (SessionSetKey) -> Unit,
+    modifier: Modifier = Modifier,
+    inputEnabled: Boolean = mutationEnabled
 ) {
     val colors = IMFITColors.training
     Surface(
@@ -377,23 +381,25 @@ internal fun ActiveExerciseCard(
             ) {
                 Column(modifier = Modifier.weight(1f)) {
                     Text(
-                        text = exerciseLog.exercise.name,
+                        text = exerciseLog.name,
                         color = colors.text,
                         style = MaterialTheme.typography.titleMedium,
                         fontWeight = FontWeight.SemiBold
                     )
                     Text(
-                        text = stringResource(exerciseLog.exercise.muscleCategory.stringResourceId),
+                        text = exerciseLog.muscleCategory,
                         color = colors.muted,
                         style = MaterialTheme.typography.bodySmall,
                         fontSize = 12.sp
                     )
+                    Text(stringResource(R.string.session_exercise_rest, exerciseLog.restSeconds),
+                        color = colors.muted, style = MaterialTheme.typography.bodySmall)
                 }
 
                 if (exerciseLog.sets.none { it.isCompleted }) {
                     val removeDesc = stringResource(
                         R.string.active_session_remove_exercise,
-                        exerciseLog.exercise.name
+                        exerciseLog.name
                     )
                     IconButton(
                         onClick = onRemoveExercise,
@@ -458,17 +464,22 @@ internal fun ActiveExerciseCard(
             }
 
             // Set Rows
-            exerciseLog.sets.forEachIndexed { setIndex, set ->
-                key(set.setNumber) {
+            exerciseLog.sets.forEach { set ->
+                val setKey = SessionSetKey(exerciseLog.id, set.id)
+                val draft = drafts[setKey]
+                key(exerciseLog.id, set.id) {
                     ActiveSetRow(
                         set = set,
-                        exerciseName = exerciseLog.exercise.name,
+                        exerciseName = exerciseLog.name,
+                        weight = draft?.weightText ?: set.weight,
+                        reps = draft?.repsText ?: set.reps.toString(),
                         mutationEnabled = mutationEnabled,
+                        inputEnabled = inputEnabled,
                         canDelete = exerciseLog.sets.size > 1 && !set.isCompleted && mutationEnabled,
                         isPaused = isPaused,
-                        onUpdate = { weight, reps -> onSetUpdate(setIndex, weight, reps) },
-                        onComplete = { onSetComplete(setIndex) },
-                        onDelete = { onRemoveSet(setIndex) }
+                        onUpdate = { weight, reps -> onSetUpdate(setKey, weight, reps) },
+                        onComplete = { onSetComplete(setKey) },
+                        onDelete = { onRemoveSet(setKey) }
                     )
                 }
             }
@@ -684,11 +695,9 @@ internal fun RestTimerConfigDialog(
     onConfirm: (Int) -> Unit
 ) {
     val colors = IMFITColors.training
-    val initialHours = currentRestSeconds / 3600
-    val initialMinutes = (currentRestSeconds % 3600) / 60
+    val initialMinutes = currentRestSeconds.coerceIn(0, 600) / 60
     val initialSeconds = currentRestSeconds % 60
 
-    var hours by rememberSaveable { mutableIntStateOf(initialHours) }
     var minutes by rememberSaveable { mutableIntStateOf(initialMinutes) }
     var seconds by rememberSaveable { mutableIntStateOf(initialSeconds) }
     var draftSoundEnabled by rememberSaveable { mutableStateOf(soundEnabled) }
@@ -739,24 +748,16 @@ internal fun RestTimerConfigDialog(
                 ) {
                     Box(Modifier.weight(1f)) {
                         WheelPickerColumn(
-                            value = hours,
-                            range = 0..23,
-                            unit = stringResource(R.string.rest_timer_unit_hours),
-                            onValueChange = { hours = it }
-                        )
-                    }
-                    Box(Modifier.weight(1f)) {
-                        WheelPickerColumn(
                             value = minutes,
-                            range = 0..59,
+                            range = 0..10,
                             unit = stringResource(R.string.rest_timer_unit_minutes),
-                            onValueChange = { minutes = it }
+                            onValueChange = { minutes = it; if (it == 10) seconds = 0 }
                         )
                     }
                     Box(Modifier.weight(1f)) {
                         WheelPickerColumn(
                             value = seconds,
-                            range = 0..59,
+                            range = if (minutes == 10) 0..0 else 0..59,
                             unit = stringResource(R.string.rest_timer_unit_seconds),
                             onValueChange = { seconds = it }
                         )
@@ -839,10 +840,10 @@ internal fun RestTimerConfigDialog(
                 }, primary = {
                     Button(
                         onClick = {
-                            val total = hours * 3600 + minutes * 60 + seconds
+                            val total = minutes * 60 + seconds
                             onSoundChange(draftSoundEnabled)
                             onVibrationChange(draftVibrationEnabled)
-                            onConfirm(if (total > 0) total else 60)
+                            onConfirm(total)
                         },
                         modifier = Modifier.fillMaxWidth().heightIn(min = 54.dp),
                         shape = RoundedCornerShape(10.dp),
@@ -1191,7 +1192,6 @@ internal fun ActiveSessionLoadingState(
     Column(
         modifier = modifier
             .fillMaxWidth()
-            .verticalScroll(rememberScrollState())
             .padding(bottom = 24.dp)
             .testTag("active_workout_loading")
             .semantics { liveRegion = LiveRegionMode.Polite },

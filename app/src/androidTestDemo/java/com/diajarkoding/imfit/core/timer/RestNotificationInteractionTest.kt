@@ -30,9 +30,10 @@ class RestNotificationInteractionTest {
         assumeTrue(context.packageName.endsWith(".modaldiagnostic"))
         val ports = EntryPointAccessors.fromApplication(context.applicationContext, RestTimerEntryPoint::class.java)
         val user = requireNotNull(ports.auth().getLocalUserId())
-        val repository = ports.workouts()
-        val template = repository.getTemplates(user).first()
-        val session = repository.startWorkout(template)
+        val reads = ports.reads()
+        val sessions = ports.sessions()
+        val template = reads.read(com.diajarkoding.imfit.data.remote.online.OnlineRpc.templates(limit = 20)).data.first { it.exerciseCount > 0 }
+        val session = sessions.start(template.id, template.revision)
         val timer = ports.timer()
         val manager = context.getSystemService(NotificationManager::class.java)
         val device = UiDevice.getInstance(InstrumentationRegistry.getInstrumentation())
@@ -44,13 +45,14 @@ class RestNotificationInteractionTest {
             ContextCompat.startForegroundService(context, Intent(context, WorkoutService::class.java).apply {
                 action = WorkoutService.ACTION_START_WORKOUT
                 putExtra(WorkoutService.EXTRA_TEMPLATE_ID, template.id)
+                putExtra(WorkoutService.EXTRA_SESSION_ID, session.id)
                 putExtra(WorkoutService.EXTRA_WORKOUT_NAME, template.name)
             })
             await { withContext(Dispatchers.Main) { ports.runtime().foregroundServiceActive } }
             for (body in listOf(false, true)) {
                 withContext(Dispatchers.Main) {
                     timer.start(RestTimerState("", userId = user, workoutId = session.id, templateId = template.id,
-                        exerciseId = session.exerciseLogs.first().exercise.id, setId = "tap-$body", exerciseName = "Synthetic rest",
+                        exerciseId = session.exercises.first().exerciseId, setId = session.exercises.first().sets.first().id, exerciseName = "Synthetic rest",
                         durationMs = 1000, deadlineElapsedMs = 0, bootIdentity = null, startedAtEpochMs = 0))
                 }
                 device.pressHome()
@@ -69,7 +71,7 @@ class RestNotificationInteractionTest {
                 await("acknowledged body=$body") { timer.state.value?.status == TimerStatus.ACKNOWLEDGED }
                 await("effects stopped body=$body") { !withContext(Dispatchers.Main) { ports.runtime().isAlertPlaying() } && manager.activeNotifications.none {
                     it.id == NotificationChannels.REST_FINISHED_NOTIFICATION_ID } }
-                assertEquals(session.id, repository.getActiveSession()?.id)
+                assertEquals(session.id, sessions.peek()?.id)
                 if (body) {
                     val label = LocaleManager.getUpdatedContext(context).getString(R.string.active_session_sets_completed)
                     val visible = device.wait(Until.hasObject(By.text(label)), 12_000)
@@ -83,7 +85,7 @@ class RestNotificationInteractionTest {
             }
         } finally {
             withContext(Dispatchers.Main) { timer.cancel("INTERACTION_TEST_FINISHED") }
-            repository.cancelWorkout()
+            sessions.cancel(session.id)
             context.stopService(Intent(context, WorkoutService::class.java))
         }
     }

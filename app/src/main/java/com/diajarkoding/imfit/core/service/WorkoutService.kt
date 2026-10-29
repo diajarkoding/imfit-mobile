@@ -13,7 +13,10 @@ import com.diajarkoding.imfit.core.notification.NotificationChannels
 import com.diajarkoding.imfit.core.notification.WorkoutActions
 import com.diajarkoding.imfit.core.notification.WorkoutNotificationManager
 import com.diajarkoding.imfit.core.timer.*
-import com.diajarkoding.imfit.domain.repository.WorkoutRepository
+import com.diajarkoding.imfit.data.remote.online.OnlineSessionStore
+import com.diajarkoding.imfit.data.remote.online.SessionCommand
+import com.diajarkoding.imfit.data.remote.online.toDomain
+import com.diajarkoding.imfit.data.remote.online.SessionStatus
 import dagger.hilt.android.AndroidEntryPoint
 import kotlinx.coroutines.*
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -26,7 +29,7 @@ class WorkoutService : Service() {
     @Inject lateinit var notificationManager: WorkoutNotificationManager
     @Inject lateinit var timer: RestTimerCoordinator
     @Inject lateinit var runtime: RestTimerAndroidRuntime
-    @Inject lateinit var workouts: WorkoutRepository
+    @Inject lateinit var sessions: OnlineSessionStore
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main)
     private val running = MutableStateFlow(false)
     val isRunning = running.asStateFlow()
@@ -34,6 +37,9 @@ class WorkoutService : Service() {
     private var templateId: String? = null
     private var ticker: Job? = null
     private val sessionRetry = RestTimerRetry()
+    private var entryVerification: Job? = null
+    private var actionFailed = false
+    private var expectedSessionId: String? = null
 
     inner class WorkoutBinder : Binder() { fun getService() = this@WorkoutService }
     override fun onBind(intent: Intent?): IBinder = WorkoutBinder()
@@ -52,6 +58,8 @@ class WorkoutService : Service() {
         if (!running.value) {
             update = update.copy(workoutName = intent?.getStringExtra(EXTRA_WORKOUT_NAME) ?: "Workout")
             templateId = intent?.getStringExtra(EXTRA_TEMPLATE_ID)
+            expectedSessionId = intent?.getStringExtra(EXTRA_SESSION_ID)
+            expectedSessionId?.let(notificationManager::bindSession)
             try {
                 val notification = notificationManager.buildWorkoutNotification(update.workoutName, "00:00:00", 0, 0, 0f, templateId = templateId)
                 ServiceCompat.startForeground(this, NotificationChannels.WORKOUT_NOTIFICATION_ID, notification,
@@ -67,6 +75,7 @@ class WorkoutService : Service() {
                 return START_NOT_STICKY
             }
         }
+        verifyEntryOnce()
         ensureTicker()
         when (intent?.action) {
             ACTION_UPDATE_WORKOUT -> updateWorkoutNotification(WorkoutTimerUpdate(
@@ -81,11 +90,13 @@ class WorkoutService : Service() {
             ACTION_PAUSE_WORKOUT -> scope.launch { setPaused(true) }
             ACTION_RESUME_WORKOUT -> scope.launch { setPaused(false) }
             ACTION_STOP_WORKOUT -> scope.launch {
-                try { workouts.cancelWorkout() }
-                catch (e: CancellationException) { throw e }
-                catch (e: Exception) { RestTimerTrace.event("service_cancel_failed", timer.state.value,
-                    "source=fgs_stop exception=${e.javaClass.simpleName}") }
-                stopWorkout()
+                try {
+                    val session = verifiedSession()
+                    if (session != null) sessions.cancel(session.id)
+                    timer.cancel("SESSION_CANCELLED")
+                    stopWorkout()
+                } catch (e: CancellationException) { throw e }
+                catch (e: Exception) { showActionFailure("fgs_stop", e) }
             }
             WorkoutActions.EXPIRE -> playback?.let { runtime.reportServiceResult(it, true) }
         }
@@ -109,7 +120,11 @@ class WorkoutService : Service() {
                 val iteration = RestTimerTickerIteration(
                     readSession = {
                         RestTimerTrace.measured("ticker_session_read", timer.state.value) {
-                            workouts.getActiveSessionForTimer()
+                            val current = sessions.state.value
+                            check(current.snapshot != null || current.pendingRequestId == null) { "Unknown creation outcome" }
+                            check(expectedSessionId == null || current.snapshot == null || current.snapshot.id == expectedSessionId) { "Session target not verified" }
+                            check(current.snapshot?.reviewRequired != true && current.snapshot?.effectiveStatus != SessionStatus.EXPIRED) { "Session requires review" }
+                            sessions.peek()?.toDomain()
                         }
                     },
                     reconcile = { timer.reconcile(source = "fgs_ticker") },
@@ -155,6 +170,7 @@ class WorkoutService : Service() {
                         exactAvailable = available
                     }
                     if (!iteration.tick()) return@launch
+                    if (actionFailed) notificationManager.showActionFailure()
                     if (!sessionRetry.available(SystemClock.elapsedRealtime()) &&
                         rest?.status == TimerStatus.RUNNING && now >= rest.deadlineElapsedMs) {
                         RestTimerTrace.event("ticker_backoff", rest, "source=fgs_ticker")
@@ -183,20 +199,53 @@ class WorkoutService : Service() {
             "source=fgs_ticker stage=$stage attempt=${sessionRetry.failures} retryMs=$retryMs exception=${error.javaClass.simpleName}")
     }
 
+    /** Entry verification is coalesced, never invoked from ticker/validator hot paths. */
+    private fun verifyEntryOnce() {
+        val current = sessions.state.value
+        if ((current.loaded && (expectedSessionId == null || current.snapshot?.id == expectedSessionId)) || entryVerification != null) return
+        entryVerification = scope.launch {
+            try {
+                timer.restore()
+                val id = expectedSessionId ?: timer.state.value?.workoutId ?: error("Open workout for operation review")
+                sessions.reload(id)
+                RestTimerTrace.event("session_verified", timer.state.value, "source=fgs_entry")
+                timer.reconcile(source = "fgs_entry_verified")
+            } catch (e: CancellationException) { throw e }
+            catch (e: Exception) { showActionFailure("fgs_entry", e) }
+        }
+    }
+    private suspend fun verifiedSession(): com.diajarkoding.imfit.data.remote.online.SessionSnapshot? {
+        val id = expectedSessionId ?: timer.state.value?.workoutId ?: error("Open workout for operation review")
+        val before = sessions.state.value
+        if (!before.loaded || before.requiresVerification || (before.snapshot != null && before.snapshot.id != id))
+            sessions.reload(id)
+        val current = sessions.state.value
+        check(current.pendingRequestId == null) { "Original request must be resolved first" }
+        check(current.snapshot?.reviewRequired != true && current.snapshot?.effectiveStatus != SessionStatus.EXPIRED) { "Session requires review" }
+        return sessions.peek()
+    }
+    private fun showActionFailure(source: String, error: Exception) {
+        actionFailed = true
+        RestTimerTrace.event("service_action_failed", timer.state.value,
+            "source=$source exception=${error.javaClass.simpleName}")
+        try { notificationManager.showActionFailure() }
+        catch (notificationError: RuntimeException) {
+            RestTimerTrace.event("service_error_notification_failed", timer.state.value,
+                "exception=${notificationError.javaClass.simpleName}")
+        }
+    }
     private suspend fun setPaused(paused: Boolean) {
-        if (paused) {
-            timer.whenRestInactive { persistPause(true) }
-        } else persistPause(false)
+        try {
+            if (paused) {
+                check(timer.whenRestInactive { persistPause(true) })
+            } else persistPause(false)
+            actionFailed = false
+        } catch (e: CancellationException) { throw e }
+        catch (e: Exception) { showActionFailure("fgs_pause", e) }
     }
     private suspend fun persistPause(paused: Boolean) {
-        val session = workouts.getActiveSessionForTimer() ?: return
-        if (session.isPaused == paused) return
-        val now = System.currentTimeMillis()
-        workouts.mutateActiveSession(session.id) { current -> if (current.isPaused == paused) current else current.copy(
-            isPaused = paused,
-            lastPauseTime = if (paused) now else null,
-            totalPausedTimeMs = current.totalPausedTimeMs + if (!paused) (now - (current.lastPauseTime ?: now)).coerceAtLeast(0) else 0
-        ) }
+        val session = verifiedSession() ?: error("No authoritative active session")
+        sessions.command(session.id, if (paused) SessionCommand.Pause else SessionCommand.Resume)
         update = update.copy(isPaused = paused)
     }
 
@@ -226,6 +275,7 @@ class WorkoutService : Service() {
         const val ACTION_RESUME_WORKOUT = WorkoutActions.RESUME
         const val ACTION_STOP_WORKOUT = WorkoutActions.STOP
         const val EXTRA_WORKOUT_NAME = "extra_workout_name"
+        const val EXTRA_SESSION_ID = "extra_session_id"
         const val EXTRA_TEMPLATE_ID = "extra_template_id"
         const val EXTRA_START_TIME = "extra_start_time"
         const val EXTRA_TOTAL_PAUSED_TIME = "extra_total_paused_time"

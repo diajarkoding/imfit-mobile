@@ -25,11 +25,14 @@ import com.diajarkoding.imfit.core.timer.RestTimerTrace
     
     // Store current template ID for navigation
     private var currentTemplateId: String? = null
+    private var currentSessionId: String? = null
+    fun bindSession(sessionId: String) { currentSessionId = sessionId }
      
     private fun createContentIntent(templateId: String? = null): PendingIntent {
          val intent = Intent(context, MainActivity::class.java).apply {
              flags = Intent.FLAG_ACTIVITY_SINGLE_TOP or Intent.FLAG_ACTIVITY_CLEAR_TOP
              putExtra(EXTRA_OPEN_WORKOUT, true)
+            currentSessionId?.let { putExtra(EXTRA_SESSION_ID, it) }
             templateId?.let { putExtra(EXTRA_TEMPLATE_ID, it) }
                 ?: currentTemplateId?.let { putExtra(EXTRA_TEMPLATE_ID, it) }
          }
@@ -44,6 +47,7 @@ import com.diajarkoding.imfit.core.timer.RestTimerTrace
      private fun createStopIntent(): PendingIntent {
          val intent = Intent(context, WorkoutNotificationReceiver::class.java).apply {
              action = ACTION_STOP_WORKOUT
+            currentSessionId?.let { putExtra(EXTRA_SESSION_ID, it) }
          }
          return PendingIntent.getBroadcast(
              context,
@@ -56,6 +60,7 @@ import com.diajarkoding.imfit.core.timer.RestTimerTrace
      private fun createPauseIntent(): PendingIntent {
          val intent = Intent(context, WorkoutNotificationReceiver::class.java).apply {
              action = ACTION_PAUSE_WORKOUT
+            currentSessionId?.let { putExtra(EXTRA_SESSION_ID, it) }
          }
          return PendingIntent.getBroadcast(
              context,
@@ -68,6 +73,7 @@ import com.diajarkoding.imfit.core.timer.RestTimerTrace
      private fun createResumeIntent(): PendingIntent {
          val intent = Intent(context, WorkoutNotificationReceiver::class.java).apply {
              action = ACTION_RESUME_WORKOUT
+            currentSessionId?.let { putExtra(EXTRA_SESSION_ID, it) }
          }
          return PendingIntent.getBroadcast(
              context,
@@ -155,6 +161,7 @@ import com.diajarkoding.imfit.core.timer.RestTimerTrace
            templateId: String? = null
       ): Notification {
           templateId?.let { currentTemplateId = it }
+          currentSessionId = state.workoutId
           val title = context.getString(R.string.notification_rest_timer)
           val contentText = context.getString(R.string.notification_resting_after, state.exerciseName)
           val whenMs = System.currentTimeMillis() + (state.deadlineElapsedMs - SystemClock.elapsedRealtime()).coerceAtLeast(0)
@@ -253,6 +260,7 @@ import com.diajarkoding.imfit.core.timer.RestTimerTrace
                   data = android.net.Uri.parse("imfit-rest://open-workout/${state.timerId}/${state.generation}")
                   putExtra(EXTRA_OPEN_WORKOUT, true)
                   putExtra(EXTRA_TEMPLATE_ID, state.templateId)
+                  putExtra(EXTRA_SESSION_ID, state.workoutId)
                   putExtra(EXTRA_REST_TIMER_ID, state.timerId)
                   putExtra(EXTRA_REST_GENERATION, state.generation)
               },
@@ -290,8 +298,21 @@ import com.diajarkoding.imfit.core.timer.RestTimerTrace
       }
 
       fun dismissRestFinished() = notificationManager.cancel(NotificationChannels.REST_FINISHED_NOTIFICATION_ID)
+
+      fun showActionFailure() {
+          val notification = NotificationCompat.Builder(context, NotificationChannels.WORKOUT_ACTIVE_CHANNEL_ID)
+              .setSmallIcon(R.drawable.ic_fitness)
+              .setContentTitle(context.getString(R.string.session_unknown))
+              .setContentText(context.getString(R.string.session_action_failed))
+              .setContentIntent(createContentIntent())
+              .setOngoing(true)
+              .setOnlyAlertOnce(true)
+              .build()
+          notificationManager.notify(NotificationChannels.WORKOUT_NOTIFICATION_ID, notification)
+      }
      
       companion object {
+          const val EXTRA_SESSION_ID = "extra_session_id"
           const val EXTRA_REST_TIMER_ID = "rest_timer_id"
           const val EXTRA_REST_GENERATION = "rest_generation"
          const val EXTRA_OPEN_WORKOUT = "extra_open_workout"

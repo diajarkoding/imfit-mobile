@@ -1,12 +1,11 @@
 """Host-only tests for the local test runner's fail-closed target guards."""
 
-import contextlib
-import io
 import json
 import unittest
 from unittest.mock import patch
 
 import verify_local_baseline as runner
+import verify_local_migration_paths as replay
 
 
 class TargetGuardTest(unittest.TestCase):
@@ -65,24 +64,56 @@ class TargetGuardTest(unittest.TestCase):
                 runner.verify()
             self.assertEqual(command.call_count, 3)
 
-    def test_mocked_success_labels_the_limited_baseline_scope(self):
-        audit = {
-            "transaction_read_only": "on", "template_revision_column": True,
-            "template_receipt_table": "template_write_receipts", "public_tables_without_rls": [],
-            "missing_required_routine_names": [f"mock_rpc_{i}" for i in range(15)],
-        }
-        output = io.StringIO()
-        responses = [json.dumps(self.CONTEXT), json.dumps(self.CONTAINER), json.dumps(self.METADATA), json.dumps(runner.MIGRATIONS), "", json.dumps(audit)]
-        with patch.object(runner, "command", side_effect=responses) as command:
-            with contextlib.redirect_stdout(output):
-                runner.verify()
-            result = json.loads(output.getvalue())
-            self.assertEqual(result["status"], "PASS")
-            self.assertIn("baseline only", result["scope"])
-            self.assertEqual(command.call_count, 6)
-            fixture_sql = command.call_args_list[4].args[1].lower()
-            self.assertIn("begin;", fixture_sql)
-            self.assertIn("rollback;", fixture_sql)
+
+
+class PlatformDumpGuardTest(unittest.TestCase):
+    ROLES = {"postgres", "supabase_admin", "supabase_auth_admin", "supabase_storage_admin"}
+
+    def toc(self, extra=(), omitted=()):
+        objects = sorted(replay.APP_TOC_OBJECTS - set(omitted))
+        objects.extend(extra)
+        return "; Archive created by guarded local pg_dump\n" + "\n".join(
+            f"{number}; 0 0 {item}" for number, item in enumerate(objects, 1))
+
+    def test_platform_objects_retained_and_only_exact_app_dependencies_excluded(self):
+        schema = "SCHEMA - auth supabase_auth_admin"
+        extension = "EXTENSION - pgcrypto "
+        comment = "COMMENT - EXTENSION pgcrypto "
+        trigger = "TRIGGER storage buckets enforce_bucket_name_length_trigger supabase_storage_admin"
+        result = replay.filter_platform_toc(self.toc([schema, extension, comment, trigger]), self.ROLES)
+        self.assertIn(schema, result)
+        self.assertIn(extension, result)
+        self.assertIn(comment, result)
+        self.assertIn(trigger, result)
+        self.assertNotIn("avatars_", result)
+        self.assertNotIn("on_auth_user_created", result)
+
+    def test_unknown_storage_policy_is_blocked_not_silently_filtered(self):
+        with self.assertRaisesRegex(RuntimeError, "Unknown app-dependent"):
+            replay.filter_platform_toc(self.toc(["POLICY storage objects avatars_unreviewed postgres"]), self.ROLES)
+
+    def test_unknown_auth_user_trigger_is_blocked(self):
+        with self.assertRaisesRegex(RuntimeError, "Unknown app-dependent"):
+            replay.filter_platform_toc(self.toc(["TRIGGER auth users unreviewed postgres"]), self.ROLES)
+
+    def test_schema_dump_containing_data_is_blocked(self):
+        with self.assertRaisesRegex(RuntimeError, "platform-data"):
+            replay.filter_platform_toc(self.toc(["TABLE DATA auth users supabase_auth_admin"]), self.ROLES)
+
+    def test_missing_or_duplicate_allowlisted_object_is_blocked(self):
+        omitted = next(iter(replay.APP_TOC_OBJECTS))
+        with self.assertRaisesRegex(RuntimeError, "missing exact"):
+            replay.filter_platform_toc(self.toc(omitted=[omitted]), self.ROLES)
+        with self.assertRaisesRegex(RuntimeError, "Duplicate"):
+            replay.filter_platform_toc(self.toc([omitted]), self.ROLES)
+
+    def test_unavailable_platform_owner_fails_with_concrete_role(self):
+        with self.assertRaisesRegex(RuntimeError, "unavailable role: unexpected_admin"):
+            replay.filter_platform_toc(self.toc(["SCHEMA - auth unexpected_admin"]), self.ROLES)
+
+    def test_unrecognized_toc_format_is_blocked(self):
+        with self.assertRaisesRegex(RuntimeError, "Unrecognized"):
+            replay.filter_platform_toc(self.toc() + "\nmalformed archive record", self.ROLES)
 
 
 if __name__ == "__main__":

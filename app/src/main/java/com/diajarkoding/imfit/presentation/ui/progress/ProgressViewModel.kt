@@ -5,6 +5,7 @@ import androidx.lifecycle.viewModelScope
 import com.diajarkoding.imfit.domain.model.WorkoutLog
 import com.diajarkoding.imfit.domain.repository.AuthRepository
 import com.diajarkoding.imfit.domain.repository.WorkoutRepository
+import com.diajarkoding.imfit.domain.repository.avatarPresentationUrl
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -46,7 +47,8 @@ data class ProgressState(
 @HiltViewModel
 class ProgressViewModel @Inject constructor(
     private val reads: RemoteReadGateway,
-    private val authRepository: AuthRepository
+    private val authRepository: AuthRepository,
+    private val changes: OnlineMutationChanges,
 ) : ViewModel() {
 
     private val _state = MutableStateFlow(ProgressState(remoteMode = true))
@@ -56,7 +58,7 @@ class ProgressViewModel @Inject constructor(
     private val markers = RemoteResource<DateMarkers>(reads.auth, viewModelScope)
     private val day = RemoteResource<ProgressSummary>(reads.auth, viewModelScope)
     private var window: DateWindow? = null
-    private var selectedDay: LocalDate? = null
+    private var selectedDayWindow: DateWindow? = null
     private val ownerListener = reads.auth.onIdentityChanged { _state.value = ProgressState(isLoading = false, remoteMode = true) }
 
     init {
@@ -81,17 +83,37 @@ class ProgressViewModel @Inject constructor(
             } }
         }
         viewModelScope.launch { reads.auth.identity.collectLatest { if (it != null) loadData(force = false) } }
+        viewModelScope.launch { changes.events.collect { change ->
+            reads.auth.synchronizedState {
+                if (!reads.auth.isCurrent(change.identity)) return@synchronizedState
+                when (change) {
+                    is ProfileChanged -> profile.load("profile", true) { loadProfile() }
+                    is WorkoutCommitted -> {
+                        window?.takeIf { it.containsWorkout(change.startedAt) }?.let { query ->
+                            aggregate.load(query.toString(), true) { reads.read(OnlineRpc.progress(query)) }
+                            markers.load(query.toString(), true) { reads.read(OnlineRpc.dateMarkers(query)) }
+                        }
+                        selectedDayWindow?.takeIf { it.containsWorkout(change.startedAt) }?.let { query ->
+                            day.load(query.toString(), true) { reads.read(OnlineRpc.progress(query)) }
+                        }
+                    }
+                }
+            }
+        } }
         runCatching { reads.auth.capture() }
     }
 
     fun loadData() = loadData(force = true)
 
     private fun loadData(force: Boolean) {
-        val query = window ?: return
-        profile.load("profile", force) { reads.profile() }
-        aggregate.load(query.toString(), force) { reads.read(OnlineRpc.progress(query)) }
-        markers.load(query.toString(), force) { reads.read(OnlineRpc.dateMarkers(query)) }
-        selectedDay?.let { selectDay(it, force) }
+        profile.load("profile", force) { loadProfile() }
+        window?.let { query ->
+            aggregate.load(query.toString(), force) { reads.read(OnlineRpc.progress(query)) }
+            markers.load(query.toString(), force) { reads.read(OnlineRpc.dateMarkers(query)) }
+        }
+        selectedDayWindow?.let { query ->
+            day.load(query.toString(), force) { reads.read(OnlineRpc.progress(query)) }
+        }
     }
 
     fun selectMonth(month: YearMonth) = setWindow(month.atDay(1), month.plusMonths(1).atDay(1))
@@ -100,14 +122,18 @@ class ProgressViewModel @Inject constructor(
         val next = DateWindow(start.toString(), end.toString(), ZoneId.systemDefault().id)
         if (next == window) return
         window = next
-        profile.load("profile") { reads.profile() }
+        profile.load("profile") { loadProfile() }
         aggregate.load(next.toString()) { reads.read(OnlineRpc.progress(next)) }
         markers.load(next.toString()) { reads.read(OnlineRpc.dateMarkers(next)) }
     }
     fun selectDay(date: LocalDate, force: Boolean = false) {
-        selectedDay = date
         val query = DateWindow(date.toString(), date.plusDays(1).toString(), ZoneId.systemDefault().id)
+        selectedDayWindow = query
         day.load(query.toString(), force) { reads.read(OnlineRpc.progress(query)) }
+    }
+    private suspend fun loadProfile(): RemoteProfile {
+        val value = reads.profile()
+        return value.copy(avatarUrl = authRepository.avatarPresentationUrl(value.avatarUrl))
     }
     override fun onCleared() { profile.close(); aggregate.close(); markers.close(); day.close(); ownerListener.close() }
 

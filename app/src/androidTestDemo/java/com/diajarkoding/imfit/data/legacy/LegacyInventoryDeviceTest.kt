@@ -125,6 +125,81 @@ class LegacyInventoryDeviceTest {
         }
     }
 
+    @Test fun selectedAggregateMapsExactRealTextAndKeepsEverySourceByteAcrossSupportedVersions() = runBlocking {
+        val owner = "00000000-0000-0000-0000-000000000001"
+        val workout = "00000000-0000-0000-0000-000000000002"
+        val exercise = "00000000-0000-0000-0000-000000000003"
+        val set = "00000000-0000-0000-0000-000000000004"
+        for (version in listOf(6, 7, 9)) {
+            val file = fixture(version) { database ->
+                insert(database, "exercises", "id" to "bench", "description" to "Original dependency")
+                insert(database, "workout_logs", "id" to workout, "user_id" to owner,
+                    "pending_operation" to "CREATE", "sync_status" to "PENDING_SYNC",
+                    "date" to -1L, "start_time" to 1L, "end_time" to 1001L,
+                    "total_volume" to "24.6912", "total_sets" to 1L, "total_reps" to 2L)
+                insert(database, "exercise_logs", "id" to exercise, "workout_log_id" to workout,
+                    "exercise_id" to "bench", "order_index" to 0L,
+                    "total_volume" to "24.6912", "total_sets" to 1L, "total_reps" to 2L)
+                insert(database, "workout_sets", "id" to set, "workout_log_id" to workout,
+                    "exercise_log_id" to exercise, "exercise_id" to "bench",
+                    "weight" to "12.3456", "reps" to 2L, "is_completed" to 1L)
+                insert(database, "workout_logs", "id" to "private-B", "user_id" to "B", "template_name" to "Secret B")
+            }
+            val before = hash(file)
+            val reader = AndroidLegacyInventoryReader(file)
+            val inventory = reader.inspect(owner) as LegacyInventory.Present
+            val item = inventory.items.single { it.kind == LegacyKind.WORKOUT }
+            val aggregate = reader.read(owner, item, inventory.evidence())
+            assertEquals(inventory.aggregateFingerprint(item), aggregate.aggregateFingerprint)
+            assertEquals(inventory.dependencyFingerprint(), aggregate.dependencyFingerprint)
+            assertEquals("12.3456", aggregate.records.getValue(LegacyKind.SET).single().getValue("weight"))
+            assertEquals("Original dependency", aggregate.dependencies.getValue("EXERCISE").single().getValue("description"))
+            val mapped = LegacyImportMapper.map(aggregate)
+            assertEquals("24.6912", mapped.workout.getValue("total_volume").jsonPrimitive.content)
+            assertEquals("1969-12-31", mapped.workout.getValue("date").jsonPrimitive.content)
+            assertEquals(JsonNull, mapped.exercises.single().jsonObject.getValue("input_defaults"))
+            assertEquals(setOf(workout, exercise, set), mapped.idMapping.keys)
+            assertFalse(aggregate.toString().contains("Secret B"))
+            assertEquals(before, hash(file))
+        }
+    }
+
+    @Test fun selectedAggregateRejectsChangedDependencyEvidenceAndUnsupportedSchemaWithoutPartialSuccess() = runBlocking {
+        val file = fixture(9) { database ->
+            insert(database, "users", "id" to "A")
+            insert(database, "workout_templates", "id" to "template-A", "user_id" to "A")
+        }
+        val reader = AndroidLegacyInventoryReader(file)
+        val inventory = reader.inspect("A") as LegacyInventory.Present
+        val item = inventory.items.single { it.kind == LegacyKind.PROFILE }
+        SQLiteDatabase.openDatabase(file.path, null, SQLiteDatabase.OPEN_READWRITE).use {
+            it.execSQL("UPDATE workout_templates SET name='changed dependency' WHERE id='template-A'")
+        }
+        try { reader.read("A", item, inventory.evidence()); fail("Stale dependency evidence must block") }
+        catch (failure: LegacyAggregateReadException) { assertEquals(LegacyReadFailure.CHANGED_DURING_READ, failure.failure) }
+        SQLiteDatabase.openDatabase(file.path, null, SQLiteDatabase.OPEN_READWRITE).use { it.version = 8 }
+        val before = hash(file)
+        try { reader.read("A", item, inventory.evidence()); fail("Unsupported schema must block") }
+        catch (failure: LegacyAggregateReadException) { assertEquals(LegacyReadFailure.UNSUPPORTED_SCHEMA, failure.failure) }
+        assertEquals(before, hash(file))
+    }
+
+    @Test fun selectedAggregateReadsCommittedWalAndDoesNotCheckpointIt() = runBlocking {
+        val file = fixture(9)
+        SQLiteDatabase.openDatabase(file.path, null, SQLiteDatabase.OPEN_READWRITE).use { writer ->
+            assertTrue(writer.enableWriteAheadLogging())
+            insert(writer, "users", "id" to "A", "pending_operation" to "REVIEW")
+            val before = hash(file)
+            val wal = File(file.path + "-wal")
+            val beforeWal = hash(wal)
+            val reader = AndroidLegacyInventoryReader(file)
+            val inventory = reader.inspect("A") as LegacyInventory.Present
+            val aggregate = reader.read("A", inventory.items.single(), inventory.evidence())
+            assertEquals("A", aggregate.records.getValue(LegacyKind.PROFILE).single().getValue("id"))
+            assertEquals(before, hash(file)); assertEquals(beforeWal, hash(wal))
+        }
+    }
+
     @Test fun checkpointsSurviveNewStoreAndRemainOwnerScopedWithoutBusinessDraft() = runBlocking {
         val folder = directory()
         val first = FileLegacyCheckpointStore(folder)

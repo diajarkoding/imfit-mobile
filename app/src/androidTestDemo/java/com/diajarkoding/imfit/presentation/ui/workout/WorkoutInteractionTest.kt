@@ -6,7 +6,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.ui.platform.LocalResources
 import androidx.compose.ui.test.*
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
-import com.diajarkoding.imfit.domain.model.WorkoutSet
+import com.diajarkoding.imfit.data.remote.online.WorkoutSet
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Rule
@@ -20,19 +20,21 @@ class WorkoutInteractionTest {
     @Before fun configureWindow() { rule.runOnUiThread { rule.activity.enableEdgeToEdge() } }
 
     @Test fun compactSetKeepsDecimalWeightStableNumberAndAccessibleTargets() {
-        val set = mutableStateOf(WorkoutSet(3, 62.5f, 10))
+        val set = WorkoutSet("set-3", 3, "62.5", 10, false)
+        val weight = mutableStateOf(set.weight)
+        val reps = mutableStateOf(set.reps.toString())
         var completed = 0
         rule.setContent {
             WorkoutTestEnvironment(width = 320, fontScale = 1.3f) {
-                ActiveSetRow(set.value, "Bench", true, true, false,
-                    onUpdate = { weight, reps -> set.value = set.value.copy(weight = weight, reps = reps) },
+                ActiveSetRow(set, "Bench", weight.value, reps.value, true, true, false,
+                    onUpdate = { rawWeight, rawReps -> weight.value = rawWeight; reps.value = rawReps },
                     onComplete = { completed++ }, onDelete = {})
             }
         }
         rule.onNodeWithText("Set 3").assertIsDisplayed()
         val field = rule.onNodeWithContentDescription("Bench, set 3, beban dalam kg")
         field.assertIsEnabled().performTextReplacement("67,5")
-        rule.runOnIdle { assertEquals(67.5f, set.value.weight, 0.001f) }
+        rule.runOnIdle { assertEquals("67,5", weight.value); assertEquals("10", reps.value); assertEquals("62.5", set.weight) }
         val complete = rule.onNodeWithContentDescription("Selesaikan Bench, set 3")
         val density = rule.onNodeWithTag("active_set_3").fetchSemanticsNode().boundsInRoot.width / 320f
         val bounds = complete.fetchSemanticsNode().boundsInRoot
@@ -46,7 +48,7 @@ class WorkoutInteractionTest {
         val enabled = mutableStateOf(true)
         rule.setContent {
             WorkoutTestEnvironment(indonesian = false) {
-                ActiveSetRow(WorkoutSet(4, 60f, 10), "Bench", enabled.value, true, paused.value,
+                ActiveSetRow(WorkoutSet("set-4", 4, "60", 10, false), "Bench", "60", "10", enabled.value, true, paused.value,
                     onUpdate = { _, _ -> }, onComplete = {}, onDelete = {})
             }
         }
@@ -56,6 +58,39 @@ class WorkoutInteractionTest {
         rule.onNodeWithContentDescription("Bench, set 4, weight in kg").assertIsNotEnabled()
         rule.onNodeWithContentDescription("Delete Bench, set 4").assertIsNotEnabled()
         rule.onNodeWithContentDescription("Complete Bench, set 4").assertIsNotEnabled()
+    }
+
+    @Test fun savingAllowsNewRawRevisionWithoutChangingConfirmedValues() {
+        val weight = mutableStateOf("60")
+        val reps = mutableStateOf("10")
+        val confirmed = WorkoutSet("set-7", 7, "60", 10, false)
+        rule.setContent {
+            WorkoutTestEnvironment(indonesian = false) {
+                ActiveSetRow(confirmed, "Bench", weight.value, reps.value, false, false, false,
+                    onUpdate = { w, r -> weight.value = w; reps.value = r }, onComplete = {}, onDelete = {},
+                    inputEnabled = true)
+            }
+        }
+        rule.onNodeWithContentDescription("Bench, set 7, weight in kg").performTextReplacement("61,")
+        rule.onNodeWithContentDescription("Bench, set 7, reps").performTextClearance()
+        rule.runOnIdle {
+            assertEquals("61,", weight.value)
+            assertEquals("", reps.value)
+            assertEquals("60", confirmed.weight)
+            assertEquals(10, confirmed.reps)
+        }
+        rule.onNodeWithContentDescription("Complete Bench, set 7").assertIsNotEnabled()
+    }
+
+    @Test fun zeroRestIsSubmittedWithoutAnImplicitDefault() {
+        var selected = -1
+        rule.setContent {
+            WorkoutTestEnvironment(indonesian = false) {
+                RestTimerConfigDialog(0, true, {}, false, {}, true, {}, {}, { selected = it })
+            }
+        }
+        rule.onNodeWithText("Save").performScrollTo().performClick()
+        rule.runOnIdle { assertEquals(0, selected) }
     }
 
     @Test fun cancelMessagesFollowResourcesLocaleNotActivityContext() {

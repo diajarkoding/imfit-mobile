@@ -13,7 +13,6 @@ class G3ReadTablesTest {
         val client = HttpClient(MockEngine { request ->
             assertEquals("/rest/v1/profiles", request.url.encodedPath)
             assertEquals("eq.A", request.url.parameters["id"])
-            assertEquals("1", request.url.parameters["limit"])
             assertEquals("id,name,email,birth_date,avatar_url", request.url.parameters["select"])
             assertEquals("Bearer synthetic-token", request.headers[HttpHeaders.Authorization])
             respond("""[{"id":"A","name":"Fixture","email":"fixture@example.invalid","birth_date":null,"avatar_url":null}]""", HttpStatusCode.OK)

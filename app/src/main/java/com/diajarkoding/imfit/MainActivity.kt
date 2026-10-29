@@ -36,6 +36,7 @@ class MainActivity : ComponentActivity() {
 
     private var pendingWorkoutNavigation = mutableStateOf(false)
     private var pendingTemplateId = mutableStateOf<String?>(null)
+    private var pendingSessionId = mutableStateOf<String?>(null)
     private var pendingAuthenticatedNavigation = mutableStateOf(false)
 
     override fun attachBaseContext(newBase: Context) {
@@ -65,6 +66,7 @@ class MainActivity : ComponentActivity() {
             val configVersion = LocaleManager.configurationVersion
             val shouldNavigateToWorkout by pendingWorkoutNavigation
             val templateId by pendingTemplateId
+            val sessionId by pendingSessionId
             val shouldNavigateToMain by pendingAuthenticatedNavigation
 
                 IMFITTheme(darkTheme = isDarkMode) {
@@ -80,9 +82,11 @@ class MainActivity : ComponentActivity() {
                             },
                             openActiveWorkout = shouldNavigateToWorkout,
                             activeWorkoutTemplateId = templateId,
+                            activeWorkoutSessionId = sessionId,
                             onActiveWorkoutOpened = {
                                 pendingWorkoutNavigation.value = false
                                 pendingTemplateId.value = null
+                                pendingSessionId.value = null
                             },
                             authenticatedFromDeepLink = shouldNavigateToMain,
                             onAuthenticatedFromDeepLinkConsumed = {
@@ -129,6 +133,7 @@ class MainActivity : ComponentActivity() {
             }
 
             val templateId = intent.getStringExtra(WorkoutNotificationManager.EXTRA_TEMPLATE_ID)
+            pendingSessionId.value = intent.getStringExtra(WorkoutNotificationManager.EXTRA_SESSION_ID)
             if (templateId != null) {
                 pendingWorkoutNavigation.value = true
                 pendingTemplateId.value = templateId

@@ -23,7 +23,6 @@ import androidx.compose.ui.window.DialogProperties
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
 import androidx.test.uiautomator.UiDevice
-import com.diajarkoding.imfit.data.sync.SyncState
 import com.diajarkoding.imfit.presentation.ui.auth.AuthBirthDatePicker
 import com.diajarkoding.imfit.presentation.ui.auth.PhotoSourceSheet
 import com.diajarkoding.imfit.presentation.ui.exercise.ExerciseCategory
@@ -63,7 +62,6 @@ class ModalScrimTest {
                             "message" -> IMFITDialog({ kind.value = "none" }, title = "Synthetic message", onConfirm = {})
                             "photo-sheet" -> PhotoSourceSheet({ kind.value = "none" }, {}, {})
                             "filter-sheet" -> MuscleFilterSheet(ExerciseCategory.ALL, { kind.value = "none" }, {})
-                            "sync" -> SyncProgressDialog(SyncState(isInitialSync = true, progress = 0.5f, progressMessage = "Synthetic fixture"))
                         }
                     }
                 }
@@ -71,7 +69,7 @@ class ModalScrimTest {
         }
         val directory = File(rule.activity.filesDir, "compose-scrim-evidence").apply { mkdirs() }
         try {
-            for (isDark in listOf(false, true)) for (name in listOf("calendar", "routine", "message", "photo-sheet", "filter-sheet", "sync")) {
+            for (isDark in listOf(false, true)) for (name in listOf("calendar", "routine", "message", "photo-sheet", "filter-sheet")) {
                 rule.runOnIdle { dark.value = isDark; kind.value = name; window = null }
                 rule.waitForIdle()
                 UiDevice.getInstance(InstrumentationRegistry.getInstrumentation()).waitForIdle(1_000)

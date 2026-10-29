@@ -46,11 +46,6 @@
     kotlinx.serialization.KSerializer serializer(...);
 }
 
-# ===== ROOM =====
--keep class * extends androidx.room.RoomDatabase
--keep @androidx.room.Entity class *
--dontwarn androidx.room.paging.**
-
 # ===== HILT =====
 -keep class dagger.hilt.** { *; }
 -keep class javax.inject.** { *; }

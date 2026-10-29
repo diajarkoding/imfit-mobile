@@ -20,8 +20,6 @@ import com.diajarkoding.imfit.R
 import com.diajarkoding.imfit.data.remote.TemplateWriteRequest
 import com.diajarkoding.imfit.data.remote.online.*
 import com.diajarkoding.imfit.data.repository.DemoAuthRepository
-import com.diajarkoding.imfit.data.repository.DemoWorkoutRepository
-import com.diajarkoding.imfit.data.sync.*
 import com.diajarkoding.imfit.domain.model.Exercise
 import com.diajarkoding.imfit.domain.model.MuscleCategory
 import com.diajarkoding.imfit.presentation.ui.exercise.*
@@ -40,12 +38,37 @@ import org.junit.Test
 import java.time.*
 import java.util.Collections
 import java.util.Locale
+import dagger.hilt.android.EntryPointAccessors
+import com.diajarkoding.imfit.di.RestTimerEntryPoint
 
 /** Actual route/VM renderers with a scripted in-memory transport; no hosted account or DAO writes. */
 class G3ReadStatesTest {
+    private val stubWorkoutRepo = object : com.diajarkoding.imfit.domain.repository.WorkoutRepository {
+        override suspend fun getTemplateById(templateId: String) = null
+        override suspend fun createTemplate(userId: String, name: String, exercises: List<com.diajarkoding.imfit.domain.model.TemplateExercise>) = error("")
+        override suspend fun updateTemplate(templateId: String, name: String, exercises: List<com.diajarkoding.imfit.domain.model.TemplateExercise>) = null
+        override suspend fun updateTemplateExercises(templateId: String, exercises: List<com.diajarkoding.imfit.domain.model.TemplateExercise>) = null
+        override suspend fun updateTemplateExercise(templateId: String, exerciseId: String, sets: Int, reps: Int, restSeconds: Int) = null
+        override suspend fun deleteTemplate(templateId: String) = true
+        override suspend fun getActiveSessionForTimer() = null
+        override suspend fun isActiveSessionForTimer(userId: String, workoutId: String) = false
+        override suspend fun startWorkout(template: com.diajarkoding.imfit.domain.model.WorkoutTemplate) = error("")
+        override suspend fun getActiveSession() = null
+        override suspend fun getPrefillForExercise(exerciseId: String, userId: String, defaults: com.diajarkoding.imfit.domain.model.ExerciseInputDefaults) = emptyMap<Int, Pair<Float, Int>>()
+        override suspend fun finishWorkout() = null
+        override suspend fun cancelWorkout() {}
+        override suspend fun updateSessionRestOverride(seconds: Int) {}
+        override suspend fun getSessionRestOverride() = null
+        override suspend fun getWorkoutLogById(logId: String) = null
+        override suspend fun getLastWorkoutLog(userId: String) = null
+    }
     @get:Rule val rule = createAndroidComposeRule<ComponentActivity>()
     private val store = ViewModelStore()
     private val gateway = ScreenGateway()
+    private val changes = OnlineMutationChanges(gateway.auth)
+    private val sessions by lazy {
+        EntryPointAccessors.fromApplication(rule.activity.applicationContext, RestTimerEntryPoint::class.java).sessions()
+    }
     private val authRepository = DemoAuthRepository()
     private val recomposition = mutableIntStateOf(0)
     private fun <T : ViewModel> keep(vm: T): T { store.put(vm.javaClass.name, vm); return vm }
@@ -90,10 +113,8 @@ class G3ReadStatesTest {
 
     @Test fun homeLoadingErrorEmptyContentAndStaleRefreshAtCompactLargeFont() {
         val pending = gateway.stage(fail = true, hold = true)
-        val sync = object : SyncStateProvider { override val syncState = MutableStateFlow(SyncState()) }
-        val runner = object : SyncRunner { override suspend fun run(expectedUserId: String?): SyncRunResult = error("No global pull permitted") }
-        val vm = keep(HomeViewModel(authRepository, DemoWorkoutRepository(), sync, runner, gateway,
-            TemplateEditBridge(gateway, LegacyTemplateGuard { _, _ -> })))
+        val vm = keep(HomeViewModel(authRepository, stubWorkoutRepo, gateway,
+            TemplateEditBridge(gateway, LegacyTemplateGuard { _, _ -> }), changes))
         show { HomeScreen({}, viewModel = vm) }
         waitFor { vm.state.value.refreshing }; assertTrue(vm.state.value.isLoading)
         pending.complete(Unit); waitFor { vm.state.value.hasReadError && !vm.state.value.refreshing }
@@ -113,7 +134,7 @@ class G3ReadStatesTest {
 
     @Test fun historyErrorEmptyRefreshStaleAndDetailRetryAtCompactLargeFont() {
         val pending = gateway.stage(fail = true, hold = true)
-        val vm = keep(RemoteHistoryViewModel(gateway))
+        val vm = keep(RemoteHistoryViewModel(gateway, changes))
         show { WorkoutHistoryDetailScreen("2026-10-01", {}, vm) }
         waitFor { vm.page.value.refreshing }; rule.onNodeWithTag("workout_history_loading").assertExists()
         pending.complete(Unit); waitFor { vm.page.value.refreshError != null }
@@ -137,7 +158,7 @@ class G3ReadStatesTest {
 
     @Test fun progressAndYearCalendarKeepAggregatesAndMarkersThroughFailures() {
         val pending = gateway.stage(fail = true, hold = true)
-        val vm = keep(ProgressViewModel(gateway, authRepository))
+        val vm = keep(ProgressViewModel(gateway, authRepository, changes))
         val yearly = mutableStateOf(false)
         show { if (yearly.value) YearlyCalendarScreen({}, {}, viewModel = vm) else ProgressScreen(viewModel = vm) }
         waitFor { vm.state.value.isLoading && gateway.calls.isNotEmpty() }
@@ -164,7 +185,7 @@ class G3ReadStatesTest {
 
     @Test fun profileLoadingErrorPullRetryAndStaleIdentityAtCompactLargeFont() {
         val pending = gateway.stage(fail = true, hold = true)
-        val vm = keep(ProfileViewModel(gateway, authRepository))
+        val vm = keep(ProfileViewModel(gateway, authRepository, changes, sessions))
         show { ProfileScreen({}, {}, false, {}, false, {}, vm) }
         waitFor { vm.state.value.loading }; rule.onNodeWithTag("profile_loading").assertExists()
         pending.complete(Unit); waitFor { vm.state.value.error != null }
@@ -221,7 +242,7 @@ class G3ReadStatesTest {
 
     @Test fun templateDetailErrorEmptyStaleAndRetryNeverStartsAWorkout() {
         val pending = gateway.stage(fail = true, hold = true)
-        val vm = keep(WorkoutDetailViewModel(DemoWorkoutRepository(), SavedStateHandle(), gateway,
+        val vm = keep(WorkoutDetailViewModel(stubWorkoutRepo, SavedStateHandle(), gateway,
             TemplateEditBridge(gateway, LegacyTemplateGuard { _, _ -> })))
         var starts = 0
         show { WorkoutDetailScreen("template", {}, {}, { starts++ }, viewModel = vm) }
@@ -289,11 +310,9 @@ class G3ReadStatesTest {
 
     @Test fun homeAndHistoryAppendErrorsLatchUntilFooterRetryWithoutLosingRows() {
         gateway.stage(more = true, failAppend = true)
-        val sync = object : SyncStateProvider { override val syncState = MutableStateFlow(SyncState()) }
-        val runner = object : SyncRunner { override suspend fun run(expectedUserId: String?): SyncRunResult = error("No global pull permitted") }
-        val home = keep(HomeViewModel(authRepository, DemoWorkoutRepository(), sync, runner, gateway,
-            TemplateEditBridge(gateway, LegacyTemplateGuard { _, _ -> })))
-        val history = keep(RemoteHistoryViewModel(gateway))
+        val home = keep(HomeViewModel(authRepository, stubWorkoutRepo, gateway,
+            TemplateEditBridge(gateway, LegacyTemplateGuard { _, _ -> }), changes))
+        val history = keep(RemoteHistoryViewModel(gateway, changes))
         val historyRoute = mutableStateOf(false)
         show { if (historyRoute.value) WorkoutHistoryDetailScreen("2026-10-01", {}, history) else HomeScreen({}, viewModel = home) }
         waitFor { home.state.value.templateSummaries.isNotEmpty() }
@@ -339,6 +358,8 @@ private class ScreenGateway : RemoteReadGateway {
         request("profile")
         return RemoteProfile("screen-owner", "Synthetic profile with a long name", "fixture@example.invalid", null, null)
     }
+    override suspend fun updateProfile(patch: com.diajarkoding.imfit.domain.model.ProfilePatch): RemoteProfile =
+        throw UnsupportedOperationException("Read-only screen fixture")
     override suspend fun exercises(ids: List<String>): List<Exercise> {
         request("exercises")
         return ids.map { Exercise(it, "Synthetic bench", MuscleCategory.CHEST, "") }

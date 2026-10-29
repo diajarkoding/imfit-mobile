@@ -24,6 +24,7 @@ import kotlinx.coroutines.TimeoutCancellationException
 import kotlinx.coroutines.suspendCancellableCoroutine
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeout
+import com.diajarkoding.imfit.data.remote.online.OnlineSessionStore
 
 /** Recovery only, not the rest deadline scheduler. WorkManager timing is best-effort. */
 @Singleton
@@ -67,7 +68,8 @@ class RestTimerRecoveryScheduler @Inject constructor(
 class RestTimerRecoveryWorker @AssistedInject constructor(
     @Assisted context: Context,
     @Assisted parameters: WorkerParameters,
-    private val timer: RestTimerCoordinator
+    private val timer: RestTimerCoordinator,
+    private val sessions: OnlineSessionStore
 ) : CoroutineWorker(context, parameters) {
     override suspend fun doWork(): Result {
         val timerId = inputData.getString(KEY_TIMER_ID)?.takeIf { it.isNotBlank() } ?: return Result.failure()
@@ -76,6 +78,11 @@ class RestTimerRecoveryWorker @AssistedInject constructor(
         val outcome = try {
             withTimeout(RestTimerRecoveryPolicy.WORK_TIMEOUT_MS) {
                 withContext(Dispatchers.Main.immediate) {
+                    timer.restore()
+                    val target = timer.state.value?.takeIf { it.timerId == timerId && it.generation == generation }
+                        ?: return@withContext AlarmDeliveryResult.HANDLED
+                    // One targeted verification per recovery attempt, never from a timer tick.
+                    if (!sessions.state.value.loaded) sessions.reload(target.workoutId)
                     // A worker is not an exact-alarm FGS-start exemption. Notification delivery
                     // still works without an Activity/service, but audio must have a legal owner.
                     timer.expiry(timerId, generation, alarmDelivery = false, recoveryDelivery = true)

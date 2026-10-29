@@ -5,7 +5,14 @@ import json
 import subprocess
 import sys
 
-from verify_local_baseline import CONTAINER, MIGRATIONS, ROOT, local_sql
+from verify_local_baseline import CONTAINER, MIGRATIONS, REQUIRED_RPC_SIGNATURES, ROOT, local_sql
+
+
+FINAL_MIGRATIONS = MIGRATIONS + [
+    "20261028000100", "20261028000200", "20261028000300",
+    "20261028000400", "20261028000500", "20261028000600",
+    "20261028042753", "20261028043417", "20261028090758", "20261029000100",
+]
 
 
 def verify(phase):
@@ -22,7 +29,7 @@ def verify(phase):
     if phase in ("reads", "final"):
         expected.append("20261028000300")
     if phase == "final":
-        expected.extend(["20261028000400", "20261028000500", "20261028000600", "20261028042753", "20261028043417", "20261028090758"])
+        expected = FINAL_MIGRATIONS
     if versions != expected:
         raise RuntimeError("Unexpected migration inventory for selected phase; refusing fixture")
     sql((ROOT / "supabase/tests/online_only_operation_receipts.sql").read_text(encoding="utf-8"))
@@ -34,13 +41,22 @@ def verify(phase):
         sql((ROOT / "supabase/tests/online_only_final_security.sql").read_text(encoding="utf-8"))
         sql((ROOT / "supabase/tests/online_only_query_plans.sql").read_text(encoding="utf-8"))
         sql((ROOT / "supabase/tests/online_only_home_summary.sql").read_text(encoding="utf-8"))
+        sql((ROOT / "supabase/tests/online_only_legacy_recovery.sql").read_text(encoding="utf-8"))
         audit = json.loads(sql("begin read only;\n" +
             (ROOT / "supabase/tests/full_online_only_readiness_audit.sql").read_text(encoding="utf-8") + "\nrollback;"))
         expected_columns = [
             {"table": "profiles", "column": column, "privilege": "UPDATE"}
             for column in ("avatar_url", "birth_date", "name")
         ]
-        if (audit["missing_required_routine_names"] or audit["public_tables_without_rls"]
+        grants = audit["required_routine_grants"]
+        recovery_tables = audit["private_recovery_tables"]
+        if ({row["signature"] for row in grants} != REQUIRED_RPC_SIGNATURES
+            or len(grants) != len(REQUIRED_RPC_SIGNATURES)
+            or any(row["authenticated_execute"] is not True or row["anon_execute"] is not False for row in grants)
+            or {row["table"] for row in recovery_tables} != {"legacy_session_reviews", "legacy_workout_imports"}
+            or any(not row["rls"] or row["authenticated_any_access"] or row["anon_any_access"] for row in recovery_tables)):
+            raise RuntimeError("Exact RPC grants/private recovery table readiness audit failed")
+        if (audit["missing_required_routine_signatures"] or audit["public_tables_without_rls"]
             or audit["authenticated_direct_write_tables"] or not audit["private_operation_receipt_rls"]
             or audit["authenticated_column_writes"] != expected_columns):
             raise RuntimeError("Final metadata/RLS/table-and-column-grant readiness audit failed")
@@ -50,7 +66,7 @@ def verify(phase):
         "checks": ["template_wrapper", "receipt_replay", "typed_validation", "discovery", "keyset_cursor", "owner_isolation", "private_receipt_and_anon_denial"]
             + (["session_commands", "atomic_finish_and_rollback", "expiry_review", "legacy_fail_closed"] if phase in ("sessions", "reads") else [])
             + (["602_workout_pagination", "period_aggregates", "timezone", "numeric_precision", "prefill_provenance"] if phase in ("reads", "final") else [])
-            + (["final_write_lockdown", "profile_column_grants", "child_parent_constraints", "RPC_only_finish", "10k_history_keyset_query_plan", "read_only_readiness_audit"] if phase == "final" else []),
+            + (["final_write_lockdown", "profile_column_grants", "child_parent_constraints", "RPC_only_finish", "10k_history_keyset_query_plan", "read_only_readiness_audit", "legacy_recovery_import_resolution_and_readiness"] if phase == "final" else []),
         "scope": "Selected SQL rollback fixtures only; HTTP/concurrency are a separate transport runner",
     }, indent=2))
 

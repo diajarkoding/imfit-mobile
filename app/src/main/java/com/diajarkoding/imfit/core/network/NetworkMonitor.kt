@@ -12,6 +12,8 @@ import kotlinx.coroutines.flow.callbackFlow
 import kotlinx.coroutines.flow.distinctUntilChanged
 import javax.inject.Inject
 import javax.inject.Singleton
+import com.diajarkoding.imfit.BuildConfig
+import kotlinx.coroutines.flow.flowOf
 
 /**
  * Utility class to monitor network connectivity status.
@@ -28,6 +30,7 @@ class NetworkMonitor @Inject constructor(
      */
     val isOnline: Boolean
         get() {
+            if (BuildConfig.FLAVOR == "demo") return true
             val network = connectivityManager.activeNetwork ?: return false
             val capabilities = connectivityManager.getNetworkCapabilities(network) ?: return false
             return capabilities.hasCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET) &&
@@ -38,23 +41,22 @@ class NetworkMonitor @Inject constructor(
      * Flow that emits network connectivity status changes.
      * Emits true when online, false when offline.
      */
-    val networkStatus: Flow<Boolean> = callbackFlow {
+    val networkStatus: Flow<Boolean> = if (BuildConfig.FLAVOR == "demo") flowOf(true) else callbackFlow {
         val networkCallback = object : ConnectivityManager.NetworkCallback() {
             override fun onAvailable(network: Network) {
-                trySend(true)
+                trySend(isOnline)
             }
 
             override fun onLost(network: Network) {
-                trySend(false)
+                trySend(isOnline)
             }
 
             override fun onCapabilitiesChanged(
                 network: Network,
                 networkCapabilities: NetworkCapabilities
             ) {
-                val hasInternet = networkCapabilities.hasCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET) &&
-                        networkCapabilities.hasCapability(NetworkCapabilities.NET_CAPABILITY_VALIDATED)
-                trySend(hasInternet)
+                // Default validated network is a hint, not any callback network's availability.
+                trySend(isOnline)
             }
         }
 

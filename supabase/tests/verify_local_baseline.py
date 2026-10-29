@@ -18,6 +18,20 @@ ROOT = Path(__file__).resolve().parents[2]
 PROJECT = "IMFIT-MOBILE"
 CONTAINER = f"supabase_db_{PROJECT}"
 MIGRATIONS = ["20260828130114", "20260828130132", "20260828130154", "20261025000100"]
+REQUIRED_RPC_SIGNATURES = {
+    "save_template_revision(uuid,uuid,bigint,text,jsonb,jsonb,boolean,uuid)",
+    "get_workout_history_page(date,date,text,text,integer)",
+    "get_exercise_catalog_page(text,integer,text,integer)",
+    "get_template_page(text,integer)", "get_workout_detail(uuid)", "get_template_detail(uuid)",
+    "get_progress_summary(date,date,text)", "get_workout_date_markers(date,date,text)",
+    "get_exercise_prefill(text,jsonb)", "create_active_session(uuid,uuid,uuid,bigint)",
+    "get_active_session(uuid)", "update_active_session(uuid,uuid,bigint,jsonb)",
+    "cancel_active_session(uuid,uuid,bigint)", "finish_active_session(uuid,uuid,bigint)",
+    "get_operation_status(uuid)",
+    "list_recent_operations(timestamp with time zone,timestamp with time zone,text,integer)",
+    "get_home_summary()", "get_start_recovery_status(integer)", "get_legacy_recovery_page(text,integer)",
+    "resolve_legacy_session(uuid,uuid,text,text)", "import_legacy_workout(uuid,jsonb,jsonb,jsonb,jsonb)",
+}
 
 
 def docker_path():
@@ -109,17 +123,19 @@ def verify():
         raise RuntimeError("Template revision/receipt baseline is missing")
     if audit["public_tables_without_rls"]:
         raise RuntimeError("Baseline has public tables without RLS")
-    if "save_template_revision" in audit["missing_required_routine_names"]:
-        raise RuntimeError("Baseline template RPC is missing")
-    if len(audit["missing_required_routine_names"]) != 15:
-        raise RuntimeError("Unexpected RPC inventory for baseline; inspect before proceeding")
+    missing = set(audit["missing_required_routine_signatures"])
+    baseline_missing = REQUIRED_RPC_SIGNATURES - {
+        "save_template_revision(uuid,uuid,bigint,text,jsonb,jsonb,boolean,uuid)"
+    }
+    if missing != baseline_missing:
+        raise RuntimeError("Unexpected exact RPC signatures for baseline; inspect before proceeding")
     print(json.dumps({
         "status": "PASS",
         "target": CONTAINER,
         "server_version_num": metadata["server_version_num"],
         "migration_versions": migrations,
         "checks": ["local_socket_and_project_guard", "template_revision_rollback_fixture", "read_only_metadata_audit"],
-        "missing_target_rpcs": audit["missing_required_routine_names"],
+        "missing_target_rpcs": sorted(missing),
         "scope": "baseline only; not new session/read RPCs, HTTP, concurrency, or final lockdown",
     }, indent=2))
 

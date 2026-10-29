@@ -16,6 +16,7 @@ import com.diajarkoding.imfit.presentation.ui.home.HomeViewModel
 import com.diajarkoding.imfit.presentation.ui.progress.RemoteHistoryViewModel
 import kotlinx.coroutines.flow.MutableStateFlow
 import io.mockk.mockk
+import io.mockk.every
 import kotlinx.coroutines.*
 import kotlinx.coroutines.test.*
 import kotlinx.serialization.encodeToString
@@ -37,9 +38,15 @@ internal class ScriptedReadGateway : RemoteReadGateway {
         if (failProfile) throw OnlineFailure(RemoteError.Network)
         return RemoteProfile(auth.capture().identity.ownerId, "Fixture name", "fixture@example.invalid", null, null)
     }
+    override suspend fun updateProfile(patch: com.diajarkoding.imfit.domain.model.ProfilePatch): RemoteProfile =
+        throw UnsupportedOperationException("Read-only test fixture")
     override suspend fun exercises(ids: List<String>) = ids.map { Exercise(it, "Fixture $it", MuscleCategory.CHEST, "Synthetic") }
     override suspend fun <T> read(call: RpcCall<T>): T = repository.execute(call)
     override suspend fun saveTemplate(request: TemplateWriteRequest): TemplateWriteReceipt = repository.execute(OnlineRpc.saveTemplate(request))
+}
+
+internal fun idleSessionStore(): OnlineSessionStore = mockk {
+    every { state } returns MutableStateFlow(OnlineSessionState())
 }
 
 @OptIn(ExperimentalCoroutinesApi::class)
@@ -116,7 +123,7 @@ class G3RemoteReadTest {
     }
 
     @Test fun `profile VM is independent from history and failed refresh retains stale profile`() = runTest(dispatcher) {
-        val vm = keep(ProfileViewModel(reads, mockk(relaxed = true)))
+        val vm = keep(ProfileViewModel(reads, mockk(relaxed = true), OnlineMutationChanges(reads.auth), idleSessionStore()))
         runCurrent()
         assertEquals("Fixture name", vm.state.value.data!!.name)
         assertEquals(1, reads.profileCalls)
@@ -129,7 +136,7 @@ class G3RemoteReadTest {
     }
 
     @Test fun `progress uses complete server aggregate and markers without loading history pages`() = runTest(dispatcher) {
-        val vm = keep(ProgressViewModel(reads, mockk(relaxed = true)))
+        val vm = keep(ProgressViewModel(reads, mockk(relaxed = true), OnlineMutationChanges(reads.auth)))
         vm.selectMonth(YearMonth.of(2026, 10))
         val requests = listOf(reads.api.requests.receive(), reads.api.requests.receive())
         assertEquals(setOf("get_progress_summary", "get_workout_date_markers"), requests.map { it.rpc }.toSet())
@@ -203,11 +210,8 @@ class G3RemoteReadTest {
     }
 
     @Test fun `home reads bounded summaries retains stale error and cannot republish logged-out owner`() = runTest(dispatcher) {
-        val sync = object : com.diajarkoding.imfit.data.sync.SyncStateProvider {
-            override val syncState = MutableStateFlow(com.diajarkoding.imfit.data.sync.SyncState())
-        }
-        val vm = keep(HomeViewModel(mockk(relaxed = true), mockk(relaxed = true), sync, mockk(relaxed = true), reads,
-            TemplateEditBridge(reads, LegacyTemplateGuard { _, _ -> })))
+        val vm = keep(HomeViewModel(mockk(relaxed = true), mockk(relaxed = true), reads,
+            TemplateEditBridge(reads, LegacyTemplateGuard { _, _ -> }), OnlineMutationChanges(reads.auth)))
         val requests = listOf(reads.api.requests.receive(), reads.api.requests.receive())
         assertEquals(setOf("get_template_page", "get_home_summary"), requests.map { it.rpc }.toSet())
         requests.forEach {
@@ -230,7 +234,7 @@ class G3RemoteReadTest {
     }
 
     @Test fun `history initially requests one page and complete period totals but no child detail`() = runTest(dispatcher) {
-        val vm = keep(RemoteHistoryViewModel(reads))
+        val vm = keep(RemoteHistoryViewModel(reads, OnlineMutationChanges(reads.auth)))
         vm.initialize(java.time.LocalDate.of(2026, 10, 1))
         val requests = listOf(reads.api.requests.receive(), reads.api.requests.receive())
         assertEquals(setOf("get_workout_history_page", "get_progress_summary"), requests.map { it.rpc }.toSet())

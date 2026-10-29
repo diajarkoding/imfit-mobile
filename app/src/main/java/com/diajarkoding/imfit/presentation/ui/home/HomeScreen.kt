@@ -15,7 +15,6 @@ import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.diajarkoding.imfit.R
-import com.diajarkoding.imfit.data.sync.SyncState
 import com.diajarkoding.imfit.presentation.components.common.*
 import com.diajarkoding.imfit.theme.IMFITSpacing
 import java.time.Instant
@@ -28,10 +27,10 @@ fun HomeScreen(
     onNavigateToWorkoutDetail: (String) -> Unit,
     onNavigateToActiveWorkout: (String) -> Unit = {},
     viewModel: HomeViewModel = hiltViewModel(),
-    onNavigateToProfile: () -> Unit = {}
+    onNavigateToProfile: () -> Unit = {},
+    onRecovery: () -> Unit = {}
 ) {
     val state by viewModel.state.collectAsStateWithLifecycle()
-    val syncState by viewModel.syncState.collectAsStateWithLifecycle()
     var showDialog by rememberSaveable { mutableStateOf(false) }
     var name by rememberSaveable { mutableStateOf("") }
     val list = rememberLazyListState()
@@ -81,15 +80,8 @@ fun HomeScreen(
                 }
             }
             if (state.hasReadError) item("remote_error") { RemoteReadFailure(state.stale, viewModel::refresh) }
-            if (syncState.pendingCount > 0 ||
-                syncState.status == SyncState.SyncStatus.SYNCING ||
-                syncState.status == SyncState.SyncStatus.FAILED
-            ) {
-                item(key = "sync_status") {
-                    HomeSyncStatusCard(syncState, Modifier.padding(bottom = IMFITSpacing.sm),
-                        onRetryUploads = viewModel::retryPendingUploads, retrying = state.retryingUploads,
-                        retryFailed = state.uploadRetryFailed)
-                }
+            item("recovery_entry") {
+                RoutineButton(stringResource(R.string.legacy_recovery_title), onRecovery, outlined = true)
             }
             item(key = "workout_section") {
                 HomeWorkoutSectionHeader(enabled = !state.isLoading && !state.isCreating, onAdd = { viewModel.clearCreateError(); showDialog = true })

@@ -17,24 +17,29 @@ with public_tables as (
       where d.classid = 'pg_catalog.pg_proc'::regclass
         and d.objid = p.oid and d.deptype = 'e'
     )
-), required_routines(name) as (
+), required_routines(signature) as (
   values
-    ('save_template_revision'),
-    ('get_workout_history_page'),
-    ('get_exercise_catalog_page'),
-    ('get_template_page'),
-    ('get_workout_detail'),
-    ('get_template_detail'),
-    ('get_progress_summary'),
-    ('get_workout_date_markers'),
-    ('get_exercise_prefill'),
-    ('create_active_session'),
-    ('get_active_session'),
-    ('update_active_session'),
-    ('cancel_active_session'),
-    ('finish_active_session'),
-    ('get_operation_status'),
-    ('list_recent_operations')
+    ('save_template_revision(uuid,uuid,bigint,text,jsonb,jsonb,boolean,uuid)'),
+    ('get_workout_history_page(date,date,text,text,integer)'),
+    ('get_exercise_catalog_page(text,integer,text,integer)'),
+    ('get_template_page(text,integer)'),
+    ('get_workout_detail(uuid)'),
+    ('get_template_detail(uuid)'),
+    ('get_progress_summary(date,date,text)'),
+    ('get_workout_date_markers(date,date,text)'),
+    ('get_exercise_prefill(text,jsonb)'),
+    ('create_active_session(uuid,uuid,uuid,bigint)'),
+    ('get_active_session(uuid)'),
+    ('update_active_session(uuid,uuid,bigint,jsonb)'),
+    ('cancel_active_session(uuid,uuid,bigint)'),
+    ('finish_active_session(uuid,uuid,bigint)'),
+    ('get_operation_status(uuid)'),
+    ('list_recent_operations(timestamp with time zone,timestamp with time zone,text,integer)'),
+    ('get_home_summary()'),
+    ('get_start_recovery_status(integer)'),
+    ('get_legacy_recovery_page(text,integer)'),
+    ('resolve_legacy_session(uuid,uuid,text,text)'),
+    ('import_legacy_workout(uuid,jsonb,jsonb,jsonb,jsonb)')
 )
 select jsonb_build_object(
   'observed_at_utc', timezone('UTC', statement_timestamp()),
@@ -49,10 +54,23 @@ select jsonb_build_object(
   'public_policy_count', (
     select count(*) from pg_catalog.pg_policies where schemaname = 'public'
   ),
-  'missing_required_routine_names', (
-    select coalesce(jsonb_agg(r.name order by r.name), '[]'::jsonb)
+  'missing_required_routine_signatures', (
+    select coalesce(jsonb_agg(r.signature order by r.signature), '[]'::jsonb)
     from required_routines r
-    where not exists (select 1 from public_routines p where p.proname = r.name)
+    where to_regprocedure('public.' || r.signature) is null
+  ),
+  'required_routine_grants', (
+    select jsonb_agg(jsonb_build_object('signature',signature,
+      'authenticated_execute',has_function_privilege('authenticated',to_regprocedure('public.'||signature),'EXECUTE'),
+      'anon_execute',has_function_privilege('anon',to_regprocedure('public.'||signature),'EXECUTE'))
+      order by signature) from required_routines
+  ),
+  'private_recovery_tables', (
+    select coalesce(jsonb_agg(jsonb_build_object('table',c.relname,'rls',c.relrowsecurity,
+      'authenticated_any_access',has_table_privilege('authenticated',c.oid,'SELECT,INSERT,UPDATE,DELETE'),
+      'anon_any_access',has_table_privilege('anon',c.oid,'SELECT,INSERT,UPDATE,DELETE')) order by c.relname),'[]'::jsonb)
+    from pg_catalog.pg_class c join pg_catalog.pg_namespace n on n.oid=c.relnamespace
+    where n.nspname='imfit_private' and c.relname in ('legacy_session_reviews','legacy_workout_imports')
   ),
   'template_revision_column', exists (
     select 1 from pg_catalog.pg_attribute a
@@ -92,5 +110,5 @@ select jsonb_build_object(
     join pg_catalog.pg_namespace n on n.oid = c.relnamespace
     where n.nspname = 'imfit_private' and c.relname = 'operation_receipts' and c.relrowsecurity
   ),
-  'limitations', 'Metadata only; target routine names do not verify signatures, HTTP exposure, transactions, isolation, or runtime security. Table and column grants must both be reviewed.'
+  'limitations', 'Metadata only; exact routine signatures/grants do not prove HTTP exposure, transactions, isolation, or runtime security. Table and column grants must both be reviewed.'
 ) as audit;

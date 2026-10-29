@@ -22,10 +22,6 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.saveable.rememberSaveable
-import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -42,7 +38,7 @@ import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import com.diajarkoding.imfit.R
-import com.diajarkoding.imfit.domain.model.WorkoutSet
+import com.diajarkoding.imfit.data.remote.online.WorkoutSet
 import com.diajarkoding.imfit.presentation.components.common.Delete
 import com.diajarkoding.imfit.presentation.components.common.Symbols
 import com.diajarkoding.imfit.theme.IMFITColors
@@ -51,23 +47,21 @@ import com.diajarkoding.imfit.theme.IMFITColors
 internal fun ActiveSetRow(
     set: WorkoutSet,
     exerciseName: String,
+    weight: String,
+    reps: String,
     mutationEnabled: Boolean,
     canDelete: Boolean,
     isPaused: Boolean,
-    onUpdate: (Float, Int) -> Unit,
+    onUpdate: (String, String) -> Unit,
     onComplete: () -> Unit,
     onDelete: () -> Unit,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    inputEnabled: Boolean = mutationEnabled
 ) {
     val colors = IMFITColors.training
     val configuration = LocalConfiguration.current
     val compact = configuration.screenWidthDp <= 340 || configuration.fontScale >= 1.25f
-    val locale = configuration.locales[0]
-    val editable = mutationEnabled && !set.isCompleted
-    var weight by rememberSaveable(set.weight, locale) {
-        mutableStateOf(if (set.weight > 0f) formatSetWeight(set.weight, locale) else "")
-    }
-    var reps by rememberSaveable(set.reps) { mutableStateOf(if (set.reps > 0) set.reps.toString() else "") }
+    val editable = inputEnabled && !set.isCompleted
     val weightLabel = stringResource(R.string.active_session_weight_input, exerciseName, set.setNumber)
     val repsLabel = stringResource(R.string.active_session_reps_input, exerciseName, set.setNumber)
     val completeLabel = stringResource(R.string.active_session_complete_set, exerciseName, set.setNumber)
@@ -78,22 +72,12 @@ internal fun ActiveSetRow(
             Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
                 if (compact) Text(stringResource(R.string.active_session_column_kg), color = colors.muted,
                     style = MaterialTheme.typography.labelSmall)
-                SetNumberInput(weight, { raw ->
-                    if (raw.matches(Regex("\\d*([.,]\\d*)?"))) {
-                        val value = raw.replace(',', '.').toFloatOrNull() ?: 0f
-                        if (value.isFinite()) { weight = raw; onUpdate(value, set.reps) }
-                    }
-                }, weightLabel, editable, set.isCompleted, KeyboardType.Decimal)
+                SetNumberInput(weight, { raw -> onUpdate(raw, reps) }, weightLabel, editable, set.isCompleted, KeyboardType.Decimal)
             }
             Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
                 if (compact) Text(stringResource(R.string.active_session_column_reps), color = colors.muted,
                     style = MaterialTheme.typography.labelSmall)
-                SetNumberInput(reps, { raw ->
-                    if (raw.all(Char::isDigit) && (raw.isEmpty() || raw.toIntOrNull() != null)) {
-                        reps = raw
-                        onUpdate(set.weight, raw.toIntOrNull() ?: 0)
-                    }
-                }, repsLabel, editable, set.isCompleted, KeyboardType.Number)
+                SetNumberInput(reps, { raw -> onUpdate(weight, raw) }, repsLabel, editable, set.isCompleted, KeyboardType.Number)
             }
         }
     }
@@ -105,7 +89,8 @@ internal fun ActiveSetRow(
         Checkbox(
             checked = set.isCompleted,
             onCheckedChange = { onComplete() },
-            enabled = editable && !isPaused && set.weight > 0f && set.reps > 0,
+            enabled = mutationEnabled && editable && !isPaused && weight.replace(',', '.').toBigDecimalOrNull()?.let { it.signum() > 0 } == true &&
+                reps.toIntOrNull()?.let { it > 0 } == true,
             modifier = Modifier.size(48.dp).semantics { contentDescription = completeLabel },
             colors = CheckboxDefaults.colors(
                 checkedColor = colors.success,

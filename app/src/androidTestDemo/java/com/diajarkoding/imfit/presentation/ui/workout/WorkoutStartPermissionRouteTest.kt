@@ -18,7 +18,6 @@ import com.diajarkoding.imfit.R
 import com.diajarkoding.imfit.core.service.WorkoutService
 import com.diajarkoding.imfit.data.local.FakeExerciseDataSource
 import com.diajarkoding.imfit.di.RestTimerEntryPoint
-import com.diajarkoding.imfit.domain.model.TemplateExercise
 import com.diajarkoding.imfit.theme.LocaleManager
 import dagger.hilt.android.EntryPointAccessors
 import kotlinx.coroutines.runBlocking
@@ -27,6 +26,7 @@ import org.junit.Assume.assumeTrue
 import org.junit.Rule
 import org.junit.Test
 import java.io.File
+import java.util.UUID
 
 /** Permission changes are restricted to the disposable diagnostic package; no production data. */
 class WorkoutStartPermissionRouteTest {
@@ -53,46 +53,69 @@ class WorkoutStartPermissionRouteTest {
         val prefs = context.getSharedPreferences(WORKOUT_NOTIFICATION_PREFERENCES, Context.MODE_PRIVATE)
         prefs.edit().clear().putBoolean(WORKOUT_NOTIFICATION_ASKED, mode == "asked").commit()
         val ports = EntryPointAccessors.fromApplication(rule.activity.application, RestTimerEntryPoint::class.java)
-        val repository = ports.workouts()
+        val sessions = ports.sessions()
+        val reads = ports.reads()
+        val user = waitForOwner(ports.auth())
+        val workout = FakeExerciseDataSource.exercises.first()
         waitFor(text(R.string.redesign_ready))
-        val template = runBlocking {
-            repository.cancelWorkout()
-            repository.createTemplate(requireNotNull(ports.auth().getLocalUserId()), "Permission fixture $mode",
-                listOf(TemplateExercise(FakeExerciseDataSource.exercises.first(), sets = 1)))
+        val templateId = UUID.randomUUID().toString()
+        val name = "Permission fixture $mode"
+        val receipt = runBlocking {
+            sessions.reload()?.let { sessions.cancel(it.id) }
+            reads.saveTemplate(com.diajarkoding.imfit.data.remote.TemplateWriteRequest(UUID.randomUUID().toString(), templateId, null,
+                name, listOf(com.diajarkoding.imfit.data.remote.TemplateWriteExercise(workout.id, 0, 3, 10, 60)), emptyList(), ownerId = user))
         }
         try {
-            rule.onNode(hasScrollToNodeAction()).performScrollToNode(hasText(template.name))
-            rule.onNodeWithText(template.name).performClick()
+            rule.onNode(hasScrollToNodeAction()).performScrollToNode(hasText(name))
+            rule.onNodeWithText(name).performClick()
             waitFor(text(R.string.action_start_workout))
-            val resumed = if (mode == "resume") runBlocking { repository.startWorkout(template) } else null
+            val resumed = if (mode == "resume") runBlocking { sessions.start(templateId, receipt.revision) } else null
             if (resumed != null) {
                 // Enter via the real Home resume affordance. An externally seeded session does
                 // not itself emit an observeTemplate update to the already open Detail fixture.
                 rule.onNodeWithContentDescription(text(R.string.action_back)).performClick()
                 waitFor(text(R.string.nav_home))
-                rule.onNode(hasScrollToNodeAction()).performScrollToNode(hasText(template.name))
+                rule.onNode(hasScrollToNodeAction()).performScrollToNode(hasText(name))
                 rule.waitUntil(10_000) { rule.onAllNodesWithText(text(R.string.home_resume), substring = true).fetchSemanticsNodes().isNotEmpty() }
-                rule.onNodeWithText(template.name).performClick()
+                rule.onNodeWithText(name).performClick()
             } else rule.onNodeWithText(text(R.string.action_start_workout)).performClick()
             val device = UiDevice.getInstance(instrumentation)
             val allow = By.res("com.android.permissioncontroller", "permission_allow_button")
             if (mode in listOf("allow", "deny")) {
                 assertTrue("Permission dialog expected", device.wait(Until.hasObject(allow), 5_000))
-                assertNull("Session must not exist before consent result", runBlocking { repository.getActiveSession() })
+                assertNull("Session must not exist before consent result", sessions.state.value.snapshot)
                 capture("permission-$mode-before-session")
                 device.findObject(if (mode == "allow") allow else By.res("com.android.permissioncontroller", "permission_deny_button")).click()
             }
-            rule.waitUntil(15_000) { runBlocking { repository.getActiveSession() } != null }
-            val session = runBlocking { requireNotNull(repository.getActiveSession()) }
+            rule.waitUntil(15_000) { sessions.state.value.snapshot != null }
+            val session = runBlocking { requireNotNull(sessions.reload()) }
             if (resumed != null) assertEquals(resumed.id, session.id)
             rule.waitForIdle()
             assertFalse(device.hasObject(allow))
             rule.onAllNodesWithText(text(R.string.rest_alert_limited)).assertCountEquals(0)
             capture("permission-$mode-active")
         } finally {
-            runBlocking { repository.cancelWorkout(); repository.deleteTemplate(template.id) }
+            runBlocking {
+                sessions.state.value.snapshot?.takeIf {
+                    it.effectiveStatus == com.diajarkoding.imfit.data.remote.online.SessionStatus.ACTIVE ||
+                        it.effectiveStatus == com.diajarkoding.imfit.data.remote.online.SessionStatus.PAUSED
+                }?.let { sessions.cancel(it.id) }
+                reads.saveTemplate(com.diajarkoding.imfit.data.remote.TemplateWriteRequest(UUID.randomUUID().toString(), templateId,
+                    receipt.revision, name, listOf(com.diajarkoding.imfit.data.remote.TemplateWriteExercise(workout.id, 0, 3, 10, 60)),
+                    emptyList(), isDeleted = true, ownerId = user))
+            }
             context.stopService(Intent(context, WorkoutService::class.java))
             prefs.edit().clear().commit()
+        }
+    }
+
+    private fun waitForOwner(auth: com.diajarkoding.imfit.domain.repository.AuthRepository): String {
+        val deadline = android.os.SystemClock.elapsedRealtime() + 10_000
+        while (true) {
+            val value: String? = runBlocking { auth.getLocalUserId() }
+            if (value != null) return value
+            require(android.os.SystemClock.elapsedRealtime() < deadline) { "Auth identity missing" }
+            Thread.sleep(250)
         }
     }
 

@@ -57,7 +57,7 @@ internal object RestTimerReleaseDiagnostics {
         "terminal_decided", "recovery_enqueued", "recovery_enqueue_failed", "recovery_cancel_failed", "recovery_worker_result",
         "recovery_worker_timeout", "recovery_worker_failed", "recovery_exhausted", "recovery_failed",
         "operation_failed", "delivery_window_expired", "expired_committed", "notify_result", "notify_failed", "notify_blocked",
-        "auth_status_snapshot",
+        "auth_status_snapshot", "audio_started", "service_action_failed", "session_verified",
         "alarm_scheduled", "alarm_cancelled", "rest_started", "rest_extended", "expiry_requested", "expiry_lock_acquired",
         "receiver_enter", "receiver_rejected", "activity_resumed", "activity_paused", "service_created", "service_start",
         "fgs_promoted", "fgs_promotion_failed", "ui_fgs_start_failed", "service_destroyed", "ticker_started",

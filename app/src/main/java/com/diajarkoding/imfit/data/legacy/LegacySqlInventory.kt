@@ -4,7 +4,8 @@ import kotlinx.serialization.json.*
 
 /** Inspects an existing connection whose read stability is validated by the caller. No writes. */
 internal class LegacySqlInventory(private val db: LegacySqlReader, private val maxRows: Int = 10_000,
-    private val payload: (Map<LegacyKind, List<Map<String, String?>>>) -> Unit = {}) {
+    private val payload: (Map<LegacyKind, List<Map<String, String?>>>) -> Unit = {},
+    private val dependencyPayload: (Map<String, List<Map<String, String?>>>) -> Unit = {}) {
     init { require(maxRows > 0) }
     private val json = Json
     private fun rows(sql: String, args: List<String> = emptyList()): List<Map<String, String?>> = buildList {
@@ -65,7 +66,7 @@ internal class LegacySqlInventory(private val db: LegacySqlReader, private val m
                 LegacyKind.TEMPLATE_INTENT -> row["key"]
                 else -> row["id"]
             }?.takeIf { it.isNotBlank() } ?: throw LegacyScanException(LegacyReadFailure.CORRUPT)
-            val parent = row["workout_log_id"] ?: row["template_id"]
+            val parent = row["exercise_log_id"] ?: row["workout_log_id"] ?: row["template_id"]
             row["exercise_id"]?.let(exerciseIds::add)
             if (kind in setOf(LegacyKind.WORKOUT, LegacyKind.ACTIVE_SESSION, LegacyKind.TEMPLATE_INTENT)) row["template_id"]?.let(templateIds::add)
             var disposition = classify(row)
@@ -93,25 +94,43 @@ internal class LegacySqlInventory(private val db: LegacySqlReader, private val m
                     require(payload.getValue("p_owner_id").jsonPrimitive.content == owner)
                     require(payload.getValue("p_template_id").jsonPrimitive.content == row["template_id"])
                     requestId = payload.getValue("p_request_id").jsonPrimitive.content.also { require(it.isNotBlank()) }
+                    payload["p_exercises"]?.jsonArray?.forEach { exercise ->
+                        exerciseIds += exercise.jsonObject.getValue("exercise_id").jsonPrimitive.content.also { require(it.isNotBlank()) }
+                    }
+                    payload["p_removed_exercise_ids"]?.jsonArray?.forEach { exercise ->
+                        exerciseIds += exercise.jsonPrimitive.content.also { require(it.isNotBlank()) }
+                    }
                 } catch (_: Exception) { disposition = LegacyDisposition.PROBLEM }
             }
-            if (kind == LegacyKind.EXERCISE_LOG && disposition != LegacyDisposition.SYNCED_CACHE_CANDIDATE) {
-                val defaults = runCatching { json.parseToJsonElement(row["input_defaults"] ?: "null").jsonObject }.getOrNull()
-                if (defaults == null || defaults["sets"]?.jsonPrimitive?.intOrNull == null || defaults["reps"]?.jsonPrimitive?.intOrNull == null) disposition = LegacyDisposition.REVIEW
-            }
-            LegacyItem(kind, id, disposition, fingerprint(canonical(row)), parent, requestId)
+            LegacyItem(kind, id, disposition, legacyRowFingerprint(row), parent, requestId)
         } }
-        val ownerTemplates = selected.getValue(LegacyKind.TEMPLATE).map { it.getValue("id") }.toSet()
-        val availableExercises = mutableSetOf<String>()
-        exerciseIds.toList().chunked(400).forEach { ids ->
-            rows("SELECT id FROM exercises WHERE id IN (${ids.joinToString { "?" }}) ORDER BY id", ids).forEach { availableExercises += it.getValue("id")!! }
+        if (exerciseIds.size + templateIds.size > maxRows) throw LegacyScanException(LegacyReadFailure.LIMIT_EXCEEDED)
+        val templates = selected.getValue(LegacyKind.TEMPLATE)
+        val templateExercises = selected.getValue(LegacyKind.TEMPLATE_EXERCISE)
+        val exercises = buildList {
+            exerciseIds.toList().chunked(400).forEach { ids ->
+                addAll(rows("SELECT * FROM exercises WHERE id IN (${ids.joinToString { "?" }}) ORDER BY id", ids))
+                if (size + selected.values.sumOf { it.size } > maxRows) throw LegacyScanException(LegacyReadFailure.LIMIT_EXCEEDED)
+            }
         }
-        val dependencies = templateIds.sorted().map { LegacyDependency("TEMPLATE", it, it in ownerTemplates) } +
-            exerciseIds.sorted().map { LegacyDependency("EXERCISE", it, it in availableExercises) }
+        val dependencyRows = linkedMapOf("TEMPLATE" to templates, "TEMPLATE_EXERCISE" to templateExercises, "EXERCISE" to exercises)
+        val dependencies = dependencyRows.flatMap { (kind, records) ->
+            records.map { row ->
+                val id = if (kind == "TEMPLATE_EXERCISE") legacyRecordId(LegacyKind.TEMPLATE_EXERCISE, row) else row.getValue("id")!!
+                LegacyDependency(kind, id, true, legacyRowFingerprint(row))
+            }
+        }.toMutableList()
+        val ownerTemplateIds = templates.mapTo(hashSetOf()) { it["id"] ?: throw LegacyScanException(LegacyReadFailure.CORRUPT) }
+        val availableExerciseIds = exercises.mapTo(hashSetOf()) { it["id"] ?: throw LegacyScanException(LegacyReadFailure.CORRUPT) }
+        dependencies += (templateIds - ownerTemplateIds).map { LegacyDependency("TEMPLATE", it, false) }
+        dependencies += (exerciseIds - availableExerciseIds).map { LegacyDependency("EXERCISE", it, false) }
+        if (dependencies.size > maxRows) throw LegacyScanException(LegacyReadFailure.LIMIT_EXCEEDED)
+        dependencies.sortWith(compareBy({ it.kind }, { it.id }))
         val evidence = "$version:${expected.first}:" + items.joinToString { "${it.kind}:${it.id}:${it.fingerprint}" } +
-            dependencies.joinToString { "${it.kind}:${it.id}:${it.available}" }
+            dependencies.joinToString { "${it.kind}:${it.id}:${it.available}:${it.fingerprint}" }
         val result = LegacyInventory.Present(owner, version, fingerprint(evidence), items, dependencies)
         payload(selected)
+        dependencyPayload(dependencyRows)
         return result
     }
 
@@ -124,9 +143,6 @@ internal class LegacySqlInventory(private val db: LegacySqlReader, private val m
         else -> LegacyDisposition.REVIEW
     }
 
-    private fun canonical(row: Map<String, String?>) = row.toSortedMap().entries.joinToString("") { (key, value) ->
-        "$key:${value?.toByteArray()?.size ?: -1}:$value\n"
-    }
 
     companion object {
         private val baseTables = listOf("users", "exercises", "workout_templates", "template_exercises", "workout_logs", "exercise_logs", "workout_sets", "active_sessions")

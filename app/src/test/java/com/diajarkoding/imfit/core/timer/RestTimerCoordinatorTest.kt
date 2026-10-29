@@ -817,7 +817,7 @@ class RestTimerCoordinatorTest {
         assertTrue(f.effects.posted)
     }
 
-    @Test fun undeliveredRunningAndExpiredTimersBecomeDurablySilentAfterDeliveryWindow() = runBlocking {
+    @Test fun coldUnknownRetainsAnchorBeyondDeliveryWindowUntilAuthoritativeVerification() = runBlocking {
         for (alreadyExpired in listOf(false, true)) {
             val f = Fixture(); f.start()
             val state = f.store.saved!!
@@ -827,16 +827,22 @@ class RestTimerCoordinatorTest {
                 assertEquals(AlarmDeliveryResult.RETRY, f.timer.expiry(state.timerId, state.generation))
             }
             f.clock.now += RestTimerRecoveryPolicy.MAX_ALERT_LATENESS_MS + 1
-            // Do not require broken auth/Room to recover merely to discard a stale alert.
-            f.effects.validate = { throw java.io.IOException("still unavailable") }
+            val retained = f.store.saved
+            val commits = f.effects.events.count { it.first == "expired_committed" }
+            f.effects.validate = { throw java.io.IOException("server verification unavailable") }
             val cold = RestTimerCoordinator(f.store, f.clock, f.effects)
-            assertEquals(AlarmDeliveryResult.HANDLED,
+            assertEquals(AlarmDeliveryResult.RETRY,
                 cold.expiry(state.timerId, state.generation, recoveryDelivery = true))
-            assertEquals(TimerStatus.CANCELLED, f.store.saved!!.status)
-            assertEquals("DELIVERY_WINDOW_EXPIRED", f.store.saved!!.reason)
+            assertEquals(retained, f.store.saved)
+            assertEquals(commits, f.effects.events.count { it.first == "expired_committed" })
+            assertFalse(f.effects.posted)
+            assertEquals(0, f.effects.plays)
             f.effects.validate = null
             f.effects.presentation = FinishedPresentation.POSTED
             RestTimerCoordinator(f.store, f.clock, f.effects).reconcile()
+            assertEquals(TimerStatus.CANCELLED, f.store.saved!!.status)
+            assertEquals("DELIVERY_WINDOW_EXPIRED", f.store.saved!!.reason)
+            assertEquals(state.deadlineElapsedMs, f.store.saved!!.deadlineElapsedMs)
             assertFalse(f.effects.posted)
             assertEquals(0, f.effects.plays)
         }

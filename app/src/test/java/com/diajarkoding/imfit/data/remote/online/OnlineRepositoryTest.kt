@@ -150,6 +150,37 @@ class OnlineRepositoryTest {
         assertEquals(RemoteError.Protocol, invalid.await())
     }
 
+    @Test fun `registration boundary runs before dispatch and never after owner gate rejection`() = runTest {
+        var registrations = 0
+        val first = async { reason { repository.execute(command, onRegistered = { registrations++ }) } }
+        val request = api.requests.receive()
+        assertEquals(1, registrations)
+        request.loseResponse()
+        assertEquals(RemoteError.UnknownOutcome, first.await())
+        assertEquals(RemoteError.UnresolvedMutation, reason {
+            repository.execute(OnlineRpc.finishSession("different", "session", 1), onRegistered = { registrations++ })
+        })
+        assertEquals(1, registrations)
+        assertTrue(api.requests.tryReceive().isFailure)
+        val retry = async { repository.execute(command, onRegistered = { registrations++ }) }
+        api.requests.receive().also {
+            assertEquals(2, registrations)
+            assertEquals(request.body, it.body)
+            it.reply(OnlineFixtures.receipt())
+        }
+        retry.await()
+    }
+
+    @Test fun `resolve never crosses the original login epoch`() = runTest {
+        val originalIdentity = auth.capture().identity
+        val send = async { reason { repository.execute(command) } }
+        api.requests.receive().loseResponse(); send.await()
+        auth.signIn("B", "token-B")
+        val failure = runCatching { repository.resolve(command, expectedIdentity = originalIdentity) }.exceptionOrNull()
+        assertTrue(failure is StaleAuthException)
+        assertTrue(api.requests.tryReceive().isFailure)
+    }
+
     @Test fun `wrong discovery resource is rejected and unknown remains blocked`() = runTest {
         val send = async { reason { repository.execute(command) } }
         api.requests.receive().loseResponse(); send.await()

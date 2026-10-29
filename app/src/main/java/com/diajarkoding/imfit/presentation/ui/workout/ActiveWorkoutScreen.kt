@@ -1,5 +1,16 @@
 package com.diajarkoding.imfit.presentation.ui.workout
 
+import androidx.activity.compose.BackHandler
+import androidx.compose.foundation.layout.Column
+import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
+import androidx.compose.ui.semantics.LiveRegionMode
+import androidx.compose.ui.semantics.liveRegion
+import androidx.compose.ui.semantics.semantics
+import com.diajarkoding.imfit.data.remote.online.*
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import android.content.ComponentName
 import android.content.Context
 import android.content.Intent
@@ -37,11 +48,6 @@ import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.diajarkoding.imfit.R
 import com.diajarkoding.imfit.core.service.WorkoutService
-import com.diajarkoding.imfit.domain.model.Exercise
-import com.diajarkoding.imfit.domain.model.ExerciseLog
-import com.diajarkoding.imfit.domain.model.MuscleCategory
-import com.diajarkoding.imfit.domain.model.WorkoutSession
-import com.diajarkoding.imfit.domain.model.WorkoutSet
 import com.diajarkoding.imfit.presentation.components.common.Add
 import com.diajarkoding.imfit.presentation.components.common.RoutineButton
 import com.diajarkoding.imfit.presentation.components.common.Symbols
@@ -60,10 +66,25 @@ fun ActiveWorkoutScreen(
     onAddExercises: (String, List<String>) -> Unit = { _, _ -> },
     selectionSessionId: String? = null,
     selectedExerciseIds: List<String>? = null,
-    onSelectedExercisesConsumed: () -> Unit = {}
+    onSelectedExercisesConsumed: () -> Unit = {},
+    expectedSessionId: String? = null,
+    onRecovery: () -> Unit = {},
+    allowCreate: Boolean = true
 ) {
     val state by viewModel.state.collectAsStateWithLifecycle()
+    var showLeaveWarning by remember(state.identity) { mutableStateOf(false) }
+    BackHandler {
+        if (state.unconfirmed) showLeaveWarning = true else onNavigateBack()
+    }
+    if (showLeaveWarning) {
+        AlertDialog(onDismissRequest = { showLeaveWarning = false },
+            title = { Text(stringResource(R.string.session_leave_title)) },
+            text = { Text(stringResource(R.string.session_leave_message)) },
+            confirmButton = { TextButton(onClick = { showLeaveWarning = false; onNavigateBack() }) { Text(stringResource(R.string.session_leave)) } },
+            dismissButton = { TextButton(onClick = { showLeaveWarning = false }) { Text(stringResource(R.string.session_stay)) } })
+    }
     var showRestConfigSheet by rememberSaveable { mutableStateOf(false) }
+    LaunchedEffect(state.identity) { showRestConfigSheet = false }
     val restState by viewModel.restState.collectAsStateWithLifecycle()
     val snackbarHostState = remember { SnackbarHostState() }
     val coroutineScope = rememberCoroutineScope()
@@ -122,8 +143,8 @@ fun ActiveWorkoutScreen(
         }
     }
 
-    LaunchedEffect(templateId) {
-        viewModel.startWorkout(templateId, selectionSessionId)
+    LaunchedEffect(templateId, expectedSessionId, allowCreate) {
+        viewModel.startWorkout(templateId, expectedSessionId ?: selectionSessionId, allowCreate)
     }
 
     LaunchedEffect(state.session?.id, selectedExerciseIds, selectionSessionId) {
@@ -159,6 +180,7 @@ fun ActiveWorkoutScreen(
                 action = WorkoutService.ACTION_START_WORKOUT
                 putExtra(WorkoutService.EXTRA_WORKOUT_NAME, session.templateName)
                 putExtra(WorkoutService.EXTRA_TEMPLATE_ID, session.templateId)
+                putExtra(WorkoutService.EXTRA_SESSION_ID, session.id)
                 putExtra(WorkoutService.EXTRA_START_TIME, session.startTime)
                 putExtra(WorkoutService.EXTRA_TOTAL_PAUSED_TIME, session.totalPausedTimeMs)
             }
@@ -262,14 +284,21 @@ fun ActiveWorkoutScreen(
             }
         },
         onRemoveExercise = { exerciseId -> viewModel.removeExercise(exerciseId) },
-        onSetUpdate = { exerciseIndex, setIndex, weight, reps ->
-            viewModel.updateSet(exerciseIndex, setIndex, weight, reps)
-        },
-        onSetComplete = { exerciseIndex, setIndex ->
-            viewModel.completeSet(exerciseIndex, setIndex)
-        },
-        onAddSet = { exerciseIndex -> viewModel.addSet(exerciseIndex) },
-        onRemoveSet = { exerciseIndex, setIndex -> viewModel.removeSet(exerciseIndex, setIndex) }
+        onSetUpdate = viewModel::updateSet,
+        onSetComplete = viewModel::completeSet,
+        onAddSet = viewModel::addSet,
+        onRemoveSet = viewModel::removeSet,
+        onRetry = viewModel::retryEntry,
+        onReload = viewModel::reload,
+        onResolve = viewModel::resolvePending,
+        onRetryOriginal = viewModel::retryPending,
+        onUseServer = viewModel::useServer,
+        onReapply = viewModel::reapplyDrafts,
+        onAcknowledgeExpiry = viewModel::acknowledgeExpiry,
+        onRecovery = onRecovery,
+        onRecentOperations = viewModel::loadRecentOperations,
+        onReviewOperation = viewModel::reviewOperation,
+        onRetryExercises = viewModel::retryExerciseAddition
     )
 }
 
@@ -283,11 +312,22 @@ internal fun ActiveWorkoutScreenContent(
     onFinishClick: () -> Unit,
     onAddExercises: () -> Unit,
     onRemoveExercise: (exerciseId: String) -> Unit,
-    onSetUpdate: (exerciseIndex: Int, setIndex: Int, weight: Float, reps: Int) -> Unit,
-    onSetComplete: (exerciseIndex: Int, setIndex: Int) -> Unit,
-    onAddSet: (exerciseIndex: Int) -> Unit,
-    onRemoveSet: (exerciseIndex: Int, setIndex: Int) -> Unit,
-    modifier: Modifier = Modifier
+    onSetUpdate: (SessionSetKey, String, String) -> Unit,
+    onSetComplete: (SessionSetKey) -> Unit,
+    onAddSet: (String) -> Unit,
+    onRemoveSet: (SessionSetKey) -> Unit,
+    modifier: Modifier = Modifier,
+    onRetry: () -> Unit = {},
+    onReload: () -> Unit = {},
+    onResolve: () -> Unit = {},
+    onRetryOriginal: () -> Unit = {},
+    onUseServer: () -> Unit = {},
+    onReapply: () -> Unit = {},
+    onAcknowledgeExpiry: () -> Unit = {},
+    onRecovery: () -> Unit = {},
+    onRecentOperations: () -> Unit = {},
+    onReviewOperation: (OperationReceipt) -> Unit = {},
+    onRetryExercises: () -> Unit = {}
 ) {
     val colors = IMFITColors.training
     val configuration = LocalConfiguration.current
@@ -299,8 +339,8 @@ internal fun ActiveWorkoutScreenContent(
     val session = state.session
     val completedSets = session?.totalCompletedSets ?: 0
     val totalSets = session?.totalSets ?: 0
-    val canFinish = completedSets > 0 && !state.isFinishing && !state.isCancelling && !state.isAddingExercises
-    val actionsEnabled = session != null && !state.isFinishing && !state.isCancelling && !state.isAddingExercises
+    val actionsEnabled = state.actionsEnabled
+    val canFinish = completedSets > 0 && actionsEnabled
 
     Scaffold(
         modifier = modifier
@@ -338,11 +378,26 @@ internal fun ActiveWorkoutScreenContent(
                 .padding(top = IMFITSpacing.headerContentGap)
         ) {
             if (session == null) {
-                ActiveSessionLoadingState(
-                    modifier = Modifier
-                        .fillMaxSize()
-                        .padding(horizontal = IMFITSpacing.screenHorizontal)
-                )
+                Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(horizontal = IMFITSpacing.screenHorizontal)) {
+                    SessionConfirmationStatus(state, onRetry, onReload, onResolve, onRetryOriginal, onUseServer, onReapply, onAcknowledgeExpiry, onRecovery)
+                    if (state.reviewRecentOperations) {
+                        Text(stringResource(R.string.session_recent_review))
+                        state.recentOperations.forEach { receipt ->
+                            TextButton(onClick = { onReviewOperation(receipt) }) {
+                                Text("${receipt.operation} · ${receipt.committedAt}")
+                            }
+                        }
+                        if (state.recentOperations.isEmpty() || state.recentHasMore) {
+                            TextButton(onClick = onRecentOperations, enabled = !state.recentLoading) {
+                                Text(stringResource(R.string.session_recent_load))
+                            }
+                        }
+                    }
+                    if (!state.reviewRecentOperations && state.entryPhase != SessionEntryPhase.LOADING && state.entryPhase != SessionEntryPhase.BLOCKED) {
+                        TextButton(onClick = onRetry) { Text(stringResource(R.string.session_retry)) }
+                    }
+                    if (state.entryPhase == SessionEntryPhase.LOADING) ActiveSessionLoadingState()
+                }
             } else {
                 LazyColumn(
                     modifier = Modifier.fillMaxSize().testTag("active_workout_list"),
@@ -354,6 +409,14 @@ internal fun ActiveWorkoutScreenContent(
                     ),
                     verticalArrangement = Arrangement.spacedBy(16.dp)
                 ) {
+                    item(key = "confirmation") {
+                        SessionConfirmationStatus(state, onRetry, onReload, onResolve, onRetryOriginal, onUseServer, onReapply, onAcknowledgeExpiry, onRecovery)
+                        if (state.canRetryExerciseAddition) {
+                            TextButton(onClick = onRetryExercises, enabled = state.actionsEnabled) {
+                                Text(stringResource(R.string.session_retry_exercises))
+                            }
+                        }
+                    }
                     // 1. Live Session Overview
                     item(key = "overview") {
                         ActiveSessionOverview(
@@ -386,23 +449,19 @@ internal fun ActiveWorkoutScreenContent(
                             )
                         }
                     } else {
-                        session.exerciseLogs.forEachIndexed { exerciseIndex, exerciseLog ->
-                            item(key = "exercise_${exerciseLog.exercise.id}") {
+                        state.confirmed?.exercises?.forEach { exerciseLog ->
+                            item(key = "${state.identity}_${session.id}_${exerciseLog.id}") {
                                 ActiveExerciseCard(
                                     exerciseLog = exerciseLog,
+                                    drafts = state.drafts,
                                     mutationEnabled = actionsEnabled,
+                                    inputEnabled = state.inputEnabled,
                                     isPaused = state.isPaused,
-                                    onRemoveExercise = { onRemoveExercise(exerciseLog.exercise.id) },
-                                    onSetUpdate = { setIndex, weight, reps ->
-                                        onSetUpdate(exerciseIndex, setIndex, weight, reps)
-                                    },
-                                    onSetComplete = { setIndex ->
-                                        onSetComplete(exerciseIndex, setIndex)
-                                    },
-                                    onAddSet = { onAddSet(exerciseIndex) },
-                                    onRemoveSet = { setIndex ->
-                                        onRemoveSet(exerciseIndex, setIndex)
-                                    }
+                                    onRemoveExercise = { onRemoveExercise(exerciseLog.id) },
+                                    onSetUpdate = onSetUpdate,
+                                    onSetComplete = onSetComplete,
+                                    onAddSet = { onAddSet(exerciseLog.id) },
+                                    onRemoveSet = onRemoveSet
                                 )
                             }
                         }
@@ -415,7 +474,7 @@ internal fun ActiveWorkoutScreenContent(
                                 onClick = onAddExercises,
                                 outlined = true,
                                 matchOutlineToContent = true,
-                                enabled = !state.isFinishing && !state.isCancelling && !state.isAddingExercises,
+                                enabled = actionsEnabled,
                                 loading = state.isAddingExercises
                             )
                         }
@@ -430,34 +489,22 @@ internal fun ActiveWorkoutScreenContent(
 @Preview(showBackground = true)
 @Composable
 private fun ActiveWorkoutScreenPreview() {
-    val sampleExercises = listOf(
-        ExerciseLog(
-            exercise = Exercise("1", "Barbell Bench Press", MuscleCategory.CHEST, ""),
-            sets = listOf(
-                WorkoutSet(1, 60f, 10, isCompleted = true),
-                WorkoutSet(2, 60f, 10, isCompleted = true),
-                WorkoutSet(3, 60f, 10, isCompleted = false)
-            )
-        ),
-        ExerciseLog(
-            exercise = Exercise("2", "Dumbbell Shoulder Press", MuscleCategory.SHOULDERS, ""),
-            sets = listOf(
-                WorkoutSet(1, 20f, 12, isCompleted = false),
-                WorkoutSet(2, 20f, 12, isCompleted = false),
-                WorkoutSet(3, 20f, 12, isCompleted = false)
-            )
-        )
+    val snapshot = SessionSnapshot(
+        id = "session-preview", version = 1, status = SessionStatus.ACTIVE, effectiveStatus = SessionStatus.ACTIVE,
+        reviewRequired = false, templateId = "template-preview", templateName = "Upper Body", templateRevision = 1,
+        startedAt = "2026-10-29T10:00:00Z", pausedAt = null, totalPausedMs = 0,
+        lastActivityAt = "2026-10-29T10:00:00Z", expiresAt = "2026-11-28T10:00:00Z",
+        schemaVersion = 1, currentExerciseId = "child-preview", completedWorkoutId = null,
+        exercises = listOf(SessionExercise("child-preview", "exercise-preview", "Barbell Bench Press", 0, 60,
+            InputDefaults(3, 10), listOf(
+                com.diajarkoding.imfit.data.remote.online.WorkoutSet("set-preview-1", 1, "60", 10, true),
+                com.diajarkoding.imfit.data.remote.online.WorkoutSet("set-preview-2", 2, "60", 10, true),
+                com.diajarkoding.imfit.data.remote.online.WorkoutSet("set-preview-3", 3, "60", 10, false)
+            ), "Chest"))
     )
-    val state = ActiveWorkoutState(
-        session = WorkoutSession(
-            id = "ses_preview",
-            templateId = "tmpl_1",
-            templateName = "Upper Body",
-            startTime = System.currentTimeMillis() - 23 * 60 * 1000L,
-            exerciseLogs = sampleExercises
-        ),
-        elapsedSeconds = 23 * 60 + 42
-    )
+    val state = ActiveWorkoutState(session = snapshot.toDomain(), confirmed = snapshot,
+        entryPhase = SessionEntryPhase.CONFIRMED, savePhase = SessionSavePhase.CONFIRMED,
+        requiresVerification = false, elapsedSeconds = 23 * 60 + 42)
 
     IMFITTheme(darkTheme = false) {
         ActiveWorkoutScreenContent(
@@ -469,10 +516,63 @@ private fun ActiveWorkoutScreenPreview() {
             onFinishClick = {},
             onAddExercises = {},
             onRemoveExercise = {},
-            onSetUpdate = { _, _, _, _ -> },
-            onSetComplete = { _, _ -> },
+            onSetUpdate = { _, _, _ -> },
+            onSetComplete = {},
             onAddSet = {},
-            onRemoveSet = { _, _ -> }
+            onRemoveSet = {}
         )
+    }
+}
+
+@Composable
+private fun SessionConfirmationStatus(
+    state: ActiveWorkoutState,
+    onRetry: () -> Unit, onReload: () -> Unit, onResolve: () -> Unit,
+    onRetryOriginal: () -> Unit, onUseServer: () -> Unit, onReapply: () -> Unit,
+    onAcknowledgeExpiry: () -> Unit, onRecovery: () -> Unit
+) {
+    val status = when {
+        state.entryPhase == SessionEntryPhase.BLOCKED -> R.string.session_blocked
+        state.confirmed?.effectiveStatus == SessionStatus.EXPIRED || state.confirmed?.reviewRequired == true -> R.string.session_expired
+        state.onlineHint == false -> R.string.session_offline
+        state.entryPhase == SessionEntryPhase.UNKNOWN -> R.string.session_unknown
+        else -> when (state.savePhase) {
+            SessionSavePhase.CONFIRMED -> if (state.requiresVerification) R.string.session_unknown else R.string.session_saved
+            SessionSavePhase.DIRTY -> R.string.session_dirty
+            SessionSavePhase.SAVING -> R.string.session_saving
+            SessionSavePhase.OFFLINE_BLOCKED -> R.string.session_offline
+            SessionSavePhase.UNKNOWN -> R.string.session_unknown
+            SessionSavePhase.RESOLVING -> R.string.session_resolving
+            SessionSavePhase.CONFLICT -> R.string.session_conflict
+            SessionSavePhase.RELOADING -> R.string.session_reloading
+        }
+    }
+    var confirmDiscard by remember(state.identity, state.confirmed?.id) { mutableStateOf<(() -> Unit)?>(null) }
+    Column(Modifier.semantics { liveRegion = LiveRegionMode.Polite }.testTag("session_confirmation_status")) {
+        Text(stringResource(status), color = IMFITColors.training.text)
+        if (state.entryPhase == SessionEntryPhase.BLOCKED) {
+            TextButton(onClick = onRecovery) { Text(stringResource(R.string.session_recovery)) }
+            TextButton(onClick = onRetry) { Text(stringResource(R.string.session_retry)) }
+        } else if (state.entryPhase == SessionEntryPhase.UNKNOWN || state.requiresVerification || state.savePhase == SessionSavePhase.CONFLICT) {
+            TextButton(onClick = onReload) { Text(stringResource(R.string.session_reload)) }
+        }
+        if (state.pendingRequestId != null) {
+            TextButton(onClick = onResolve) { Text(stringResource(R.string.session_resolve)) }
+            TextButton(onClick = onRetryOriginal) { Text(stringResource(R.string.session_retry_original)) }
+        }
+        if (state.savePhase == SessionSavePhase.CONFLICT && !state.requiresVerification && state.pendingRequestId == null) {
+            TextButton(onClick = { confirmDiscard = onUseServer }) { Text(stringResource(R.string.session_use_server)) }
+            TextButton(onClick = onReapply) { Text(stringResource(R.string.session_reapply)) }
+        }
+        if (state.confirmed?.effectiveStatus == SessionStatus.EXPIRED || state.confirmed?.reviewRequired == true) {
+            TextButton(onClick = { confirmDiscard = onAcknowledgeExpiry }) { Text(stringResource(R.string.session_acknowledge)) }
+        }
+    }
+    confirmDiscard?.let { action ->
+        AlertDialog(onDismissRequest = { confirmDiscard = null },
+            title = { Text(stringResource(R.string.session_leave_title)) },
+            text = { Text(stringResource(R.string.session_leave_message)) },
+            confirmButton = { TextButton(onClick = { confirmDiscard = null; action() }) { Text(stringResource(R.string.action_continue)) } },
+            dismissButton = { TextButton(onClick = { confirmDiscard = null }) { Text(stringResource(R.string.session_stay)) } })
     }
 }

@@ -9,7 +9,7 @@ import java.sql.DriverManager
 
 /** Actual inventory SQL against exported Room schemas on host SQLite. No migration or device proof. */
 class LegacySqlInventoryTest {
-    private fun fixture(version: Int = 9, work: Fixture.() -> Unit) {
+    internal fun fixture(version: Int = 9, work: Fixture.() -> Unit) {
         Class.forName("org.sqlite.JDBC")
         DriverManager.getConnection("jdbc:sqlite::memory:").use { db ->
             val suffix = "schemas/com.diajarkoding.imfit.data.local.database.IMFITDatabase/$version.json"
@@ -28,7 +28,7 @@ class LegacySqlInventoryTest {
             Fixture(db).work()
         }
     }
-    private class Fixture(val db: Connection) {
+    internal class Fixture(val db: Connection) {
         val queries = mutableListOf<String>()
         val reader = LegacySqlReader { sql, args, consume ->
             assertTrue("Inventory is query-only", sql.trimStart().startsWith("SELECT") || sql.startsWith("PRAGMA"))
@@ -60,6 +60,17 @@ class LegacySqlInventoryTest {
         }
         fun sql(sql: String) { db.createStatement().use { it.execute(sql) } }
         fun scan(owner: String = "A", cap: Int = 10_000) = LegacySqlInventory(reader, cap).inspect(owner)
+        fun aggregate(owner: String, item: LegacyItem, evidence: String): LegacyAggregate {
+            var records: Map<LegacyKind, List<Map<String, String?>>> = emptyMap()
+            var dependencies: Map<String, List<Map<String, String?>>> = emptyMap()
+            db.createStatement().use { it.execute("BEGIN DEFERRED") }
+            try {
+                val inventory = LegacySqlInventory(reader, payload = { records = it }, dependencyPayload = { dependencies = it }).inspect(owner)
+                return inventory.selectedAggregate(item, evidence, records, dependencies)
+            } finally {
+                db.createStatement().use { it.execute("ROLLBACK") }
+            }
+        }
         fun log(id: String, owner: String) {
             insert("workout_logs", "id" to id, "user_id" to owner)
             insert("exercise_logs", "id" to "e-$id", "workout_log_id" to id, "exercise_id" to "bench")
@@ -133,10 +144,10 @@ class LegacySqlInventoryTest {
         assertEquals(LegacyDisposition.PROBLEM, scan().items.single().disposition)
     }
 
-    @Test fun `missing provenance for pending exercise stays review without rewrite`() = fixture {
+    @Test fun `missing provenance for pending exercise is retained as unknown without inference`() = fixture {
         log("log", "A")
         sql("UPDATE exercise_logs SET sync_status='PENDING_SYNC',pending_operation='CREATE'")
-        assertEquals(LegacyDisposition.REVIEW, scan().items.single { it.kind == LegacyKind.EXERCISE_LOG }.disposition)
+        assertEquals(LegacyDisposition.PENDING_CREATE, scan().items.single { it.kind == LegacyKind.EXERCISE_LOG }.disposition)
     }
 
     @Test fun `unsupported schema including 4 8 and zero fails closed`() = fixture {

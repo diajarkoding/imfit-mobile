@@ -7,8 +7,8 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.diajarkoding.imfit.domain.model.WorkoutLog
 import com.diajarkoding.imfit.domain.model.WorkoutTemplate
-import com.diajarkoding.imfit.data.sync.SyncStateProvider
 import com.diajarkoding.imfit.domain.repository.AuthRepository
+import com.diajarkoding.imfit.domain.repository.avatarPresentationUrl
 import com.diajarkoding.imfit.domain.repository.WorkoutRepository
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -50,23 +50,21 @@ data class HomeState(
 class HomeViewModel @Inject constructor(
     private val authRepository: AuthRepository,
     private val workoutRepository: WorkoutRepository,
-    syncStateProvider: SyncStateProvider,
-    private val syncRunner: com.diajarkoding.imfit.data.sync.SyncRunner,
+
     private val reads: RemoteReadGateway,
     private val edits: TemplateEditBridge,
+    private val changes: OnlineMutationChanges,
 ) : ViewModel() {
 
     private val _state = MutableStateFlow(HomeState())
     val state = _state.asStateFlow()
     
-    // Expose sync state for UI
-    val syncState = syncStateProvider.syncState
     private var loadJob: Job? = null
     private var displayedOwner: String? = null
     private val templates = reads.templateFeed(viewModelScope)
     private val profile = RemoteResource<RemoteProfile>(reads.auth, viewModelScope)
     private val summary = RemoteResource<HomeSummary>(reads.auth, viewModelScope)
-    private val ownerListener = reads.auth.onIdentityChanged { _state.value = HomeState() }
+    private val ownerListener = reads.auth.onIdentityChanged { loadJob?.cancel(); _state.value = HomeState() }
 
     init {
         viewModelScope.launch { combine(templates.state, profile.state, summary.state) { page, user, home ->
@@ -85,6 +83,18 @@ class HomeViewModel @Inject constructor(
         } }
         viewModelScope.launch { reads.auth.identity.collectLatest { if (it != null) loadData() } }
         viewModelScope.launch { edits.changes.collect { if (reads.auth.isCurrent(it.identity)) templates.refresh() } }
+        viewModelScope.launch { changes.events.collect { change ->
+            reads.auth.synchronizedState {
+                if (!reads.auth.isCurrent(change.identity)) return@synchronizedState
+                when (change) {
+                    is WorkoutCommitted -> {
+                        summary.load("home", true) { reads.read(OnlineRpc.homeSummary()) }
+                        loadSessionIndication(change.identity)
+                    }
+                    is ProfileChanged -> profile.load("profile", true) { loadProfile() }
+                }
+            }
+        } }
         runCatching { reads.auth.capture() }
     }
 
@@ -93,14 +103,20 @@ class HomeViewModel @Inject constructor(
         templates.select(QueryKey.Templates)
         profile.load("profile") { loadProfile() }
         summary.load("home") { reads.read(OnlineRpc.homeSummary()) }
-        // Explicitly retained legacy recovery ONLY; not the source for templates/history/profile.
-        viewModelScope.launch {
-            val identity = reads.auth.capture().identity
+        loadSessionIndication(reads.auth.identity.value ?: return)
+    }
+
+    private fun loadSessionIndication(identity: AuthIdentity) {
+        loadJob?.cancel()
+        loadJob = viewModelScope.launch {
             try {
-                val legacy = workoutRepository.getActiveSession()
-                if (reads.auth.isCurrent(identity)) _state.update { it.copy(activeWorkoutTemplateId = legacy?.templateId) }
+                reads.auth.withCurrent(identity) { }
+                val session = workoutRepository.getActiveSession()
+                reads.auth.synchronizedState {
+                    if (reads.auth.isCurrent(identity)) _state.update { it.copy(activeWorkoutTemplateId = session?.templateId) }
+                }
             } catch (cancelled: CancellationException) { throw cancelled }
-            catch (_: Exception) { /* Recovery remains unavailable, never fabricate a server session. */ }
+            catch (_: Exception) { /* An unavailable read is not authoritative absence. */ }
         }
     }
 
@@ -116,19 +132,6 @@ class HomeViewModel @Inject constructor(
         summary.load("home", true) { reads.read(OnlineRpc.homeSummary()) }
     }
 
-    fun retryPendingUploads() {
-        if (_state.value.retryingUploads) return
-        _state.update { it.copy(retryingUploads = true, uploadRetryFailed = false) }
-        viewModelScope.launch {
-            try {
-                val owner = authRepository.getLocalUserId()
-                val success = owner != null && syncRunner.retryPendingUploads(owner) == com.diajarkoding.imfit.data.sync.SyncRunResult.SUCCESS
-                _state.update { it.copy(uploadRetryFailed = !success) }
-            } catch (cancelled: CancellationException) { throw cancelled }
-            catch (_: Exception) { _state.update { it.copy(uploadRetryFailed = true) } }
-            finally { _state.update { it.copy(retryingUploads = false) } }
-        }
-    }
 
     fun createWorkout(name: String) {
         if (_state.value.isCreating || _state.value.newlyCreatedWorkoutId != null) return
@@ -162,10 +165,7 @@ class HomeViewModel @Inject constructor(
     fun more() { templates.state.value.items.lastOrNull()?.let { access(it.id) } }
     private suspend fun loadProfile(): RemoteProfile {
         val profile = reads.profile()
-        val avatar = try { authRepository.getSignedAvatarUrl(profile.avatarUrl) }
-        catch (cancelled: CancellationException) { throw cancelled }
-        catch (_: Exception) { null }
-        return profile.copy(avatarUrl = avatar)
+        return profile.copy(avatarUrl = authRepository.avatarPresentationUrl(profile.avatarUrl))
     }
-    override fun onCleared() { templates.close(); profile.close(); summary.close(); ownerListener.close() }
+    override fun onCleared() { loadJob?.cancel(); templates.close(); profile.close(); summary.close(); ownerListener.close() }
 }

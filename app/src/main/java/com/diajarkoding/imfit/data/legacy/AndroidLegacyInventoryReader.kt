@@ -4,6 +4,7 @@ import android.database.Cursor
 import android.database.DatabaseErrorHandler
 import android.database.sqlite.SQLiteDatabase
 import android.database.sqlite.SQLiteDatabaseCorruptException
+import android.os.Build
 import android.system.ErrnoException
 import android.system.Os
 import android.system.OsConstants
@@ -15,25 +16,28 @@ import kotlinx.coroutines.withContext
 import java.io.File
 
 /** Opens only this existing file, never Room/open-helper migration or CREATE_IF_NECESSARY. */
-class AndroidLegacyInventoryReader(private val file: File, private val maxRows: Int = 10_000) : LegacyInventoryReader {
+class AndroidLegacyInventoryReader(private val file: File, private val maxRows: Int = 10_000) : LegacyInventoryReader, LegacyAggregateReader {
     override suspend fun inspect(ownerId: String): LegacyInventory = scan(ownerId)
+    override suspend fun read(ownerId: String, item: LegacyItem, expectedEvidence: String): LegacyAggregate {
+        var records: Map<LegacyKind, List<Map<String, String?>>> = emptyMap()
+        var dependencies: Map<String, List<Map<String, String?>>> = emptyMap()
+        val inventory = scan(ownerId, { records = it }, { dependencies = it })
+        if (inventory !is LegacyInventory.Present) {
+            throw LegacyAggregateReadException((inventory as? LegacyInventory.Unknown)?.failure ?: LegacyReadFailure.CHANGED_DURING_READ)
+        }
+        return inventory.selectedAggregate(item, expectedEvidence, records, dependencies)
+    }
     override suspend fun record(ownerId: String, item: LegacyItem): Map<String, String?> {
         var fields: Map<String, String?>? = null
-        val inventory = scan(ownerId) { rows ->
-            fields = rows[item.kind]?.singleOrNull { row ->
-                val id = when (item.kind) {
-                    LegacyKind.TEMPLATE_EXERCISE -> "${row["template_id"]}:${row["exercise_id"]}"
-                    LegacyKind.TEMPLATE_INTENT -> row["key"]
-                    else -> row["id"]
-                }
-                id == item.id
-            }
-        }
+        val inventory = scan(ownerId, payload = { rows ->
+            fields = rows[item.kind]?.singleOrNull { row -> legacyRecordId(item.kind, row) == item.id }
+        })
         require(inventory is LegacyInventory.Present && inventory.items.any { it == item }) { "Legacy record changed or is unavailable" }
         return requireNotNull(fields)
     }
     private suspend fun scan(ownerId: String,
-        payload: (Map<LegacyKind, List<Map<String, String?>>>) -> Unit = {}): LegacyInventory = withContext(Dispatchers.IO) {
+        payload: (Map<LegacyKind, List<Map<String, String?>>>) -> Unit = {},
+        dependencies: (Map<String, List<Map<String, String?>>>) -> Unit = {}): LegacyInventory = withContext(Dispatchers.IO) {
         require(ownerId.isNotBlank())
         try {
             val stat = try { Os.lstat(file.absolutePath) } catch (failure: ErrnoException) {
@@ -52,9 +56,9 @@ class AndroidLegacyInventoryReader(private val file: File, private val maxRows: 
                 // Android's default corruption handler may DELETE a database even on open failure.
                 DatabaseErrorHandler { /* Preserve the exact legacy file for explicit recovery. */ }).use { database ->
                 check(database.isReadOnly)
-                // Public read-only transactions are only available on newer Android APIs. Do not
-                // issue BEGIN IMMEDIATE/EXCLUSIVE against legacy storage. This private pool has no
-                // WAL-enable flag (one connection); data_version fences reject any concurrent commit.
+                // API 35's read-only transaction is explicitly DEFERRED. Older Android transaction
+                // APIs request write locks, so retain the optimistic fence there instead. This
+                // private non-WAL pool uses one connection; never BEGIN IMMEDIATE/EXCLUSIVE.
                 check(!database.isWriteAheadLoggingEnabled)
                 fun stamp(): List<Long> = listOf("data_version", "schema_version", "user_version").map { name ->
                     database.rawQuery("PRAGMA $name", null).use { check(it.moveToFirst()); it.getLong(0) }
@@ -71,7 +75,16 @@ class AndroidLegacyInventoryReader(private val file: File, private val maxRows: 
                         }
                     }
                 }
-                val inspected = LegacySqlInventory(reader, maxRows, payload).inspect(ownerId)
+                val inspected = if (Build.VERSION.SDK_INT >= 35) {
+                    database.beginTransactionReadOnly()
+                    try {
+                        LegacySqlInventory(reader, maxRows, payload, dependencies).inspect(ownerId)
+                    } finally {
+                        database.endTransaction()
+                    }
+                } else {
+                    LegacySqlInventory(reader, maxRows, payload, dependencies).inspect(ownerId)
+                }
                 val after = Os.lstat(file.absolutePath)
                 if (before != stamp() || stat.st_ino != after.st_ino || stat.st_dev != after.st_dev ||
                     stat.st_size != after.st_size || stat.st_mtime != after.st_mtime) {

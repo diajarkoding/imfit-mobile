@@ -134,9 +134,6 @@ dependencies {
     implementation(libs.coil.network.okhttp)
 
     // --- LOCAL STORAGE ---
-    implementation(libs.room.runtime)
-    ksp(libs.room.compiler)
-    implementation(libs.room.ktx)
     implementation(libs.datastore.preferences)
     // F2 network-only spike; no RemoteMediator or runtime screen migration yet.
     implementation(libs.androidx.paging.common)
@@ -169,7 +166,6 @@ dependencies {
     androidTestImplementation(libs.androidx.espresso.core)
     androidTestImplementation(platform(libs.androidx.compose.bom))
     androidTestImplementation(libs.androidx.compose.ui.test.junit4)
-    androidTestImplementation(libs.room.testing)
     androidTestImplementation("androidx.test.uiautomator:uiautomator:2.3.0")
     // Required by AndroidX Test tracing when the instrumentation APK is minified too.
     androidTestCompileOnly("com.google.errorprone:error_prone_annotations:2.36.0")
@@ -177,9 +173,6 @@ dependencies {
     debugImplementation(libs.androidx.compose.ui.test.manifest)
 }
 
-ksp {
-    arg("room.schemaLocation", "$projectDir/schemas")
-}
 
 kotlin {
     compilerOptions {

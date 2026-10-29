@@ -17,8 +17,11 @@ import com.diajarkoding.imfit.theme.LocaleManager
 import androidx.test.platform.app.InstrumentationRegistry
 import com.diajarkoding.imfit.di.RestTimerEntryPoint
 import dagger.hilt.android.EntryPointAccessors
-import com.diajarkoding.imfit.domain.model.TemplateExercise
-import com.diajarkoding.imfit.domain.repository.ExerciseRepository
+import com.diajarkoding.imfit.data.remote.TemplateWriteRequest
+import com.diajarkoding.imfit.data.remote.TemplateWriteExercise
+import com.diajarkoding.imfit.data.remote.online.SessionCommand
+import com.diajarkoding.imfit.data.remote.online.SessionSetKey
+import java.util.UUID
 import com.diajarkoding.imfit.data.local.FakeExerciseDataSource
 import kotlinx.coroutines.runBlocking
 import java.time.YearMonth
@@ -127,12 +130,12 @@ class RedesignNavigationTest {
     @Test fun editedNameAppearsOnRetainedDetailAndHomeWithoutSync() {
         waitForText(text(R.string.redesign_ready))
         val ports = EntryPointAccessors.fromApplication(rule.activity.application, RestTimerEntryPoint::class.java)
-        val repository = ports.workouts()
+        val reads = ports.reads()
+        val edits = ports.edits()
         val before = "Rename ${System.nanoTime()}"
         val after = "$before saved"
-        val template = runBlocking {
-            repository.createTemplate(requireNotNull(ports.auth().getLocalUserId()), before, emptyList())
-        }
+        val receipt = runBlocking { edits.save(null, before, emptyList()) }
+        val templateId = receipt.templateId
         try {
             rule.onNode(hasScrollToNodeAction()).performScrollToNode(hasText(before))
             rule.onNodeWithText(before).performClick()
@@ -145,41 +148,52 @@ class RedesignNavigationTest {
             rule.onNodeWithContentDescription(text(R.string.action_back)).performClick()
             rule.onNode(hasScrollToNodeAction()).performScrollToNode(hasText(after))
             rule.onNodeWithText(after).assertIsDisplayed()
-        } finally { runBlocking { repository.deleteTemplate(template.id) } }
+        } finally {
+            runBlocking {
+                val (current, domain) = reads.template(templateId)
+                edits.save(current, domain.name, domain.exercises, deleted = true)
+            }
+        }
     }
 
     @Test fun homeHistoryUpdatesToOneFinishedSessionWithoutReopeningHomeOrWaitingForCloud() {
         waitForText(text(R.string.redesign_ready))
         val ports = EntryPointAccessors.fromApplication(rule.activity.application, RestTimerEntryPoint::class.java)
-        val repository = ports.workouts()
+        val reads = ports.reads()
+        val sessions = ports.sessions()
         val name = "Latest card ${System.nanoTime()}"
+        val templateId = UUID.randomUUID().toString()
+        val owner = runBlocking { requireNotNull(ports.auth().getLocalUserId()) }
         val template = runBlocking {
-            repository.cancelWorkout()
-            repository.createTemplate(requireNotNull(ports.auth().getLocalUserId()), name,
-                listOf(TemplateExercise(FakeExerciseDataSource.exercises.first(), sets = 1)))
+            sessions.reload()?.let { sessions.cancel(it.id) }
+            reads.saveTemplate(TemplateWriteRequest(UUID.randomUUID().toString(), templateId, null, name,
+                listOf(TemplateWriteExercise(FakeExerciseDataSource.exercises.first().id, 0, 1, 8, 60)),
+                emptyList(), ownerId = owner))
         }
         try {
-            val finished = runBlocking {
-                val session = repository.startWorkout(template)
-                // One versioned command per intent: edits fly first, completions second.
-                repository.mutateActiveSession(session.id) { current -> current.copy(exerciseLogs = current.exerciseLogs.map { log ->
-                    log.copy(sets = log.sets.map { it.copy(weight = 20f, reps = 8) })
-                }) }
-                repository.mutateActiveSession(session.id) { current -> current.copy(exerciseLogs = current.exerciseLogs.map { log ->
-                    log.copy(sets = log.sets.map { it.copy(isCompleted = true) })
-                }) }
-                requireNotNull(repository.finishWorkout())
+            val volume = runBlocking {
+                val session = sessions.start(templateId, template.revision)
+                for (exercise in session.exercises) for (set in exercise.sets) {
+                    sessions.editSet(session.id, SessionSetKey(exercise.id, set.id), "20", "8")
+                    sessions.command(session.id, SessionCommand.CompleteSet(exercise.id, set.id))
+                }
+                val workoutId = requireNotNull(sessions.finish(session.id).workoutId)
+                reads.read(com.diajarkoding.imfit.data.remote.online.OnlineRpc.workoutDetail(workoutId)).totalVolume
             }
             val localized = LocaleManager.getUpdatedContext(rule.activity)
             val locale = localized.resources.configuration.locales[0]
             val heading = localized.getString(R.string.home_summary_heading, name.uppercase(locale))
-            // Shipped contract: Home picks up the confirmed terminal receipt on the explicit
-            // refresh path (pull-to-refresh); silent related-query invalidation stays an open plan item.
-            rule.onNodeWithText(text(R.string.nav_home)).performClick()
-            rule.onNodeWithTag("home_refresh").performTouchInput { swipeDown() }
+            // The retained Home collector refreshes its summary from the terminal receipt.
             waitForText(heading)
             rule.onNodeWithText(heading).assertIsDisplayed()
-            rule.onNodeWithText(String.format(locale, "%,.0f kg", finished.totalVolume)).assertIsDisplayed()
-        } finally { runBlocking { repository.cancelWorkout(); repository.deleteTemplate(template.id) } }
+            rule.onNodeWithText(String.format(locale, "%,.0f kg", volume.toBigDecimal())).assertIsDisplayed()
+        } finally {
+            runBlocking {
+                sessions.peek()?.let { sessions.cancel(it.id) }
+                val current = reads.template(templateId).first
+                reads.saveTemplate(TemplateWriteRequest(UUID.randomUUID().toString(), templateId, current.revision,
+                    name, emptyList(), current.exercises.map { it.exerciseId }, isDeleted = true, ownerId = owner))
+            }
+        }
     }
 }

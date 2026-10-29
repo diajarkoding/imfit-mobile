@@ -24,7 +24,7 @@ interface AuthRepository {
     /** Auth state machine name for diagnostics only (e.g. Authenticated, NotAuthenticated); never a user ID. */
     suspend fun localAuthStatusName(): String = "UNKNOWN"
     suspend fun isLoggedIn(): Boolean
-    suspend fun updateProfile(user: User): Result<User>
+    suspend fun updateProfile(patch: com.diajarkoding.imfit.domain.model.ProfilePatch): Result<User>
     
     /**
      * Gets a signed URL for accessing a private avatar image.

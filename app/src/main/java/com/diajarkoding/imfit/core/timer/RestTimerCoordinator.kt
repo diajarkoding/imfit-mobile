@@ -258,10 +258,12 @@ class RestTimerCoordinator(
         }
         if (current.status == TimerStatus.RUNNING || current.status == TimerStatus.EXPIRED) {
             val reason = when {
+                // Cold unknown must retain the original anchor, even beyond the alert window.
+                // validSession throws on unknown; only a verified mismatch is terminal absence.
+                !effects.validSession(current) -> "SESSION_INVALID"
                 current.bootIdentity == null || current.bootIdentity != clock.bootIdentity() -> "BOOT_UNVERIFIED"
                 effects.userStopped(current) -> "USER_STOPPED"
                 RestTimerRecoveryPolicy.alertTooLate(current, clock.elapsedRealtime()) -> "DELIVERY_WINDOW_EXPIRED"
-                !effects.validSession(current) -> "SESSION_INVALID"
                 else -> null
             }
             if (reason != null) {

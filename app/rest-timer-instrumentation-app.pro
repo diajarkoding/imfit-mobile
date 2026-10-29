@@ -11,6 +11,3 @@
 -keepclassmembers class com.diajarkoding.imfit.core.timer.RestTimerAndroidRuntime { public *; }
 -keepclassmembers class com.diajarkoding.imfit.core.timer.RestTimerState { public *; }
 -keep class com.diajarkoding.imfit.core.timer.RestTimerCorrelation { *; }
--keepclassmembers class com.diajarkoding.imfit.data.local.database.IMFITDatabase { public *; }
--keepclassmembers class com.diajarkoding.imfit.data.local.entity.ActiveSessionEntity { public *; }
--keep interface com.diajarkoding.imfit.data.local.dao.ActiveSessionDao { *; }

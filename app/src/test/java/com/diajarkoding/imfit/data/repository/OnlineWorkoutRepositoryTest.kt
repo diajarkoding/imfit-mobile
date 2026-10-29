@@ -11,16 +11,16 @@ import kotlinx.coroutines.test.runTest
 import kotlinx.serialization.json.*
 import org.junit.Assert.*
 import org.junit.Test
-import java.time.OffsetDateTime
 
 /** Runtime facade contract: memory-peek timer reads, receipt-driven terminal writes, no legacy bulk reads. */
 class OnlineWorkoutRepositoryTest {
     private val reads = ScriptedReadGateway()
-    private val preflight = LegacyStartPreflight(reads, LegacyInventoryReader { LegacyInventory.Absent(it) },
+    private val inventory = LegacyInventoryReader { LegacyInventory.Absent(it) }
+    private val preflight = LegacyStartPreflight(reads, inventory,
         object : LegacyCheckpointStore {
             override suspend fun load(ownerId: String): LegacyCheckpoint? = null
             override suspend fun record(checkpoint: LegacyCheckpoint) = Unit
-        })
+        }, testRecoveryCoordinator(reads, reads.repository, inventory))
     private val store = OnlineSessionStore(reads, reads.repository, LegacyGuardedSessionStart(preflight, reads.repository))
     private val repo = OnlineWorkoutRepository(reads, store, TemplateEditBridge(reads) { _, _ -> })
 
@@ -64,21 +64,11 @@ class OnlineWorkoutRepositoryTest {
         assertTrue(reads.api.requests.tryReceive().isFailure)
     }
 
-    @Test fun `terminal completion maps the workout log and empties the timer peek`() = runTest {
+    @Test fun `terminal completion returns receipt identity without depending on a detail fetch`() = runTest {
         load()
         val finished = async { repo.finishWorkout() }
         reads.api.requests.receive().also { assertEquals("finish_active_session", it.rpc); it.receipt(3, it.rpc, "COMPLETED") }
-        reads.api.requests.receive().also { assertEquals("get_workout_detail", it.rpc); it.reply(workoutDetail) }
-        val log = finished.await()!!
-        assertEquals("workout", log.id)
-        assertEquals("Routine", log.templateName)
-        assertEquals(125.5f, log.totalVolume, 0.001f)
-        assertEquals(OffsetDateTime.parse(OnlineFixtures.time).toInstant().toEpochMilli(), log.startTime)
-        val exercise = log.exerciseLogs.single()
-        assertEquals("Squat", exercise.exercise.name)
-        assertEquals(com.diajarkoding.imfit.domain.model.MuscleCategory.CHEST, exercise.exercise.muscleCategory)
-        assertEquals(ExerciseInputDefaults(3, 10), exercise.inputDefaults)
-        assertTrue(exercise.sets.single().isCompleted)
+        assertEquals("workout", finished.await())
         assertNull(repo.getActiveSessionForTimer())
         assertTrue(reads.api.requests.tryReceive().isFailure)
     }
@@ -119,7 +109,6 @@ class OnlineWorkoutRepositoryTest {
         load()
         val finished = async { repo.finishWorkout() }
         reads.api.requests.receive().also { assertEquals("finish_active_session", it.rpc); it.receipt(3, it.rpc, "COMPLETED") }
-        reads.api.requests.receive().also { assertEquals("get_workout_detail", it.rpc); it.reply(workoutDetail) }
         assertNotNull(finished.await())
         // The in-memory projection is terminal: cancelling again must not dispatch anything.
         repo.cancelWorkout()
@@ -151,17 +140,6 @@ class OnlineWorkoutRepositoryTest {
         assertTrue(reads.api.requests.tryReceive().isFailure)
     }
 
-    @Test fun `bulk legacy contracts fail loudly instead of leaking unbounded queries`() = runTest {
-        load()
-        fails { repo.getTemplates("A") }
-        fails { repo.getWorkoutLogs("A") }
-        fails { repo.getLastExerciseLog("squat") }
-        fails { repo.getLastWeightsForExercise("squat", "A") }
-        fails { repo.updateActiveSession(store.peek()!!.toDomain()) }
-        fails { repo.requestCancelSession("session") }
-        assertTrue(reads.api.requests.tryReceive().isFailure)
-    }
-
     @Test fun `prefill reads defaults for the logged owner only`() = runTest {
         load()
         fails { repo.getPrefillForExercise("squat", "someone-else", ExerciseInputDefaults(3, 10)) }
@@ -185,9 +163,8 @@ class OnlineWorkoutRepositoryTest {
             assertEquals("template", it.body.getValue("p_template_id")!!.jsonPrimitive.content)
             it.reply("""{"id":"template","name":"Routine","revision":1,"updated_at":"${OnlineFixtures.time}","exercises":[]}""")
         }
-        reads.api.requests.receive().also { assertEquals("get_active_session", it.rpc); it.reply("""{"found":false,"session":null}""") }
-        reads.api.requests.receive().also { assertEquals("list_recent_operations", it.rpc)
-            it.reply("""{"data":[],"page_info":{"next_cursor":null,"has_more":false,"limit":100}}""") }
+        reads.api.requests.receive().also { assertEquals("get_start_recovery_status", it.rpc)
+            it.reply(LegacyReadinessFixtures.ready) }
         reads.api.requests.receive().also { assertEquals("create_active_session", it.rpc); it.receipt(1, it.rpc, "ACTIVE")
             minted = it.body.getValue("p_session_id")!!.jsonPrimitive.content }
         val session = started.await().getOrThrow()

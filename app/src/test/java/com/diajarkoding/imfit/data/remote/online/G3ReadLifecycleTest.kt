@@ -130,7 +130,7 @@ class G3ReadLifecycleTest {
                 return withContext(NonCancellable) { response.await() }
             }
         }
-        val vm = keep(ProfileViewModel(gateway, mockk(relaxed = true)))
+        val vm = keep(ProfileViewModel(gateway, mockk(relaxed = true), OnlineMutationChanges(gateway.auth), idleSessionStore()))
         val old = profiles.receive()
         reads.auth.signOut(); reads.auth.signIn("B", "B"); reads.auth.signIn("A", "new-A"); runCurrent()
         val fresh = profiles.receive()
@@ -186,7 +186,7 @@ class G3ReadLifecycleTest {
     }
 
     @Test fun `history day switch rejects delayed summaries and duplicate initialize never reloads`() = runTest(dispatcher) {
-        val vm = keep(RemoteHistoryViewModel(reads))
+        val vm = keep(RemoteHistoryViewModel(reads, OnlineMutationChanges(reads.auth)))
         vm.initialize(LocalDate.of(2026, 10, 1))
         val old = listOf(reads.api.requests.receive(), reads.api.requests.receive())
         vm.initialize(LocalDate.of(2026, 10, 2))
@@ -210,7 +210,7 @@ class G3ReadLifecycleTest {
 
     @Test fun `progress reverse completion and A B A cannot mix aggregate or markers from old query`() = runTest(dispatcher) {
         reads.api.ignoreCancellation = true
-        val vm = keep(ProgressViewModel(reads, mockk(relaxed = true)))
+        val vm = keep(ProgressViewModel(reads, mockk(relaxed = true), OnlineMutationChanges(reads.auth)))
         vm.selectMonth(YearMonth.of(2026, 10))
         val october = listOf(reads.api.requests.receive(), reads.api.requests.receive())
         vm.selectMonth(YearMonth.of(2026, 11))

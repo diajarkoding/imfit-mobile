@@ -22,7 +22,8 @@ import com.diajarkoding.imfit.R
 import com.diajarkoding.imfit.core.notification.NotificationChannels
 import com.diajarkoding.imfit.core.notification.WorkoutNotificationManager
 import com.diajarkoding.imfit.domain.repository.AuthRepository
-import com.diajarkoding.imfit.domain.repository.WorkoutRepository
+import com.diajarkoding.imfit.data.remote.online.OnlineSessionStore
+import com.diajarkoding.imfit.data.remote.online.toDomain
 import com.diajarkoding.imfit.domain.model.WorkoutSession
 import com.diajarkoding.imfit.core.service.WorkoutService
 import com.diajarkoding.imfit.core.notification.WorkoutActions
@@ -37,7 +38,7 @@ import kotlinx.coroutines.*
 class RestTimerAndroidRuntime @Inject constructor(
     @ApplicationContext private val context: Context,
     private val auth: Provider<AuthRepository>,
-    private val workouts: Provider<WorkoutRepository>,
+    private val sessions: Provider<OnlineSessionStore>,
     private val notifications: WorkoutNotificationManager,
     private val coordinator: Provider<RestTimerCoordinator>
 ) : RestTimerEffects, Application.ActivityLifecycleCallbacks {
@@ -82,7 +83,7 @@ class RestTimerAndroidRuntime @Inject constructor(
         peekUserId = { auth.get().peekLocalUserId() },
         authStatus = { auth.get().localAuthStatusName() },
         onStatus = { status -> RestTimerTrace.event("auth_status_snapshot", state, "authStatus=$status") },
-        sessionExists = { userId, workoutId -> workouts.get().isActiveSessionForTimer(userId, workoutId) },
+        sessionExists = { _, workoutId -> sessions.get().peek()?.id == workoutId },
         measure = { stage, block -> RestTimerTrace.measured(stage, state, block) }
     ).valid(state)
 
@@ -91,7 +92,7 @@ class RestTimerAndroidRuntime @Inject constructor(
     override suspend fun workoutSessionIsCurrent(session: WorkoutSession): Boolean =
         RestTimerTrace.measured("workout_render_validation") {
             withTimeout(2500) {
-                val latest = workouts.get().getActiveSessionForTimer()
+                val latest = sessions.get().peek()?.toDomain()
                 this@RestTimerAndroidRuntime.session = latest
                 latest?.id == session.id
             }
@@ -116,6 +117,7 @@ class RestTimerAndroidRuntime @Inject constructor(
             rest?.deadlineElapsedMs, epochOffsetSeconds)
         if (lastRender == identity) return
         try {
+            notifications.bindSession(currentSession.id)
             val posted = if (rest != null) notifications.showRestTimerNotification(rest, currentSession.templateId)
             else notifications.showWorkoutNotification(currentSession.templateName, format(elapsed), currentSession.totalCompletedSets,
                 currentSession.totalSets, currentSession.totalVolume, currentSession.isPaused, currentSession.templateId)
@@ -129,14 +131,14 @@ class RestTimerAndroidRuntime @Inject constructor(
         }
     }
 
-    /** Full JSON recovery is for rendering, never a prerequisite for expiry/notification 1002. */
+    /** Memory-only rendering recovery. Only explicit entry/recovery verifies a cold session. */
     private fun refreshWorkoutRendering(state: RestTimerState?) {
         if (state == null || state.status !in listOf(TimerStatus.RUNNING, TimerStatus.EXPIRED)) return
         if (workoutRefreshJob?.isActive == true || !workoutRefreshRetry.available(android.os.SystemClock.elapsedRealtime())) return
         workoutRefreshJob = scope.launch {
             try {
                 val recovered = RestTimerTrace.measured("workout_refresh", state) {
-                    withTimeout(2500) { workouts.get().getActiveSessionForTimer() }
+                    sessions.get().peek()?.toDomain()
                 }
                 // Re-enter the coordinator; logout/replacement while reading must win.
                 if (recovered != null) coordinator.get().renderWorkout(recovered)

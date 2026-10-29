@@ -228,3 +228,57 @@ data class HomeSummary(@SerialName("last_workout") val lastWorkout: WorkoutSumma
 
 @Serializable
 data class OperationLookup(val state: OperationState, val receipt: OperationReceipt?)
+
+@Serializable
+enum class RecoveryBlockerKind { LEGACY_SESSION, ACTIVE_SESSION, EXPIRED_SESSION }
+@Serializable
+enum class RecoveryBlockerReason { LEGACY_REVIEW_REQUIRED, SESSION_REVIEW_REQUIRED }
+@Serializable
+data class StartRecoveryBlocker(
+    val kind: RecoveryBlockerKind,
+    @SerialName("resource_id") val resourceId: String,
+    val version: Long?,
+    @SerialName("source_fingerprint") val sourceFingerprint: String?,
+    val reason: RecoveryBlockerReason,
+)
+@Serializable
+data class StartRecoveryStatus(
+    @SerialName("contract_version") val contractVersion: Int,
+    @SerialName("checked_at") val checkedAt: String,
+    @SerialName("can_create") val canCreate: Boolean,
+    val blockers: List<StartRecoveryBlocker>,
+    @SerialName("has_more_blockers") val hasMoreBlockers: Boolean,
+)
+@Serializable
+enum class LegacyResolution { KEEP_ARCHIVED }
+@Serializable
+data class LegacyRecoveryItem(
+    @SerialName("session_id") val sessionId: String,
+    @SerialName("source_fingerprint") val sourceFingerprint: String,
+    val resolution: LegacyResolution?,
+    @SerialName("raw_source") val rawSource: JsonObject,
+)
+@Serializable
+data class LegacySessionResolutionReceipt(
+    @SerialName("request_id") val requestId: String,
+    val operation: String,
+    @SerialName("session_id") val sessionId: String,
+    @SerialName("source_fingerprint") val sourceFingerprint: String,
+    val resolution: LegacyResolution,
+    @SerialName("committed_at") val committedAt: String,
+)
+@Serializable
+enum class LegacyImportOutcome { IMPORTED, MATCHED }
+@Serializable
+data class LegacyWorkoutImportReceipt(
+    @SerialName("request_id") val requestId: String,
+    val operation: String,
+    @SerialName("workout_id") val workoutId: String,
+    @SerialName("source_fingerprint") val sourceFingerprint: String,
+    @SerialName("payload_digest") val payloadDigest: String,
+    val outcome: LegacyImportOutcome,
+    @SerialName("id_mapping") val idMapping: JsonObject,
+    @SerialName("exercise_count") val exerciseCount: Int,
+    @SerialName("set_count") val setCount: Int,
+    @SerialName("committed_at") val committedAt: String,
+)

@@ -11,7 +11,10 @@ import java.time.ZoneId
 import javax.inject.Inject
 
 @HiltViewModel
-class RemoteHistoryViewModel @Inject constructor(private val reads: RemoteReadGateway) : ViewModel() {
+class RemoteHistoryViewModel @Inject constructor(
+    private val reads: RemoteReadGateway,
+    private val changes: OnlineMutationChanges,
+) : ViewModel() {
     private val feed = reads.historyFeed(viewModelScope)
     val page = feed.state
     private val aggregate = RemoteResource<ProgressSummary>(reads.auth, viewModelScope)
@@ -19,8 +22,17 @@ class RemoteHistoryViewModel @Inject constructor(private val reads: RemoteReadGa
     private val detail = RemoteResource<WorkoutDetail>(reads.auth, viewModelScope)
     val selected = detail.state
     private var date: LocalDate? = null
+    private var window: DateWindow? = null
     init {
         viewModelScope.launch { reads.auth.identity.collect { if (it != null) date?.let { day -> loadDay(day, false) } } }
+        viewModelScope.launch { changes.events.collect { change ->
+            reads.auth.synchronizedState {
+                if (change !is WorkoutCommitted || !reads.auth.isCurrent(change.identity)) return@synchronizedState
+                val query = window?.takeIf { it.containsWorkout(change.startedAt) } ?: return@synchronizedState
+                feed.refresh()
+                aggregate.load(query.toString(), true) { reads.read(OnlineRpc.progress(query)) }
+            }
+        } }
         runCatching { reads.auth.capture() }
     }
     fun initialize(day: LocalDate, force: Boolean = false) {
@@ -30,10 +42,11 @@ class RemoteHistoryViewModel @Inject constructor(private val reads: RemoteReadGa
     }
     private fun loadDay(day: LocalDate, force: Boolean) {
         if (reads.auth.identity.value == null) return
-        val window = DateWindow(day.toString(), day.plusDays(1).toString(), ZoneId.systemDefault().id)
-        feed.select(QueryKey.History(window))
+        val query = DateWindow(day.toString(), day.plusDays(1).toString(), ZoneId.systemDefault().id)
+        window = query
+        feed.select(QueryKey.History(query))
         if (force) feed.refresh()
-        aggregate.load(window.toString(), force) { reads.read(OnlineRpc.progress(window)) }
+        aggregate.load(query.toString(), force) { reads.read(OnlineRpc.progress(query)) }
     }
     fun refresh() { date?.let { initialize(it, true) } }
     fun retry() = feed.retry()

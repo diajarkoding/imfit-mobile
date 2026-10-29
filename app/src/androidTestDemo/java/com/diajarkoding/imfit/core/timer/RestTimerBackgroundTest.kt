@@ -29,10 +29,10 @@ class RestTimerBackgroundTest {
 
     /** Templates come from remote paging after the Room cutover; bulk list reads are fail-loud. */
     private suspend fun firstRemoteTemplate(reads: com.diajarkoding.imfit.data.remote.online.RemoteReadGateway):
-        com.diajarkoding.imfit.domain.model.WorkoutTemplate {
+        com.diajarkoding.imfit.data.remote.online.TemplateDetail {
         val summary = reads.read(com.diajarkoding.imfit.data.remote.online.OnlineRpc.templates(cursor = null, limit = 30))
             .data.first { it.exerciseCount > 0 }
-        return reads.template(summary.id).second
+        return reads.template(summary.id).first
     }
 
     /** A negative assertion needs an observation interval, not a sleep followed by one snapshot. */
@@ -66,10 +66,11 @@ class RestTimerBackgroundTest {
         context.startActivity(Intent(context, MainActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
         val ports = EntryPointAccessors.fromApplication(context, RestTimerEntryPoint::class.java)
         val timer = ports.timer()
-        val repository = ports.workouts()
+        val sessions = ports.sessions()
         val user = requireNotNull(ports.auth().getLocalUserId())
-        val session = repository.startWorkout(firstRemoteTemplate(ports.reads()))
-        val exercise = session.exerciseLogs.first().exercise
+        val template = firstRemoteTemplate(ports.reads())
+        val session = sessions.start(template.id, template.revision)
+        val exercise = session.exercises.first()
         val manager = context.getSystemService(NotificationManager::class.java)
         try {
             ContextCompat.startForegroundService(context, Intent(context, WorkoutService::class.java).apply {
@@ -78,7 +79,7 @@ class RestTimerBackgroundTest {
             awaitCondition { withContext(Dispatchers.Main) { ports.runtime().foregroundServiceActive } }
             if (android.os.Build.VERSION.SDK_INT >= 34) assertFalse(manager.canUseFullScreenIntent())
             withContext(Dispatchers.Main) {
-                timer.start(RestTimerState("", userId = user, workoutId = session.id, templateId = session.templateId,
+                timer.start(RestTimerState("", userId = user, workoutId = session.id, templateId = session.templateId ?: template.id,
                     exerciseId = exercise.id, setId = "fsi-denied", exerciseName = exercise.name,
                     durationMs = 1000, deadlineElapsedMs = 0, bootIdentity = null, startedAtEpochMs = 0))
             }
@@ -106,7 +107,7 @@ class RestTimerBackgroundTest {
             NotificationChannels.createNotificationChannels(context)
             if (Build.VERSION.SDK_INT >= 34) shell("appops set ${context.packageName} USE_FULL_SCREEN_INTENT allow")
             withContext(Dispatchers.Main) { timer.cancel("CAPABILITY_TEST_FINISHED") }
-            repository.cancelWorkout()
+            sessions.cancel(session.id)
             context.stopService(Intent(context, WorkoutService::class.java))
         }
     }
@@ -117,10 +118,11 @@ class RestTimerBackgroundTest {
         context.startActivity(Intent(context, MainActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
         val ports = EntryPointAccessors.fromApplication(context, RestTimerEntryPoint::class.java)
         val timer = ports.timer()
-        val repository = ports.workouts()
+        val sessions = ports.sessions()
         val user = requireNotNull(ports.auth().getLocalUserId())
-        val session = repository.startWorkout(firstRemoteTemplate(ports.reads()))
-        val exercise = session.exerciseLogs.first().exercise
+        val template = firstRemoteTemplate(ports.reads())
+        val session = sessions.start(template.id, template.revision)
+        val exercise = session.exercises.first()
         val manager = context.getSystemService(NotificationManager::class.java)
         try {
             ContextCompat.startForegroundService(context, Intent(context, WorkoutService::class.java).apply {
@@ -130,13 +132,15 @@ class RestTimerBackgroundTest {
             })
             awaitCondition { withContext(Dispatchers.Main) { ports.runtime().foregroundServiceActive } }
             repeat(2) { index ->
+                // The coordinator sets the deadline inside start(); capture before scheduling
+                // so the measured window cannot underflow by the scheduling/suspend overhead.
+                val started = android.os.SystemClock.elapsedRealtime()
                 withContext(Dispatchers.Main) {
-                    timer.start(RestTimerState("", userId = user, workoutId = session.id, templateId = session.templateId,
+                    timer.start(RestTimerState("", userId = user, workoutId = session.id, templateId = session.templateId ?: template.id,
                         exerciseId = exercise.id, setId = "screen-off-$index", exerciseName = exercise.name,
                         durationMs = 120_000, deadlineElapsedMs = 0, bootIdentity = null, startedAtEpochMs = 0))
                 }
                 shell("input keyevent 223") // KEYCODE_SLEEP; no forced Doze or battery exemption.
-                val started = android.os.SystemClock.elapsedRealtime()
                 withTimeout(135_000) { while (timer.state.value?.status != TimerStatus.EXPIRED) delay(200) }
                 val latency = android.os.SystemClock.elapsedRealtime() - started
                 assertTrue("Screen-off expiry took ${latency}ms", latency in 118_000..130_000)
@@ -148,12 +152,12 @@ class RestTimerBackgroundTest {
                     .notification.actions.first().actionIntent.send()
                 withTimeout(5000) { while (timer.state.value?.status != TimerStatus.ACKNOWLEDGED) delay(50) }
                 withContext(Dispatchers.Main) { assertFalse(ports.runtime().isAlertPlaying()) }
-                assertNotNull(repository.getActiveSession())
+                assertNotNull(sessions.state.value.snapshot)
             }
         } finally {
             shell("input keyevent 224")
             withContext(Dispatchers.Main) { timer.cancel("SCREEN_OFF_TEST_FINISHED") }
-            repository.cancelWorkout()
+            sessions.cancel(session.id)
             context.stopService(Intent(context, WorkoutService::class.java))
         }
     }
@@ -164,12 +168,12 @@ class RestTimerBackgroundTest {
         configureCapabilities(context)
         val ports = EntryPointAccessors.fromApplication(context, RestTimerEntryPoint::class.java)
         val timer = ports.timer()
-        val repository = ports.workouts()
+        val sessions = ports.sessions()
         val userId = requireNotNull(ports.auth().getLocalUserId())
         val template = firstRemoteTemplate(ports.reads())
         context.startActivity(Intent(context, MainActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
-        val session = repository.startWorkout(template)
-        val exercise = session.exerciseLogs.first().exercise
+        val session = sessions.start(template.id, template.revision)
+        val exercise = session.exercises.first()
         val manager = context.getSystemService(NotificationManager::class.java)
         try {
             ContextCompat.startForegroundService(context, Intent(context, WorkoutService::class.java).apply {
@@ -179,7 +183,7 @@ class RestTimerBackgroundTest {
             })
             awaitCondition { withContext(Dispatchers.Main) { ports.runtime().foregroundServiceActive } }
             withContext(Dispatchers.Main) {
-                timer.start(RestTimerState("", userId = userId, workoutId = session.id, templateId = session.templateId,
+                timer.start(RestTimerState("", userId = userId, workoutId = session.id, templateId = session.templateId ?: template.id,
                     exerciseId = exercise.id, setId = "integration-set-1", exerciseName = exercise.name,
                     durationMs = 120_000, deadlineElapsedMs = 0, bootIdentity = null, startedAtEpochMs = 0))
             }
@@ -229,7 +233,7 @@ class RestTimerBackgroundTest {
             observeFor(1500) {
                 assertFalse(manager.activeNotifications.any { it.id == NotificationChannels.REST_FINISHED_NOTIFICATION_ID })
             }
-            assertNotNull(repository.getActiveSession())
+            assertNotNull(sessions.state.value.snapshot)
             withContext(Dispatchers.Main) { assertFalse(ports.runtime().isAlertPlaying()) }
 
             withContext(Dispatchers.Main) {
@@ -257,7 +261,7 @@ class RestTimerBackgroundTest {
             withContext(Dispatchers.Main) { assertFalse(ports.runtime().isAlertPlaying()) }
         } finally {
             withContext(Dispatchers.Main) { timer.cancel("TEST_FINISHED") }
-            repository.cancelWorkout()
+            sessions.cancel(session.id)
             context.stopService(Intent(context, WorkoutService::class.java))
         }
     }

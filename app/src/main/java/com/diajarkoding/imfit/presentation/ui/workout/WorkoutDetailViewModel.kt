@@ -8,7 +8,6 @@ import androidx.lifecycle.viewModelScope
 import com.diajarkoding.imfit.domain.model.Exercise
 import com.diajarkoding.imfit.domain.model.TemplateExercise
 import com.diajarkoding.imfit.domain.model.WorkoutTemplate
-import com.diajarkoding.imfit.domain.repository.ExerciseRepository
 import com.diajarkoding.imfit.domain.repository.WorkoutRepository
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -60,7 +59,7 @@ class WorkoutDetailViewModel @Inject constructor(
             if (identity != null && initialized && _state.value.workout == null && observeJob?.isActive != true) loadWorkout()
         } }
         viewModelScope.launch { edits.changes.collect { change ->
-            if (change.templateId == workoutId && reads.auth.isCurrent(change.identity)) loadWorkout()
+            if (change.templateId == workoutId && reads.auth.isCurrent(change.identity)) loadWorkout(refreshSession = false)
         } }
     }
 
@@ -82,7 +81,9 @@ class WorkoutDetailViewModel @Inject constructor(
         loadWorkout()
     }
 
-    fun loadWorkout() {
+    fun loadWorkout() = loadWorkout(refreshSession = true)
+
+    private fun loadWorkout(refreshSession: Boolean) {
         val workoutId = workoutId ?: return
         observeJob?.cancel()
         observeJob = viewModelScope.launch {
@@ -90,17 +91,17 @@ class WorkoutDetailViewModel @Inject constructor(
             try {
                 val identity = reads.auth.capture().identity
                 val (snapshot, workout) = reads.template(workoutId)
-                val activeSession = workoutRepository.getActiveSession()
+                val activeSession = if (refreshSession) workoutRepository.getActiveSession() else null
                 kotlinx.coroutines.currentCoroutineContext().ensureActive()
                 if (!reads.auth.isCurrent(identity)) throw StaleAuthException()
                 source = snapshot
                 val isCurrentActive = activeSession?.templateId == workoutId
                 val hasAnyActiveSession = activeSession != null
                 _state.update { it.copy(
-                    workout = workout, 
-                    isLoading = false, 
-                    isWorkoutActive = hasAnyActiveSession,
-                    isCurrentWorkoutActive = isCurrentActive,
+                    workout = workout,
+                    isLoading = false,
+                    isWorkoutActive = if (refreshSession) hasAnyActiveSession else it.isWorkoutActive,
+                    isCurrentWorkoutActive = if (refreshSession) isCurrentActive else it.isCurrentWorkoutActive,
                     errorRes = null, refreshing = false, stale = false
                 ) }
             } catch (e: CancellationException) {
@@ -113,8 +114,19 @@ class WorkoutDetailViewModel @Inject constructor(
 
     fun endWorkout() {
         viewModelScope.launch {
-            workoutRepository.finishWorkout()
-            _state.update { it.copy(isWorkoutActive = false, workoutFinished = true) }
+            val identity = reads.auth.capture().identity
+            try {
+                val workoutId = workoutRepository.finishWorkout()
+                if (!reads.auth.isCurrent(identity)) throw StaleAuthException()
+                if (workoutId == null) {
+                    _state.update { it.copy(operationErrorRes = R.string.error_session_finish) }
+                } else {
+                    _state.update { it.copy(isWorkoutActive = false, isCurrentWorkoutActive = false, workoutFinished = true) }
+                }
+            } catch (cancelled: CancellationException) { throw cancelled }
+            catch (_: Exception) {
+                if (reads.auth.isCurrent(identity)) _state.update { it.copy(operationErrorRes = R.string.error_session_finish) }
+            }
         }
     }
 

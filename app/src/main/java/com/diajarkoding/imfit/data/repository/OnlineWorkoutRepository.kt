@@ -20,7 +20,6 @@ class OnlineWorkoutRepository @Inject constructor(
     private val sessions: OnlineSessionStore,
     private val templates: TemplateEditBridge,
 ) : WorkoutRepository {
-    override suspend fun getTemplates(userId: String): List<WorkoutTemplate> = error("Use remote template paging")
     override suspend fun getTemplateById(templateId: String) = reads.template(templateId).second
     override suspend fun createTemplate(userId: String, name: String, exercises: List<TemplateExercise>): WorkoutTemplate {
         require(reads.auth.capture().identity.ownerId == userId)
@@ -54,29 +53,25 @@ class OnlineWorkoutRepository @Inject constructor(
         val source = reads.readFor(identity, OnlineRpc.templateDetail(template.id))
         return sessions.start(source.id, source.revision).toDomain()
     }
-    override suspend fun getActiveSession() = sessions.reload()?.takeIf { it.status in setOf(SessionStatus.ACTIVE, SessionStatus.PAUSED) }?.toDomain()
+    override suspend fun getActiveSession() = sessions.reload()?.takeIf {
+        !it.reviewRequired && (it.effectiveStatus == SessionStatus.ACTIVE || it.effectiveStatus == SessionStatus.PAUSED)
+    }?.toDomain()
     override suspend fun getActiveSessionForTimer() = sessions.peek()?.toDomain()
     override suspend fun isActiveSessionForTimer(userId: String, workoutId: String): Boolean {
         if (reads.auth.capture().identity.ownerId != userId) return false
         return sessions.peek()?.id == workoutId
     }
-    override suspend fun mutateActiveSession(sessionId: String, transform: (WorkoutSession) -> WorkoutSession) = sessions.mutate(sessionId, transform).toDomain()
-    override suspend fun updateActiveSession(session: WorkoutSession): Unit = error("Whole session writes are forbidden; use versioned commands")
-    override fun requestCancelSession(sessionId: String): Unit = error("Await cancel acknowledgement before navigation")
-    override suspend fun finishWorkout(): WorkoutLog? {
-        val current = sessions.state.value.snapshot ?: return null
-        val receipt = sessions.finish(current.id)
-        return getWorkoutLogById(requireNotNull(receipt.workoutId))
+    override suspend fun finishWorkout(): String? {
+        val current = sessions.state.value.snapshot ?: sessions.reload() ?: return null
+        return requireNotNull(sessions.finish(current.id).workoutId)
     }
     override suspend fun cancelWorkout() {
-        // Already-terminal work is a no-op via the retained receipt; a cold store must confirm
-        // any remotely active session instead of pretending success without visibility.
         val state = sessions.state.value
-        val snapshot = state.snapshot
-        when {
-            snapshot != null && snapshot.status !in setOf(SessionStatus.ACTIVE, SessionStatus.PAUSED) -> return
-            snapshot != null -> sessions.cancel(snapshot.id)
-            else -> sessions.reload()?.takeIf { it.status in setOf(SessionStatus.ACTIVE, SessionStatus.PAUSED) }?.let { sessions.cancel(it.id) }
+        if (state.pendingRequestId != null) throw OnlineFailure(RemoteError.UnresolvedMutation)
+        val snapshot = state.snapshot ?: sessions.reload() ?: return
+        if (snapshot.reviewRequired) throw OnlineFailure(RemoteError.Conflict("SESSION_REVIEW_REQUIRED", null))
+        if (snapshot.effectiveStatus == SessionStatus.ACTIVE || snapshot.effectiveStatus == SessionStatus.PAUSED) {
+            sessions.cancel(snapshot.id)
         }
     }
     override suspend fun updateSessionRestOverride(seconds: Int) {
@@ -86,7 +81,6 @@ class OnlineWorkoutRepository @Inject constructor(
     }
     override suspend fun getSessionRestOverride(): Int? = sessions.peek()?.exercises?.map { it.restSeconds }?.distinct()?.singleOrNull()
 
-    override suspend fun getWorkoutLogs(userId: String): List<WorkoutLog> = error("Use bounded remote history")
     override suspend fun getWorkoutLogById(logId: String): WorkoutLog {
         val identity = reads.auth.capture().identity
         val detail = reads.readFor(identity, OnlineRpc.workoutDetail(logId))
@@ -104,8 +98,6 @@ class OnlineWorkoutRepository @Inject constructor(
         require(identity.ownerId == userId)
         return reads.readFor(identity, OnlineRpc.homeSummary()).lastWorkout?.let { getWorkoutLogById(it.id) }
     }
-    override suspend fun getLastExerciseLog(exerciseId: String): com.diajarkoding.imfit.domain.model.ExerciseLog? = error("Use provenance-aware prefill")
-    override suspend fun getLastWeightsForExercise(exerciseId: String, userId: String): Map<Int, Float> = error("Input defaults are required for prefill")
     override suspend fun getPrefillForExercise(exerciseId: String, userId: String, defaults: ExerciseInputDefaults): Map<Int, Pair<Float, Int>> {
         val identity = reads.auth.capture().identity
         require(identity.ownerId == userId)

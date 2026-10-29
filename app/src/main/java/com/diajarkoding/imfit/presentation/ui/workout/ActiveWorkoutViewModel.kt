@@ -1,41 +1,45 @@
 package com.diajarkoding.imfit.presentation.ui.workout
 
-import androidx.lifecycle.ViewModel
 import androidx.annotation.StringRes
-import com.diajarkoding.imfit.R
+import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
-import com.diajarkoding.imfit.domain.model.WorkoutSession
-import com.diajarkoding.imfit.domain.model.WorkoutSet
-import com.diajarkoding.imfit.domain.model.ExerciseLog
-import com.diajarkoding.imfit.domain.model.TemplateExercise
-import com.diajarkoding.imfit.domain.model.inputDefaults
-import com.diajarkoding.imfit.domain.model.addDefaultSet
-import com.diajarkoding.imfit.domain.model.appendExercises
-import com.diajarkoding.imfit.domain.model.removeIncompleteExercise
-import com.diajarkoding.imfit.domain.repository.ExerciseRepository
-import com.diajarkoding.imfit.domain.repository.AuthRepository
-import com.diajarkoding.imfit.domain.repository.WorkoutRepository
+import com.diajarkoding.imfit.R
 import com.diajarkoding.imfit.core.model.WorkoutTimerUpdate
-import com.diajarkoding.imfit.core.timer.RestTimerCoordinator
-import com.diajarkoding.imfit.core.timer.RestTimerState
-import com.diajarkoding.imfit.core.timer.TimerStatus
+import com.diajarkoding.imfit.core.network.NetworkMonitor
+import com.diajarkoding.imfit.core.timer.*
+import com.diajarkoding.imfit.data.remote.online.*
+import com.diajarkoding.imfit.domain.model.WorkoutSession
+import com.diajarkoding.imfit.domain.repository.AuthRepository
 import dagger.hilt.android.lifecycle.HiltViewModel
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
-import kotlinx.coroutines.flow.MutableStateFlow
-import kotlinx.coroutines.flow.MutableSharedFlow
-import kotlinx.coroutines.flow.SharedFlow
-import kotlinx.coroutines.flow.asStateFlow
-import kotlinx.coroutines.flow.asSharedFlow
-import kotlinx.coroutines.flow.update
+import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.withTimeout
-import kotlinx.coroutines.TimeoutCancellationException
-import kotlinx.coroutines.CancellationException
+import java.util.UUID
 import javax.inject.Inject
+import java.time.Instant
+import java.time.temporal.ChronoUnit
+import kotlinx.serialization.json.jsonPrimitive
+import kotlinx.serialization.json.contentOrNull
+
+enum class SessionEntryPhase { LOADING, BLOCKED, UNKNOWN, CONFIRMED }
 
 data class ActiveWorkoutState(
     val session: WorkoutSession? = null,
+    val confirmed: SessionSnapshot? = null,
+    val identity: AuthIdentity? = null,
+    val drafts: Map<SessionSetKey, SessionSetDraft> = emptyMap(),
+    val savePhase: SessionSavePhase = SessionSavePhase.RELOADING,
+    val entryPhase: SessionEntryPhase = SessionEntryPhase.LOADING,
+    val requiresVerification: Boolean = true,
+    val onlineHint: Boolean? = null,
+    val pendingRequestId: String? = null,
+    val reviewRecentOperations: Boolean = false,
+    val recentOperations: List<OperationReceipt> = emptyList(),
+    val recentHasMore: Boolean = false,
+    val recentLoading: Boolean = false,
+    val canRetryExerciseAddition: Boolean = false,
     val elapsedSeconds: Long = 0,
     val isRestTimerActive: Boolean = false,
     val restTimerSeconds: Int = 60,
@@ -55,391 +59,346 @@ data class ActiveWorkoutState(
     val isCancelling: Boolean = false,
     val isAddingExercises: Boolean = false,
     @StringRes val mutationErrorRes: Int? = null
-)
+) {
+    val actionsEnabled: Boolean get() = entryPhase == SessionEntryPhase.CONFIRMED && !requiresVerification &&
+        onlineHint != false && (savePhase == SessionSavePhase.CONFIRMED || savePhase == SessionSavePhase.DIRTY) &&
+        !isFinishing && !isCancelling && !isAddingExercises && confirmed?.reviewRequired == false &&
+        (confirmed?.effectiveStatus == SessionStatus.ACTIVE || confirmed?.effectiveStatus == SessionStatus.PAUSED)
+    val inputEnabled: Boolean get() = !requiresVerification && onlineHint != false && !isFinishing && !isCancelling &&
+        !isAddingExercises && confirmed?.reviewRequired == false &&
+        (confirmed?.effectiveStatus == SessionStatus.ACTIVE || confirmed?.effectiveStatus == SessionStatus.PAUSED) &&
+        (savePhase == SessionSavePhase.CONFIRMED || savePhase == SessionSavePhase.DIRTY || savePhase == SessionSavePhase.SAVING)
+    val unconfirmed: Boolean get() = drafts.isNotEmpty() || pendingRequestId != null || requiresVerification || savePhase != SessionSavePhase.CONFIRMED
+}
 
 @HiltViewModel
 class ActiveWorkoutViewModel @Inject constructor(
-    private val workoutRepository: WorkoutRepository,
+    private val sessions: OnlineSessionStore,
     private val authRepository: AuthRepository,
     private val timer: RestTimerCoordinator,
-    private val timerRuntime: com.diajarkoding.imfit.core.timer.RestTimerAndroidRuntime,
-    private val exerciseRepository: ExerciseRepository,
-    private val remoteReads: com.diajarkoding.imfit.data.remote.online.RemoteReadGateway
+    private val timerRuntime: RestTimerAndroidRuntime,
+    private val remoteReads: RemoteReadGateway,
+    network: NetworkMonitor
 ) : ViewModel() {
-
     private val _state = MutableStateFlow(ActiveWorkoutState())
     val state = _state.asStateFlow()
-
     private val _workoutTimerUpdates = MutableSharedFlow<WorkoutTimerUpdate>(replay = 1)
-    val workoutTimerUpdates: SharedFlow<WorkoutTimerUpdate> = _workoutTimerUpdates.asSharedFlow()
-    
-    private var elapsedTimeJob: Job? = null
-    private var started = false
-    private var sessionRevision = 0L
+    val workoutTimerUpdates = _workoutTimerUpdates.asSharedFlow()
     val restState = timer.state
+    private var entryJob: Job? = null
+    private var entered = false
+    private var template: String? = null
+    private var target: String? = null
+    private var allowCreate = true
+    private var recentJob: Job? = null
+    private var recentFrom: String? = null
+    private var recentUntil: String? = null
+    private var recentCursor: String? = null
+    private data class PendingRest(val identity: AuthIdentity, val sessionId: String, val key: SessionSetKey)
+    private var pendingRest: PendingRest? = null
+    private var selectedAddition: Pair<String, List<String>>? = null
+    private var consumeAddition: (() -> Unit)? = null
 
-    fun extendRest() { viewModelScope.launch { timer.extend() } }
-    fun reduceRest() { viewModelScope.launch { timer.reduce() } }
-    fun refreshTimerCapabilities() {
-        _state.update { it.copy(fullScreenAlarmAllowed = timerRuntime.fullScreenIntentAvailable(),
-            restLimited = timerRuntime.capabilityIssue() != null) }
-        viewModelScope.launch { timer.capabilitiesChanged(source = "ui_resume") }
-    }
-    fun timerSettingsIntent() = timerRuntime.capabilitySettingsIntent()
-    fun setRestSoundEnabled(enabled: Boolean) {
-        timerRuntime.setSoundEnabled(enabled)
-        _state.update { it.copy(restSoundEnabled = enabled) }
-    }
-    fun setRestVibrationEnabled(enabled: Boolean) {
-        timerRuntime.setVibrationEnabled(enabled)
-        _state.update { it.copy(restVibrationEnabled = enabled) }
-    }
     init {
         _state.update { it.copy(restSoundEnabled = timerRuntime.soundEnabled(), restVibrationEnabled = timerRuntime.vibrationEnabled(),
             fullScreenAlarmAllowed = timerRuntime.fullScreenIntentAvailable()) }
         viewModelScope.launch {
-            timer.state.collect { rest ->
-                _state.update { it.copy(
-                    isRestTimerActive = rest?.status == TimerStatus.RUNNING,
-                    restTimerSeconds = rest?.remainingSeconds(android.os.SystemClock.elapsedRealtime()) ?: 0,
-                    restTimerExerciseName = rest?.exerciseName
-                ) }
-            }
-        }
-    }
-
-    fun startWorkout(templateId: String, expectedSessionId: String? = null) {
-        if (started) return
-        started = true
-        viewModelScope.launch {
-            // First check for an existing active session
-            val existingSession = try {
-                withTimeout(2500) { workoutRepository.getActiveSessionForTimer() }
-            } catch (e: TimeoutCancellationException) {
-                _state.update { it.copy(timerError = true) }
-                return@launch
-            } catch (e: CancellationException) {
-                throw e
-            } catch (e: Exception) {
-                _state.update { it.copy(timerError = true) }
-                return@launch
-            }
-            timer.reconcile()
-            if (expectedSessionId != null && existingSession?.id != expectedSessionId) {
-                _state.update { it.copy(sessionEnded = true) }
-                return@launch
-            }
-            
-            if (existingSession != null) {
-                // Restore existing session - preserve all data including completed sets
-                android.util.Log.d("ActiveWorkoutVM", "Restoring existing session: ${existingSession.id}")
-                
-                // Restore session rest override if available
-                val sessionOverride = workoutRepository.getSessionRestOverride()
-                
-                _state.update { 
-                    it.copy(
-                        session = existingSession, 
-                        isPaused = existingSession.isPaused,
-                        sessionRestOverride = sessionOverride
-                    ) 
+            sessions.state.collect { current ->
+                val terminal = current.snapshot?.takeIf { it.effectiveStatus == SessionStatus.COMPLETED || it.effectiveStatus == SessionStatus.CANCELLED }
+                if (terminal != null && _state.value.confirmed?.version != terminal.version) {
+                    try { timer.cancel("SESSION_TERMINAL") }
+                    catch (cancelled: CancellationException) { throw cancelled }
+                    catch (_: Exception) { _state.update { it.copy(timerError = true) } }
                 }
-                
-                startElapsedTimeCounter()
-                return@launch
-            }
-            
-            // No existing session - create a new one
-            // G3 bounded read only. The legacy session/timer engine is intentionally unchanged until G4/G5.
-            val template = remoteReads.template(templateId).second
-            
-            val session = workoutRepository.startWorkout(template)
-            
-            // Repository commits defaults/prefill before exposing the session.
-            _state.update { it.copy(session = session) }
-
-            startElapsedTimeCounter()
-        }
-    }
-
-
-    private fun startElapsedTimeCounter() {
-        elapsedTimeJob?.cancel()
-        elapsedTimeJob = viewModelScope.launch {
-            while (true) {
-                try {
-                    val revision = sessionRevision
-                    val session = withTimeout(2500) { workoutRepository.getActiveSessionForTimer() }
-                    if (session == null) {
-                        if (_state.value.session != null && !_state.value.isFinishing && !_state.value.isCancelling) {
-                            _state.update { it.copy(session = null, sessionEnded = true, isRestTimerActive = false) }
-                            return@launch
-                        }
-                        delay(1000)
-                        continue
+                _state.update { old ->
+                    val changedOwner = old.identity != null && old.identity != current.identity
+                    val base = if (changedOwner) ActiveWorkoutState(onlineHint = old.onlineHint) else old
+                    if (changedOwner) {
+                        entryJob?.cancel()
+                        recentJob?.cancel()
+                        entered = false
+                        recentCursor = null
+                        recentFrom = null
+                        recentUntil = null
+                        pendingRest = null
+                        selectedAddition = null
+                        consumeAddition = null
                     }
-                    // Use actualElapsedMs which excludes paused time.
-                    val elapsed = session.actualElapsedMs / 1000
-                    timer.reconcile(source = "ui_ticker")
-                    if (revision != sessionRevision || _state.value.isCancelling) continue
+                    val snapshot = current.snapshot
+                    base.copy(identity = current.identity, confirmed = snapshot,
+                        session = if (snapshot === base.confirmed) base.session else snapshot?.toDomain(),
+                        drafts = current.drafts, savePhase = current.savePhase, requiresVerification = current.requiresVerification,
+                        pendingRequestId = current.pendingRequestId,
+                        mutationErrorRes = if (current.failure is RemoteError.Validation) R.string.error_session_save else base.mutationErrorRes,
+                        isPaused = snapshot?.effectiveStatus == SessionStatus.PAUSED,
+                        entryPhase = when {
+                            current.recovery != null -> SessionEntryPhase.BLOCKED
+                            current.loaded && snapshot == null && allowCreate && !entered -> SessionEntryPhase.UNKNOWN
+                            current.loaded && !current.requiresVerification -> SessionEntryPhase.CONFIRMED
+                            current.busy -> SessionEntryPhase.LOADING
+                            else -> SessionEntryPhase.UNKNOWN
+                        },
+                        workoutLogId = snapshot?.completedWorkoutId ?: base.workoutLogId,
+                        sessionEnded = base.sessionEnded || snapshot?.effectiveStatus == SessionStatus.CANCELLED)
+                }
+            }
+        }
+        viewModelScope.launch {
+            var wasOffline = false
+            network.networkStatus.collect { online ->
+                sessions.updateConnectivity(online)
+                _state.update { it.copy(onlineHint = online) }
+                if (online && wasOffline && template != null) reload()
+                wasOffline = !online
+            }
+        }
+        viewModelScope.launch {
+            timer.state.collect { rest -> _state.update { it.copy(
+                isRestTimerActive = rest?.status == TimerStatus.RUNNING,
+                restTimerSeconds = rest?.remainingSeconds(android.os.SystemClock.elapsedRealtime()) ?: 0,
+                restTimerExerciseName = rest?.exerciseName) } }
+        }
+        viewModelScope.launch {
+            while (true) {
+                // Pure memory projection. A cold/unknown store is never treated as authoritative absence.
+                val session = _state.value.session
+                if (session != null) {
+                    val elapsed = (session.actualElapsedMs / 1000).coerceAtLeast(0)
                     val rest = timer.state.value?.takeIf { it.workoutId == session.id }
-                    _state.update { it.copy(elapsedSeconds = elapsed.coerceAtLeast(0), session = session, isPaused = session.isPaused,
+                    _state.update { it.copy(elapsedSeconds = elapsed, timerError = timer.error.value != null,
                         isRestTimerActive = rest?.status == TimerStatus.RUNNING,
                         restTimerSeconds = rest?.remainingSeconds(android.os.SystemClock.elapsedRealtime()) ?: 0,
                         restTimerExerciseName = rest?.exerciseName,
-                        restLimited = timerRuntime.capabilityIssue() != null ||
-                            (rest != null && rest.status == TimerStatus.RUNNING && rest.schedulingMode != com.diajarkoding.imfit.core.timer.SchedulingMode.EXACT),
-                        timerError = timer.error.value != null) }
-                    _workoutTimerUpdates.emit(
-                        WorkoutTimerUpdate(
-                            workoutName = session.templateName,
-                            elapsedSeconds = elapsed,
-                            completedSets = session.totalCompletedSets,
-                            totalSets = session.totalSets,
-                            totalVolume = session.totalVolume,
-                            isPaused = _state.value.isPaused
-                        )
-                    )
-                } catch (e: TimeoutCancellationException) {
-                    _state.update { it.copy(timerError = true) }
-                } catch (e: CancellationException) {
-                    throw e
-                } catch (e: Exception) {
-                    _state.update { it.copy(timerError = true) }
+                        restLimited = timerRuntime.capabilityIssue() != null) }
+                    _workoutTimerUpdates.emit(WorkoutTimerUpdate(session.templateName, elapsed, session.totalCompletedSets,
+                        session.totalSets, session.totalVolume, session.isPaused))
                 }
                 delay(1000)
             }
         }
     }
 
-    /**
-     * Sets session-level rest time override.
-     * This value will be used for ALL exercises during this session.
-     */
-    fun setSessionRestOverride(seconds: Int) {
-        viewModelScope.launch {
-            _state.update { it.copy(sessionRestOverride = seconds) }
-            workoutRepository.updateSessionRestOverride(seconds)
-        }
-        android.util.Log.d("ActiveWorkoutVM", "Set session rest override: $seconds seconds")
-    }
-    
-    /**
-     * Gets the current rest time configuration.
-     * Returns session override if set, otherwise returns the default from first exercise.
-     */
-    fun getCurrentRestTime(): Int {
-        val override = _state.value.sessionRestOverride
-        if (override != null) return override
-        
-        // Return first exercise's rest time as default display value
-        return _state.value.session?.exerciseLogs?.firstOrNull()?.restSeconds ?: 60
-    }
-
-    private fun publishSession(session: WorkoutSession) {
-        sessionRevision++
-        _state.update { it.copy(session = session, isPaused = session.isPaused) }
-    }
-
-    private fun editExercise(index: Int, transform: (ExerciseLog) -> ExerciseLog) {
-        val snapshot = _state.value
-        if (snapshot.isFinishing || snapshot.isCancelling) return
-        val session = snapshot.session ?: return
-        val exerciseId = session.exerciseLogs.getOrNull(index)?.exercise?.id ?: return
-        viewModelScope.launch {
+    fun startWorkout(templateId: String, expectedSessionId: String? = null, allowCreate: Boolean = true) {
+        if (entered || entryJob?.isActive == true) return
+        template = templateId
+        target = expectedSessionId
+        this.allowCreate = allowCreate
+        entryJob = viewModelScope.launch {
+            _state.update { it.copy(entryPhase = SessionEntryPhase.LOADING) }
             try {
-                workoutRepository.mutateActiveSession(session.id) { current ->
-                    current.copy(exerciseLogs = current.exerciseLogs.map { if (it.exercise.id == exerciseId) transform(it) else it })
-                }?.let(::publishSession)
-            } catch (e: CancellationException) { throw e }
-            catch (e: Exception) { android.util.Log.e("ActiveWorkoutVM", "Session save failed", e); _state.update { it.copy(mutationErrorRes = R.string.error_session_save) } }
-        }
-    }
-
-    fun updateRestTimer(exerciseIndex: Int, seconds: Int) = editExercise(exerciseIndex) { it.copy(restSeconds = seconds) }
-
-    fun updateSet(exerciseIndex: Int, setIndex: Int, weight: Float, reps: Int) = editExercise(exerciseIndex) { log ->
-        log.copy(sets = log.sets.mapIndexed { index, set ->
-            if (index == setIndex && !set.isCompleted) set.copy(weight = weight, reps = reps) else set
-        })
-    }
-
-    fun completeSet(exerciseIndex: Int, setIndex: Int) {
-        val snapshot = _state.value
-        if (snapshot.isPaused || snapshot.isFinishing || snapshot.isCancelling) return
-        val session = snapshot.session ?: return
-        val exercise = session.exerciseLogs.getOrNull(exerciseIndex) ?: return
-        val setNumber = exercise.sets.getOrNull(setIndex)?.setNumber ?: return
-        viewModelScope.launch {
-            try {
-                var completed: WorkoutSet? = null
-                val updated = workoutRepository.mutateActiveSession(session.id) { current ->
-                    if (current.isPaused) current else current.copy(exerciseLogs = current.exerciseLogs.map { log ->
-                        if (log.exercise.id != exercise.exercise.id) log else log.copy(sets = log.sets.map { set ->
-                            if (set.setNumber == setNumber && !set.isCompleted && set.weight > 0 && set.reps > 0) {
-                                completed = set.copy(isCompleted = true); completed!!
-                            } else set
-                        })
-                    })
-                } ?: return@launch
-                publishSession(updated)
-                val set = completed ?: return@launch
-                val restSeconds = _state.value.sessionRestOverride ?: updated.exerciseLogs.first { it.exercise.id == exercise.exercise.id }.restSeconds
-                val userId = authRepository.getLocalUserId() ?: return@launch
-                timer.start(RestTimerState(timerId = "", userId = userId, workoutId = session.id, templateId = session.templateId,
-                    exerciseId = exercise.exercise.id, setId = "${session.id}:${exercise.exercise.id}:${set.setNumber}",
-                    exerciseName = exercise.exercise.name, durationMs = restSeconds.toLong() * 1000,
-                    deadlineElapsedMs = 0, bootIdentity = null, startedAtEpochMs = 0))
-                // The coordinator collector owns the displayed deadline, including rejected starts.
-            } catch (e: CancellationException) { throw e }
-            catch (e: Exception) { android.util.Log.e("ActiveWorkoutVM", "Set completion failed", e); _state.update { it.copy(mutationErrorRes = R.string.error_set_complete) } }
-        }
-    }
-
-    fun addSet(exerciseIndex: Int) = editExercise(exerciseIndex) { log ->
-        log.addDefaultSet()
-    }
-
-    fun removeSet(exerciseIndex: Int, setIndex: Int) = editExercise(exerciseIndex) { log ->
-        if (log.sets.size <= 1 || log.sets.getOrNull(setIndex)?.isCompleted != false) log
-        else log.copy(sets = log.sets.filterIndexed { index, _ -> index != setIndex })
-    }
-
-    fun removeExercise(exerciseId: String) {
-        val snapshot = _state.value
-        if (snapshot.isFinishing || snapshot.isCancelling) return
-        val session = snapshot.session ?: return
-        viewModelScope.launch {
-            try { workoutRepository.mutateActiveSession(session.id) { it.removeIncompleteExercise(exerciseId) }?.let(::publishSession) }
-            catch (e: CancellationException) { throw e }
-            catch (e: Exception) { android.util.Log.e("ActiveWorkoutVM", "Exercise removal failed", e); _state.update { it.copy(mutationErrorRes = R.string.error_exercise_remove) } }
-        }
-    }
-
-    fun addExercisesByIds(sessionId: String, exerciseIds: List<String>, onConsumed: () -> Unit) {
-        if (_state.value.isAddingExercises || _state.value.isFinishing || _state.value.isCancelling) return
-        _state.update { it.copy(isAddingExercises = true, mutationErrorRes = null) }
-        viewModelScope.launch {
-            try {
-                val userId = authRepository.getLocalUserId() ?: return@launch
-                val additions = exerciseIds.distinct().mapNotNull { id ->
-                    remoteReads.exercises(listOf(id)).singleOrNull()?.let { exercise ->
-                        val config = TemplateExercise(exercise)
-                        val lastPerf = workoutRepository.getPrefillForExercise(id, userId, config.inputDefaults())
-                        ExerciseLog(
-                            exercise = exercise,
-                            sets = (1..config.sets).map { setNumber ->
-                                val last = lastPerf[setNumber]
-                                WorkoutSet(
-                                    setNumber = setNumber,
-                                    weight = last?.first ?: 0f,
-                                    reps = last?.second ?: config.reps,
-                                    isCompleted = false
-                                )
-                            },
-                            restSeconds = config.restSeconds,
-                            inputDefaults = config.inputDefaults()
-                        )
-                    }
+                val identity = remoteReads.auth.capture().identity
+                val existing = sessions.reload(expectedSessionId)
+                if (existing == null && expectedSessionId != null) {
+                    // Targeted authoritative absence may close the route; never start the template again.
+                    _state.update { it.copy(sessionEnded = true) }
+                } else if (existing == null && allowCreate) {
+                    val revision = remoteReads.template(templateId).first.revision
+                    if (!remoteReads.auth.isCurrent(identity)) throw StaleAuthException()
+                    sessions.start(templateId, revision)
+                } else if (existing == null) {
+                    _state.update { it.copy(reviewRecentOperations = true, entryPhase = SessionEntryPhase.UNKNOWN) }
                 }
-                workoutRepository.mutateActiveSession(sessionId) { it.appendExercises(additions) }?.let(::publishSession)
-                onConsumed()
-            } catch (e: CancellationException) { throw e }
-            catch (e: Exception) { android.util.Log.e("ActiveWorkoutVM", "Exercise append failed", e); _state.update { it.copy(mutationErrorRes = R.string.error_exercise_add) } }
-            finally { _state.update { it.copy(isAddingExercises = false) } }
+                entered = true
+                timer.reconcile(source = "ui_entry")
+            } catch (cancelled: CancellationException) { throw cancelled }
+            catch (_: LegacyStartBlocked) { _state.update { it.copy(entryPhase = SessionEntryPhase.BLOCKED) } }
+            catch (_: Exception) { _state.update { it.copy(entryPhase = SessionEntryPhase.UNKNOWN, requiresVerification = true) } }
         }
     }
 
-    fun clearMutationError() { _state.update { it.copy(mutationErrorRes = null) } }
-
-    fun skipRestTimer() {
-        viewModelScope.launch {
-            timer.skip()
-            _state.update { it.copy(isRestTimerActive = false, restTimerExerciseName = null) }
+    fun reload() {
+        if (entryJob?.isActive == true) return
+        entryJob = viewModelScope.launch {
+            try {
+                val found = sessions.reload(target ?: _state.value.confirmed?.id)
+                entered = found != null || !allowCreate || target != null
+                if (found == null && target != null) _state.update { it.copy(sessionEnded = true) }
+                if (found == null && !allowCreate) _state.update { it.copy(reviewRecentOperations = true) }
+                timer.reconcile(source = "ui_reload")
+            } catch (cancelled: CancellationException) { throw cancelled }
+            catch (_: Exception) { _state.update { it.copy(entryPhase = SessionEntryPhase.UNKNOWN, requiresVerification = true) } }
         }
     }
-
-    fun pauseWorkout() {
-        viewModelScope.launch {
-            val allowed = timer.whenRestInactive { persistWorkoutPause() }
-            if (!allowed) _state.update { it.copy(pauseErrorRes = R.string.error_rest_pause) }
+    fun retryEntry() { if (!entered) template?.let { startWorkout(it, target, allowCreate) } else reload() }
+    fun resolvePending() = action(R.string.error_session_save) {
+        sessions.resolvePending()?.let { restoreConfirmedRest() }
+    }
+    fun retryPending() = action(R.string.error_session_save) {
+        sessions.retry()
+        restoreConfirmedRest()
+    }
+    fun useServer() = action(R.string.error_session_save) { sessions.discardDrafts(requireSessionId()) }
+    fun reapplyDrafts() = action(R.string.error_session_save) { sessions.reapplyDrafts(requireSessionId()) }
+    fun acknowledgeExpiry() = action(R.string.error_session_save) { sessions.acknowledgeExpiry(requireSessionId()) }
+    fun loadRecentOperations() {
+        if (recentJob?.isActive == true) return
+        recentJob = viewModelScope.launch {
+            val identity = remoteReads.auth.capture().identity
+            _state.update { it.copy(recentLoading = true) }
+            try {
+                if (recentUntil == null) {
+                    val now = Instant.now()
+                    recentUntil = now.toString()
+                    recentFrom = now.minus(90, ChronoUnit.DAYS).toString()
+                }
+                val page = remoteReads.readFor(identity, OnlineRpc.recentOperations(requireNotNull(recentFrom),
+                    requireNotNull(recentUntil), recentCursor, 20))
+                if (!remoteReads.auth.isCurrent(identity)) return@launch
+                recentCursor = page.pageInfo.nextCursor
+                _state.update { it.copy(recentOperations = (it.recentOperations + page.data).distinctBy { receipt -> receipt.requestId },
+                    recentHasMore = page.pageInfo.hasMore) }
+            } catch (cancelled: CancellationException) { throw cancelled }
+            catch (_: Exception) { if (remoteReads.auth.isCurrent(identity)) _state.update { it.copy(mutationErrorRes = R.string.error_session_save) } }
+            finally { if (remoteReads.auth.isCurrent(identity)) _state.update { it.copy(recentLoading = false) } }
         }
     }
-    private suspend fun persistWorkoutPause() {
-        val session = _state.value.session ?: return
-        workoutRepository.mutateActiveSession(session.id) { current ->
-            if (current.isPaused) current else current.copy(isPaused = true, lastPauseTime = System.currentTimeMillis())
-        }?.let(::publishSession)
-    }
-    
-    fun resumeWorkout() {
-        viewModelScope.launch {
-            val currentSession = _state.value.session ?: return@launch
-            
-            workoutRepository.mutateActiveSession(currentSession.id) { current ->
-                if (!current.isPaused) current else current.copy(isPaused = false, lastPauseTime = null,
-                    totalPausedTimeMs = current.totalPausedTimeMs + (System.currentTimeMillis() - (current.lastPauseTime ?: System.currentTimeMillis())).coerceAtLeast(0))
-            }?.let(::publishSession)
+    fun reviewOperation(receipt: OperationReceipt) = action(R.string.error_session_save) {
+        check(_state.value.recentOperations.any { it.requestId == receipt.requestId })
+        if (receipt.resourceType == "SESSION") {
+            target = receipt.resourceId
+            sessions.reload(receipt.resourceId)
+        } else if (receipt.resourceType == "WORKOUT") {
+            val id = receipt.result["workout_id"]?.jsonPrimitive?.contentOrNull ?: error("Missing workout receipt")
+            _state.update { it.copy(workoutLogId = id) }
         }
     }
-    
-    fun clearPauseError() {
-        _state.update { it.copy(pauseErrorRes = null) }
-    }
-
-    fun showCancelDialog() {
-        _state.update { it.copy(showCancelDialog = true) }
-    }
-
-    fun dismissCancelDialog() {
-        _state.update { it.copy(showCancelDialog = false) }
-    }
-
-    fun cancelWorkout(): Boolean {
-        val snapshot = _state.value
-        if (snapshot.isFinishing || snapshot.isCancelling) return false
-        val session = snapshot.session ?: return false
-        _state.update { it.copy(isCancelling = true, showCancelDialog = false, isRestTimerActive = false) }
+    private fun requireSessionId() = requireNotNull(_state.value.confirmed?.id)
+    private fun action(@StringRes error: Int, block: suspend (AuthIdentity) -> Unit) {
+        val identity = sessions.state.value.identity ?: return
         viewModelScope.launch {
             try {
-                workoutRepository.cancelWorkout()
+                if (!remoteReads.auth.isCurrent(identity)) return@launch
+                block(identity)
+            } catch (cancelled: CancellationException) { throw cancelled }
+            catch (_: Exception) { if (remoteReads.auth.isCurrent(identity)) _state.update { it.copy(mutationErrorRes = error) } }
+        }
+    }
+    fun updateSet(key: SessionSetKey, weight: String, reps: String) {
+        if (!_state.value.inputEnabled) return
+        try { sessions.editSet(requireSessionId(), key, weight, reps) }
+        catch (_: Exception) { _state.update { it.copy(mutationErrorRes = R.string.error_session_save) } }
+    }
+    fun completeSet(key: SessionSetKey) = action(R.string.error_set_complete) { identity ->
+        val id = requireSessionId()
+        pendingRest = PendingRest(identity, id, key)
+        sessions.command(id, SessionCommand.CompleteSet(key.exerciseLogId, key.setId))
+        restoreConfirmedRest()
+    }
+    private suspend fun restoreConfirmedRest() {
+        val request = pendingRest ?: return
+        val confirmed = sessions.state.value.snapshot ?: return
+        if (!remoteReads.auth.isCurrent(request.identity) || confirmed.id != request.sessionId) return
+        val exercise = confirmed.exercises.singleOrNull { it.id == request.key.exerciseLogId } ?: run { pendingRest = null; return }
+        val set = exercise.sets.singleOrNull { it.id == request.key.setId }
+        if (set?.isCompleted != true) { pendingRest = null; return }
+        if (exercise.restSeconds > 0 && confirmed.effectiveStatus == SessionStatus.ACTIVE && !confirmed.reviewRequired) {
+            val userId = authRepository.getLocalUserId() ?: return
+            if (!remoteReads.auth.isCurrent(request.identity)) return
+            timer.start(RestTimerState(timerId = "", userId = userId, workoutId = request.sessionId, templateId = confirmed.templateId.orEmpty(),
+                exerciseId = exercise.exerciseId, setId = set.id, exerciseName = exercise.name,
+                durationMs = exercise.restSeconds * 1000L, deadlineElapsedMs = 0, bootIdentity = null, startedAtEpochMs = 0))
+        }
+        pendingRest = null
+    }
+    fun addSet(exerciseLogId: String) = command(SessionCommand.AddSet(exerciseLogId, UUID.randomUUID().toString()))
+    fun removeSet(key: SessionSetKey) = command(SessionCommand.RemoveSet(key.exerciseLogId, key.setId))
+    fun removeExercise(exerciseLogId: String) = command(SessionCommand.RemoveExercise(exerciseLogId))
+    fun updateRestTimer(exerciseLogId: String, seconds: Int) = command(SessionCommand.SetRestSeconds(exerciseLogId, seconds))
+    private fun command(command: SessionCommand) = action(R.string.error_session_save) { sessions.command(requireSessionId(), command) }
+    fun addExercisesByIds(sessionId: String, exerciseIds: List<String>, onConsumed: () -> Unit) {
+        if (!_state.value.actionsEnabled) return
+        val identity = sessions.state.value.identity ?: return
+        selectedAddition = sessionId to exerciseIds.distinct()
+        consumeAddition = onConsumed
+        _state.update { it.copy(isAddingExercises = true, canRetryExerciseAddition = false) }
+        viewModelScope.launch {
+            try {
+                for (id in exerciseIds.distinct()) {
+                    if (!remoteReads.auth.isCurrent(identity)) return@launch
+                    val current = sessions.state.value.snapshot ?: error("Missing confirmed session")
+                    check(current.id == sessionId)
+                    if (current.exercises.any { it.exerciseId == id }) continue
+                    sessions.command(sessionId, SessionCommand.AddExercise(UUID.randomUUID().toString(), id))
+                }
+                if (remoteReads.auth.isCurrent(identity)) {
+                    selectedAddition = null
+                    consumeAddition = null
+                    onConsumed()
+                }
+            } catch (cancelled: CancellationException) { throw cancelled }
+            catch (_: Exception) { if (remoteReads.auth.isCurrent(identity)) _state.update { it.copy(mutationErrorRes = R.string.error_exercise_add, canRetryExerciseAddition = true) } }
+            finally { if (remoteReads.auth.isCurrent(identity)) _state.update { it.copy(isAddingExercises = false) } }
+        }
+    }
+    fun retryExerciseAddition() {
+        val selection = selectedAddition ?: return
+        addExercisesByIds(selection.first, selection.second, consumeAddition ?: return)
+    }
+    fun setSessionRestOverride(seconds: Int) = action(R.string.error_session_save) { identity ->
+        require(seconds in 0..600)
+        val snapshot = sessions.state.value.snapshot ?: error("Missing confirmed session")
+        // Publish a common override only after every receipt; partial failure remains visible per exercise.
+        _state.update { it.copy(sessionRestOverride = null) }
+        for (exercise in snapshot.exercises) {
+            if (!remoteReads.auth.isCurrent(identity)) return@action
+            if (exercise.restSeconds != seconds) sessions.command(snapshot.id, SessionCommand.SetRestSeconds(exercise.id, seconds))
+        }
+        if (remoteReads.auth.isCurrent(identity)) _state.update { it.copy(sessionRestOverride = seconds) }
+    }
+    fun getCurrentRestTime() = _state.value.confirmed?.exercises?.map { it.restSeconds }?.distinct()?.singleOrNull() ?: 60
+    fun pauseWorkout() = action(R.string.error_rest_pause) { identity ->
+        if (!timer.whenRestInactive { sessions.command(requireSessionId(), SessionCommand.Pause) })
+            if (remoteReads.auth.isCurrent(identity)) _state.update { it.copy(pauseErrorRes = R.string.error_rest_pause) }
+    }
+    fun resumeWorkout() = command(SessionCommand.Resume)
+    fun cancelWorkout(): Boolean {
+        val id = _state.value.confirmed?.id ?: return false
+        if (_state.value.isFinishing || _state.value.isCancelling) return false
+        val identity = sessions.state.value.identity ?: return false
+        _state.update { it.copy(isCancelling = true, showCancelDialog = false) }
+        viewModelScope.launch {
+            try {
+                if (!remoteReads.auth.isCurrent(identity)) return@launch
+                sessions.cancel(id)
+                if (!remoteReads.auth.isCurrent(identity)) return@launch
                 timer.cancel("SESSION_CANCELLED")
-                elapsedTimeJob?.cancel()
-                _state.update { it.copy(sessionEnded = true, isCancelling = false) }
-            } catch (e: CancellationException) { throw e }
-            catch (e: Exception) {
-                android.util.Log.e("ActiveWorkoutVM", "Session cancel failed", e)
-                _state.update { it.copy(isCancelling = false, mutationErrorRes = R.string.error_session_cancel) }
-            }
+                _state.update { it.copy(sessionEnded = true) }
+            } catch (cancelled: CancellationException) { throw cancelled }
+            catch (_: Exception) { if (remoteReads.auth.isCurrent(identity)) _state.update { it.copy(mutationErrorRes = R.string.error_session_cancel) } }
+            finally { if (remoteReads.auth.isCurrent(identity)) _state.update { it.copy(isCancelling = false) } }
         }
         return true
     }
-
     fun finishWorkout() {
-        if (_state.value.isFinishing || _state.value.isCancelling) return
-        
+        if (!_state.value.actionsEnabled) return
+        val id = _state.value.confirmed?.id ?: return
+        val identity = sessions.state.value.identity ?: return
+        _state.update { it.copy(isFinishing = true) }
         viewModelScope.launch {
-            _state.update { it.copy(isFinishing = true) }
-            elapsedTimeJob?.cancel()
-
             try {
-                val log = workoutRepository.finishWorkout()
-                if (log != null) _state.update { it.copy(workoutLogId = log.id) }
-                else {
-                    _state.update { it.copy(isFinishing = false, mutationErrorRes = R.string.error_session_finish) }
-                    startElapsedTimeCounter()
-                }
-            } catch (e: CancellationException) { throw e }
-            catch (e: Exception) {
-                android.util.Log.e("ActiveWorkoutVM", "Session finish failed", e)
-                _state.update { it.copy(isFinishing = false, mutationErrorRes = R.string.error_session_finish) }
-                startElapsedTimeCounter()
-            }
+                if (!remoteReads.auth.isCurrent(identity)) return@launch
+                val receipt = sessions.finish(id)
+                if (!remoteReads.auth.isCurrent(identity)) return@launch
+                val workoutId = requireNotNull(receipt.workoutId)
+                timer.cancel("SESSION_FINISHED")
+                _state.update { it.copy(workoutLogId = workoutId) }
+            } catch (cancelled: CancellationException) { throw cancelled }
+            catch (_: Exception) { if (remoteReads.auth.isCurrent(identity)) _state.update { it.copy(mutationErrorRes = R.string.error_session_finish) } }
+            finally { if (remoteReads.auth.isCurrent(identity)) _state.update { it.copy(isFinishing = false) } }
         }
     }
-
-    override fun onCleared() {
-        super.onCleared()
-        elapsedTimeJob?.cancel()
+    fun showCancelDialog() { _state.update { it.copy(showCancelDialog = true) } }
+    fun dismissCancelDialog() { _state.update { it.copy(showCancelDialog = false) } }
+    fun clearMutationError() { _state.update { it.copy(mutationErrorRes = null) } }
+    fun clearPauseError() { _state.update { it.copy(pauseErrorRes = null) } }
+    fun skipRestTimer() = action(R.string.rest_storage_error) { timer.skip() }
+    fun extendRest() = action(R.string.rest_storage_error) { timer.extend() }
+    fun reduceRest() = action(R.string.rest_storage_error) { timer.reduce() }
+    fun refreshTimerCapabilities() {
+        _state.update { it.copy(fullScreenAlarmAllowed = timerRuntime.fullScreenIntentAvailable(), restLimited = timerRuntime.capabilityIssue() != null) }
+        action(R.string.rest_storage_error) { timer.capabilitiesChanged(source = "ui_resume") }
     }
+    fun timerSettingsIntent() = timerRuntime.capabilitySettingsIntent()
+    fun setRestSoundEnabled(enabled: Boolean) { timerRuntime.setSoundEnabled(enabled); _state.update { it.copy(restSoundEnabled = enabled) } }
+    fun setRestVibrationEnabled(enabled: Boolean) { timerRuntime.setVibrationEnabled(enabled); _state.update { it.copy(restVibrationEnabled = enabled) } }
 }

@@ -13,6 +13,12 @@ import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
+import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.TextButton
+import com.diajarkoding.imfit.data.remote.online.SessionSavePhase
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.testTag
@@ -44,6 +50,15 @@ fun ProfileScreen(
     onRecovery: () -> Unit = {},
 ) {
     val state by viewModel.state.collectAsStateWithLifecycle()
+    val session by viewModel.sessionState.collectAsStateWithLifecycle()
+    var confirmLogout by remember(session.identity) { mutableStateOf(false) }
+    if (confirmLogout) {
+        AlertDialog(onDismissRequest = { confirmLogout = false },
+            title = { Text(stringResource(R.string.session_leave_title)) },
+            text = { Text(stringResource(R.string.session_leave_message)) },
+            confirmButton = { TextButton(onClick = { confirmLogout = false; viewModel.logout(onLogout) }) { Text(stringResource(R.string.action_logout)) } },
+            dismissButton = { TextButton(onClick = { confirmLogout = false }) { Text(stringResource(R.string.session_stay)) } })
+    }
     RemoteRefreshBox(state.loading, viewModel::refresh, Modifier.fillMaxSize()) {
     ProfileScreenContent(
         state = ProgressState(userName = state.data?.name.orEmpty(), userEmail = state.data?.email.orEmpty(),
@@ -52,7 +67,12 @@ fun ProfileScreen(
         isDarkMode = isDarkMode,
         isIndonesian = isIndonesian,
         onNavigateBack = onNavigateBack,
-        onLogout = { viewModel.logout(onLogout) },
+        onLogout = {
+            if (session.drafts.isNotEmpty() || session.pendingRequestId != null || session.requiresVerification ||
+                session.savePhase in setOf(SessionSavePhase.UNKNOWN, SessionSavePhase.RESOLVING, SessionSavePhase.CONFLICT))
+                confirmLogout = true
+            else viewModel.logout(onLogout)
+        },
         onToggleTheme = onToggleTheme,
         onToggleLanguage = onToggleLanguage,
         onRetry = viewModel::refresh,

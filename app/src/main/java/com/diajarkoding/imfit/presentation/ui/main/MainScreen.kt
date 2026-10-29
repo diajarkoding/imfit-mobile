@@ -45,7 +45,6 @@ import androidx.navigation3.runtime.rememberSaveableStateHolderNavEntryDecorator
 import androidx.navigation3.ui.NavDisplay
 import com.diajarkoding.imfit.R
 import com.diajarkoding.imfit.presentation.components.common.ImfitMainAppBar
-import com.diajarkoding.imfit.presentation.components.common.SyncProgressDialog
 import com.diajarkoding.imfit.presentation.ui.exercise.ExerciseBrowserScreen
 import com.diajarkoding.imfit.presentation.ui.home.HomeScreen
 import com.diajarkoding.imfit.presentation.ui.home.HomeViewModel
@@ -81,7 +80,8 @@ fun MainScreen(
     onNavigateToWorkoutHistory: (LocalDate) -> Unit = {},
     onNavigateToYearlyCalendar: (java.time.YearMonth) -> Unit = {},
     onNavigateToProfile: () -> Unit = {},
-    homeViewModel: HomeViewModel = hiltViewModel()
+    homeViewModel: HomeViewModel = hiltViewModel(),
+    onRecovery: () -> Unit = {}
 ) {
     val items = listOf(
         BottomNavItem(HomeTab, com.diajarkoding.imfit.R.string.nav_home, Symbols.Filled.Home, Symbols.Outlined.Home),
@@ -186,6 +186,7 @@ fun MainScreen(
                             onNavigateToWorkoutDetail = onNavigateToWorkoutDetail,
                             onNavigateToActiveWorkout = onNavigateToActiveWorkout,
                             onNavigateToProfile = onNavigateToProfile,
+                            onRecovery = onRecovery,
                             viewModel = homeViewModel
                         )
                     }

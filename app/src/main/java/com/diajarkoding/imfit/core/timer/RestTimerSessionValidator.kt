@@ -32,7 +32,7 @@ class RestTimerSessionValidator(
             }
         }
         if (!measure("session_identity") { sessionExists(state.userId, state.workoutId) }) return@withTimeout false
-        // The account can change while Room is suspended. Never trust only the persisted owner.
+        // The account can change during validation. Never trust only the persisted owner.
         measure("auth_recheck") { localUserId() == state.userId }
     }
 }

@@ -4,44 +4,57 @@
 
 | Item | Nilai |
 | --- | --- |
-| Status | **Checkpoint pengembangan untuk handoff perangkat**, bukan release-ready. Bukti dirty host §7.11 dipertahankan; commit/push diminta pengguna dengan scope checkpoint §7.12. SQL/HTTP, device/upgrade/UI dan timer runtime tetap belum teruji; SHA aktual wajib diverifikasi bersih sebelum push |
-| Versi laporan | 2.1 |
+| Status | **MVP internal preview PASS; T0–T5 selesai, APK diserahkan**. Final: 417 production/424 demo unit dan 3 smoke UI/HTTP nyata PASS pada Pixel 5 API34 existing. Production/upgrade legacy/deployment tetap deferred; [bukti §7.13](#713-mvp-internal-preview-t5) |
+| Versi laporan | 2.3 |
 | Tanggal diperbarui | 29 Oktober 2026 (tanggal eksekusi dari jam sistem) |
 | Baseline commit | `fb96784d3164a700250e7032d6565779d288029d` (`online-only`) |
 | Baseline eksekusi | `c0be6b823c6e8350a4a0f1c157d239dcdfd28e57` — branch `online-only`, awal iterasi clean; tidak fetch/commit/push |
 | Project Supabase | `ltcxltahkrjnsjaxndsa` — database bersama development/testing/production |
-| Dokumen acuan | [Feature Spec v2.1](full-online-only-feature-spec.md) · [Plan Implementasi v2.1](full-online-only-implementation-plan.md) |
+| Dokumen acuan | [tasks.md — checklist utama](tasks.md) · [Feature Spec v2.3](full-online-only-feature-spec.md) · [Plan Implementasi v2.3](full-online-only-implementation-plan.md) |
 | Metode audit live | Supabase MCP, project-scoped, `read_only=true`, `features=database`; role `supabase_read_only_user`; `transaction_read_only=on` |
-| Batas | §7.1–§7.10 mempertahankan snapshot/evidence historis. §7.11 mencatat perbaikan terarah dan check host-only 29 Oktober; tidak ada backend fixture, emulator/device, deployment/cutoff, staging, commit, worktree verifikasi atau push |
+| Batas | §7.1–§7.12 mempertahankan histori sesuai scope/izin saat itu; hasil final MVP lokal ada di §7.13. Bukan clean-commit/CI, publish signing, upgrade legacy atau deployment/cutoff utama |
 | Identitas snapshot backend teruji | HEAD c0be6b8 + dirty working tree; 27 input backend, fingerprint SHA256 `abc44bea440f906335864a654e1ac588f8553d35fac2f74d6737a6f9bed40994` (§7.3); bukan verified commit/CI |
 
 **Aturan:** file ini adalah **satu-satunya laporan implementasi** dan diperbarui di tempat. Jangan membuat laporan baru setiap iterasi. Klaim harus berlabel **Verified** dengan scope source/live metadata/runtime lokal yang jelas, **Proposed** (desain), atau **NOT_TESTED**. Keberadaan SQL atau PASS lokal bukan bukti deployment, CI, atau perangkat.
 
-**Pemisahan bukti v2.0:** **Verified — source** berarti pembacaan source pada 29 Oktober, bukan runtime. **PASS historis** berarti hasil yang sudah tercatat di §7.1–§7.9 untuk snapshot/lingkungan masing-masing, bukan hasil sesi ini. **Proposed** menandai kontrak/desain baru yang belum menjadi kemampuan existing. Semua gate eksekusi baru §7.10 adalah **NOT_TESTED** sampai benar-benar dijalankan terhadap source final. Target adalah **release-ready internal lokal**, termasuk normal dan instrumented production minified dengan signing debug internal existing; bukan publish-ready dan tidak mencakup deployment/cutoff Supabase utama.
+**Pemisahan bukti:** **Verified — source** adalah hasil inspeksi pada snapshot yang dicatat, bukan runtime; **PASS historis** hanya berlaku untuk input/lingkungan pada iterasi tersebut; **Proposed** adalah kontrak/desain, bukan bukti kemampuan. Target release-ready internal lokal pada v2.0–v2.1 adalah historis dan digantikan **MVP internal preview fresh install dengan Supabase lokal/terisolasi**. Gate lengkap §7.10 yang belum dibuktikan tetap NOT_TESTED sebagai backlog production/legacy, bukan semuanya blocker preview.
 
-**Status terbaru v2.1 ada di §7.11.** Source-current/Proposed dan remaining gaps pada audit step 0 §7.10 adalah snapshot sebelum implementasi ditinjau, bukan inventaris working tree terbaru. Source recovery/session/profile/clean cutover kini ada; gate backend/device tetap tidak boleh dianggap lulus dari host tests atau source presence.
+**Histori checkpoint ada di §7.11–§7.12; milestone T0–T5 ada di §1/tasks.md dan bukti final §7.13.** Remaining gaps audit step 0 §7.10 mendahului implementasi tambahan, bukan inventaris checkout terkini. T0–T5 selesai dalam scope internal preview; gate produksi/legacy yang belum dibuktikan tetap backlog, bukan ikut PASS atau dibuka otomatis.
 
-**Otorisasi handoff terbaru di §7.12** menggantikan batas persiapan-saja untuk staging/commit/worktree/push. Batas host-only untuk backend/device dan seluruh acceptance rilis tetap berlaku.
+**Hierarki aktif:** tasks.md = pekerjaan sekarang; Feature Spec = kontrak/kebutuhan; Plan = desain/backlog; Report ini = bukti/blocker. Otorisasi handoff §7.12 dan batas host-only §7.11 adalah histori untuk scope saat itu, bukan izin Git/deployment baru atau larangan permanen atas task MVP lokal. Supabase utama, cutoff dan penghapusan data lama tetap memerlukan persetujuan eksplisit.
 
 ## 1. Ringkasan status
 
-| Gate / workstream | Status terakhir | Bukti / catatan |
+| Area | Status tercatat | Bukti / pekerjaan tersisa |
 | --- | --- | --- |
-| G0 — keputusan produk | **Selesai** | D01–D06 tercatat di Feature Spec §1 dan Plan §1 |
-| G1 — audit backend read-only | **Selesai** | L01–L09 pada Plan §10; matriks §2.1 |
-| F1a — kontrak backend | **Desain selesai** | 16 signature/DTO wire/protocol dan K01–K05; implementasi lokal mengikuti kontrak |
-| F1b — implementasi backend lokal | **Exit lokal tercapai 28 Oktober** | 12 migration lokal (4 existing + 8 follow-up), 16 RPC; baseline/replay/upgrade/restore dan final checks lulus (§7.3) |
-| G1 — integration/concurrency/security test | **PASS lokal** | SQL + real JWT/Auth/PostgREST, 57 pemeriksaan transport, race dua koneksi, response loss setelah commit, final-lockdown; bukan production/device proof |
-| F2/G2 — Android Remote Foundation | **PASS foundation/spike historis** | 37 test baru per flavor; regresi 275 production/281 demo dan kedua APK debug tercatat lulus (§7.4); status foundation bukan status seluruh runtime saat ini |
-| G2 — Android remote foundation | **Selesai untuk foundation** | Actual commit `2ba4f82` dahulu diuji dari checkout bersih; sesi runtime kemudian dipasang pada §7.9 |
-| G3 — migrasi fitur Android | **PASS read/state/race historis** | 310 production + 316 demo unit dan 17 UI demo pada §7.7; suite historis lebih baru 387/395 pada §7.9. Production HTTP/UI dan release final tetap NOT_TESTED |
-| F6.1 — inventory/preflight foundation | **PASS historis; source terintegrasi; bukan exit G6a/G6b** | Exact schema 6/7/9, inventory/checkpoint §7.8; guard Start sudah dipasang lewat `OnlineSessionModule` dan store (§7.9/§7.10), bukan seam yang masih menunggu pemasangan |
-| F4/G4 — remote-session cutover | **Terpasang; gate lengkap belum selesai** | Kedua flavor mengikat facade `OnlineWorkoutRepository` ke store remote; 387 production/395 demo unit dan REST smoke adalah PASS historis §7.9. Dirty/debounce/flush, typed caller migration, recovery dan production proof masih terbuka |
-| F5/G5 — service/timer authoritative | **Parsial; belum selesai** | Peek memori per-tick tercatat §7.9; effective expiry/review, cold verification dan gagal cancel tidak stop-as-success masih perlu penutupan §7.10 |
-| G6a/G6b — recovery/installed upgrade | **Belum selesai** | Inventory, archive dan layar review existing bukan selected-item receipt-backed import/resolution atau installed-data proof |
-| G7/release internal lokal | **NOT_TESTED; belum siap** | Seluruh gate final §7.10 wajib lulus; hosted deployment/cutoff tetap deferred dengan izin terpisah |
+| Kontrak | **Tetap berlaku** | D01–D06/K01–K05 dan 34 AC utuh; pemisahan acceptance MVP vs production ada di Feature Spec §2 |
+| Backend | **T1 PASS lokal pada source checkpoint 5372f21** | 14 migration/21 RPC signature dan grant cocok; 35 pemeriksaan Auth/PostgREST alur MVP/RLS/finish-response-loss PASS. Recovery readiness/page teruji untuk akun fresh; full import/upgrade legacy tetap deferred |
+| Android existing | **T2/T3 integrasi preview dan T4 cutover PASS** | Dua defect diperbaiki; facade/store/guard existing dipertahankan. Tidak ditemukan Room writer/queue bisnis produksi tersisa; Room transitif WorkManager untuk timer tetap dipertahankan |
+| Pengujian host | **T5 full regression 417 production/424 demo PASS** | Satu run pada source final dibekukan, nol failure/error/skip. T2/T3 51 dan T4 37 adalah test terarah sebelumnya; §7.11 tetap historis |
+| Preview end-to-end/APK | **MVP internal preview PASS; APK tersedia** | T5: 3 smoke UI/HTTP final, restart dan critical unknown/account switch; APK signature/hash verified dan identik dengan yang dipasang/diuji. Artefak/config/batas di §7.13 |
+| Production/upgrade legacy | **Deferred; bukan selesai** | Installed upgrade/restore/crash, matriks perangkat/minified lengkap dan hosted rollout tetap backlog Plan; bukan blocker fresh-install preview kecuali safety/alur MVP terdampak |
 
-**Kesimpulan:** F1b/F2 dan G3 memiliki bukti lokal historis; §7.9 sudah mencatat cutover sesi remote kedua flavor dan guard Start, sehingga memasang facade/guard dari nol bukan pekerjaan berikutnya. Audit source 29 Oktober mengonfirmasi jalur itu, tetapi facade remote tidak berarti seluruh graph runtime bebas Room. Recovery receipt-backed, input dirty/debounce 400 ms/flush AC13/15, timer authoritative, profil returned-row, dependency cleanup dan installed-upgrade/minified proof masih terbuka. G4/G5/G6 dan release **belum selesai**. Tidak ada test baru dijalankan untuk v2.0; audit live §3, baseline commit dan hasil §7.9 tidak diganti. Target berikutnya internal release-ready lokal tanpa deployment/cutoff utama atau commit/push.
+**Milestone T0 — 29 Oktober 2026, PASS audit singkat:** `online-only@5372f210b26b3ec9f846171cbbfd63e81f4fa482`; ref cache origin sama (0/0), tanpa fetch. Perubahan awal tiga dokumen modified + tasks.md untracked dipertahankan. Source berisi 14 migration, 17 RPC inti + empat recovery; facade/store/guard dan caller Finish berbasis receipt sudah terhubung. Pencarian terarah tidak menemukan Room/DAO runtime atau dependency Room aktif; schema 6/7/9 dan legacy reader tetap ada. Ini bukti inspeksi, bukan SQL/HTTP/UI PASS.
+
+**Milestone T1 — 29 Oktober 2026, PASS backend lokal:** stack existing pada `colima-imfit-online-verify` sehat; default context tidak diubah, perintah memakai `DOCKER_CONTEXT=colima-imfit-online-verify`. Setelah backup lokal, `node_modules/.bin/supabase migration up --local` menerapkan hanya migration existing `20261029000100_online_only_legacy_recovery.sql` (13 → 14 applied). Metadata read-only: seluruh 21 RPC signature/grant hadir, RLS public/private aktif, no direct business writers, profil hanya tiga writable columns. Advisors lokal sebelum/sesudah: exit 0, kosong pada threshold warn/error.
+
+**Bukti T1:** smoke sementara memakai helper fixture/proxy existing, API `http://127.0.0.1:54321`, dua akun sintetis, **35 pemeriksaan PASS** melalui password login → katalog/template → create/edit/complete → Finish → Summary/History/Progress/read ulang. RLS/cross-owner mutation/detail/receipt ditolak atau owner-hidden. Satu response-loss nyata setelah Finish upstream 200, discovery/exact retry dan request ID baru tetap menghasilkan satu workout; query linkage database mengonfirmasi satu log. Cleanup hanya akun fixture exact-ID/email yang baru dibuat, bukan data lama. Tidak mengulang full concurrency/10k-row/replay suite.
+
+**Artefak T1:** `/private/var/folders/yv/171k2lgd0jdg4y0jclvxjtzw0000gn/T/opencode/imfit-t1-30l7k7al/` berisi `mvp-smoke-evidence.json`, `readiness-audit.json`, `migration-versions.json`, `backup-evidence.json`; backup `local-before-recovery-postgres.dump` mode 0600 di luar Git, TOC valid, **restore NOT_TESTED**. Backup awal sebagai supabase_admin gagal; ulang sebagai postgres sukses, arsip parsial tidak digunakan. CLI 2.116.0/PostgreSQL 17.6 existing dipertahankan, bukan rekomendasi hosted production.
+
+**Milestone T2/T3 — 29 Oktober 2026, PASS integrasi preview:** `OnlineRpc.kt` menerima exercise_id text katalog dan tetap memvalidasi UUID aggregate. `OnlineSessionStore.reload` sukses melepas verification lock, tetapi conflict/draft tetap memerlukan explicit Use server/Reapply; failed reload tetap locked. Dua defect direproduksi sebagai dua test FAIL sebelum fix, kemudian 35 test terarah PASS; gabungan final **51 unit production PASS**. Runtime tambahan hanya tag Summary pada layar aktif; fixture memperbarui selector/navigasi aktual, bukan bypass guard atau session manager baru.
+
+**Bukti UI T3:** hanya **Pixel_5_API_34 existing (`emulator-5554`, API 34)**, user fixture 10, productionDebug terisolasi `com.diajarkoding.imfit.modaldiagnostic` dengan flag existing `-PmodalDiagnostic=true`. **4/4 instrumentation PASS, nol skip:** login → Home create routine → catalog picker → confirmed Start → pause/resume → edit/complete → Skip rest → Finish/Summary/History/Progress/Profile; completed workout tetap ada setelah proses dihentikan dan dibuka lagi; dua client HTTP memicu CAS conflict lalu kedua aksi review UI bekerja; response-loss Finish diselesaikan melalui Resolve UI dan A→B→A tidak membocorkan state/data. Trace memuat tepat dua Finish untuk dua alur dan satu committed response drop; backend mengonfirmasi dua workout unik.
+
+**Evidence T2/T3:** `/private/var/folders/yv/171k2lgd0jdg4y0jclvxjtzw0000gn/T/opencode/imfit-t2-t3-9c0cylud/`: `device-dkz3uy5f/result.json` + empat log instrumentation, `targeted-unit-evidence.json`, `sources.json`, `t3-build.log`. APK pengujian terisolasi `app/build/outputs/apk/production/debug/app-production-debug.apk`, SHA256 `56fda795603d4edc9f63c52a98e7235b07606cbacea2b4b1611420af3a006af4`; ini bukan penyerahan APK final T5. URL/key lokal hanya sementara saat build; local.properties asli dipulihkan byte-for-byte. User emulator kembali 0, reverse sementara dihapus; akun/package fixture exact milik run dibersihkan tanpa mengganti aplikasi/data existing.
+
+**Failure/batas tetap tercatat:** run offline awal gagal artifact Room transitive WorkManager belum cached, lalu dependency existing di-resolve tanpa ubah versi; bukan writer bisnis Room IMFIT. Run minified instrumentation gagal `NoSuchMethodError mutableIntObjectMapOf` pada Compose test; deferred, bukan PASS dan bukan blocker productionDebug preview. Method JUnit non-void dan selector/tag Summary/Profile stale diperbaiki sebelum final 4 PASS. P2 fixture timer, full cold/warm timer perangkat, upgrade/restore legacy, full regression dan release-minified tetap belum dibuktikan. Hot path 10.000 peek tanpa request dan unknown/identity locks teruji unit, bukan klaim matriks timer perangkat lengkap.
+
+**Milestone T4 — 29 Oktober 2026, PASS tanpa source deletion baru:** pemeriksaan caller/DI terarah mengonfirmasi cutover existing: production auth/workout/read gateway tidak membawa Room/DAO/importer atau sync queue bisnis. SyncWorker terminal no-op tetap diperlukan untuk request lama; legacy reader OPEN_READONLY, review/checkpoint dan schema 6/7/9 tetap utuh. DependencyInsight membuktikan Room 2.7.0 hanya transitif WorkManager 2.11.2/Hilt Work yang dipakai recovery timer, bukan writer bisnis IMFIT; tidak dihapus atau di-exclude. Home memakai bounded template/Home summary, Progress aggregate/markers per periode, Profile dedicated remote state tanpa full history pull.
+
+**Bukti T4:** 37 unit production PASS (G3RemoteReadTest 13, OnlineMutationInvalidationTest 5, LegacySqlInventoryTest 17, LegacyIndependentProfileTest 2), nol failure/error/skip; command dependencyInsight + targeted test exit 0, compile/Hilt production PASS. Source/dependency/API dan schema tidak diubah; fingerprint source/SHA256 APK cocok dengan build dan proof UI T3, tanpa build APK baru atau full regression. Evidence di `/private/var/folders/yv/171k2lgd0jdg4y0jclvxjtzw0000gn/T/opencode/imfit-t4-dxycpxfr/`: `t4-verification.log`, `targeted-tests.json`, `preservation-evidence.json`. Tidak ada backend/device run atau akses database/WAL pengguna pada T4.
+
+**Kesimpulan aktif:** **T5 selesai, MVP internal preview PASS dan APK diserahkan** pada §7.13. Tidak ada blocker preview tersisa dalam scope yang diuji. Berhenti memperluas scope; production/upgrade/minified dan deployment/koneksi klien luar tetap deferred. Tidak ada hosted deployment/cutoff, reset/purge, penghapusan data lama atau commit/push.
 
 ## 2. Keputusan G0 yang sudah final
 
@@ -118,6 +131,8 @@ Catatan: schema JSON yang tersedia di `online-only` adalah 6, 7, dan 9; **schema
 
 ## 5. Status blocker
 
+**Register release penuh historis, bukan daftar blocker MVP otomatis.** B03/upgrade ditunda untuk fresh-install preview tanpa menghapus guard/data legacy; B02/B04/B05 hanya menjadi blocker MVP sejauh endpoint, safety dan alur aktif terdampak. Blocker MVP aktual hasil T0 diringkas di §1/tasks.md; source presence tidak menutup gate.
+
 | ID | Blocker | Status | Gate penutupan |
 | --- | --- | --- | --- |
 | B01 | Kehilangan input unconfirmed | **Ditutup D01** | UI/error copy dan AC15/16/21 konsisten |
@@ -127,6 +142,8 @@ Catatan: schema JSON yang tersedia di `online-only` adalah 6, 7, dan 9; **schema
 | B05 | Recovery/idempotency | **Parsial; terbuka** — backend CAS/replay/race/response-loss PASS historis dan writer sesi Android existing, tetapi registration boundary, stale replay, unknown resolution, dirty input dan timer final belum lengkap | G4/G5 dan gate unknown/CAS/timer §7.10 |
 
 ## 6. Checklist progres
+
+**Snapshot progres fase lama/backlog release penuh.** Checklist aktif yang wajib dibaca/diperbarui setiap iterasi hanya [tasks.md](tasks.md). Item terbuka di bawah tidak otomatis menjadi prasyarat MVP dan beberapa mendahului implementasi §7.11–§7.12; pertahankan sebagai histori, jangan mengulang seluruh fase/audit untuk mencentangnya.
 
 ### G0 — keputusan dan audit
 
@@ -214,7 +231,7 @@ Catatan: schema JSON yang tersedia di `online-only` adalah 6, 7, dan 9; **schema
 
 ## 7. Perubahan yang sudah dilakukan
 
-**Cara membaca §7.1–§7.9:** bagian-bagian berikut adalah catatan iterasi historis; kalimat seperti “belum punya consumer Start” pada §7.8 berlaku pada saat iterasi itu dan kemudian disupersede oleh §7.9. Jangan memakai batas historis itu sebagai status source terkini, dan jangan memakai PASS historis sebagai verifikasi ulang source final. Status terkini ada di §1, §5–§6 dan §7.10.
+**Cara membaca §7.1–§7.12:** seluruh catatan iterasi, izin dan urutan eksekusi berikut dipertahankan sebagai histori. Kalimat seperti “belum punya consumer Start” di §7.8 disupersede §7.9, audit §7.10 mendahului tambahan §7.11–§7.12. Jangan memakai roadmap release lama sebagai urutan aktif atau PASS historis sebagai verifikasi ulang source final. Ringkasan aktif ada di §1, langkah berikutnya di §9 dan checklist hanya di tasks.md.
 
 | Perubahan | Status | Catatan |
 | --- | --- | --- |
@@ -652,22 +669,43 @@ Temuan ini tidak diperbaiki diam-diam dalam task commit/push: tujuan checkpoint 
 
 APK normal/instrumented/test dan evidence `%TEMP%` §7.11 tidak ikut Git. Database Docker, emulator, user fixture dan data aplikasi juga tidak berpindah melalui clone. Konfigurasi sensitif atau data pengguna yang perlu dipindah memerlukan kanal aman dan izin tersendiri, bukan tambahan file commit.
 
+### 7.13 MVP internal preview T5
+
+**Hasil final — 29 Oktober 2026: PASS untuk fresh-install internal preview dengan Supabase lokal.** Source dibekukan pada `online-only@5372f210b26b3ec9f846171cbbfd63e81f4fa482` + perubahan T2/T3 yang masih dirty, fingerprint `544c6a58ebb2b32e978c82a64b9dfc499f04cc7ad1c736e0d885739fb2201e44`. Tidak ada perubahan source/dependency selama T5; docs hasil tidak termasuk source fingerprint. Ini bukan bukti clean commit/CI atau production release-ready.
+
+| Verifikasi final | Hasil / cakupan |
+| --- | --- |
+| `./gradlew :app:testDemoDebugUnitTest :app:testProductionDebugUnitTest --console=plain --offline` | **PASS sekali pada source final** — production 417, demo 424; 0 failure/error/skip |
+| `./gradlew -PmodalDiagnostic=true :app:assembleProductionDebug :app:assembleProductionDebugAndroidTest --console=plain --offline` | **PASS** — production graph nyata, app/test APK debug terisolasi; bukan demo/fake atau build minified |
+| `OnlineOnlyReadyTest#onlineUiJourney` | **PASS** — login UI, buat rutinitas Home, catalog picker, guarded Start, pause/resume, edit 12.25 kg × 7, complete/skip rest, Finish → Summary 85.75 kg → History/Progress/Profile |
+| `OnlineOnlyReadyTest#verifyFinishedRestart` | **PASS** — proses dihentikan/dibuka kembali; SDK auth pulih dan completed workout ID yang sama tetap ditemukan di backend dan History UI |
+| `OnlineOnlyReadyTest#lostResponseAndAccountSwitch` | **PASS** — actual committed Finish response diputus proxy, unknown tidak dianggap sukses, explicit Resolve UI menghasilkan receipt/Summary yang benar; A→B→A tanpa state/data bocor |
+| Trace dan persistence backend | **PASS** — tepat 2 request Finish untuk 2 alur, 1 committed response drop, 2 workout unik saat read ulang; cleanup exact 2 akun sintetis dibuat invocation ini |
+| Artefak | **PASS** — signature verified, byte/hash identik dengan APK yang berhasil dipasang dan diuji pada Pixel_5_API_34 existing (`emulator-5554`, API34, user fixture10) |
+
+**APK yang diserahkan:** [imfit-online-only-internal-preview-20261029.apk](../../app/build/outputs/apk/internal-preview/imfit-online-only-internal-preview-20261029.apk), **22.911.365 bytes**, variant `productionDebug`, package **`com.diajarkoding.imfit.modaldiagnostic`**, signing **debug/internal**. Ini APK aplikasi, bukan androidTest; package terisolasi dipilih agar tidak mengganti aplikasi/data IMFIT existing. SHA256 **`56fda795603d4edc9f63c52a98e7235b07606cbacea2b4b1611420af3a006af4`**; checksum sidecar `.apk.sha256` tersedia di folder yang sama.
+
+**Konfigurasi penggunaan preview:** API baked-in **`http://127.0.0.1:54321`**, Supabase lokal project `IMFIT-MOBILE`, Docker context `colima-imfit-online-verify`, CLI pinned 2.116.0, PostgreSQL 17.6 existing, 14 migration/21 signature RPC. Backend existing sehat dan exact migration inventory diverifikasi; tidak menerapkan migration baru atau mengulang suite SQL/concurrency/10k-row karena source backend tidak berubah sejak T1. Untuk Pixel 5 tersebut, gunakan `adb -s emulator-5554 reverse tcp:54321 tcp:54321`, lalu login/buat akun uji lokal; akun sintetis smoke telah dibersihkan. Backend lokal dan adb reverse diperlukan setiap pemakaian di lingkungan ini. APK ini **tidak otomatis bekerja dari jaringan klien luar**; deployment backend dan verifikasi koneksi eksternal merupakan tahap terpisah dengan izin eksplisit. `local.properties` asli dipulihkan byte-for-byte, sehingga build ulang harus secara eksplisit memakai URL/key lokal, bukan config hosted existing.
+
+**Evidence final di luar Git:** `/private/var/folders/yv/171k2lgd0jdg4y0jclvxjtzw0000gn/T/opencode/imfit-t5-xa5ue294/` menyimpan `artifact-manifest.json`, `sources-before.json`, `checkout.json`, `build-results.json`, `full-regression-results.json`, `full-regression.log`, `apk-build.log`, `device/result.json`, tiga log instrumentation dan screenshot Summary. Temporary invocation memakai guard/fixture/proxy/adapter instrumentation existing di `tools`; tidak menambah runner repository atau dokumen baru. Jangan membagikan backup `local.properties.original` yang sensitif. User emulator kembali 0, reverse sementara dihapus, dan hanya akun/package fixture milik run dibersihkan; aplikasi/data existing serta database/WAL/schema 6/7/9 tetap dipertahankan.
+
+**Deferred/FAIL/NOT_TESTED tetap jujur:** minified instrumentation T3 masih **FAIL/deferred** (`NoSuchMethodError mutableIntObjectMapOf` pada Compose test), tidak dijalankan ulang atau diklaim PASS oleh build debug. Full connected demo, matriks timer cold/warm/perangkat/API/font/accessibility lengkap, installed upgrade/restore/import/crash legacy, hosted backup/rollout/cutoff, publish signing dan koneksi klien eksternal **belum dibuktikan**. Python guard/analyzer dan suite SQL yang tidak berubah tidak diulang; bukti lama tidak diubah menjadi PASS baru. Seluruh D01–D06/K01–K05 dan 34 AC tetap berlaku; acceptance MVP bukan sertifikasi seluruh matriks production. **Tidak ada blocker internal preview tersisa; berhenti pada penyerahan APK dan backlog deferred.**
+
 ## 8. Keputusan yang dibutuhkan
 
 1. **Desain lokal diizinkan, deployment belum.** F1a desain dan K01–K05 dicatat; implementasi follow-up additive di lokal mengikuti instruksi pengguna. Tidak ada izin deployment/cutoff pada Supabase utama.
-2. **Prasyarat lokal historis tersedia, bukan verifikasi sesi baru.** Docker/CLI/baseline/backup/replay pernah lulus pada §7.2–§7.3 dan backend lokal Colima dipakai §7.9. Sebelum proof final, lingkungan/toolchain/fixture lokal harus diperiksa sesuai Plan v2.0; cleanup database/volume tetap tidak otomatis. Tidak ada rerun pada pembaruan dokumentasi ini.
+2. **Lingkungan preview lokal siap dalam scope T1/T5.** Colima/backend existing dan 14 migration diperiksa; proof final ada di §7.13, bukan audit hosted atau restore proof. Cleanup database/volume tetap tidak otomatis dan API lokal tidak otomatis terjangkau klien luar.
 3. **Timezone/durasi/volume: selesai K01/K02.** UTC storage, IANA timezone query, tanggal start, history termasuk pause, input weight baru maksimal 2 desimal kg, numeric exact + decimal string wire; data legacy tidak di-round/rewrite.
 4. **Scope UI: selesai K03.** History per tanggal + template Home; tidak menambah route.
 5. **Profile/cutoff: selesai K04/K05 untuk desain lokal.** Profile tetap direct dengan column grants minimum; compatibility/final-lockdown diuji terpisah. Production cutoff masih menunggu review/izin setelah bukti lokal.
 
 ## 9. Langkah selanjutnya
 
-1. Implementasikan backend recovery additive Proposed langkah 1: readiness resource-authoritative, raw server legacy page/archive dan insert-or-exact-match import; pertahankan replay/CAS/owner/grants/private RLS tanpa membuka writer lama.
-2. Lengkapi selected-item recovery langkah 2 pada reader/archive/UI existing, durable immutable action/checkpoint dan validated receipt; local-active explicit non-resumable archive, intent replay asli, remote session/expiry review. Jangan menganggap inventory/keep-history sebagai import atau izin cleanup.
-3. Lengkapi sesi confirmed/dirty/typed commands dan authoritative timer langkah 3 di atas facade/store/guard yang **sudah terpasang**. AC13/15 debounce 400 ms/flush/status tetap wajib; tidak mengulang cutover F4 dari nol.
-4. Profil returned-row/auth tanpa Room dan scoped invalidation langkah 4; siapkan real remote release fixture langkah 6 sebelum clean cutover API/dependency/test/Room langkah 5. Database/WAL dan schema exports 6/7/9 pengguna dipertahankan.
-5. Jalankan matriks final lokal langkah 6 sesuai Plan v2.0: backend replay/SQL/HTTP, unit/build dua flavor, actual production HTTP/UI, installed-upgrade/restore dan timer warm/cold, normal serta instrumented minified pada disposable emulator/non-owner user. Semua gate §7.10 tetap NOT_TESTED sampai evidence aktual ada; tidak ada build/test/lint/formatter dijalankan oleh step 0 ini.
-6. Perbarui satu laporan ini dengan manifest source/command/device/count/failure/skip dan evidence tanpa token/PII; petakan AC01–AC34/T01–T16 sebelum menyatakan internal release-ready. Hosted deployment/cutoff dan publish signing tetap deferred; tidak ada commit/push pada eksekusi step 0.
+**T0–T5 selesai; tidak ada task MVP aktif tersisa.** Gunakan APK/config §7.13 dan [tasks.md](tasks.md). Jangan mengulang audit/build/suite atau membuka kembali F1a/F1b/F2/G3 tanpa kegagalan baru yang reproduksibel.
+
+Langkah setelah handoff hanya bila diminta: defect preview terarah atau keputusan deployment backend/verifikasi koneksi klien luar. Backlog production/legacy/minified tetap tersedia di Plan; tidak otomatis menjadi pekerjaan baru. Supabase utama/cutoff/penghapusan data lama, release publik dan commit/push memerlukan otorisasi yang sesuai.
+
+**Batas eksekusi terbaru:** MVP fresh-install internal preview selesai pada T5; bukti hanya lingkungan lokal dan Pixel 5 API34 existing yang disebutkan. Deployment Supabase utama, penghapusan data lama, publish signing dan distribusi eksternal tidak dilakukan/diotorisasi oleh penyerahan ini.
 
 ## 10. Changelog laporan
 
@@ -685,3 +723,5 @@ APK normal/instrumented/test dan evidence `%TEMP%` §7.11 tidak ikut Git. Databa
 | 1.9 | 2026-10-28 | F4 cutover runtime kedua flavor selesai diuji: facade `cancelWorkout` idempotent-terminal (retained/in-memory/reload), writer CAS satu intent per call, cancel await-receipt; F5 timer audit (peek memori murni); F7 smoke REST lokal SMOKE_OK; unit kedua flavor 387/395 PASS; rerun connected final di §7.9; manifest kumulatif `5bc83f11…`; commit/push dengan izin pengguna |
 | 2.0 | 2026-10-29 | Rekonsiliasi metadata/ringkasan/checklist/kesimpulan/next steps dengan cutover §7.9; 387 production/395 demo unit dan REST smoke diberi label PASS historis, bukan rerun. Audit source §7.10, empat RPC/protokol recovery Proposed dan planned gates seluruhnya NOT_TESTED; target internal release-ready lokal tanpa deployment/cutoff utama, G4/G5/G6/release tetap belum selesai |
 | 2.1 | 2026-10-29 | Persiapan commit host-only dengan izin terarah: PATCH/profile regression, Home resume tanpa create, reverse handoff dan EOF; 421 demo/414 production unit, debug dan normal/instrumented minified builds, 12+13 Python tests serta smoke CLI/simulated handoff PASS pada dirty fingerprint §7.11. Backend/device/commit terisolasi belum teruji; tidak stage/commit/push |
+| 2.2 | 2026-10-29 | Penyelarasan terarah MVP: ringkasan bukti/blocker/pekerjaan tersisa, tasks.md sebagai checklist utama dan next steps T0–T5; gate legacy/production serta §7.1–§7.12 tetap historis/backlog. Tidak mengulang audit, build atau runtime test; tidak mengklaim MVP PASS |
+| 2.3 | 2026-10-29 | T0–T5 selesai: satu full regression final 417 production/424 demo dan 3 smoke UI/HTTP nyata PASS; APK lokal terisolasi diserahkan dengan signature/checksum/config/evidence §7.13. Batas minified/legacy/production/hosted tetap deferred; histori dan kontrak tidak dihapus |

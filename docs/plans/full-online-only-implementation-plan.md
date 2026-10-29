@@ -4,9 +4,9 @@
 
 | Item | Nilai |
 | --- | --- |
-| Status | Checkpoint pengembangan untuk handoff perangkat pada `online-only`; commit/push diminta pengguna, bukan rilis/deployment. Gate host dan source fingerprint ada di laporan §7.11, scope checkpoint serta clean-SHA verification di §7.12; backend/device tetap belum teruji |
+| Status | **MVP internal preview PASS, T0–T5 selesai dan APK tersedia** — [laporan §7.13](full-online-only-implementation-report.md#713-mvp-internal-preview-t5). Release penuh/upgrade legacy tetap backlog, tidak dilanjutkan otomatis |
 | Tanggal dibuat / diperbarui | 26 / 29 Oktober 2026 (tanggal eksekusi diperoleh dari system clock) |
-| Versi dokumen | 2.1 |
+| Versi dokumen | 2.3 |
 | Baseline commit | `fb96784d3164a700250e7032d6565779d288029d` |
 | Baseline eksekusi F1a/F1b | `online-only@c0be6b823c6e8350a4a0f1c157d239dcdfd28e57`; tidak mengubah baseline audit historis |
 | Scope | Modul `:app`, source bersama `main`, binding `production`, pembanding `demo`, migration SQL, test terkait, dan metadata Supabase live |
@@ -15,7 +15,11 @@
 
 **Tidak dilakukan pada audit ini:** build/Gradle test, instalasi perangkat, DDL/DML, pemanggilan RPC aplikasi, pembacaan row bisnis, deployment, commit, atau push. Audit live memakai role `supabase_read_only_user` dengan `transaction_read_only=on`. Keberadaan SQL di repository tidak membuktikan deployment backend; sebaliknya, ketiadaan RPC pada schema live adalah bukti deployment untuk snapshot 27 Oktober 2026, bukan bukti perilaku runtime. Hasil test historis dalam dokumen lama tidak dianggap hasil pengujian audit ini.
 
-**Target eksekusi 29 Oktober:** internal online-only release-ready dengan recovery data lama, proof lokal/perangkat dan production release minified; **tanpa deployment/cutoff Supabase utama**, publish signing, commit atau push. Build internal memakai signing debug existing, bukan publish-ready. Pembaruan kontrak/roadmap tidak menutup gate. Semua kontrak baru di bawah berstatus **Proposed**, dan seluruh gate implementasi/proof baru **NOT_TESTED** sampai benar-benar dijalankan pada source final. Audit/baseline dan PASS historis tetap evidence terpisah.
+**Target eksekusi v2.2:** APK online-only **MVP internal preview fresh install** pada emulator/perangkat uji disposable dengan Supabase lokal/terisolasi. Alur workout end-to-end UI production + HTTP nyata dan persistensi setelah restart wajib terbukti; bukan release-ready penuh, upgrade legacy atau publish signing. Minimal APK `assembleProductionDebug` sesuai T5. Deployment/cutoff Supabase utama dan penghapusan data lama tetap memerlukan izin eksplisit.
+
+**Hierarki aktif:** [tasks.md](tasks.md) = checklist/prioritas sekarang; [Feature Spec](full-online-only-feature-spec.md) = kontrak teknis/aturan bisnis; Plan ini = desain/backlog; [Report](full-online-only-implementation-report.md) = bukti/blocker. Baca/perbarui tasks.md setiap iterasi. D01–D06, K01–K05 dan AC01–AC34 tidak dibatalkan oleh prioritas MVP. Batas izin dan roadmap v2.0–v2.1 berikut adalah histori, bukan otorisasi baru; Proposed/source presence/PASS historis tidak berarti source final sudah teruji.
+
+**Hasil v2.3:** scope MVP ini ditutup oleh T5: satu full regression 417 production/424 demo unit dan 3 smoke UI/HTTP final PASS pada Pixel 5 API34 existing; APK productionDebug lokal dengan package terisolasi diserahkan. T4 tidak menemukan writer/queue Room bisnis yang perlu dihapus lagi; Room transitif WorkManager dan reader legacy dipertahankan. Detail artefak/config/batas ada di laporan §7.13. Snapshot audit/roadmap lama di bawah tetap referensi historis/backlog, bukan instruksi membuka kembali pekerjaan selesai.
 
 **Batas v2.1:** audit source-current, kontrak Proposed dan roadmap langkah 1–6 di bawah adalah snapshot step 0 yang dipertahankan, bukan inventaris ulang working tree setelah implementasi. Review/persiapan commit terbaru tercatat pada [laporan §7.11](full-online-only-implementation-report.md#711-persiapan-commit-host-only--29-oktober-2026). Pengguna mengizinkan perbaikan terarah dan check host-only; fixture Docker/backend, emulator/device, staging, commit, worktree verifikasi dan push belum diizinkan. Gate rilis §7 tidak dikurangi oleh batas izin ini.
 
@@ -25,7 +29,7 @@ Path pendek **M** = `app/src/main/java/com/diajarkoding/imfit`, **P** = `app/src
 
 ## 1. Kesimpulan audit
 
-**Baseline historis:** online-first hybrid dengan proyeksi Room, sesi lokal, dan recovery manual. **Source current 29 Oktober:** kedua flavor sudah memakai `OnlineWorkoutRepository`, `OnlineSessionStore` dan guarded Start (laporan §7.9); Room masih reachable melalui auth, exercise/coordinator dan template guard production. Release-ready memerlukan penyelesaian gap di langkah 1–6, bukan pemasangan facade/session writer dari nol.
+**Baseline historis:** online-first hybrid dengan proyeksi Room, sesi lokal, dan recovery manual. **Snapshot source audit 29 Oktober:** kedua flavor sudah memakai `OnlineWorkoutRepository`, `OnlineSessionStore` dan guarded Start (laporan §7.9); audit saat itu masih menemukan graph Room. Implementasi tambahan/checkpoint §7.11–§7.12 harus dicocokkan dengan checkout pada T0, bukan dipasang ulang dari nol. Urutan aktif adalah T0–T5 di §4; langkah 1–6 lama hanya referensi desain/backlog.
 
 Keputusan utama yang direkomendasikan:
 
@@ -37,9 +41,11 @@ Keputusan utama yang direkomendasikan:
 6. Recovery legacy adalah jalur transisi terisolasi, bukan antrean offline baru.
 7. Room baru boleh dilepas dari runtime umum setelah semua konsumennya dialihkan. Database lama tidak boleh dibuang selama ada data belum terselesaikan, termasuk milik akun lain.
 
-**Status blocker durability:** keputusan G0 D01 menerima kehilangan input yang belum dikonfirmasi server saat process death. Target tetap Full Online-Only tanpa durable local draft atau antrean offline baru. Release masih terblokir oleh backend final, migrasi legacy, pengamanan write server, dan recovery/idempotency (B02–B05), bukan oleh durability input.
+**Status blocker durability:** keputusan G0 D01 menerima kehilangan input yang belum dikonfirmasi server saat process death. Target tetap Full Online-Only tanpa durable local draft atau antrean offline baru. B02–B05 di bawah adalah register release penuh historis; migrasi legacy bukan blocker preview fresh install. Backend, pengamanan write dan recovery/idempotency yang dipakai alur MVP tetap wajib dibuktikan pada T1–T5.
 
 ### 1.1 Status current dan pemisahan snapshot historis
+
+**Tabel gap ini adalah snapshot audit sebelum tambahan §7.11–§7.12, bukan backlog MVP aktif.** Gunakan T0 untuk mencocokkan checkout dan T1–T5 hanya untuk gap alur preview; jangan mengimplementasikan ulang item yang sudah ada.
 
 **Snapshot 27 Oktober:** G0 dan audit live G1 selesai; backend hosted belum menyediakan kontrak target. **Evidence 28 Oktober:** backend lokal, readers G3, foundation recovery §7.8 dan cutover F4/timer peek §7.9 sudah tercatat PASS dalam scope masing-masing. Tidak ada rerun runtime pada pembaruan dokumen 29 Oktober. Keputusan D01–D06 dan seluruh AC01–AC34 tetap berlaku.
 
@@ -69,7 +75,7 @@ Empat blocker tersisa adalah **B02 backend final**, **B03 migrasi legacy**, **B0
 ### 1.3 Batas eksekusi current
 
 - **Sudah ada:** G0 D01–D06, audit live historis, backend/readers lokal, inventory/preflight, facade remote dan session writer/guarded Start (§7.9).
-- **Kerjakan berikutnya:** langkah 1–6 di §4 sesudah konsistensi ketiga dokumen; langkah 0 bukan akhir implementasi.
+- **Status berikutnya:** T0–T5 di [tasks.md](tasks.md) telah selesai; serahkan/gunakan APK/config §7.13 laporan. Tidak mengulang fase selesai atau membuka backlog production/legacy tanpa kegagalan baru atau permintaan pengguna.
 - **Tidak diotorisasi:** hosted link/db push/reset/purge/cutoff, commit/push, penghapusan data pengguna atau perubahan `.idea/misc.xml` milik pengguna.
 - **Tidak boleh diklaim:** Ready dari source-only/fake/PASS historis; Saved sebelum receipt; unknown sebagai absence; Room-free hanya karena facade remote.
 - **Fail-closed:** error transport/malformed/checkpoint/schema/dependency tetap Unknown/Blocked dan owner-isolated, bukan discard atau fallback data kosong.
@@ -201,9 +207,33 @@ Baseline memiliki `UNIQUE(user_id)` pada `active_sessions`, FK template `NOT NUL
 
 ## 4. Urutan implementasi, deliverable, dan exit gate
 
-F0–F3 di bawah mempertahankan hasil fase lama sebagai **evidence historis**. F4/F5 cutover existing dirangkum sebelum roadmap langkah 1–6; nomor fase lama bukan alasan mengulang wiring yang sudah ada. Gate baru tetap **NOT_TESTED**.
+### 4.1 Eksekusi MVP aktif — tasks.md T0–T5
 
-Urutan current: selesaikan dokumentasi langkah 0; lalu **1 → 2**. Langkah 3 independen backend recovery, langkah 4 independen 1–2. Langkah 5 menunggu 2–4 dan fixture remote langkah 6; siapkan fixture 6 sebelum Room dihapus, lalu proof final setelah 5. Migrasikan seluruh caller dan hapus kontrak lama atomik agar tree dapat dibangun. Jangan menjalankan build/lint/tests/formatter di tengah irisan paralel; verifikasi sekali pada source final oleh integrator.
+| Task utama | Deliverable aktif / dependensi |
+| --- | --- |
+| T0 — checkout nyata | Satu pemeriksaan singkat status/HEAD/source/config/wiring, maksimal lima blocker aktual. Jangan mengulang audit atau menandai PASS dari histori |
+| T1 — backend nyata | Setelah identifikasi target lokal/terisolasi pada T0: reuse migration/RPC, smoke Auth/PostgREST alur MVP, RLS akun lain dan satu finish response-loss/retry |
+| T2 — defect integrasi | Validasi exercise ID text di OnlineRpc dan akses Use server/Reapply setelah reload authoritative; test terarah. Diagnosis host tidak perlu menunggu backend, proof HTTP tetap menunggu T1 |
+| T3 — UI sampai History | Setelah endpoint T1 dan defect terkait T2 siap: integrasi login/template/start/input/complete/finish/receipt/Summary/History/Progress/restart. Pertahankan guard, dirty/flush, unknown, timer dan isolasi akun |
+| T4 — sisa Room aktif | Alihkan caller runtime ke repository remote existing sesudah integrasi terkait T3; hapus wiring/API obsolete hanya setelah caller diganti dan build PASS. Database/WAL, schema 6/7/9 dan jalur legacy review tetap utuh |
+| T5 — bukti dan APK | Setelah blocker T1–T4 selesai: test terarah, full regression sekali pada source final, satu smoke UI production + HTTP nyata, build APK internal dan serahkan lokasi/config/PASS/FAIL/keterbatasan |
+
+Checklist rinci/status hanya di [tasks.md §3](tasks.md#3-prioritas-kerja--kerjakan-berurutan), bukan checklist duplikat di Plan. Jika satu dependensi terblokir, lanjutkan task independen yang aman tanpa melewati safety. Exit MVP adalah DoD tasks.md, bukan seluruh gate §7. Jika gagal, laporkan BLOCKED, bukan release-ready. APK lokal untuk lingkungan uji yang disebutkan; penggunaan klien luar memerlukan deployment backend dan verifikasi koneksi terpisah setelah MVP lulus.
+
+**Exit MVP T5: TERCAPAI, 29 Oktober 2026.** T0–T5 selesai sesuai checklist; artefak [APK internal preview](../../app/build/outputs/apk/internal-preview/imfit-online-only-internal-preview-20261029.apk) identik dengan binary yang dipasang dan diuji. Jangan menjalankan lagi roadmap langkah 1–6/seluruh gate §7 tanpa kebutuhan baru/izin. Minified instrumentation yang gagal pada T3 tetap backlog release, bukan disamarkan sebagai PASS; publish signing, upgrade legacy dan deployment/koneksi klien eksternal tetap tahap terpisah.
+
+### 4.2 Backlog setelah MVP dan referensi fase historis
+
+**Bukan urutan aktif:** F0–F3/F4–F6 di bawah menyimpan evidence lama; **langkah 1–6 lama adalah referensi desain/backlog production/legacy**, bukan instruksi membangun ulang implementasi yang sudah ada. Bagian relevan boleh dipakai untuk gap konkret T1–T4 saja. Khusus readiness fresh install, pakai kontrak existing tanpa melemahkan fail-closed; jangan menjadikan seluruh selected-item recovery sebagai dependensi preview.
+
+| Pekerjaan non-MVP yang dipertahankan | Referensi backlog |
+| --- | --- |
+| Recovery/import/upgrade/restore legacy lengkap, crash/checkpoint dan multi-account installed-data proof | Langkah 1–2, bagian legacy langkah 5–6, §6 dan gate G6a/G6b |
+| Matriks perangkat/API/font/accessibility lengkap, load/race/crash menyeluruh dan optimasi | §7/T01–T16 serta matriks final penuh |
+| Normal/instrumented production minified, harness/fixture/provenance release lengkap | Langkah 6 dan §7.2; bukan prasyarat APK debug preview kecuali defect/gate distribusi yang sedang diuji membutuhkannya |
+| Hosted deployment/cutoff, backup/rollback production, publish signing dan koneksi klien luar | §8; tahap terpisah setelah MVP dan izin eksplisit, bukan otomatis setelah build APK |
+
+Jangan menghapus backlog atau melabelinya PASS dari MVP. Safety server/client tetap wajib; tambah migration/RPC/abstraction hanya untuk mismatch nyata yang menghalangi MVP. Setelah penyelarasan satu kali ini, dokumentasi cukup checklist per task dan ringkasan milestone Report; jangan kembali mengejar roadmap release penuh sebelum MVP selesai.
 
 ### F0 — Product decision dan kontrak awal
 
@@ -322,7 +352,7 @@ Urutan disarankan:
 
 **Exit G3:** layar membaca remote langsung, statistik benar untuk dataset > satu halaman, dan tidak ada hidden full snapshot pull pada route/tab/foreground.
 
-**Status exit G3: PASS historis lokal** pada source final §7.7: 310 production + 316 demo unit, kedua APK debug/instrumentation, 17 UI demo. Perbaikan meliputi picker context/owner retry, publication reset→identity sebelum collector Main.immediate, source/saveable key editor dan stale detail/year calendar. SDK/HTTP production, manual accessibility penuh, installed-data upgrade dan release-minified belum dibuktikan. Iterasi berikutnya §7.8 lalu §7.9 sudah memasang inventory/preflight dan cutover sesi; remaining work current mengikuti langkah 1–6.
+**Status exit G3: PASS historis lokal** pada source final §7.7: 310 production + 316 demo unit, kedua APK debug/instrumentation, 17 UI demo. Perbaikan meliputi picker context/owner retry, publication reset→identity sebelum collector Main.immediate, source/saveable key editor dan stale detail/year calendar. SDK/HTTP production, manual accessibility penuh, installed-data upgrade dan release-minified belum dibuktikan. Iterasi berikutnya §7.8 lalu §7.9 sudah memasang inventory/preflight dan cutover sesi; pekerjaan aktif kini mengikuti tasks.md T0–T5, bukan roadmap langkah 1–6 lama.
 
 ### F4/F5/F6 — Source current dan evidence historis
 
@@ -451,7 +481,7 @@ Menunggu 2–4 dan fixture remote6. Hapus source/interface/binding/tests obsolet
 - Hilangkan dependency `/tmp/imfit-f1b-baseline-c0be6b8.dump`: platform-only schema dump lokal temporary, filter app-dependent auth trigger/storage policy TOC seperti runner existing, restore verification DB baru, replay empat baseline lalu synthetic fixture. Upgrade dari empat baseline; fresh seluruh source. Tidak drop/reset DB existing/publish secrets. Platform TOC/roles beda fail prerequisite konkret, bukan hosted dump atau guard longgar.
 - Synthetic Auth API lokal mengikuti verify_local_transport, secrets temporary, cleanup exact fixture UUID/email saja. Native command nonzero gagal; tidak klaim suite tak dijalankan. Proof final sesudah clean cutover5; commands dan gate §7.
 
-**Exit lokal:** semua gate §7 lulus pada source final; AC01–AC34 dan T01–T16 dipetakan evidence/N/A scope sah. Archive owner-accessible setelah explicit consent bukan synced/alasan delete. G4/G5/G6/release tidak selesai dari roadmap. Hosted deferred, audit live27 Oktober tetap historis; runtime prerequisite/gate blocked berarti **bukan Ready**.
+**Exit release penuh setelah MVP:** semua gate §7 lulus pada source final; AC01–AC34 dan T01–T16 dipetakan evidence/N/A scope sah. Archive owner-accessible setelah explicit consent bukan synced/alasan delete. G4/G5/G6/release tidak selesai dari roadmap. Hosted deferred, audit live27 Oktober tetap historis; runtime prerequisite/gate blocked berarti **bukan Ready untuk release penuh**, bukan otomatis blocker preview.
 
 ## 5. File impact dan urutan pelepasan
 
@@ -510,6 +540,8 @@ Hasil guard existing `Ready`, `RecoveryRequired`, `Unknown`; hanya Ready owner/e
 Checkpoint baru memakai `AWAITING_REVIEW,PREPARED,SUBMITTED,CONFIRMED,CONFLICT,BLOCKED`, **tanpa cleaned/auto-delete**. CONFIRMED hanya receipt tervalidasi atau explicit fingerprint-bound archive decision sesuai operasi. Crash melanjutkan immutable original request; unknown diselesaikan sebelum review baru. Checkpoint transisi bukan durable draft/queue runtime.
 
 ## 7. Matriks verifikasi dan acceptance release
+
+**Cakupan setelah MVP:** T01–T16 di bagian ini adalah ID uji release penuh, **bukan** task eksekusi T0–T5. Seluruh kata “wajib”, command dan exit internal-ready pada §7.1–§7.2 berlaku untuk production/upgrade/backlog lengkap; gate preview aktif hanya [tasks.md T5](tasks.md#3-prioritas-kerja--kerjakan-berurutan) dan acceptance MVP Feature Spec §2. Jangan menjalankan seluruh suite/matriks ini hanya untuk menyerahkan APK preview atau mengulang build karena perubahan dokumen.
 
 | ID uji | Lapisan | Skenario wajib / hasil yang diharapkan |
 | --- | --- | --- |
@@ -588,13 +620,13 @@ $fixtureUser adalah ID yang dibuat, $runId UUID baru; cek exit tiap command. Har
 
 Evidence pada direktori temp baru: SHA256 manifest source inputs, exact migration inventory/signatures, commands/variant/device/API, counts/failures/skips, screenshots, sanitized request trace tanpa token/PII, fixture registry/receipts. Tests permanen behavior/boundary/invariant nyata, bukan source-text/wiring tests; smoke sementara dibuang setelah evidence.
 
-**Exit internal ready:** semua gate final lulus, demo+production unit/build, actual production HTTP/UI, installed upgrade/restore, timer cold/warm, normal+instrumented minified. Petakan semua34 AC dan T01–T16 ke evidence/N/A scope sah, bukan fake sebagai production proof. Docker/SDK/emulator unavailable: siapkan prerequisite aman, laporkan blocker tepat, jangan hosted/fake substitute. Publish signing/hosted policy/backup/cutoff gate terpisah.
+**Exit internal release-ready penuh setelah MVP:** semua gate final lulus, demo+production unit/build, actual production HTTP/UI, installed upgrade/restore, timer cold/warm, normal+instrumented minified. Petakan semua34 AC dan T01–T16 ke evidence/N/A scope sah, bukan fake sebagai production proof. Docker/SDK/emulator unavailable: siapkan prerequisite aman, laporkan blocker tepat, jangan hosted/fake substitute. Publish signing/hosted policy/backup/cutoff gate terpisah. Exit preview tetap tasks.md T5.
 
 Langkah0: integrator menjalankan script read-only pasangan fence, jumlah kolom tabel, link/anchor lokal, parity empat RPC, AC01–AC34 utuh dan label Proposed/source-verified/historical runtime/NOT_TESTED pada ketiga dokumen. Ini validasi dokumen, bukan exit implementasi atau proof gate runtime.
 
 ## 8. Rollout dan rollback
 
-**Eksekusi current hanya lokal/internal**, tanpa rollout/deployment/cutoff project bersama `ltcxltahkrjnsjaxndsa`. Review hosted PostgreSQL/API/TLS, backup/rollback, minimum-client policy dan izin cutoff adalah gate release tersendiri/deferred, bukan pekerjaan yang diotorisasi sesi ini.
+**Eksekusi aktif hanya MVP lokal/terisolasi**, tanpa rollout/deployment/cutoff project bersama `ltcxltahkrjnsjaxndsa`. Review hosted PostgreSQL/API/TLS, backup/rollback, minimum-client policy dan izin cutoff adalah gate release tersendiri/deferred. Deployment backend dan verifikasi koneksi dari jaringan klien luar dilakukan terpisah setelah MVP lulus; APK lokal tidak otomatis siap dipakai klien eksternal. Penghapusan data lama tetap memerlukan persetujuan eksplisit.
 
 Untuk keputusan hosted di masa depan, additive → recovery-compatible client → scoped cohort → runtime clean cutover → lockdown hanya setelah compatibility policy server-enforced. Tidak dual-write/berpindah write authority di tengah sesi. Feature flag/capability negotiation tetap Proposed, bukan kontrak existing terverifikasi; jangan mengandalkan header client yang dapat diabaikan.
 
@@ -684,3 +716,5 @@ Coverage E/L adalah audit baseline, bukan sertifikasi seluruh project. Runtime l
 | 1.9 | 2026-10-28 | Foundation F6.1 inventory/read-only schema, owner/epoch preflight dan evidence checkpoint teruji lokal; review/import/Start integration dan G6a/G6b tetap terbuka (§7.8 laporan) |
 | 2.0 | 2026-10-29 | Tanggal system clock; metadata/source current disejajarkan §7.9 tanpa rerun PASS; roadmap F4–F7 diganti langkah1–6 lengkap dengan empat RPC Proposed, selected recovery, dirty/debounce AC13/15, profil, clean cutover, backup/fixtures dan final NOT_TESTED matrix/commands. Target internal ready tanpa hosted deployment/cutoff; baseline/live audit dan fase lama tetap historis |
 | 2.1 | 2026-10-29 | Review manifest dan persiapan commit host-only; perbaikan terarah serta evidence dirty snapshot di laporan §7.11. Roadmap step 0 historis dibedakan dari source implementasi yang kini ada; gate backend/device dan izin mutasi Git tetap terbuka |
+| 2.2 | 2026-10-29 | tasks.md T0–T5 menjadi urutan aktif MVP; roadmap langkah 1–6 dan matriks release penuh dilabeli referensi/backlog setelah MVP. Kontrak/safety, source existing, evidence dan histori tetap; tanpa audit/build/runtime baru |
+| 2.3 | 2026-10-29 | Exit MVP T5 tercapai: 417/424 full host regression, 3 smoke UI/HTTP final dan APK lokal terverifikasi; T0–T5 ditutup, backlog production/legacy/minified dan izin hosted tetap terpisah |

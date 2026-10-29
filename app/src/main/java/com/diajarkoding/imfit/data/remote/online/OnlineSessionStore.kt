@@ -146,7 +146,8 @@ class OnlineSessionStore(
                 reloadRevision++
                 lastReloadTarget = sessionId
                 phase(current.copy(loaded = true, snapshot = confirmed, busy = false,
-                    requiresVerification = conflict, failure = if (conflict) current.failure else null))
+                    // The read is verified; a retained conflict still locks writes until explicit review.
+                    requiresVerification = false, failure = if (conflict) current.failure else null))
             }
             return confirmed(identity)
         } catch (cancelled: CancellationException) {

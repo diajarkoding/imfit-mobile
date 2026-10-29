@@ -313,10 +313,15 @@ class OnlineSessionStoreTest {
         reads.api.requests.receive().reply("""{"code":"PT409","message":"VERSION_CONFLICT","details":null,"hint":null}""", 409)
         assertTrue(flush.await().isFailure)
         assertEquals(SessionSavePhase.CONFLICT, store.state.value.savePhase)
+        assertTrue(store.state.value.requiresVerification)
         assertTrue(runCatching { store.reapplyDrafts("session") }.isFailure)
+        assertTrue(runCatching { store.discardDrafts("session") }.isFailure)
         assertTrue(runCatching { store.command("session", SessionCommand.Resume) }.isFailure)
         load(7, draftSnapshot)
         assertEquals(SessionSavePhase.CONFLICT, store.state.value.savePhase)
+        assertFalse(store.state.value.requiresVerification)
+        assertEquals("25", store.state.value.drafts.getValue(key).weightText)
+        assertTrue(runCatching { store.command("session", SessionCommand.Resume) }.isFailure)
         val reapply = async { store.reapplyDrafts("session") }
         reads.api.requests.receive().also {
             assertEquals(7L, it.body.getValue("p_expected_version").jsonPrimitive.long)
@@ -324,6 +329,41 @@ class OnlineSessionStoreTest {
         }
         reapply.await()
         assertEquals(SessionSavePhase.CONFIRMED, store.state.value.savePhase)
+    }
+
+    @Test fun `failed conflict reload stays locked and preserves raw text`() = runTest {
+        useScope(backgroundScope)
+        load(snapshot = draftSnapshot)
+        store.editSet("session", key, "25", "8")
+        val flush = async { runCatching { store.flushEdits("session") } }
+        reads.api.requests.receive().reply("""{"code":"PT409","message":"VERSION_CONFLICT","details":null,"hint":null}""", 409)
+        assertTrue(flush.await().isFailure)
+        val reload = async { runCatching { store.reload("session") } }
+        reads.api.requests.receive().loseResponse()
+        assertTrue(reload.await().isFailure)
+        assertTrue(store.state.value.requiresVerification)
+        assertTrue(runCatching { store.reapplyDrafts("session") }.isFailure)
+        assertTrue(runCatching { store.command("session", SessionCommand.Resume) }.isFailure)
+        assertEquals("25", store.state.value.drafts.getValue(key).weightText)
+    }
+
+    @Test fun `verified conflict can explicitly use server without sending another mutation`() = runTest {
+        useScope(backgroundScope)
+        load(snapshot = draftSnapshot)
+        store.editSet("session", key, "25", "8")
+        val flush = async { runCatching { store.flushEdits("session") } }
+        reads.api.requests.receive().reply("""{"code":"PT409","message":"VERSION_CONFLICT","details":null,"hint":null}""", 409)
+        assertTrue(flush.await().isFailure)
+        assertTrue(runCatching { store.discardDrafts("session") }.isFailure)
+        load(7, draftSnapshot)
+        assertFalse(store.state.value.requiresVerification)
+        assertEquals(SessionSavePhase.CONFLICT, store.state.value.savePhase)
+        store.discardDrafts("session")
+        assertTrue(store.state.value.drafts.isEmpty())
+        assertEquals(7L, store.state.value.snapshot!!.version)
+        assertEquals("10.00", store.state.value.snapshot!!.exercises.single().sets.single().weight)
+        assertEquals(SessionSavePhase.CONFIRMED, store.state.value.savePhase)
+        assertTrue(reads.api.requests.tryReceive().isFailure)
     }
 
     @Test fun `expiry acknowledgement reloads targeted expired review without flushing drafts`() = runTest {

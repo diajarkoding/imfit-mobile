@@ -158,7 +158,9 @@ object OnlineRpc {
         exercises.forEach {
             val row = it.jsonObject
             require(row.keys.containsAll(exerciseFields - "input_defaults"))
-            uuid(row.getValue("exercise_id").jsonPrimitive.content)
+            // Catalog identity is text (for example ex_back_1), unlike aggregate UUIDs.
+            val exerciseId = row.getValue("exercise_id").jsonPrimitive
+            require(exerciseId.isString && exerciseId.content.isNotBlank())
             timestamp(row.getValue("created_at").jsonPrimitive.content); timestamp(row.getValue("updated_at").jsonPrimitive.content)
         }
         sets.forEach {

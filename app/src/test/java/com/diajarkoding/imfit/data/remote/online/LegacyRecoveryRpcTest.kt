@@ -62,6 +62,35 @@ class LegacyRecoveryRpcTest {
         rejected { lookup.validate(OperationLookup(OperationState.COMMITTED, receipt.copy(operation = "import_legacy_workout_unsafe"))) }
     }
 
+    @Test fun catalogTextIdentityIsPreservedInImportAndAddExerciseCommand() {
+        val child = "00000000-0000-0000-0000-000000000003"
+        val source = buildJsonObject {
+            put("schema_version", 9); put("kind", "WORKOUT"); put("id", session)
+            put("fingerprint", fingerprint); put("mapping_version", 1)
+        }
+        val workout = buildJsonObject {
+            put("id", session); put("user_id", request); put("template_name", "Archive"); put("date", "2026-10-29")
+            put("start_time", now); put("end_time", now); put("created_at", now); put("updated_at", now)
+            put("total_volume", "0"); put("total_sets", 0); put("total_reps", 0)
+        }
+        val exercise = buildJsonObject {
+            put("id", child); put("workout_log_id", session); put("exercise_id", "ex_back_1")
+            put("exercise_name", "Catalog exercise"); put("muscle_category", "BACK"); put("order_index", 0)
+            put("total_volume", "0"); put("total_sets", 0); put("total_reps", 0)
+            put("created_at", now); put("updated_at", now)
+        }
+        val call = OnlineRpc.importLegacyWorkout(request, source, workout, JsonArray(listOf(exercise)), JsonArray(emptyList()))
+        assertEquals("ex_back_1", call.parameters.getValue("p_exercises").jsonArray.single().jsonObject.getValue("exercise_id").jsonPrimitive.content)
+        val command = OnlineRpc.updateSession(request, session, 1, SessionCommand.AddExercise(child, "ex_back_1"))
+        assertEquals(JsonPrimitive("ex_back_1"), command.parameters.getValue("p_command").jsonObject["exercise_id"])
+        rejected { OnlineRpc.importLegacyWorkout(request, source, workout,
+            JsonArray(listOf(JsonObject(exercise + ("id" to JsonPrimitive("not-an-aggregate-uuid"))))), JsonArray(emptyList())) }
+        for (invalid in listOf(JsonPrimitive(""), JsonPrimitive(" "), JsonPrimitive(12))) {
+            rejected { OnlineRpc.importLegacyWorkout(request, source, workout,
+                JsonArray(listOf(JsonObject(exercise + ("exercise_id" to invalid)))), JsonArray(emptyList())) }
+        }
+    }
+
     private fun rejected(block: () -> Unit) {
         try { block(); fail("Invalid server evidence accepted") } catch (_: IllegalArgumentException) { }
     }

@@ -2,8 +2,13 @@ package com.diajarkoding.imfit.data.repository
 
 import com.diajarkoding.imfit.data.local.FakeUserDataSource
 import com.diajarkoding.imfit.domain.model.User
+import com.diajarkoding.imfit.domain.model.UserProfileState
 import com.diajarkoding.imfit.domain.model.RegisterResult
 import com.diajarkoding.imfit.domain.repository.AuthRepository
+import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.map
 import javax.inject.Inject
 import javax.inject.Singleton
 
@@ -13,10 +18,14 @@ class DemoAuthRepository @Inject constructor(
 ) : AuthRepository {
     constructor() : this(null)
 
+    override val userProfileState: StateFlow<UserProfileState> = FakeUserDataSource.userProfileState
+
     init {
         FakeUserDataSource.login(DEMO_EMAIL, DEMO_PASSWORD)
     }
 
+    override suspend fun refreshProfile(force: Boolean): Result<User?> =
+        Result.success(FakeUserDataSource.getCurrentUser())
     override suspend fun register(
         name: String,
         email: String,
@@ -40,6 +49,9 @@ class DemoAuthRepository @Inject constructor(
     }
 
     override suspend fun getCurrentUser(): User? = FakeUserDataSource.getCurrentUser()
+
+    override fun observeCurrentUser(): Flow<User?> =
+        userProfileState.map { it.currentUser }.distinctUntilChanged()
 
     override suspend fun isLoggedIn(): Boolean = FakeUserDataSource.isLoggedIn()
 

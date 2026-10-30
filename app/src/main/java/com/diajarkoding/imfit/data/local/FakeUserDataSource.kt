@@ -1,6 +1,10 @@
 package com.diajarkoding.imfit.data.local
 
 import com.diajarkoding.imfit.domain.model.User
+import com.diajarkoding.imfit.domain.model.UserProfileState
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
 
 object FakeUserDataSource {
 
@@ -11,8 +15,14 @@ object FakeUserDataSource {
         )
     )
 
-    private var currentUser: User? = null
+    private val _userProfileState = MutableStateFlow(UserProfileState.unauthenticated())
+    val userProfileState: StateFlow<UserProfileState> = _userProfileState.asStateFlow()
 
+    private var currentUser: User? = null
+        set(value) {
+            field = value
+            _userProfileState.value = UserProfileState.fromDirectUser(value)
+        }
     data class UserCredentials(
         val user: User,
         val password: String

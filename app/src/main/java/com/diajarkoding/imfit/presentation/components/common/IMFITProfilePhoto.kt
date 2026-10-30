@@ -144,15 +144,13 @@ fun IMFITProfilePhoto(
             isLoading = false
         }
 
-        // Show loading indicator
+        // Show shimmer while image bytes are loading
         if (isLoading && !hasLoadedSuccessfully && !profilePhotoUri.isNullOrBlank()) {
-            CircularProgressIndicator(
-                modifier = Modifier.size(size * 0.3f),
-                color = placeholderTint,
-                strokeWidth = 2.dp
+            ShimmerCircle(
+                size = size,
+                modifier = Modifier.testTag("profile_photo_shimmer")
             )
         }
-
         // Show placeholder if no URI, loading, or if image failed to load
         if (showPlaceholder) {
             Icon(

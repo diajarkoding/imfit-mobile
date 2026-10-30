@@ -41,7 +41,26 @@ class ProgressViewModel @Inject constructor(
     private var loadJob: Job? = null
 
     init {
+        observeProfile()
         loadData()
+    }
+
+    private fun observeProfile() {
+        viewModelScope.launch {
+            authRepository.userProfileState.collect { profile ->
+                val current = profile.currentUser
+                if (current != null) {
+                    _state.update {
+                        it.copy(
+                            userName = current.name,
+                            userEmail = current.email,
+                            userBirthDate = current.birthDate,
+                            userProfilePhotoUri = profile.resolvedAvatarUrl
+                        )
+                    }
+                }
+            }
+        }
     }
 
     fun loadData() {
@@ -50,39 +69,48 @@ class ProgressViewModel @Inject constructor(
             _state.update { it.copy(isLoading = true, hasError = false) }
 
             try {
-                authRepository.observeCurrentUser().collectLatest { user ->
-                if (user == null) {
-                    _state.update { it.copy(
-                        userName = "Guest",
-                        userEmail = "",
-                        userBirthDate = null,
-                        userProfilePhotoUri = null,
-                        workoutDates = emptySet(),
-                        workoutLogsByDate = emptyMap(),
-                        isLoading = false
-                    ) }
-                    return@collectLatest
-                }
-
-                _state.update { it.copy(userName = user.name, userEmail = user.email, userBirthDate = user.birthDate) }
-                // Get signed URL for profile photo (private bucket)
-                val signedAvatarUrl = try {
-                    authRepository.getSignedAvatarUrl(user.profilePhotoUri)
-                } catch (e: CancellationException) {
-                    throw e
-                } catch (_: Exception) {
-                    null // A failed avatar fetch must not hide locally available workout history.
-                }
-                
-                workoutRepository.observeWorkoutLogs(user.id).collect { logs ->
-                    val workoutLogsByDate = logs.distinctBy { it.id }.groupBy { log ->
-                        Instant.ofEpochMilli(log.startTime).atZone(ZoneId.systemDefault()).toLocalDate()
+                authRepository.refreshProfile(force = false)
+                authRepository.userProfileState.collectLatest { profile ->
+                    if (profile.isProfileLoading) return@collectLatest
+                    val user = profile.currentUser
+                    if (!profile.hasRetainedSessionContext || user == null) {
+                        _state.update {
+                            it.copy(
+                                userName = "Guest",
+                                userEmail = "",
+                                userBirthDate = null,
+                                userProfilePhotoUri = null,
+                                workoutDates = emptySet(),
+                                workoutLogsByDate = emptyMap(),
+                                isLoading = false
+                            )
+                        }
+                        return@collectLatest
                     }
-                    _state.update { it.copy(
-                        userProfilePhotoUri = signedAvatarUrl, workoutDates = workoutLogsByDate.keys,
-                        workoutLogsByDate = workoutLogsByDate, isLoading = false, hasError = false
-                    ) }
-                }
+
+                    _state.update {
+                        it.copy(
+                            userName = user.name,
+                            userEmail = user.email,
+                            userBirthDate = user.birthDate,
+                            userProfilePhotoUri = profile.resolvedAvatarUrl
+                        )
+                    }
+
+                    workoutRepository.observeWorkoutLogs(user.id).collect { logs ->
+                        val workoutLogsByDate = logs.distinctBy { it.id }.groupBy { log ->
+                            Instant.ofEpochMilli(log.startTime).atZone(ZoneId.systemDefault()).toLocalDate()
+                        }
+                        _state.update {
+                            it.copy(
+                                userProfilePhotoUri = authRepository.userProfileState.value.resolvedAvatarUrl,
+                                workoutDates = workoutLogsByDate.keys,
+                                workoutLogsByDate = workoutLogsByDate,
+                                isLoading = false,
+                                hasError = false
+                            )
+                        }
+                    }
                 }
             } catch (e: CancellationException) {
                 throw e

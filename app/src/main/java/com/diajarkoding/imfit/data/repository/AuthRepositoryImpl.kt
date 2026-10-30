@@ -14,11 +14,14 @@ import com.diajarkoding.imfit.data.sync.SyncPreferences
 import com.diajarkoding.imfit.data.sync.SyncScheduler
 import com.diajarkoding.imfit.domain.model.RegisterResult
 import com.diajarkoding.imfit.domain.model.User
+import com.diajarkoding.imfit.domain.model.UserProfileState
 import com.diajarkoding.imfit.domain.repository.AuthRepository
 import dagger.hilt.android.qualifiers.ApplicationContext
 import io.github.jan.supabase.SupabaseClient
 import io.github.jan.supabase.auth.auth
 import io.github.jan.supabase.auth.providers.builtin.Email
+import io.github.jan.supabase.auth.status.SessionStatus
+import io.github.jan.supabase.auth.user.UserInfo
 import io.github.jan.supabase.postgrest.postgrest
 import io.github.jan.supabase.storage.storage
 import kotlin.time.Duration.Companion.seconds
@@ -28,11 +31,14 @@ import java.util.UUID
 import javax.inject.Inject
 import javax.inject.Singleton
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.flow.emitAll
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.distinctUntilChanged
-
 private const val TAG = "AuthRepository"
 private const val AVATARS_BUCKET = "avatars"
 
@@ -46,9 +52,53 @@ class AuthRepositoryImpl @Inject constructor(
     @ApplicationContext private val context: Context,
     private val timerCleanup: com.diajarkoding.imfit.core.timer.TimerSessionCleanup
 ) : AuthRepository {
-
+    private val profileScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
     private var cachedUser: User? = null
 
+    private val profileCoordinator = UserProfileCoordinator(
+        scope = profileScope,
+        sessionSignals = supabaseClient.auth.sessionStatus.map { status ->
+            when (status) {
+                is SessionStatus.Initializing -> AuthSessionSignal.Initializing
+                is SessionStatus.Authenticated -> {
+                    val userInfo = status.session.user ?: supabaseClient.auth.currentUserOrNull()
+                    if (userInfo != null) userInfo.toAuthSignal() else AuthSessionSignal.NotAuthenticated
+                }
+                is SessionStatus.RefreshFailure -> AuthSessionSignal.RefreshFailure
+                is SessionStatus.NotAuthenticated -> AuthSessionSignal.NotAuthenticated
+            }
+        },
+        currentIdentity = {
+            supabaseClient.auth.currentUserOrNull()?.toAuthSignal()
+        },
+        awaitIdentity = {
+            supabaseClient.auth.currentUserOrNull()?.toAuthSignal() ?: run {
+                supabaseClient.auth.awaitInitialization()
+                supabaseClient.auth.currentUserOrNull()?.toAuthSignal()
+            }
+        },
+        readLocalUser = { userId ->
+            database.userDao().getUserById(userId)?.toUser()
+                ?: cachedUser?.takeIf { it.id == userId }
+        },
+        writeLocalUser = { user ->
+            if (peekLocalUserId() == user.id) {
+                database.userDao().insertUser(user.toLocal())
+                cachedUser = user
+            }
+        },
+        fetchRemoteProfile = { userId ->
+            fetchProfileResult(userId)
+        },
+        createSignedAvatarUrl = { storagePath ->
+            fetchSignedAvatarUrlFromStorage(storagePath)
+        }
+    )
+
+    override val userProfileState: StateFlow<UserProfileState> = profileCoordinator.state
+
+    override suspend fun refreshProfile(force: Boolean): Result<User?> =
+        profileCoordinator.refreshProfile(force)
     override suspend fun register(
         name: String,
         email: String,
@@ -180,14 +230,22 @@ class AuthRepositoryImpl @Inject constructor(
      * @param storagePath The storage path (e.g., "userId/filename.jpg")
      * @return The signed URL or null if generation fails
      */
-    override suspend fun getSignedAvatarUrl(storagePath: String?): String? {
+    override suspend fun getSignedAvatarUrl(storagePath: String?): String? =
+        profileCoordinator.getCachedOrFetchSignedAvatarUrl(
+            userId = peekLocalUserId() ?: userProfileState.value.userId,
+            storagePath = storagePath
+        )
+
+    private suspend fun fetchSignedAvatarUrlFromStorage(storagePath: String?): String? {
         if (storagePath.isNullOrBlank()) return null
-        
+
         return try {
             val bucket = supabaseClient.storage.from(AVATARS_BUCKET)
             val signedUrl = bucket.createSignedUrl(storagePath, expiresIn = 3600.seconds)
             Log.d(TAG, "Generated signed URL for: $storagePath")
             signedUrl
+        } catch (e: CancellationException) {
+            throw e
         } catch (e: Exception) {
             Log.e(TAG, "Failed to generate signed URL: ${e.message}", e)
             null
@@ -273,12 +331,15 @@ class AuthRepositoryImpl @Inject constructor(
 
     override suspend fun logout() {
         timerCleanup.stop("LOGOUT")
-        val userId = supabaseClient.auth.currentUserOrNull()?.id ?: return
-        syncScheduler.cancelForUser(userId)
-        syncLifecycleController.blockAndAwaitIdle(userId)
-        database.deleteUserData(userId)
-        syncPreferences.clearForUser(userId)
+        val userId = supabaseClient.auth.currentUserOrNull()?.id ?: userProfileState.value.userId
+        if (userId != null) {
+            syncScheduler.cancelForUser(userId)
+            syncLifecycleController.blockAndAwaitIdle(userId)
+            database.deleteUserData(userId)
+            syncPreferences.clearForUser(userId)
+        }
         cachedUser = null
+        profileCoordinator.onLogout()
         supabaseClient.auth.signOut()
     }
 
@@ -343,8 +404,7 @@ class AuthRepositoryImpl @Inject constructor(
 
     private suspend fun cacheUser(user: User) {
         if (getLocalUserId() != user.id) return
-        database.userDao().insertUser(user.toLocal())
-        cachedUser = user
+        profileCoordinator.onUserAuthenticatedOrUpdated(user)
     }
 
     override suspend fun isLoggedIn(): Boolean {
@@ -377,19 +437,32 @@ class AuthRepositoryImpl @Inject constructor(
         }
     }
 
-    private suspend fun fetchProfile(userId: String): User? {
+    private suspend fun fetchProfileResult(userId: String): Result<User?> {
         return try {
             val profile = supabaseClient.postgrest.from("profiles")
                 .select {
                     filter { eq("id", userId) }
                 }
                 .decodeSingleOrNull<ProfileDto>()
-            profile?.toDomain()
+            Result.success(profile?.toDomain())
+        } catch (e: CancellationException) {
+            throw e
         } catch (e: Exception) {
             Log.e("AuthRepository", "Fetch profile error: ${e.message}", e)
-            null
+            Result.failure(e)
         }
     }
+
+    private suspend fun fetchProfile(userId: String): User? =
+        fetchProfileResult(userId).getOrNull()
+
+    private fun UserInfo.toAuthSignal(): AuthSessionSignal.Authenticated =
+        AuthSessionSignal.Authenticated(
+            userId = id,
+            email = email.orEmpty(),
+            fallbackName = userMetadata.displayNameOrDefault(),
+            fallbackBirthDate = userMetadata?.get("birth_date")?.toString()?.removeSurrounding("\"")
+        )
 
     private fun isStrongPassword(password: String): Boolean =
         password.length >= 8 &&

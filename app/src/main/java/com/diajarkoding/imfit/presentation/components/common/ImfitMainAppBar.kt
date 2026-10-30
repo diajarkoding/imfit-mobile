@@ -43,6 +43,7 @@ fun ImfitMainAppBar(
     title: String,
     modifier: Modifier = Modifier,
     profilePhotoUri: String? = null,
+    isProfileLoading: Boolean = false,
     onProfileClick: (() -> Unit)? = null
 ) {
     val colors = IMFITColors.training
@@ -69,10 +70,19 @@ fun ImfitMainAppBar(
                     containerColor = colors.primaryContainer, contentColor = colors.onPrimaryContainer
                 )
             ) {
-                if (profilePhotoUri.isNullOrBlank()) {
-                    Icon(Symbols.Default.Person, null, Modifier.size(IMFITComponentSizes.brandIcon))
-                } else {
-                    IMFITProfilePhoto(profilePhotoUri, size = IMFITSizes.avatarSm)
+                when {
+                    isProfileLoading && profilePhotoUri.isNullOrBlank() -> {
+                        ShimmerCircle(
+                            size = IMFITSizes.avatarSm,
+                            modifier = Modifier.testTag("app_bar_avatar_shimmer")
+                        )
+                    }
+                    profilePhotoUri.isNullOrBlank() -> {
+                        Icon(Symbols.Default.Person, null, Modifier.size(IMFITComponentSizes.brandIcon))
+                    }
+                    else -> {
+                        IMFITProfilePhoto(profilePhotoUri, size = IMFITSizes.avatarSm)
+                    }
                 }
             }
         }

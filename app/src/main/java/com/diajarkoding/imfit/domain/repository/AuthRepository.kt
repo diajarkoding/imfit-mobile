@@ -1,9 +1,13 @@
 package com.diajarkoding.imfit.domain.repository
 
 import com.diajarkoding.imfit.domain.model.User
+import com.diajarkoding.imfit.domain.model.UserProfileState
 import com.diajarkoding.imfit.domain.model.RegisterResult
+import kotlinx.coroutines.flow.StateFlow
 
 interface AuthRepository {
+    val userProfileState: StateFlow<UserProfileState>
+    suspend fun refreshProfile(force: Boolean = false): Result<User?>
     suspend fun register(
         name: String,
         email: String,

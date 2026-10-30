@@ -45,7 +45,6 @@ import androidx.navigation3.runtime.rememberSaveableStateHolderNavEntryDecorator
 import androidx.navigation3.ui.NavDisplay
 import com.diajarkoding.imfit.R
 import com.diajarkoding.imfit.presentation.components.common.ImfitMainAppBar
-import com.diajarkoding.imfit.presentation.components.common.SyncProgressDialog
 import com.diajarkoding.imfit.presentation.ui.exercise.ExerciseBrowserScreen
 import com.diajarkoding.imfit.presentation.ui.home.HomeScreen
 import com.diajarkoding.imfit.presentation.ui.home.HomeViewModel
@@ -81,6 +80,7 @@ fun MainScreen(
     onNavigateToWorkoutHistory: (LocalDate) -> Unit = {},
     onNavigateToYearlyCalendar: (java.time.YearMonth) -> Unit = {},
     onNavigateToProfile: () -> Unit = {},
+    mainViewModel: MainViewModel = hiltViewModel(),
     homeViewModel: HomeViewModel = hiltViewModel(),
     onRefreshRemote: () -> Unit = {}
 ) {
@@ -91,11 +91,14 @@ fun MainScreen(
     )
     val bottomBackStack = rememberNavBackStack(HomeTab)
     val currentTab = bottomBackStack.lastOrNull()
-    LaunchedEffect(currentTab) { onRefreshRemote() }
+    LaunchedEffect(currentTab) {
+        if (currentTab != null && currentTab !is HomeTab) {
+            onRefreshRemote()
+        }
+    }
     
-    // Get sync state from HomeViewModel
-    val syncState by homeViewModel.syncState.collectAsStateWithLifecycle()
-    val homeState by homeViewModel.state.collectAsStateWithLifecycle()
+    val syncState by mainViewModel.syncState.collectAsStateWithLifecycle()
+    val userProfileState by mainViewModel.userProfileState.collectAsStateWithLifecycle()
     val appBarTitleRes = when (currentTab) {
         is ExerciseTab -> R.string.nav_exercises
         is ProgressTab -> R.string.nav_progress
@@ -122,7 +125,8 @@ fun MainScreen(
                     modifier = Modifier.windowInsetsPadding(
                         WindowInsets.safeDrawing.only(WindowInsetsSides.Top + WindowInsetsSides.Horizontal)
                     ),
-                    profilePhotoUri = if (showProfileAction) homeState.userProfilePhotoUri else null,
+                    profilePhotoUri = if (showProfileAction) userProfileState.resolvedAvatarUrl else null,
+                    isProfileLoading = showProfileAction && userProfileState.isAvatarLoading,
                     onProfileClick = if (showProfileAction) onNavigateToProfile else null
                 )
             },
@@ -211,8 +215,6 @@ fun MainScreen(
             )
         }
         
-        // Full-screen sync overlay - covers entire screen including bottom nav
-        SyncProgressDialog(syncState = syncState)
     }
     }
 }

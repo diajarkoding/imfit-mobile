@@ -26,7 +26,6 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.diajarkoding.imfit.R
 import com.diajarkoding.imfit.presentation.components.common.RoutineAppBar
 import com.diajarkoding.imfit.presentation.ui.progress.ProgressState
-import com.diajarkoding.imfit.presentation.ui.progress.ProgressViewModel
 import com.diajarkoding.imfit.theme.IMFITColors
 import com.diajarkoding.imfit.theme.IMFITSpacing
 import com.diajarkoding.imfit.theme.IMFITTheme
@@ -40,7 +39,7 @@ fun ProfileScreen(
     onToggleTheme: () -> Unit,
     isIndonesian: Boolean,
     onToggleLanguage: () -> Unit,
-    viewModel: ProgressViewModel = hiltViewModel()
+    viewModel: ProfileViewModel = hiltViewModel()
 ) {
     val state by viewModel.state.collectAsStateWithLifecycle()
     ProfileScreenContent(
@@ -51,7 +50,7 @@ fun ProfileScreen(
         onLogout = { viewModel.logout(onLogout) },
         onToggleTheme = onToggleTheme,
         onToggleLanguage = onToggleLanguage,
-        onRetry = viewModel::loadData
+        onRetry = viewModel::retry
     )
 }
 

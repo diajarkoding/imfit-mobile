@@ -13,10 +13,20 @@ import com.diajarkoding.imfit.domain.model.MuscleCategory
 import com.diajarkoding.imfit.domain.model.TemplateExercise
 import com.diajarkoding.imfit.domain.model.User
 import com.diajarkoding.imfit.domain.model.RegisterResult
+import com.diajarkoding.imfit.domain.model.UserProfileState
 import com.diajarkoding.imfit.domain.model.WorkoutTemplate
 import com.diajarkoding.imfit.domain.repository.AuthRepository
+import com.diajarkoding.imfit.data.remote.WorkoutRemoteDataSource
+import com.diajarkoding.imfit.data.remote.dto.ExerciseDto
+import com.diajarkoding.imfit.data.remote.dto.MuscleCategoryDto
+import com.diajarkoding.imfit.data.remote.dto.TemplateExerciseDto
+import com.diajarkoding.imfit.data.remote.dto.WorkoutLogDto
+import com.diajarkoding.imfit.data.remote.dto.WorkoutTemplateDto
+import com.diajarkoding.imfit.domain.model.HomeRemoteReadResult
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.*
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.first
 import androidx.lifecycle.viewModelScope
 import com.diajarkoding.imfit.domain.model.appendExercises
@@ -288,6 +298,136 @@ class WorkoutRepositoryRoomFirstTest {
         } catch (_: kotlinx.serialization.SerializationException) { }
     }
 
+
+    @Test
+    fun fetchRemoteTemplatesReconcilesRoomAppliesPendingOverlayAndSupportsDetailNavigation() = runBlocking {
+        val localPendingCreate = repository.createTemplate(user.id, "Offline Created", sampleTemplate().exercises)
+        val toDelete = repository.createTemplate(user.id, "To Delete Locally", emptyList())
+        repository.deleteTemplate(toDelete.id)
+
+        val remoteExerciseDto = ExerciseDto(
+            id = "ex_remote_pull",
+            muscleCategoryId = 2,
+            name = "Barbell Row",
+            description = "Back exercise",
+            muscleCategory = MuscleCategoryDto(2, "BACK", "Back")
+        )
+        val remoteTemplateDto = WorkoutTemplateDto(
+            id = UUID.randomUUID().toString(),
+            userId = user.id,
+            name = "Remote Pull Day",
+            isDeleted = false,
+            createdAt = "2026-10-31T08:00:00Z",
+            updatedAt = "2026-10-31T08:00:00Z",
+            templateExercises = listOf(
+                TemplateExerciseDto(
+                    templateId = "ignored",
+                    exerciseId = remoteExerciseDto.id,
+                    orderIndex = 0,
+                    sets = 4,
+                    reps = 10,
+                    restSeconds = 90,
+                    exercises = remoteExerciseDto
+                )
+            )
+        )
+        val staleDeletedDto = WorkoutTemplateDto(
+            id = toDelete.id,
+            userId = user.id,
+            name = "To Delete Locally",
+            isDeleted = false,
+            createdAt = "2026-10-31T09:00:00Z",
+            updatedAt = "2026-10-31T09:00:00Z",
+            templateExercises = emptyList()
+        )
+
+        val repoWithRemote = WorkoutRepositoryImpl(
+            authRepository = FakeAuthRepository(user),
+            exerciseLogDao = database.exerciseLogDao(),
+            workoutSetDao = database.workoutSetDao(),
+            exerciseDao = database.exerciseDao(),
+            workoutLogDao = database.workoutLogDao(),
+            workoutTemplateDao = database.workoutTemplateDao(),
+            templateExerciseDao = database.templateExerciseDao(),
+            activeSessionDao = database.activeSessionDao(),
+            database = database,
+            syncScheduler = scheduler,
+            timerCleanup = null,
+            remoteDataSource = object : WorkoutRemoteDataSource {
+                override suspend fun fetchActiveTemplates(userId: String) = listOf(remoteTemplateDto, staleDeletedDto)
+                override suspend fun fetchLatestCompletedWorkoutLog(userId: String): WorkoutLogDto? = null
+            }
+        )
+
+        val result = repoWithRemote.fetchRemoteTemplates(user.id)
+        assertTrue(result is HomeRemoteReadResult.RemotePrimary)
+        val names = result.data.map { it.name }
+        assertTrue("Remote template must be present", "Remote Pull Day" in names)
+        assertTrue("Local pending create must be overlaid", "Offline Created" in names)
+        assertFalse("Pending local delete must be filtered out", "To Delete Locally" in names)
+
+        // Navigating from Home to WorkoutDetail reads getTemplateById from Room: must exist with exercises!
+        val detailTemplate = repoWithRemote.getTemplateById(remoteTemplateDto.id)
+        assertNotNull(detailTemplate)
+        assertEquals("Remote Pull Day", detailTemplate?.name)
+        assertEquals(1, detailTemplate?.exercises?.size)
+        assertEquals("Barbell Row", detailTemplate?.exercises?.first()?.exercise?.name)
+    }
+
+    @Test
+    fun remoteFailureUsesLocalFallbackWhenValidDataExistsAndThrowsWhenColdCacheIsEmpty() = runBlocking {
+        val failingRemote = object : WorkoutRemoteDataSource {
+            override suspend fun fetchActiveTemplates(userId: String): List<WorkoutTemplateDto> =
+                throw java.io.IOException("Network unreachable")
+            override suspend fun fetchLatestCompletedWorkoutLog(userId: String): WorkoutLogDto? =
+                throw java.io.IOException("Network unreachable")
+        }
+        val repoWithFailingRemote = WorkoutRepositoryImpl(
+            authRepository = FakeAuthRepository(user),
+            exerciseLogDao = database.exerciseLogDao(),
+            workoutSetDao = database.workoutSetDao(),
+            exerciseDao = database.exerciseDao(),
+            workoutLogDao = database.workoutLogDao(),
+            workoutTemplateDao = database.workoutTemplateDao(),
+            templateExerciseDao = database.templateExerciseDao(),
+            activeSessionDao = database.activeSessionDao(),
+            database = database,
+            syncScheduler = scheduler,
+            timerCleanup = null,
+            remoteDataSource = failingRemote
+        )
+
+        // 1. Cold empty cache: must throw rather than masquerading as empty success
+        try {
+            repoWithFailingRemote.fetchRemoteTemplates(user.id)
+            org.junit.Assert.fail("Empty cache must not return Success(emptyList()) on remote failure")
+        } catch (_: java.io.IOException) { }
+
+        try {
+            repoWithFailingRemote.fetchRemoteLastWorkoutLog(user.id)
+            org.junit.Assert.fail("Empty cache must not return Success(null) on remote failure")
+        } catch (_: java.io.IOException) { }
+
+        // 2. Create template & finish workout offline (PENDING_SYNC in Room), then fetch -> returns LocalFallback
+        val tpl = repoWithFailingRemote.createTemplate(user.id, "Offline Template", sampleTemplate().exercises)
+        val session = repoWithFailingRemote.startWorkout(tpl)
+        repoWithFailingRemote.updateActiveSession(
+            session.copy(exerciseLogs = session.exerciseLogs.map { log ->
+                log.copy(sets = log.sets.map { it.copy(weight = 60f, reps = 10, isCompleted = true) })
+            })
+        )
+        val finishedLog = requireNotNull(repoWithFailingRemote.finishWorkout())
+
+        val fallbackTemplates = repoWithFailingRemote.fetchRemoteTemplates(user.id)
+        assertTrue(fallbackTemplates is HomeRemoteReadResult.LocalFallback)
+        assertFalse(fallbackTemplates.isFromRemote)
+        assertEquals(listOf("Offline Template"), fallbackTemplates.data.map { it.name })
+
+        val fallbackLastLog = repoWithFailingRemote.fetchRemoteLastWorkoutLog(user.id)
+        assertTrue(fallbackLastLog is HomeRemoteReadResult.LocalFallback)
+        assertFalse(fallbackLastLog.isFromRemote)
+        assertEquals(finishedLog.id, fallbackLastLog.data?.id)
+    }
     private fun sampleTemplate() = WorkoutTemplate(
         id = UUID.randomUUID().toString(),
         userId = user.id,
@@ -319,6 +459,14 @@ private class RecordingSyncScheduler : SyncScheduler {
 }
 
 private class FakeAuthRepository(private var user: User?) : AuthRepository {
+    private val profileFlow = MutableStateFlow(UserProfileState.fromDirectUser(user))
+    override val userProfileState: StateFlow<UserProfileState> = profileFlow
+
+    override suspend fun refreshProfile(force: Boolean): Result<User?> {
+        profileFlow.value = UserProfileState.fromDirectUser(user)
+        return Result.success(user)
+    }
+
     override suspend fun register(
         name: String,
         email: String,
@@ -332,8 +480,8 @@ private class FakeAuthRepository(private var user: User?) : AuthRepository {
 
     override suspend fun logout() {
         user = null
+        profileFlow.value = UserProfileState.unauthenticated()
     }
-
     override suspend fun getCurrentUser() = user
     override suspend fun isLoggedIn() = user != null
     override suspend fun updateProfile(user: User) = Result.success(user)

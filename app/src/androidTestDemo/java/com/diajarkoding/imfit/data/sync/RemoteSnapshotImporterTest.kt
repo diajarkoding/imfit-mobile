@@ -62,4 +62,65 @@ class RemoteSnapshotImporterTest {
         assertEquals("Local", db.workoutTemplateDao().getTemplateById("template")!!.name)
         assertEquals(1, db.templateExerciseDao().getExercisesForTemplateList("template").size)
     }
+
+    @Test fun reconcileActiveTemplatesDeletesOnlyCleanMissingTemplatesAndRespectsRevisionGuard() = runBlocking {
+        val cleanRemoved = WorkoutTemplateEntity("tpl_clean", "user", "Clean Removed", syncStatus = SyncStatus.SYNCED.name, updatedAt = 10)
+        val pendingCreate = WorkoutTemplateEntity("tpl_pending", "user", "Pending Create", syncStatus = SyncStatus.PENDING_SYNC.name, pendingOperation = "CREATE", updatedAt = 10)
+        val parentWithDirtyChild = WorkoutTemplateEntity("tpl_dirty_child", "user", "Dirty Child", syncStatus = SyncStatus.SYNCED.name, updatedAt = 10)
+        val dirtyChild = TemplateExerciseEntity("tpl_dirty_child", "exercise", 0, 4, 10, 60, syncStatus = SyncStatus.PENDING_SYNC.name, pendingOperation = "UPDATE")
+
+        db.workoutTemplateDao().insertTemplate(cleanRemoved)
+        db.workoutTemplateDao().insertTemplate(pendingCreate)
+        db.workoutTemplateDao().insertTemplate(parentWithDirtyChild)
+        db.templateExerciseDao().insertTemplateExercise(dirtyChild)
+
+        val remoteSurvivor = WorkoutTemplateEntity("tpl_remote", "user", "Remote Survivor", syncStatus = SyncStatus.SYNCED.name, updatedAt = 20)
+
+        // 1. When allowMissingDeletion returns false (concurrent local mutation occurred), cleanRemoved is NOT deleted
+        importer.reconcileActiveTemplates(
+            userId = "user",
+            snapshots = listOf(remoteSurvivor to emptyList()),
+            allowMissingDeletion = { false }
+        )
+        assertNotNull(db.workoutTemplateDao().getTemplateById("tpl_clean"))
+        assertNotNull(db.workoutTemplateDao().getTemplateById("tpl_remote"))
+
+        // 2. When allowMissingDeletion returns true, only cleanRemoved is soft-deleted; pendingCreate & parentWithDirtyChild survive
+        importer.reconcileActiveTemplates(
+            userId = "user",
+            snapshots = listOf(remoteSurvivor to emptyList()),
+            allowMissingDeletion = { true }
+        )
+        assertNull(db.workoutTemplateDao().getTemplateById("tpl_clean"))
+        assertTrue(db.workoutTemplateDao().getTemplateByIdIncludingDeleted("tpl_clean")!!.isDeleted)
+        assertNotNull(db.workoutTemplateDao().getTemplateById("tpl_pending"))
+        assertNotNull(db.workoutTemplateDao().getTemplateById("tpl_dirty_child"))
+        assertEquals(10, db.templateExerciseDao().getExercisesForTemplateList("tpl_dirty_child").single().reps)
+    }
+
+    @Test fun pendingDeleteTemplateAndDirtyWorkoutChildrenAreNeverOverwrittenByRemote() = runBlocking {
+        val deletedLocal = WorkoutTemplateEntity(
+            id = "tpl_del",
+            userId = "user",
+            name = "Deleted Locally",
+            isDeleted = true,
+            syncStatus = SyncStatus.PENDING_SYNC.name,
+            pendingOperation = "DELETE",
+            updatedAt = 5
+        )
+        db.workoutTemplateDao().insertTemplate(deletedLocal)
+
+        importer.template(
+            deletedLocal.copy(isDeleted = false, syncStatus = SyncStatus.SYNCED.name, pendingOperation = null, updatedAt = 999),
+            emptyList()
+        )
+        assertTrue(db.workoutTemplateDao().getTemplateByIdIncludingDeleted("tpl_del")!!.isDeleted)
+        assertEquals("DELETE", db.workoutTemplateDao().getTemplateByIdIncludingDeleted("tpl_del")!!.pendingOperation)
+
+        // Workout with dirty child set must not be overwritten even if parent is SYNCED
+        importer.workout(parent(10), listOf(exercise()), listOf(set()))
+        db.workoutSetDao().insertWorkoutSets(listOf(set().copy(weight = 75f, syncStatus = SyncStatus.PENDING_SYNC.name, pendingOperation = "UPDATE")))
+        importer.workout(parent(999), listOf(exercise()), listOf(set().copy(weight = 10f)))
+        assertEquals(75f, db.workoutSetDao().getSetsByWorkoutLogId("log").single().weight)
+    }
 }

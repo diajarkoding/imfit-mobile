@@ -6,6 +6,8 @@ import com.diajarkoding.imfit.data.auth.SupabaseAuthDeepLinkHandler
 import com.diajarkoding.imfit.data.repository.ExerciseRepositoryImpl
 import com.diajarkoding.imfit.data.repository.WorkoutRepositoryImpl
 import com.diajarkoding.imfit.data.remote.ImfitAggregateRemoteDataSource
+import com.diajarkoding.imfit.data.remote.SupabaseWorkoutRemoteDataSource
+import com.diajarkoding.imfit.data.remote.WorkoutRemoteDataSource
 import com.diajarkoding.imfit.data.sync.SyncManager
 import com.diajarkoding.imfit.data.sync.SyncScheduler
 import com.diajarkoding.imfit.data.sync.SyncRunner
@@ -32,8 +34,13 @@ abstract class AppModule {
         fun provideAggregateRemoteDataSource(
             supabase: io.github.jan.supabase.SupabaseClient,
         ) = ImfitAggregateRemoteDataSource(supabase)
-    }
 
+        @Provides
+        @Singleton
+        fun provideWorkoutRemoteDataSource(
+            supabase: io.github.jan.supabase.SupabaseClient,
+        ): WorkoutRemoteDataSource = SupabaseWorkoutRemoteDataSource(supabase)
+    }
     @Binds
     @Singleton
     abstract fun bindAuthRepository(impl: AuthRepositoryImpl): AuthRepository

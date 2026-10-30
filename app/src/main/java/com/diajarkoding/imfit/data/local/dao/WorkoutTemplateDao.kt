@@ -12,6 +12,12 @@ interface WorkoutTemplateDao {
     @Query("SELECT * FROM workout_templates WHERE user_id = :userId AND is_deleted = 0")
     suspend fun getTemplatesByUserList(userId: String): List<WorkoutTemplateEntity>
 
+
+    @Query("SELECT * FROM workout_templates WHERE user_id = :userId")
+    suspend fun getAllTemplatesByUserIncludingDeleted(userId: String): List<WorkoutTemplateEntity>
+
+    @Query("SELECT COUNT(*) FROM workout_templates WHERE user_id = :userId")
+    suspend fun countAllUserTemplates(userId: String): Int
     @Query("SELECT * FROM workout_templates WHERE id = :id AND is_deleted = 0")
     suspend fun getTemplateById(id: String): WorkoutTemplateEntity?
 

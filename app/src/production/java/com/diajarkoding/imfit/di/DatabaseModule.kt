@@ -29,6 +29,7 @@ object DatabaseModule {
                 IMFITDatabase.MIGRATION_5_6,
                 IMFITDatabase.MIGRATION_6_7
             )
+            .fallbackToDestructiveMigrationOnDowngrade(dropAllTables = true)
             .build()
     }
 

@@ -1,6 +1,7 @@
 package com.diajarkoding.imfit.domain.repository
 
 import com.diajarkoding.imfit.domain.model.ExerciseLog
+import com.diajarkoding.imfit.domain.model.HomeRemoteReadResult
 import com.diajarkoding.imfit.domain.model.TemplateExercise
 import com.diajarkoding.imfit.domain.model.WorkoutLog
 import com.diajarkoding.imfit.domain.model.WorkoutSession
@@ -11,7 +12,8 @@ import kotlinx.coroutines.flow.flow
 interface WorkoutRepository {
     fun observeTemplates(userId: String): Flow<List<WorkoutTemplate>> = flow { emit(getTemplates(userId)) }
     fun observeTemplate(templateId: String): Flow<WorkoutTemplate?> = flow { emit(getTemplateById(templateId)) }
-    // Template operations
+    suspend fun fetchRemoteTemplates(userId: String): HomeRemoteReadResult<List<WorkoutTemplate>>
+    suspend fun fetchRemoteLastWorkoutLog(userId: String): HomeRemoteReadResult<WorkoutLog?>
     suspend fun getTemplates(userId: String): List<WorkoutTemplate>
     suspend fun getTemplateById(templateId: String): WorkoutTemplate?
     suspend fun createTemplate(userId: String, name: String, exercises: List<TemplateExercise>): WorkoutTemplate

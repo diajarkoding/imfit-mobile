@@ -28,6 +28,12 @@ data class WorkoutLogDto(
     val totalReps: Int = 0,
     val notes: String? = null,
     val rating: Int? = null,
+    @SerialName("created_at")
+    val createdAt: String? = null,
+    @SerialName("updated_at")
+    val updatedAt: String? = null,
+    @SerialName("deleted_at")
+    val deletedAt: String? = null,
     @SerialName("exercise_logs")
     val exerciseLogs: List<ExerciseLogDto>? = null
 )
@@ -47,6 +53,10 @@ data class ExerciseLogDto(
     val orderIndex: Int = 0,
     @SerialName("total_volume")
     val totalVolume: Double = 0.0,
+    @SerialName("total_sets")
+    val totalSets: Int = 0,
+    @SerialName("total_reps")
+    val totalReps: Int = 0,
     @SerialName("workout_sets")
     val workoutSets: List<WorkoutSetDto>? = null,
     val exercises: ExerciseDto? = null
@@ -57,6 +67,10 @@ data class WorkoutSetDto(
     val id: String? = null,
     @SerialName("exercise_log_id")
     val exerciseLogId: String? = null,
+    @SerialName("workout_log_id")
+    val workoutLogId: String? = null,
+    @SerialName("exercise_id")
+    val exerciseId: String? = null,
     @SerialName("set_number")
     val setNumber: Int,
     val weight: Double = 0.0,
@@ -69,6 +83,10 @@ data class WorkoutSetDto(
 )
 
 fun WorkoutLogDto.toDomain(): WorkoutLog {
+    val sortedExercises = exerciseLogs
+        ?.sortedWith(compareBy<ExerciseLogDto> { it.orderIndex }.thenBy { it.id.orEmpty() }.thenBy { it.exerciseId })
+        ?.map { it.toDomain() }
+        ?: emptyList()
     return WorkoutLog(
         id = id,
         userId = userId,
@@ -77,10 +95,9 @@ fun WorkoutLogDto.toDomain(): WorkoutLog {
         startTime = parseTimestamp(startTime),
         endTime = parseTimestamp(endTime),
         totalVolume = totalVolume.toFloat(),
-        exerciseLogs = exerciseLogs?.map { it.toDomain() } ?: emptyList()
+        exerciseLogs = sortedExercises
     )
 }
-
 fun ExerciseLogDto.toDomain(): ExerciseLog {
     // Try to use the nested exercise, or create a fallback from DTO data
     val exercise = exercises?.toDomain() ?: run {
@@ -98,9 +115,13 @@ fun ExerciseLogDto.toDomain(): ExerciseLog {
             imageUrl = null
         )
     }
+    val sortedSets = workoutSets
+        ?.sortedWith(compareBy<WorkoutSetDto> { it.setNumber }.thenBy { it.id.orEmpty() })
+        ?.map { it.toDomain() }
+        ?: emptyList()
     return ExerciseLog(
         exercise = exercise,
-        sets = workoutSets?.map { it.toDomain() } ?: emptyList()
+        sets = sortedSets
     )
 }
 

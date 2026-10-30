@@ -3,6 +3,7 @@ package com.diajarkoding.imfit.data.repository
 import com.diajarkoding.imfit.data.local.FakeWorkoutDataSource
 import com.diajarkoding.imfit.data.local.FakeUserDataSource
 import com.diajarkoding.imfit.domain.model.ExerciseLog
+import com.diajarkoding.imfit.domain.model.HomeRemoteReadResult
 import com.diajarkoding.imfit.domain.model.ExerciseInputDefaults
 import com.diajarkoding.imfit.domain.model.inputDefaults
 import com.diajarkoding.imfit.domain.model.TemplateExercise
@@ -38,10 +39,14 @@ class DemoWorkoutRepository @Inject constructor(
     override fun observeWorkoutLogs(userId: String) = historyRevision.map { getWorkoutLogs(userId) }.distinctUntilChanged()
     override fun observeLastWorkoutLog(userId: String) = historyRevision.map { getLastWorkoutLog(userId) }.distinctUntilChanged()
     override fun observeWorkoutLog(logId: String) = historyRevision.map { getWorkoutLogById(logId) }.distinctUntilChanged()
+    override suspend fun fetchRemoteTemplates(userId: String): HomeRemoteReadResult<List<WorkoutTemplate>> =
+        HomeRemoteReadResult.RemotePrimary(getTemplates(userId))
+
+    override suspend fun fetchRemoteLastWorkoutLog(userId: String): HomeRemoteReadResult<WorkoutLog?> =
+        HomeRemoteReadResult.RemotePrimary(getLastWorkoutLog(userId))
 
     override suspend fun getTemplates(userId: String): List<WorkoutTemplate> =
         FakeWorkoutDataSource.getTemplates(userId)
-
     override suspend fun getTemplateById(templateId: String): WorkoutTemplate? =
         FakeWorkoutDataSource.getTemplateById(templateId)
 

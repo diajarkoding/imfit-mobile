@@ -42,12 +42,16 @@ data class TemplateExerciseDto(
 )
 
 fun WorkoutTemplateDto.toDomain(): WorkoutTemplate {
+    val sortedExercises = templateExercises
+        ?.sortedWith(compareBy<TemplateExerciseDto> { it.orderIndex }.thenBy { it.exerciseId })
+        ?.mapNotNull { it.toDomain() }
+        ?: emptyList()
     return WorkoutTemplate(
         id = id,
         userId = userId,
         name = name,
-        exercises = templateExercises?.mapNotNull { it.toDomain() } ?: emptyList(),
-        createdAt = parseTimestamp(createdAt)
+        exercises = sortedExercises,
+        createdAt = parseRemoteTimestamp(createdAt)
     )
 }
 
@@ -72,11 +76,16 @@ fun TemplateExercise.toDto(templateId: String, orderIndex: Int): TemplateExercis
     )
 }
 
-private fun parseTimestamp(timestamp: String?): Long {
-    if (timestamp == null) return System.currentTimeMillis()
+internal fun parseRemoteTimestamp(timestamp: String?, fallbackMs: Long = 0L): Long {
+    if (timestamp.isNullOrBlank()) return fallbackMs
     return try {
         java.time.OffsetDateTime.parse(timestamp).toInstant().toEpochMilli()
     } catch (e: Exception) {
-        System.currentTimeMillis()
+        try {
+            java.time.LocalDate.parse(timestamp).atStartOfDay(java.time.ZoneOffset.UTC)
+                .toInstant().toEpochMilli()
+        } catch (e2: Exception) {
+            fallbackMs
+        }
     }
 }

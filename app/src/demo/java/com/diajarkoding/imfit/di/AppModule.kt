@@ -5,6 +5,9 @@ import com.diajarkoding.imfit.data.auth.AuthDeepLinkHandler
 import com.diajarkoding.imfit.data.auth.DemoAuthDeepLinkHandler
 import com.diajarkoding.imfit.data.repository.DemoExerciseRepository
 import com.diajarkoding.imfit.data.repository.DemoWorkoutRepository
+import com.diajarkoding.imfit.data.remote.WorkoutRemoteDataSource
+import com.diajarkoding.imfit.data.remote.dto.WorkoutLogDto
+import com.diajarkoding.imfit.data.remote.dto.WorkoutTemplateDto
 import com.diajarkoding.imfit.data.sync.DemoSyncStateProvider
 import com.diajarkoding.imfit.data.sync.SyncScheduler
 import com.diajarkoding.imfit.data.sync.SyncRunner
@@ -17,12 +20,21 @@ import dagger.Binds
 import dagger.Module
 import dagger.hilt.InstallIn
 import dagger.hilt.components.SingletonComponent
+import dagger.Provides
 import javax.inject.Singleton
 
 @Module
 @InstallIn(SingletonComponent::class)
 abstract class AppModule {
 
+    companion object {
+        @Provides
+        @Singleton
+        fun provideWorkoutRemoteDataSource(): WorkoutRemoteDataSource = object : WorkoutRemoteDataSource {
+            override suspend fun fetchActiveTemplates(userId: String): List<WorkoutTemplateDto> = emptyList()
+            override suspend fun fetchLatestCompletedWorkoutLog(userId: String): WorkoutLogDto? = null
+        }
+    }
     @Binds
     @Singleton
     abstract fun bindAuthRepository(impl: DemoAuthRepository): AuthRepository

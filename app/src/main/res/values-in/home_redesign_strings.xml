@@ -21,4 +21,6 @@
     <string name="home_sync_local">Tersimpan di perangkat ini.</string>
     <string name="home_sync_failed">Sinkronisasi gagal</string>
     <string name="home_sync_failed_description">Data lokal tetap ada. Coba lagi saat online.</string>
+    <string name="home_last_workout_error">Tidak dapat memuat ringkasan latihan terakhir.</string>
+    <string name="home_templates_error">Tidak dapat memuat daftar rutinitas.</string>
 </resources>

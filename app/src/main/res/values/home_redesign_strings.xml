@@ -21,4 +21,6 @@
     <string name="home_sync_local">Saved on this device.</string>
     <string name="home_sync_failed">Sync failed</string>
     <string name="home_sync_failed_description">Local data is still saved. Try again when online.</string>
+    <string name="home_last_workout_error">Unable to load latest workout summary.</string>
+    <string name="home_templates_error">Unable to load routines.</string>
 </resources>

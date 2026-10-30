@@ -18,10 +18,10 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalConfiguration
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.res.pluralStringResource
-import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.liveRegion
 import androidx.compose.ui.semantics.LiveRegionMode
@@ -31,7 +31,6 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.diajarkoding.imfit.R
-import com.diajarkoding.imfit.data.sync.SyncState
 import com.diajarkoding.imfit.domain.model.WorkoutLog
 import com.diajarkoding.imfit.domain.model.WorkoutTemplate
 import com.diajarkoding.imfit.presentation.components.common.*
@@ -160,29 +159,129 @@ private fun Modifier.strengthBannerGradient(): Modifier = this.drawWithCache {
 internal fun HomeLastWorkout(log: WorkoutLog?, modifier: Modifier = Modifier) {
     val colors = homePalette()
     val locale = LocalConfiguration.current.locales[0] ?: Locale.ROOT
-    Surface(modifier.fillMaxWidth(), shape = IMFITShapes.CardSmall, color = colors.surface,
-        border = BorderStroke(IMFITComponentSizes.border, colors.border)) {
-        Column(Modifier.padding(IMFITSpacing.cardPadding), verticalArrangement = Arrangement.spacedBy(IMFITSpacing.summaryGap)) {
-            if (log == null) {
-                Text(stringResource(R.string.home_summary_empty), color = colors.text,
-                    style = IMFITTypography.compactTitle)
-                Text(stringResource(R.string.redesign_start_hint), color = colors.muted, style = IMFITTypography.caption)
-            } else {
-                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(IMFITSpacing.compact)) {
-                    Icon(painterResource(R.drawable.ic_home_history), null, Modifier.size(IMFITComponentSizes.metricIcon), tint = colors.muted)
-                    Text(stringResource(R.string.home_summary_heading, log.templateName.uppercase(locale)),
-                        Modifier.weight(1f), color = colors.muted, style = IMFITTypography.historyHeading)
-                    Text(Instant.ofEpochMilli(log.startTime).atZone(ZoneId.systemDefault())
-                        .format(DateTimeFormatter.ofPattern("d MMM yyyy", locale)),
-                        color = colors.muted, style = IMFITTypography.historyDate, textAlign = TextAlign.End)
-                }
-                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(IMFITSpacing.xl)) {
-                    HomeSummaryMetric(log.formattedDuration, stringResource(R.string.home_total_duration),
-                        R.drawable.msr_timer_filled, Modifier.weight(1f))
-                    Box(Modifier.width(IMFITComponentSizes.border).height(IMFITComponentSizes.metricDivider).background(colors.border))
-                    HomeSummaryMetric(String.format(locale, "%,.0f kg", log.totalVolume),
-                        stringResource(R.string.home_total_volume), R.drawable.ic_home_weight, Modifier.weight(1f))
-                }
+    val dash = stringResource(R.string.placeholder_dash)
+    val headingText = if (log != null) {
+        stringResource(R.string.home_summary_heading, log.templateName.uppercase(locale))
+    } else {
+        stringResource(R.string.home_summary_heading, dash)
+    }
+    val dateText = if (log != null) {
+        Instant.ofEpochMilli(log.startTime)
+            .atZone(ZoneId.systemDefault())
+            .format(DateTimeFormatter.ofPattern("d MMM yyyy", locale))
+    } else {
+        dash
+    }
+    val durationText = log?.formattedDuration ?: stringResource(R.string.workout_duration_zero)
+    val volumeText = String.format(locale, "%,.0f kg", log?.totalVolume ?: 0f)
+
+    Surface(
+        modifier = modifier.fillMaxWidth().testTag("home_last_workout_card"),
+        shape = IMFITShapes.CardSmall,
+        color = colors.surface,
+        border = BorderStroke(IMFITComponentSizes.border, colors.border)
+    ) {
+        Column(
+            Modifier.padding(IMFITSpacing.cardPadding),
+            verticalArrangement = Arrangement.spacedBy(IMFITSpacing.summaryGap)
+        ) {
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(IMFITSpacing.compact)
+            ) {
+                Icon(
+                    painterResource(R.drawable.ic_home_history),
+                    null,
+                    Modifier.size(IMFITComponentSizes.metricIcon),
+                    tint = colors.muted
+                )
+                Text(
+                    headingText,
+                    Modifier.weight(1f),
+                    color = colors.muted,
+                    style = IMFITTypography.historyHeading
+                )
+                Text(
+                    dateText,
+                    color = colors.muted,
+                    style = IMFITTypography.historyDate,
+                    textAlign = TextAlign.End
+                )
+            }
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(IMFITSpacing.xl)
+            ) {
+                HomeSummaryMetric(
+                    durationText,
+                    stringResource(R.string.home_total_duration),
+                    R.drawable.msr_timer_filled,
+                    Modifier.weight(1f)
+                )
+                Box(
+                    Modifier
+                        .width(IMFITComponentSizes.border)
+                        .height(IMFITComponentSizes.metricDivider)
+                        .background(colors.border)
+                )
+                HomeSummaryMetric(
+                    volumeText,
+                    stringResource(R.string.home_total_volume),
+                    R.drawable.ic_home_weight,
+                    Modifier.weight(1f)
+                )
+            }
+        }
+    }
+}
+
+@Composable
+internal fun HomeSectionErrorCard(
+    message: String,
+    onRetry: () -> Unit,
+    modifier: Modifier = Modifier,
+    testTag: String = "home_section_error"
+) {
+    val colors = homePalette()
+    Surface(
+        modifier = modifier
+            .fillMaxWidth()
+            .testTag(testTag)
+            .semantics { liveRegion = LiveRegionMode.Polite },
+        shape = IMFITShapes.CardSmall,
+        color = colors.surface,
+        border = BorderStroke(IMFITComponentSizes.border, colors.border)
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(IMFITSpacing.cardPadding),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(IMFITSpacing.md)
+        ) {
+            Icon(
+                painter = painterResource(R.drawable.ic_home_alert),
+                contentDescription = null,
+                modifier = Modifier.size(IMFITSizes.iconSm),
+                tint = colors.error
+            )
+            Text(
+                text = message,
+                modifier = Modifier.weight(1f),
+                color = colors.text,
+                style = IMFITTypography.supporting
+            )
+            TextButton(
+                onClick = onRetry,
+                modifier = Modifier
+                    .heightIn(min = IMFITSizes.buttonHeight)
+                    .testTag("${testTag}_retry"),
+                colors = ButtonDefaults.textButtonColors(contentColor = colors.primary)
+            ) {
+                Text(
+                    text = stringResource(R.string.redesign_retry),
+                    style = IMFITTypography.textAction
+                )
             }
         }
     }
@@ -253,63 +352,3 @@ internal fun HomeWorkoutCard(template: WorkoutTemplate, active: Boolean, onClick
     }
 }
 
-@Composable
-internal fun HomeSyncStatusCard(state: SyncState, modifier: Modifier = Modifier) {
-    val colors = homePalette()
-    val pending = state.pendingCount.coerceAtLeast(0)
-    val status = when {
-        state.status == SyncState.SyncStatus.SYNCED && pending > 0 -> SyncState.SyncStatus.IDLE
-        else -> state.status
-    }
-    val (accent, background) = when (status) {
-        SyncState.SyncStatus.OFFLINE -> colors.warning to colors.warningContainer
-        SyncState.SyncStatus.FAILED -> colors.error to colors.errorContainer
-        SyncState.SyncStatus.SYNCED -> colors.success to colors.successContainer
-        SyncState.SyncStatus.IDLE, SyncState.SyncStatus.SYNCING -> colors.primary to colors.primaryContainer
-    }
-    val title = when (status) {
-        SyncState.SyncStatus.IDLE -> if (pending > 0) stringResource(R.string.home_sync_pending, pending)
-            else stringResource(R.string.home_sync_idle)
-        SyncState.SyncStatus.SYNCING -> stringResource(R.string.home_sync_syncing)
-        SyncState.SyncStatus.SYNCED -> stringResource(R.string.home_sync_synced)
-        SyncState.SyncStatus.OFFLINE -> if (pending > 0) stringResource(R.string.home_sync_offline_pending, pending)
-            else stringResource(R.string.home_sync_offline)
-        SyncState.SyncStatus.FAILED -> stringResource(R.string.home_sync_failed)
-    }
-    val description = when (status) {
-        SyncState.SyncStatus.IDLE -> if (pending > 0) R.string.home_sync_local else R.string.home_sync_idle_description
-        SyncState.SyncStatus.SYNCING -> R.string.home_sync_syncing_description
-        SyncState.SyncStatus.SYNCED -> R.string.home_sync_synced_description
-        SyncState.SyncStatus.OFFLINE -> R.string.home_sync_local
-        SyncState.SyncStatus.FAILED -> R.string.home_sync_failed_description
-    }
-    val icon = when (status) {
-        SyncState.SyncStatus.IDLE -> R.drawable.ic_home_cloud
-        SyncState.SyncStatus.SYNCING -> R.drawable.ic_home_refresh
-        SyncState.SyncStatus.SYNCED -> R.drawable.ic_home_cloud_check
-        SyncState.SyncStatus.OFFLINE -> R.drawable.ic_home_cloud_off
-        SyncState.SyncStatus.FAILED -> R.drawable.ic_home_alert
-    }
-    Surface(modifier.fillMaxWidth().semantics(mergeDescendants = true) { liveRegion = LiveRegionMode.Polite },
-        shape = RoundedCornerShape(IMFITCornerRadius.small), color = background) {
-        Row(Modifier.padding(IMFITSpacing.cardPadding), verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(IMFITSpacing.md)) {
-            Icon(painterResource(icon), null, Modifier.size(IMFITSizes.iconSm), tint = accent)
-            Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(IMFITSpacing.xxs)) {
-                Text(title, color = accent, style = IMFITTypography.statusTitle)
-                Text(stringResource(description), color = colors.text, style = IMFITTypography.statusBody)
-                if (status == SyncState.SyncStatus.SYNCING) {
-                    val progress = state.progress
-                    if (state.isInitialSync && progress.isFinite()) {
-                        LinearProgressIndicator(progress = { progress.coerceIn(0f, 1f) },
-                            modifier = Modifier.fillMaxWidth().padding(top = 6.dp),
-                            color = accent, trackColor = accent.copy(alpha = 0.15f))
-                    } else {
-                        LinearProgressIndicator(Modifier.fillMaxWidth().padding(top = 6.dp),
-                            color = accent, trackColor = accent.copy(alpha = 0.15f))
-                    }
-                }
-            }
-        }
-    }
-}

@@ -6,6 +6,7 @@ import androidx.compose.animation.core.animateFloat
 import androidx.compose.animation.core.infiniteRepeatable
 import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.animation.core.tween
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -16,6 +17,7 @@ import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -24,6 +26,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Surface
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
@@ -32,23 +35,27 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
+import com.diajarkoding.imfit.theme.IMFITColors
+import com.diajarkoding.imfit.theme.IMFITComponentSizes
+import com.diajarkoding.imfit.theme.IMFITCornerRadius
 import com.diajarkoding.imfit.theme.IMFITShapes
+import com.diajarkoding.imfit.theme.IMFITSizes
 import com.diajarkoding.imfit.theme.IMFITSpacing
-
 @Composable
 fun shimmerBrush(
     targetValue: Float = 1000f,
     showShimmer: Boolean = true
 ): Brush {
     return if (showShimmer) {
+        val palette = IMFITColors.training
         val shimmerColors = listOf(
-            MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.6f),
-            MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.2f),
-            MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.6f)
+            palette.border.copy(alpha = 0.7f),
+            palette.raised.copy(alpha = 0.95f),
+            palette.border.copy(alpha = 0.7f)
         )
-
         val transition = rememberInfiniteTransition(label = "shimmer")
         val translateAnim by transition.animateFloat(
             initialValue = 0f,
@@ -105,33 +112,55 @@ fun ShimmerCircle(
 fun ShimmerWorkoutCard(
     modifier: Modifier = Modifier
 ) {
-    Card(
-        modifier = modifier.fillMaxWidth(),
-        shape = IMFITShapes.Card,
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
-        elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
+    val colors = IMFITColors.training
+    val brush = shimmerBrush()
+    Surface(
+        modifier = modifier
+            .fillMaxWidth()
+            .heightIn(min = IMFITSizes.cardMinHeight)
+            .testTag("shimmer_workout_card"),
+        shape = RoundedCornerShape(IMFITCornerRadius.template),
+        color = colors.surface,
+        border = BorderStroke(IMFITComponentSizes.border, colors.border)
     ) {
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(IMFITSpacing.cardPadding),
-            verticalAlignment = Alignment.CenterVertically
+                .padding(IMFITSpacing.md),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(IMFITSpacing.md)
         ) {
-            ShimmerBox(
-                width = 52.dp,
-                height = 52.dp,
-                shape = RoundedCornerShape(12.dp)
+            Box(
+                modifier = Modifier
+                    .size(IMFITComponentSizes.templateThumbnail)
+                    .clip(RoundedCornerShape(IMFITCornerRadius.small))
+                    .background(brush)
             )
-            Spacer(modifier = Modifier.width(IMFITSpacing.lg))
-            Column(modifier = Modifier.weight(1f)) {
-                ShimmerBox(width = 140.dp, height = 20.dp)
-                Spacer(modifier = Modifier.height(IMFITSpacing.sm))
-                Row(horizontalArrangement = Arrangement.spacedBy(IMFITSpacing.lg)) {
-                    ShimmerBox(width = 60.dp, height = 14.dp)
-                    ShimmerBox(width = 80.dp, height = 14.dp)
-                }
+            Column(
+                modifier = Modifier.weight(1f),
+                verticalArrangement = Arrangement.spacedBy(IMFITSpacing.inline)
+            ) {
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth(0.58f)
+                        .height(20.dp)
+                        .clip(RoundedCornerShape(IMFITCornerRadius.xs))
+                        .background(brush)
+                )
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth(0.36f)
+                        .height(16.dp)
+                        .clip(RoundedCornerShape(IMFITCornerRadius.xs))
+                        .background(brush)
+                )
             }
-            ShimmerBox(width = 24.dp, height = 24.dp)
+            Box(
+                modifier = Modifier
+                    .size(IMFITSizes.iconSm)
+                    .clip(RoundedCornerShape(IMFITCornerRadius.xs))
+                    .background(brush)
+            )
         }
     }
 }
@@ -205,28 +234,102 @@ fun ShimmerInfoCard(
 fun ShimmerStatCard(
     modifier: Modifier = Modifier
 ) {
-    Card(
-        modifier = modifier.fillMaxWidth(),
-        shape = IMFITShapes.Card,
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
+    val colors = IMFITColors.training
+    val brush = shimmerBrush()
+    Surface(
+        modifier = modifier
+            .fillMaxWidth()
+            .testTag("shimmer_last_workout_card"),
+        shape = IMFITShapes.CardSmall,
+        color = colors.surface,
+        border = BorderStroke(IMFITComponentSizes.border, colors.border)
     ) {
-        Column(modifier = Modifier.padding(IMFITSpacing.cardPaddingLarge)) {
+        Column(
+            modifier = Modifier.padding(IMFITSpacing.cardPadding),
+            verticalArrangement = Arrangement.spacedBy(IMFITSpacing.summaryGap)
+        ) {
             Row(
                 modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(IMFITSpacing.compact)
             ) {
-                ShimmerBox(width = 100.dp, height = 14.dp)
-                ShimmerBox(width = 120.dp, height = 18.dp)
+                Box(
+                    modifier = Modifier
+                        .size(IMFITComponentSizes.metricIcon)
+                        .clip(RoundedCornerShape(4.dp))
+                        .background(brush)
+                )
+                Box(modifier = Modifier.weight(1f)) {
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth(0.55f)
+                            .height(14.dp)
+                            .clip(RoundedCornerShape(4.dp))
+                            .background(brush)
+                    )
+                }
+                Box(
+                    modifier = Modifier
+                        .width(68.dp)
+                        .height(14.dp)
+                        .clip(RoundedCornerShape(4.dp))
+                        .background(brush)
+                )
             }
-            Spacer(modifier = Modifier.height(IMFITSpacing.lg))
             Row(
                 modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceEvenly
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(IMFITSpacing.xl)
             ) {
-                ShimmerBox(width = 100.dp, height = 48.dp, shape = RoundedCornerShape(8.dp))
-                ShimmerBox(width = 100.dp, height = 48.dp, shape = RoundedCornerShape(8.dp))
+                ShimmerSummaryMetricColumn(brush = brush, valueWidth = 64.dp, modifier = Modifier.weight(1f))
+                Box(
+                    modifier = Modifier
+                        .width(IMFITComponentSizes.border)
+                        .height(IMFITComponentSizes.metricDivider)
+                        .background(colors.border)
+                )
+                ShimmerSummaryMetricColumn(brush = brush, valueWidth = 76.dp, modifier = Modifier.weight(1f))
             }
         }
+    }
+}
+
+@Composable
+private fun ShimmerSummaryMetricColumn(
+    brush: Brush,
+    valueWidth: Dp,
+    modifier: Modifier = Modifier
+) {
+    Column(
+        modifier = modifier,
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.spacedBy(IMFITSpacing.compact)
+    ) {
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(IMFITSpacing.inline)
+        ) {
+            Box(
+                modifier = Modifier
+                    .size(IMFITComponentSizes.metricIcon)
+                    .clip(RoundedCornerShape(4.dp))
+                    .background(brush)
+            )
+            Box(
+                modifier = Modifier
+                    .width(68.dp)
+                    .height(13.dp)
+                    .clip(RoundedCornerShape(4.dp))
+                    .background(brush)
+            )
+        }
+        Box(
+            modifier = Modifier
+                .width(valueWidth)
+                .height(25.dp)
+                .clip(RoundedCornerShape(IMFITCornerRadius.xs))
+                .background(brush)
+        )
     }
 }
 
@@ -234,10 +337,27 @@ fun ShimmerStatCard(
 fun ShimmerWelcomeSection(
     modifier: Modifier = Modifier
 ) {
-    Column(modifier = modifier) {
-        ShimmerBox(width = 200.dp, height = 28.dp)
-        Spacer(modifier = Modifier.height(IMFITSpacing.xs))
-        ShimmerBox(width = 280.dp, height = 18.dp)
+    val brush = shimmerBrush()
+    Column(
+        modifier = modifier
+            .fillMaxWidth()
+            .testTag("shimmer_welcome_section"),
+        verticalArrangement = Arrangement.spacedBy(IMFITSpacing.xs)
+    ) {
+        Box(
+            modifier = Modifier
+                .fillMaxWidth(0.52f)
+                .height(27.dp)
+                .clip(RoundedCornerShape(IMFITCornerRadius.xs))
+                .background(brush)
+        )
+        Box(
+            modifier = Modifier
+                .fillMaxWidth(0.68f)
+                .height(18.dp)
+                .clip(RoundedCornerShape(IMFITCornerRadius.xs))
+                .background(brush)
+        )
     }
 }
 

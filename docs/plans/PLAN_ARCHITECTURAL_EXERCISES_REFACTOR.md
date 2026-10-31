@@ -504,11 +504,11 @@ gantt
 - [x] Perbarui `SupabaseRoutineRepository.kt` dan `WorkoutRepositoryImpl.kt` untuk transport data bertipe. (SELESAI - Typed target validation, typed start/mutate/finish, and SyncManager safety verified)
 
 ### Phase 4: Android Presentation & UI/UX
-- [ ] Implementasikan komponen polymorphic `ActiveSetRow.kt` dengan input dinamis.
-- [ ] Implementasikan set stopwatch/timer selector untuk latihan durasi dengan input manual fallback.
-- [ ] Refactor `EditWorkoutScreen.kt` dan `EditWorkoutViewModel.kt` untuk form dinamis (Reps vs Waktu/Jarak).
-- [ ] Hapus pemblokiran pada `ExerciseSelectionScreen.kt` dan tambahkan badge modality.
-- [ ] Update layar `ProgressScreen`, `HomeScreen`, dan `WorkoutHistoryDetailScreen` agar menampilkan metrik terpisah.
+- [x] Implementasikan komponen polymorphic `ActiveSetRow.kt` dengan input dinamis. (SELESAI - Polymorphic inputs for 6 tracking types & SetMeasurement callbacks)
+- [x] Implementasikan set stopwatch/timer selector untuk latihan durasi dengan input manual fallback. (SELESAI - Monotonic stopwatch & MM:SS fallback implemented)
+- [x] Refactor `EditWorkoutScreen.kt` dan `EditWorkoutViewModel.kt` untuk form dinamis (Reps vs Waktu/Jarak). (SELESAI - Dynamic targets, mode chips, and typed draft recovery)
+- [x] Hapus pemblokiran pada `ExerciseSelectionScreen.kt` dan tambahkan badge modality. (SELESAI - All 161 catalog exercises enabled with modality badges)
+- [x] Update layar `ProgressScreen`, `HomeScreen`, dan `WorkoutHistoryDetailScreen` agar menampilkan metrik terpisah. (SELESAI - Modality-separated metrics & typed set formatting across summary/history/progress)
 
 ### Phase 5: Verification, Canary Testing, & Release Gate
 - [ ] Eksekusi seluruh skenario test matrix (Unit test, SQL integration test, Compose UI test).

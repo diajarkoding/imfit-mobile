@@ -28,6 +28,7 @@ import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.diajarkoding.imfit.R
 import com.diajarkoding.imfit.domain.model.Exercise
+import com.diajarkoding.imfit.domain.model.ExerciseModality
 import com.diajarkoding.imfit.domain.model.ExercisePrescriptionCapability
 import com.diajarkoding.imfit.domain.model.prescriptionCapability
 import com.diajarkoding.imfit.presentation.components.common.*
@@ -275,8 +276,7 @@ internal fun ExercisePickerContent(
                     }
                     items(state.filteredExercises, key = { it.id }) { exercise ->
                         ExercisePickerRow(exercise, state.selectedExercises.any { it.id == exercise.id },
-                            enabled && !state.isLoading && exercise.isActive &&
-                                exercise.prescriptionCapability == ExercisePrescriptionCapability.REPS_LOAD) { onToggle(exercise) }
+                            enabled && !state.isLoading && exercise.isActive) { onToggle(exercise) }
                     }
                     if (state.isAppending) {
                         item(key = "append_progress") {
@@ -328,9 +328,24 @@ internal fun ExercisePickerRow(exercise: Exercise, selected: Boolean, enabled: B
                     color = if (selected) c.onPrimaryContainer else c.muted,
                     style = MaterialTheme.typography.bodySmall
                 )
-                if (exercise.prescriptionCapability != ExercisePrescriptionCapability.REPS_LOAD) {
-                    Text(stringResource(R.string.routine_duration_unsupported), color = c.muted,
-                        style = MaterialTheme.typography.bodySmall)
+                val modalityLabel = when (exercise.modality) {
+                    ExerciseModality.STRENGTH -> "Strength"
+                    ExerciseModality.CALISTHENICS -> "Bodyweight"
+                    ExerciseModality.ISOMETRIC -> "Isometric"
+                    ExerciseModality.CARDIO -> "Cardio"
+                    ExerciseModality.CONDITIONING -> "Conditioning"
+                }
+                Surface(
+                    shape = RoundedCornerShape(4.dp),
+                    color = c.raised,
+                    modifier = Modifier.padding(top = 2.dp)
+                ) {
+                    Text(
+                        text = modalityLabel,
+                        color = c.muted,
+                        style = MaterialTheme.typography.labelSmall,
+                        modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
+                    )
                 }
             }
             Checkbox(

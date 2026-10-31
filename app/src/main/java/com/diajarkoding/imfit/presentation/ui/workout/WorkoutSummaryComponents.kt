@@ -37,6 +37,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.diajarkoding.imfit.R
 import com.diajarkoding.imfit.domain.model.ExerciseLog
+import com.diajarkoding.imfit.domain.model.TrackingType
 import com.diajarkoding.imfit.presentation.components.common.CheckCircle
 import com.diajarkoding.imfit.presentation.components.common.FitnessCenter
 import com.diajarkoding.imfit.presentation.components.common.RoutineButton
@@ -272,8 +273,15 @@ internal fun WorkoutSummaryExerciseCard(
                     fontSize = 12.sp,
                     modifier = Modifier.weight(1f)
                 )
+                val headerMetricText = when (exerciseLog.trackingType) {
+                    TrackingType.WEIGHT_REPS -> formatSummaryVolume(exerciseLog.totalVolume, locale)
+                    TrackingType.BODYWEIGHT_REPS -> if (exerciseLog.additionalVolume > 0f) "+${formatSummaryVolume(exerciseLog.additionalVolume, locale)}" else "${exerciseLog.totalReps} reps"
+                    TrackingType.ASSISTED_REPS, TrackingType.REPS_ONLY -> "${exerciseLog.totalReps} reps"
+                    TrackingType.DURATION -> "${exerciseLog.totalDurationSeconds}s"
+                    TrackingType.DISTANCE_DURATION -> "${String.format(locale, "%.2f km", exerciseLog.totalDistanceMeters / 1000f)} · ${exerciseLog.totalDurationSeconds}s"
+                }
                 Text(
-                    text = formatSummaryVolume(exerciseLog.totalVolume, locale),
+                    text = headerMetricText,
                     color = colors.muted,
                     style = MaterialTheme.typography.bodySmall,
                     fontSize = 12.sp,
@@ -303,12 +311,26 @@ internal fun WorkoutSummaryExerciseCard(
                                 fontSize = 13.sp,
                                 modifier = Modifier.weight(1f)
                             )
+                            val setText = when (exerciseLog.trackingType) {
+                                TrackingType.WEIGHT_REPS -> stringResource(R.string.summary_set_details_formatted, formatSetWeight(set.weight, locale), set.reps)
+                                TrackingType.BODYWEIGHT_REPS -> if ((set.additionalWeight ?: 0f) > 0f) {
+                                    "+${formatSetWeight(set.additionalWeight ?: 0f, locale)} kg × ${set.reps} reps"
+                                } else {
+                                    "${set.reps} reps"
+                                }
+                                TrackingType.ASSISTED_REPS -> "${set.reps} reps · bantuan ${formatSetWeight(set.assistanceWeight ?: 0f, locale)} kg"
+                                TrackingType.REPS_ONLY -> "${set.reps} reps"
+                                TrackingType.DURATION -> "${set.durationSeconds ?: 0} detik"
+                                TrackingType.DISTANCE_DURATION -> {
+                                    val km = (set.distanceMeters ?: 0) / 1000f
+                                    val sec = set.durationSeconds ?: 0
+                                    val mm = sec / 60
+                                    val ss = sec % 60
+                                    "${String.format(locale, "%.2f km", km)} · ${String.format(Locale.US, "%02d:%02d", mm, ss)}"
+                                }
+                            }
                             Text(
-                                text = stringResource(
-                                    R.string.summary_set_details_formatted,
-                                    formatSetWeight(set.weight, locale),
-                                    set.reps
-                                ),
+                                text = setText,
                                 color = colors.text,
                                 style = MaterialTheme.typography.bodySmall,
                                 fontWeight = FontWeight.Medium,

@@ -173,8 +173,18 @@ internal fun HomeLastWorkout(log: WorkoutLog?, modifier: Modifier = Modifier) {
         dash
     }
     val durationText = log?.formattedDuration ?: stringResource(R.string.workout_duration_zero)
-    val volumeText = String.format(locale, "%,.0f kg", log?.totalVolume ?: 0f)
-
+    val metricValueText = when {
+        log == null -> dash
+        log.totalVolume > 0f -> String.format(locale, "%,.0f kg", log.totalVolume)
+        log.totalDurationSeconds > 0 -> "${log.totalDurationSeconds / 60}m ${log.totalDurationSeconds % 60}s"
+        else -> "${log.totalReps} reps"
+    }
+    val metricLabelText = when {
+        log == null -> stringResource(R.string.home_total_volume)
+        log.totalVolume > 0f -> stringResource(R.string.home_total_volume)
+        log.totalDurationSeconds > 0 -> "Durasi Latihan"
+        else -> "Total Repetisi"
+    }
     Surface(
         modifier = modifier.fillMaxWidth().testTag("home_last_workout_card"),
         shape = IMFITShapes.CardSmall,
@@ -225,8 +235,8 @@ internal fun HomeLastWorkout(log: WorkoutLog?, modifier: Modifier = Modifier) {
                         .background(colors.border)
                 )
                 HomeSummaryMetric(
-                    volumeText,
-                    stringResource(R.string.home_total_volume),
+                    metricValueText,
+                    metricLabelText,
                     R.drawable.ic_home_weight,
                     Modifier.weight(1f)
                 )

@@ -72,6 +72,8 @@ import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.DialogProperties
 import com.diajarkoding.imfit.R
 import com.diajarkoding.imfit.domain.model.ExerciseLog
+import com.diajarkoding.imfit.domain.model.SetMeasurement
+import com.diajarkoding.imfit.domain.model.TrackingType
 import com.diajarkoding.imfit.presentation.components.common.Add
 import com.diajarkoding.imfit.presentation.components.common.Check
 import com.diajarkoding.imfit.presentation.components.common.CheckCircle
@@ -351,11 +353,14 @@ internal fun ActiveExerciseCard(
     mutationEnabled: Boolean,
     isPaused: Boolean,
     onRemoveExercise: () -> Unit,
-    onSetUpdate: (setIndex: Int, weight: Float, reps: Int) -> Unit,
+    onSetUpdate: (setIndex: Int, weight: Float, reps: Int) -> Unit = { _, _, _ -> },
     onSetComplete: (setIndex: Int) -> Unit,
     onAddSet: () -> Unit,
     onRemoveSet: (setIndex: Int) -> Unit,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    onSetMeasurementUpdate: (setIndex: Int, measurement: SetMeasurement) -> Unit = { setIndex, m ->
+        onSetUpdate(setIndex, m.weight ?: 0f, m.reps ?: 0)
+    }
 ) {
     val colors = IMFITColors.training
     Surface(
@@ -426,22 +431,34 @@ internal fun ActiveExerciseCard(
                     textAlign = TextAlign.Center,
                     modifier = Modifier.width(28.dp)
                 )
-                Spacer(Modifier.width(8.dp))
-                Text(
-                    text = stringResource(R.string.active_session_column_kg),
-                    color = colors.muted,
-                    style = MaterialTheme.typography.labelSmall,
-                    textAlign = TextAlign.Center,
-                    modifier = Modifier.weight(1f)
-                )
-                Spacer(Modifier.width(8.dp))
-                Text(
-                    text = stringResource(R.string.active_session_column_reps),
-                    color = colors.muted,
-                    style = MaterialTheme.typography.labelSmall,
-                    textAlign = TextAlign.Center,
-                    modifier = Modifier.weight(1f)
-                )
+                when (exerciseLog.trackingType) {
+                    TrackingType.WEIGHT_REPS -> {
+                        Text(text = stringResource(R.string.active_session_column_kg), color = colors.muted, style = MaterialTheme.typography.labelSmall, textAlign = TextAlign.Center, modifier = Modifier.weight(1f))
+                        Spacer(Modifier.width(8.dp))
+                        Text(text = stringResource(R.string.active_session_column_reps), color = colors.muted, style = MaterialTheme.typography.labelSmall, textAlign = TextAlign.Center, modifier = Modifier.weight(1f))
+                    }
+                    TrackingType.BODYWEIGHT_REPS -> {
+                        Text(text = "+KG", color = colors.muted, style = MaterialTheme.typography.labelSmall, textAlign = TextAlign.Center, modifier = Modifier.weight(1f))
+                        Spacer(Modifier.width(8.dp))
+                        Text(text = stringResource(R.string.active_session_column_reps), color = colors.muted, style = MaterialTheme.typography.labelSmall, textAlign = TextAlign.Center, modifier = Modifier.weight(1f))
+                    }
+                    TrackingType.ASSISTED_REPS -> {
+                        Text(text = "-KG", color = colors.muted, style = MaterialTheme.typography.labelSmall, textAlign = TextAlign.Center, modifier = Modifier.weight(1f))
+                        Spacer(Modifier.width(8.dp))
+                        Text(text = stringResource(R.string.active_session_column_reps), color = colors.muted, style = MaterialTheme.typography.labelSmall, textAlign = TextAlign.Center, modifier = Modifier.weight(1f))
+                    }
+                    TrackingType.REPS_ONLY -> {
+                        Text(text = stringResource(R.string.active_session_column_reps), color = colors.muted, style = MaterialTheme.typography.labelSmall, textAlign = TextAlign.Center, modifier = Modifier.weight(1f))
+                    }
+                    TrackingType.DURATION -> {
+                        Text(text = "DURASI (S)", color = colors.muted, style = MaterialTheme.typography.labelSmall, textAlign = TextAlign.Center, modifier = Modifier.weight(1f))
+                    }
+                    TrackingType.DISTANCE_DURATION -> {
+                        Text(text = "JARAK (M)", color = colors.muted, style = MaterialTheme.typography.labelSmall, textAlign = TextAlign.Center, modifier = Modifier.weight(1f))
+                        Spacer(Modifier.width(8.dp))
+                        Text(text = "DURASI (S)", color = colors.muted, style = MaterialTheme.typography.labelSmall, textAlign = TextAlign.Center, modifier = Modifier.weight(1f))
+                    }
+                }
                 Spacer(Modifier.width(4.dp))
                 Box(Modifier.size(48.dp)) // Spacer matching delete icon button
                 Box(
@@ -468,7 +485,9 @@ internal fun ActiveExerciseCard(
                         isPaused = isPaused,
                         onUpdate = { weight, reps -> onSetUpdate(setIndex, weight, reps) },
                         onComplete = { onSetComplete(setIndex) },
-                        onDelete = { onRemoveSet(setIndex) }
+                        onDelete = { onRemoveSet(setIndex) },
+                        trackingType = exerciseLog.trackingType,
+                        onMeasurementUpdate = { measurement -> onSetMeasurementUpdate(setIndex, measurement) }
                     )
                 }
             }

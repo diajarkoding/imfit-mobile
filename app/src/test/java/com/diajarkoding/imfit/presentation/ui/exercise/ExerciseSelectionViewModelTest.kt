@@ -280,7 +280,7 @@ class ExerciseSelectionViewModelTest {
         }
     }
 
-    @Test fun unsupportedAndInactiveExercisesRemainVisibleButCannotBeSelected() {
+    @Test fun inactiveExercisesRemainVisibleButCannotBeSelectedWhileAllActiveAreSelectable() {
         Harness().use { h ->
             val plank = exercise("ex_core_1", MuscleCategory.CORE)
             val inactive = bench.copy(isActive = false)
@@ -290,7 +290,7 @@ class ExerciseSelectionViewModelTest {
             h.vm.toggleExercise(inactive)
             h.vm.toggleExercise(row)
             assertEquals(listOf(plank, inactive, row), h.vm.state.value.allExercises)
-            assertEquals(listOf(row), h.vm.state.value.selectedExercises)
+            assertEquals(listOf(plank, row), h.vm.state.value.selectedExercises)
         }
     }
 

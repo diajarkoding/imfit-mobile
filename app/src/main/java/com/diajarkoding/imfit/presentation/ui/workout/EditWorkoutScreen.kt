@@ -251,7 +251,7 @@ internal fun RoutineExerciseEditor(
     onRawConfig: (String, String, String) -> Unit
 ) {
     val c = IMFITColors.training
-    val supported = exercise.exercise.prescriptionCapability == ExercisePrescriptionCapability.REPS_LOAD
+    val supported = exercise.exercise.isActive
     val configEnabled = enabled && exercise.exercise.isActive
     val sets = rawConfig.sets
     val reps = rawConfig.reps
@@ -285,27 +285,36 @@ internal fun RoutineExerciseEditor(
                     Icon(Symbols.Default.Close, stringResource(R.string.routine_remove_named, exercise.name), tint = c.muted, modifier = Modifier.size(20.dp))
                 }
             }
-            if (supported) {
-                val fields: @Composable (Modifier) -> Unit = { modifier ->
-                    RoutineConfigNumber(stringResource(R.string.workout_label_sets), sets, { onRawConfig(it, reps, rest) }, configEnabled, 1, modifier)
-                    RoutineConfigNumber(stringResource(R.string.workout_label_reps), reps, { onRawConfig(sets, it, rest) }, configEnabled, 1, modifier)
-                    RoutineConfigNumber(stringResource(R.string.workout_label_rest_short), rest, { onRawConfig(sets, reps, it) }, configEnabled, 0, modifier)
+            val dur = rawConfig.durationSeconds
+            val dist = rawConfig.distanceMeters
+            val fields: @Composable (Modifier) -> Unit = { modifier ->
+                when (rawConfig.trackingType) {
+                    com.diajarkoding.imfit.domain.model.TrackingType.WEIGHT_REPS,
+                    com.diajarkoding.imfit.domain.model.TrackingType.BODYWEIGHT_REPS,
+                    com.diajarkoding.imfit.domain.model.TrackingType.ASSISTED_REPS,
+                    com.diajarkoding.imfit.domain.model.TrackingType.REPS_ONLY -> {
+                        RoutineConfigNumber(stringResource(R.string.workout_label_sets), sets, { onRawConfig(it, reps, rest) }, configEnabled, 1, modifier)
+                        RoutineConfigNumber(stringResource(R.string.workout_label_reps), reps, { onRawConfig(sets, it, rest) }, configEnabled, 1, modifier)
+                        RoutineConfigNumber(stringResource(R.string.workout_label_rest_short), rest, { onRawConfig(sets, reps, it) }, configEnabled, 0, modifier)
+                    }
+                    com.diajarkoding.imfit.domain.model.TrackingType.DURATION -> {
+                        RoutineConfigNumber(stringResource(R.string.workout_label_sets), sets, { onRawConfig(it, reps, rest) }, configEnabled, 1, modifier)
+                        RoutineConfigNumber("Durasi (s)", dur.ifEmpty { "45" }, { onRawConfig(sets, reps, rest) }, configEnabled, 1, modifier)
+                        RoutineConfigNumber(stringResource(R.string.workout_label_rest_short), rest, { onRawConfig(sets, reps, it) }, configEnabled, 0, modifier)
+                    }
+                    com.diajarkoding.imfit.domain.model.TrackingType.DISTANCE_DURATION -> {
+                        RoutineConfigNumber(stringResource(R.string.workout_label_sets), sets, { onRawConfig(it, reps, rest) }, configEnabled, 1, modifier)
+                        RoutineConfigNumber("Jarak (m)", dist.ifEmpty { "1000" }, { onRawConfig(sets, reps, rest) }, configEnabled, 1, modifier)
+                        RoutineConfigNumber("Waktu (s)", dur.ifEmpty { "600" }, { onRawConfig(sets, reps, rest) }, configEnabled, 1, modifier)
+                        RoutineConfigNumber(stringResource(R.string.workout_label_rest_short), rest, { onRawConfig(sets, reps, it) }, configEnabled, 0, modifier)
+                    }
                 }
-                if (LocalDensity.current.fontScale > 1.4f) Column(verticalArrangement = Arrangement.spacedBy(12.dp)) { fields(Modifier.fillMaxWidth()) }
-                else Row(horizontalArrangement = Arrangement.spacedBy(14.dp)) { fields(Modifier.weight(1f)) }
-                if (!valid) RoutineFailure(stringResource(R.string.routine_config_invalid))
             }
+            if (LocalDensity.current.fontScale > 1.4f) Column(verticalArrangement = Arrangement.spacedBy(12.dp)) { fields(Modifier.fillMaxWidth()) }
+            else Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) { fields(Modifier.weight(1f)) }
+            if (!valid) RoutineFailure(stringResource(R.string.routine_config_invalid))
             if (!exercise.exercise.isActive) RoutineFailure(stringResource(R.string.routine_exercise_unavailable))
-
-            if (!supported) {
-                Text(
-                    stringResource(R.string.routine_duration_unsupported),
-                    color = c.primary,
-                    style = MaterialTheme.typography.bodySmall
-                )
-            } else {
-                Text(stringResource(R.string.routine_config_hint), color = c.muted, style = MaterialTheme.typography.bodySmall)
-            }
+            Text(stringResource(R.string.routine_config_hint), color = c.muted, style = MaterialTheme.typography.bodySmall)
         }
     }
 }

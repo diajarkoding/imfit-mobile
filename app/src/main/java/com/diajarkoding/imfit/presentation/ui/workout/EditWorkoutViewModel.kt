@@ -26,9 +26,28 @@ import kotlinx.serialization.json.Json
 import java.util.UUID
 import javax.inject.Inject
 
-data class RawExerciseConfig(val sets: String, val reps: String, val rest: String) {
-    val isValid: Boolean get() = sets.toIntOrNull() in 1..20 &&
-        reps.toIntOrNull() in 1..100 && rest.toIntOrNull() in 0..600
+data class RawExerciseConfig(
+    val sets: String,
+    val reps: String = "",
+    val rest: String = "60",
+    val trackingType: TrackingType = TrackingType.WEIGHT_REPS,
+    val durationSeconds: String = "",
+    val distanceMeters: String = ""
+) {
+    val isValid: Boolean get() {
+        val setsNum = sets.toIntOrNull() ?: return false
+        val restNum = rest.toIntOrNull() ?: return false
+        if (setsNum !in 1..20 || restNum !in 0..600) return false
+        return when (trackingType) {
+            TrackingType.WEIGHT_REPS,
+            TrackingType.BODYWEIGHT_REPS,
+            TrackingType.ASSISTED_REPS,
+            TrackingType.REPS_ONLY -> (reps.toIntOrNull() ?: 0) in 1..100
+            TrackingType.DURATION -> (durationSeconds.toIntOrNull() ?: 0) in 1..86400
+            TrackingType.DISTANCE_DURATION -> (durationSeconds.toIntOrNull() ?: 0) in 1..86400 &&
+                (distanceMeters.isBlank() || (distanceMeters.toIntOrNull() ?: 0) in 1..1000000)
+        }
+    }
 }
 
 data class EditWorkoutState(
@@ -54,7 +73,15 @@ data class EditWorkoutState(
 )
 
 @Serializable
-private data class DraftRow(val id: String, val sets: String, val reps: String, val rest: String)
+private data class DraftRow(
+    val id: String,
+    val sets: String,
+    val reps: String,
+    val rest: String,
+    val trackingType: String? = null,
+    val durationSeconds: String? = null,
+    val distanceMeters: String? = null
+)
 
 @Serializable
 private data class CommandExercise(
@@ -206,17 +233,38 @@ class EditWorkoutViewModel(
         val draft = durable ?: return
         val byId = exercises.associateBy { it.id }
         val templates = draft.rows.map { row ->
-            TemplateExercise(byId.getValue(row.id), sets = row.sets.toIntOrNull() ?: 0,
-                reps = row.reps.toIntOrNull() ?: 0, restSeconds = row.rest.toIntOrNull() ?: 0)
+            val ex = byId.getValue(row.id)
+            val parsedTracking = row.trackingType?.let { runCatching { TrackingType.valueOf(it) }.getOrNull() }
+                ?: ex.defaultTrackingType
+            TemplateExercise(
+                exercise = ex,
+                sets = row.sets.toIntOrNull() ?: 3,
+                reps = row.reps.toIntOrNull(),
+                restSeconds = row.rest.toIntOrNull() ?: 60,
+                trackingType = parsedTracking,
+                targetDurationSeconds = row.durationSeconds?.toIntOrNull(),
+                targetDistanceMeters = row.distanceMeters?.toIntOrNull()
+            )
         }
-        val raw = draft.rows.associate { it.id to RawExerciseConfig(it.sets, it.reps, it.rest) }
+        val raw = draft.rows.associate { row ->
+            val ex = byId.getValue(row.id)
+            val parsedTracking = row.trackingType?.let { runCatching { TrackingType.valueOf(it) }.getOrNull() }
+                ?: ex.defaultTrackingType
+            row.id to RawExerciseConfig(
+                sets = row.sets,
+                reps = row.reps,
+                rest = row.rest,
+                trackingType = parsedTracking,
+                durationSeconds = row.durationSeconds ?: "",
+                distanceMeters = row.distanceMeters ?: ""
+            )
+        }
         _state.value = _state.value.copy(workoutName = draft.name, exercises = templates, rawConfigs = raw,
             baseRevision = draft.revision, hasLoaded = true, isLoading = false, isDirty = draft.dirty,
             hasPendingSave = draft.command != null,
             invalidConfigIds = templates.filter { !raw.getValue(it.id).isValid || !it.exercise.supportsRoutinePrescription() }.map { it.id }.toSet(),
             errorRes = null)
     }
-
     private fun canEdit() = _state.value.let {
         it.hasLoaded && !it.isLoading && !it.isSaving && !it.hasPendingSave &&
             !it.isSaved && !it.accountInvalid && durable?.committed == false
@@ -234,9 +282,44 @@ class EditWorkoutViewModel(
         _state.value = _state.value.copy(nameErrorRes = null)
     }
 
-    fun updateRawConfig(id: String, sets: String, reps: String, rest: String) {
+    fun updateRawConfig(
+        id: String,
+        sets: String,
+        reps: String,
+        rest: String,
+        trackingType: TrackingType? = null,
+        durationSeconds: String? = null,
+        distanceMeters: String? = null
+    ) {
         if (_state.value.exercises.find { it.id == id }?.exercise?.supportsRoutinePrescription() != true) return
-        mutate { it.copy(rows = it.rows.map { row -> if (row.id == id) DraftRow(id, sets, reps, rest) else row }) }
+        mutate { it.copy(rows = it.rows.map { row ->
+            if (row.id == id) {
+                DraftRow(
+                    id = id,
+                    sets = sets,
+                    reps = reps,
+                    rest = rest,
+                    trackingType = trackingType?.name ?: row.trackingType,
+                    durationSeconds = durationSeconds ?: row.durationSeconds,
+                    distanceMeters = distanceMeters ?: row.distanceMeters
+                )
+            } else row
+        }) }
+    }
+
+    fun changeTrackingMode(id: String, mode: TrackingType) {
+        val exercise = _state.value.exercises.find { it.id == id }?.exercise ?: return
+        if (mode !in exercise.allowedTrackingTypes) return
+        val current = _state.value.rawConfigs[id] ?: return
+        updateRawConfig(
+            id = id,
+            sets = current.sets,
+            reps = current.reps,
+            rest = current.rest,
+            trackingType = mode,
+            durationSeconds = current.durationSeconds,
+            distanceMeters = current.distanceMeters
+        )
     }
 
     fun removeExercise(index: Int) = mutate { draft ->
@@ -324,8 +407,16 @@ class EditWorkoutViewModel(
 
     fun dismissErrorDialog() { _state.value = _state.value.copy(showErrorDialog = false) }
 
-    private fun TemplateExercise.row() = DraftRow(id, sets.toString(), reps.toString(), restSeconds.toString())
-    private fun Exercise.supportsRoutinePrescription() = isActive && prescriptionCapability == ExercisePrescriptionCapability.REPS_LOAD
+    private fun TemplateExercise.row() = DraftRow(
+        id = id,
+        sets = sets.toString(),
+        reps = (reps ?: 10).toString(),
+        rest = restSeconds.toString(),
+        trackingType = trackingType.name,
+        durationSeconds = targetDurationSeconds?.toString() ?: "",
+        distanceMeters = targetDistanceMeters?.toString() ?: ""
+    )
+    private fun Exercise.supportsRoutinePrescription() = isActive
 
     companion object { const val DRAFT_KEY = "routine_editor_durable_draft" }
 }

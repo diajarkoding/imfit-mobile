@@ -18,6 +18,7 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
+import com.diajarkoding.imfit.domain.model.SetMeasurement
 import androidx.compose.material3.SnackbarResult
 import androidx.compose.material3.Text
 import androidx.compose.material3.MaterialTheme
@@ -281,6 +282,9 @@ fun ActiveWorkoutScreen(
         onSetUpdate = { exerciseIndex, setIndex, weight, reps ->
             viewModel.updateSet(exerciseIndex, setIndex, weight, reps)
         },
+        onSetMeasurementUpdate = { exerciseIndex, setIndex, measurement ->
+            viewModel.updateSetMeasurement(exerciseIndex, setIndex, measurement)
+        },
         onSetComplete = { exerciseIndex, setIndex ->
             viewModel.completeSet(exerciseIndex, setIndex)
         },
@@ -299,7 +303,8 @@ internal fun ActiveWorkoutScreenContent(
     onFinishClick: () -> Unit,
     onAddExercises: () -> Unit,
     onRemoveExercise: (exerciseId: String) -> Unit,
-    onSetUpdate: (exerciseIndex: Int, setIndex: Int, weight: Float, reps: Int) -> Unit,
+    onSetUpdate: (exerciseIndex: Int, setIndex: Int, weight: Float, reps: Int) -> Unit = { _, _, _, _ -> },
+    onSetMeasurementUpdate: (exerciseIndex: Int, setIndex: Int, measurement: SetMeasurement) -> Unit = { exerciseIndex, setIndex, m -> onSetUpdate(exerciseIndex, setIndex, m.weight ?: 0f, m.reps ?: 0) },
     onSetComplete: (exerciseIndex: Int, setIndex: Int) -> Unit,
     onAddSet: (exerciseIndex: Int) -> Unit,
     onRemoveSet: (exerciseIndex: Int, setIndex: Int) -> Unit,
@@ -424,6 +429,9 @@ internal fun ActiveWorkoutScreenContent(
                                     onRemoveExercise = { onRemoveExercise(exerciseLog.exercise.id) },
                                     onSetUpdate = { setIndex, weight, reps ->
                                         onSetUpdate(exerciseIndex, setIndex, weight, reps)
+                                    },
+                                    onSetMeasurementUpdate = { setIndex, measurement ->
+                                        onSetMeasurementUpdate(exerciseIndex, setIndex, measurement)
                                     },
                                     onSetComplete = { setIndex ->
                                         onSetComplete(exerciseIndex, setIndex)

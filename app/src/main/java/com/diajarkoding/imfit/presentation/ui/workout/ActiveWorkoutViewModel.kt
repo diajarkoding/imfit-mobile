@@ -6,6 +6,7 @@ import com.diajarkoding.imfit.R
 import androidx.lifecycle.viewModelScope
 import com.diajarkoding.imfit.domain.model.WorkoutSession
 import com.diajarkoding.imfit.domain.model.WorkoutSet
+import com.diajarkoding.imfit.domain.model.SetMeasurement
 import com.diajarkoding.imfit.domain.model.ExerciseLog
 import com.diajarkoding.imfit.domain.model.TemplateExercise
 import com.diajarkoding.imfit.domain.model.inputDefaults
@@ -256,9 +257,21 @@ class ActiveWorkoutViewModel @Inject constructor(
 
     fun updateRestTimer(exerciseIndex: Int, seconds: Int) = editExercise(exerciseIndex) { it.copy(restSeconds = seconds) }
 
-    fun updateSet(exerciseIndex: Int, setIndex: Int, weight: Float, reps: Int) = editExercise(exerciseIndex) { log ->
+    fun updateSet(exerciseIndex: Int, setIndex: Int, weight: Float, reps: Int) =
+        updateSetMeasurement(exerciseIndex, setIndex, SetMeasurement(weight = weight, reps = reps))
+
+    fun updateSetMeasurement(exerciseIndex: Int, setIndex: Int, measurement: SetMeasurement) = editExercise(exerciseIndex) { log ->
         log.copy(sets = log.sets.mapIndexed { index, set ->
-            if (index == setIndex && !set.isCompleted) set.copy(weight = weight, reps = reps) else set
+            if (index == setIndex && !set.isCompleted) {
+                set.copy(
+                    weight = measurement.weight ?: set.weight,
+                    reps = measurement.reps ?: set.reps,
+                    durationSeconds = measurement.durationSeconds ?: set.durationSeconds,
+                    distanceMeters = measurement.distanceMeters ?: set.distanceMeters,
+                    additionalWeight = measurement.additionalWeight ?: set.additionalWeight,
+                    assistanceWeight = measurement.assistanceWeight ?: set.assistanceWeight
+                )
+            } else set
         })
     }
 
@@ -274,7 +287,7 @@ class ActiveWorkoutViewModel @Inject constructor(
                 val updated = workoutRepository.mutateActiveSession(session.id) { current ->
                     if (current.isPaused) current else current.copy(exerciseLogs = current.exerciseLogs.map { log ->
                         if (log.exercise.id != exercise.exercise.id) log else log.copy(sets = log.sets.map { set ->
-                            if (set.setNumber == setNumber && !set.isCompleted && set.weight > 0 && set.reps > 0) {
+                            if (set.setNumber == setNumber && !set.isCompleted && set.measurement.isCompleteEligible(log.trackingType)) {
                                 completed = set.copy(isCompleted = true); completed!!
                             } else set
                         })

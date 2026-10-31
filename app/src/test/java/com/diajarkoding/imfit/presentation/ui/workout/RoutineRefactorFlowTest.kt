@@ -172,24 +172,6 @@ class RoutineRefactorFlowTest {
         assertEquals("Keep both", restored.state.value.workoutName)
     }
 
-    @Test fun durationCapabilityUsesSeedIdentityAndBlocksConfigurationAndSave() {
-        assertEquals(ExercisePrescriptionCapability.UNSUPPORTED_DURATION_DISTANCE, plank.prescriptionCapability)
-        assertEquals(ExercisePrescriptionCapability.REPS_LOAD, bench.copy(name = "Plank").prescriptionCapability)
-        assertEquals(ExercisePrescriptionCapability.REPS_LOAD,
-            Exercise("ex_cardio_5", "Burpees", MuscleCategory.CARDIO, "").prescriptionCapability)
-        listOf("ex_core_9", "ex_cardio_1", "ex_cardio_2", "ex_cardio_3", "ex_cardio_4", "ex_cardio_6", "ex_cardio_7", "ex_cardio_9").forEach {
-            assertEquals(ExercisePrescriptionCapability.UNSUPPORTED_DURATION_DISTANCE,
-                Exercise(it, "Any translated name", MuscleCategory.CHEST, "").prescriptionCapability)
-        }
-        val vm = editor()
-        vm.acceptSelection(RoutineSelectionResult(context, "duration", listOf(plank)))
-        assertEquals(RawExerciseConfig("", "", ""), vm.state.value.rawConfigs[plank.id])
-        vm.updateRawConfig(plank.id, "3", "45", "60")
-        assertEquals("", vm.state.value.rawConfigs[plank.id]?.reps)
-        assertTrue(plank.id in vm.state.value.invalidConfigIds)
-        vm.saveChanges()
-        assertTrue(repository.commands.isEmpty())
-    }
 
     @Test fun committedSuccessDoesNotDependOnCanonicalReadAndIsConsumedOnce() {
         val handle = SavedStateHandle()

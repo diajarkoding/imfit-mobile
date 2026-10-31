@@ -1,31 +1,16 @@
 package com.diajarkoding.imfit.presentation.ui.workout
 
+import android.os.SystemClock
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
-import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.heightIn
-import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.text.KeyboardOptions
-import androidx.compose.material3.Checkbox
-import androidx.compose.material3.CheckboxDefaults
-import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
-import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Text
-import androidx.compose.runtime.Composable
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
+import androidx.compose.material3.*
+import androidx.compose.runtime.*
 import androidx.compose.runtime.saveable.rememberSaveable
-import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -42,10 +27,15 @@ import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import com.diajarkoding.imfit.R
+import com.diajarkoding.imfit.domain.model.SetMeasurement
+import com.diajarkoding.imfit.domain.model.TrackingType
 import com.diajarkoding.imfit.domain.model.WorkoutSet
 import com.diajarkoding.imfit.presentation.components.common.Delete
 import com.diajarkoding.imfit.presentation.components.common.Symbols
+import com.diajarkoding.imfit.presentation.components.common.Pause
+import com.diajarkoding.imfit.presentation.components.common.PlayArrow
 import com.diajarkoding.imfit.theme.IMFITColors
+import kotlinx.coroutines.delay
 
 @Composable
 internal fun ActiveSetRow(
@@ -54,49 +44,213 @@ internal fun ActiveSetRow(
     mutationEnabled: Boolean,
     canDelete: Boolean,
     isPaused: Boolean,
-    onUpdate: (Float, Int) -> Unit,
+    onUpdate: (Float, Int) -> Unit = { _, _ -> },
     onComplete: () -> Unit,
     onDelete: () -> Unit,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    trackingType: TrackingType = TrackingType.WEIGHT_REPS,
+    onMeasurementUpdate: (SetMeasurement) -> Unit = { m -> onUpdate(m.weight ?: 0f, m.reps ?: 0) }
 ) {
     val colors = IMFITColors.training
     val configuration = LocalConfiguration.current
     val compact = configuration.screenWidthDp <= 340 || configuration.fontScale >= 1.25f
     val locale = configuration.locales[0]
     val editable = mutationEnabled && !set.isCompleted
-    var weight by rememberSaveable(set.weight, locale) {
+
+    var weightText by rememberSaveable(set.weight, locale) {
         mutableStateOf(if (set.weight > 0f) formatSetWeight(set.weight, locale) else "")
     }
-    var reps by rememberSaveable(set.reps) { mutableStateOf(if (set.reps > 0) set.reps.toString() else "") }
-    val weightLabel = stringResource(R.string.active_session_weight_input, exerciseName, set.setNumber)
-    val repsLabel = stringResource(R.string.active_session_reps_input, exerciseName, set.setNumber)
-    val completeLabel = stringResource(R.string.active_session_complete_set, exerciseName, set.setNumber)
-    val deleteLabel = stringResource(R.string.active_session_delete_set, exerciseName, set.setNumber)
+    var repsText by rememberSaveable(set.reps) {
+        mutableStateOf(if (set.reps > 0) set.reps.toString() else "")
+    }
+    var additionalWeightText by rememberSaveable(set.additionalWeight, locale) {
+        mutableStateOf(if ((set.additionalWeight ?: 0f) > 0f) formatSetWeight(set.additionalWeight ?: 0f, locale) else "")
+    }
+    var assistanceWeightText by rememberSaveable(set.assistanceWeight, locale) {
+        mutableStateOf(if ((set.assistanceWeight ?: 0f) > 0f) formatSetWeight(set.assistanceWeight ?: 0f, locale) else "")
+    }
+    var durationText by rememberSaveable(set.durationSeconds) {
+        mutableStateOf(if ((set.durationSeconds ?: 0) > 0) (set.durationSeconds ?: 0).toString() else "")
+    }
+    var distanceText by rememberSaveable(set.distanceMeters) {
+        mutableStateOf(if ((set.distanceMeters ?: 0) > 0) (set.distanceMeters ?: 0).toString() else "")
+    }
 
-    val inputs: @Composable () -> Unit = {
-        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                if (compact) Text(stringResource(R.string.active_session_column_kg), color = colors.muted,
-                    style = MaterialTheme.typography.labelSmall)
-                SetNumberInput(weight, { raw ->
-                    if (raw.matches(Regex("\\d*([.,]\\d*)?"))) {
-                        val value = raw.replace(',', '.').toFloatOrNull() ?: 0f
-                        if (value.isFinite()) { weight = raw; onUpdate(value, set.reps) }
-                    }
-                }, weightLabel, editable, set.isCompleted, KeyboardType.Decimal)
-            }
-            Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                if (compact) Text(stringResource(R.string.active_session_column_reps), color = colors.muted,
-                    style = MaterialTheme.typography.labelSmall)
-                SetNumberInput(reps, { raw ->
-                    if (raw.all(Char::isDigit) && (raw.isEmpty() || raw.toIntOrNull() != null)) {
-                        reps = raw
-                        onUpdate(set.weight, raw.toIntOrNull() ?: 0)
-                    }
-                }, repsLabel, editable, set.isCompleted, KeyboardType.Number)
+    // Stopwatch state for duration-based sets
+    var isStopwatchRunning by rememberSaveable { mutableStateOf(false) }
+    var stopwatchStartRealtime by rememberSaveable { mutableStateOf(0L) }
+    var baseDurationSeconds by rememberSaveable { mutableStateOf(set.durationSeconds ?: 0) }
+
+    LaunchedEffect(isStopwatchRunning, isPaused) {
+        if (isStopwatchRunning && !isPaused) {
+            stopwatchStartRealtime = SystemClock.elapsedRealtime()
+            while (isStopwatchRunning && !isPaused) {
+                delay(200)
+                val elapsedSec = baseDurationSeconds + ((SystemClock.elapsedRealtime() - stopwatchStartRealtime) / 1000).toInt()
+                durationText = elapsedSec.toString()
+                onMeasurementUpdate(set.measurement.copy(durationSeconds = elapsedSec))
             }
         }
     }
+
+    val completeLabel = stringResource(R.string.active_session_complete_set, exerciseName, set.setNumber)
+    val deleteLabel = stringResource(R.string.active_session_delete_set, exerciseName, set.setNumber)
+
+    val isCompleteEligible = set.measurement.isCompleteEligible(trackingType)
+
+    val inputs: @Composable () -> Unit = {
+        when (trackingType) {
+            TrackingType.WEIGHT_REPS -> {
+                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                        if (compact) Text(stringResource(R.string.active_session_column_kg), color = colors.muted, style = MaterialTheme.typography.labelSmall)
+                        SetNumberInput(weightText, { raw ->
+                            if (raw.matches(Regex("\\d*([.,]\\d*)?"))) {
+                                val value = raw.replace(',', '.').toFloatOrNull() ?: 0f
+                                if (value.isFinite()) {
+                                    weightText = raw
+                                    onMeasurementUpdate(set.measurement.copy(weight = value))
+                                }
+                            }
+                        }, stringResource(R.string.active_session_weight_input, exerciseName, set.setNumber), editable, set.isCompleted, KeyboardType.Decimal)
+                    }
+                    Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                        if (compact) Text(stringResource(R.string.active_session_column_reps), color = colors.muted, style = MaterialTheme.typography.labelSmall)
+                        SetNumberInput(repsText, { raw ->
+                            if (raw.all(Char::isDigit) && (raw.isEmpty() || raw.toIntOrNull() != null)) {
+                                repsText = raw
+                                onMeasurementUpdate(set.measurement.copy(reps = raw.toIntOrNull() ?: 0))
+                            }
+                        }, stringResource(R.string.active_session_reps_input, exerciseName, set.setNumber), editable, set.isCompleted, KeyboardType.Number)
+                    }
+                }
+            }
+
+            TrackingType.BODYWEIGHT_REPS -> {
+                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                        if (compact) Text("+kg (opsional)", color = colors.muted, style = MaterialTheme.typography.labelSmall)
+                        SetNumberInput(additionalWeightText, { raw ->
+                            if (raw.matches(Regex("\\d*([.,]\\d*)?"))) {
+                                val value = raw.replace(',', '.').toFloatOrNull() ?: 0f
+                                if (value.isFinite()) {
+                                    additionalWeightText = raw
+                                    onMeasurementUpdate(set.measurement.copy(additionalWeight = value))
+                                }
+                            }
+                        }, "+kg beban tambahan", editable, set.isCompleted, KeyboardType.Decimal)
+                    }
+                    Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                        if (compact) Text(stringResource(R.string.active_session_column_reps), color = colors.muted, style = MaterialTheme.typography.labelSmall)
+                        SetNumberInput(repsText, { raw ->
+                            if (raw.all(Char::isDigit) && (raw.isEmpty() || raw.toIntOrNull() != null)) {
+                                repsText = raw
+                                onMeasurementUpdate(set.measurement.copy(reps = raw.toIntOrNull() ?: 0))
+                            }
+                        }, stringResource(R.string.active_session_reps_input, exerciseName, set.setNumber), editable, set.isCompleted, KeyboardType.Number)
+                    }
+                }
+            }
+
+            TrackingType.ASSISTED_REPS -> {
+                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                        if (compact) Text("-kg bantuan", color = colors.muted, style = MaterialTheme.typography.labelSmall)
+                        SetNumberInput(assistanceWeightText, { raw ->
+                            if (raw.matches(Regex("\\d*([.,]\\d*)?"))) {
+                                val value = raw.replace(',', '.').toFloatOrNull() ?: 0f
+                                if (value.isFinite()) {
+                                    assistanceWeightText = raw
+                                    onMeasurementUpdate(set.measurement.copy(assistanceWeight = value))
+                                }
+                            }
+                        }, "-kg bantuan mesin", editable, set.isCompleted, KeyboardType.Decimal)
+                    }
+                    Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                        if (compact) Text(stringResource(R.string.active_session_column_reps), color = colors.muted, style = MaterialTheme.typography.labelSmall)
+                        SetNumberInput(repsText, { raw ->
+                            if (raw.all(Char::isDigit) && (raw.isEmpty() || raw.toIntOrNull() != null)) {
+                                repsText = raw
+                                onMeasurementUpdate(set.measurement.copy(reps = raw.toIntOrNull() ?: 0))
+                            }
+                        }, stringResource(R.string.active_session_reps_input, exerciseName, set.setNumber), editable, set.isCompleted, KeyboardType.Number)
+                    }
+                }
+            }
+
+            TrackingType.REPS_ONLY -> {
+                Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                    if (compact) Text(stringResource(R.string.active_session_column_reps), color = colors.muted, style = MaterialTheme.typography.labelSmall)
+                    SetNumberInput(repsText, { raw ->
+                        if (raw.all(Char::isDigit) && (raw.isEmpty() || raw.toIntOrNull() != null)) {
+                            repsText = raw
+                            onMeasurementUpdate(set.measurement.copy(reps = raw.toIntOrNull() ?: 0))
+                        }
+                    }, stringResource(R.string.active_session_reps_input, exerciseName, set.setNumber), editable, set.isCompleted, KeyboardType.Number)
+                }
+            }
+
+            TrackingType.DURATION -> {
+                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
+                    if (editable && !isPaused) {
+                        IconButton(
+                            onClick = {
+                                if (isStopwatchRunning) {
+                                    isStopwatchRunning = false
+                                    baseDurationSeconds = durationText.toIntOrNull() ?: 0
+                                } else {
+                                    baseDurationSeconds = durationText.toIntOrNull() ?: 0
+                                    isStopwatchRunning = true
+                                }
+                            },
+                            modifier = Modifier.size(40.dp)
+                        ) {
+                            Icon(
+                                if (isStopwatchRunning) Symbols.Filled.Pause else Symbols.Filled.PlayArrow,
+                                contentDescription = if (isStopwatchRunning) "Pause Stopwatch" else "Start Stopwatch",
+                                tint = colors.primary
+                            )
+                        }
+                    }
+                    Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                        if (compact) Text("Durasi (detik)", color = colors.muted, style = MaterialTheme.typography.labelSmall)
+                        SetNumberInput(durationText, { raw ->
+                            if (raw.all(Char::isDigit) && (raw.isEmpty() || raw.toIntOrNull() != null)) {
+                                durationText = raw
+                                val sec = raw.toIntOrNull() ?: 0
+                                baseDurationSeconds = sec
+                                onMeasurementUpdate(set.measurement.copy(durationSeconds = sec))
+                            }
+                        }, "Durasi dalam detik", editable && !isStopwatchRunning, set.isCompleted, KeyboardType.Number)
+                    }
+                }
+            }
+
+            TrackingType.DISTANCE_DURATION -> {
+                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                        if (compact) Text("Jarak (meter)", color = colors.muted, style = MaterialTheme.typography.labelSmall)
+                        SetNumberInput(distanceText, { raw ->
+                            if (raw.all(Char::isDigit) && (raw.isEmpty() || raw.toIntOrNull() != null)) {
+                                distanceText = raw
+                                onMeasurementUpdate(set.measurement.copy(distanceMeters = raw.toIntOrNull() ?: 0))
+                            }
+                        }, "Jarak dalam meter", editable, set.isCompleted, KeyboardType.Number)
+                    }
+                    Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                        if (compact) Text("Durasi (detik)", color = colors.muted, style = MaterialTheme.typography.labelSmall)
+                        SetNumberInput(durationText, { raw ->
+                            if (raw.all(Char::isDigit) && (raw.isEmpty() || raw.toIntOrNull() != null)) {
+                                durationText = raw
+                                onMeasurementUpdate(set.measurement.copy(durationSeconds = raw.toIntOrNull() ?: 0))
+                            }
+                        }, "Durasi dalam detik", editable, set.isCompleted, KeyboardType.Number)
+                    }
+                }
+            }
+        }
+    }
+
     val actions: @Composable () -> Unit = {
         IconButton(onClick = onDelete, enabled = canDelete && mutationEnabled, modifier = Modifier.size(48.dp)) {
             Icon(Symbols.Filled.Delete, deleteLabel, tint = if (canDelete && mutationEnabled) colors.error else colors.muted.copy(alpha = 0.4f),
@@ -105,7 +259,7 @@ internal fun ActiveSetRow(
         Checkbox(
             checked = set.isCompleted,
             onCheckedChange = { onComplete() },
-            enabled = editable && !isPaused && set.weight > 0f && set.reps > 0,
+            enabled = editable && !isPaused && isCompleteEligible,
             modifier = Modifier.size(48.dp).semantics { contentDescription = completeLabel },
             colors = CheckboxDefaults.colors(
                 checkedColor = colors.success,

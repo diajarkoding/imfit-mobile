@@ -5,6 +5,9 @@ import androidx.annotation.StringRes
 import com.diajarkoding.imfit.R
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import androidx.lifecycle.SavedStateHandle
+import com.diajarkoding.imfit.domain.repository.RoutineError
+import java.util.UUID
 import com.diajarkoding.imfit.domain.model.WorkoutLog
 import com.diajarkoding.imfit.domain.model.WorkoutTemplate
 import com.diajarkoding.imfit.domain.repository.AuthRepository
@@ -19,6 +22,7 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.drop
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import com.diajarkoding.imfit.domain.repository.RoutineRepository
 import kotlinx.coroutines.supervisorScope
 import java.util.concurrent.atomic.AtomicLong
 import javax.inject.Inject
@@ -36,6 +40,9 @@ data class HomeState(
     val lastWorkoutState: SectionLoadState<WorkoutLog?> = SectionLoadState.Loading,
     val templatesState: SectionLoadState<List<WorkoutTemplate>> = SectionLoadState.Loading,
     val newlyCreatedWorkoutId: String? = null,
+    val newlyCreatedWorkoutName: String? = null,
+    val newlyCreatedWorkoutOwnerId: String? = null,
+    val pendingCreateName: String? = null,
     val activeWorkoutTemplateId: String? = null,
     val isCreating: Boolean = false,
     @StringRes val createErrorRes: Int? = null,
@@ -69,16 +76,22 @@ data class HomeState(
 class HomeViewModel(
     private val authRepository: AuthRepository,
     private val workoutRepository: WorkoutRepository,
+    private val routineRepository: RoutineRepository,
+    private val savedStateHandle: SavedStateHandle = SavedStateHandle(),
     private val overrideScope: CoroutineScope? = null
 ) : ViewModel() {
 
     @Inject
     constructor(
         authRepository: AuthRepository,
-        workoutRepository: WorkoutRepository
+        workoutRepository: WorkoutRepository,
+        routineRepository: RoutineRepository,
+        savedStateHandle: SavedStateHandle
     ) : this(
         authRepository = authRepository,
         workoutRepository = workoutRepository,
+        routineRepository = routineRepository,
+        savedStateHandle = savedStateHandle,
         overrideScope = null
     )
 
@@ -93,6 +106,7 @@ class HomeViewModel(
     private val requestGeneration = AtomicLong(0L)
     private var currentUserId: String? = null
     private var hasHandledInitialEntry = false
+    private var restoredCreate = false
 
     init {
         refreshHome(HomeRefreshTrigger.INITIAL)
@@ -121,6 +135,7 @@ class HomeViewModel(
                             localObserverJob?.cancel()
                             requestGeneration.incrementAndGet()
                             currentUserId = null
+                            clearCreateCommand()
                             _state.update {
                                 it.copy(
                                     userName = "Guest",
@@ -129,23 +144,44 @@ class HomeViewModel(
                                     isPullRefreshing = false,
                                     lastWorkoutState = SectionLoadState.Success(null),
                                     templatesState = SectionLoadState.Success(emptyList()),
-                                    activeWorkoutTemplateId = null
+                                    activeWorkoutTemplateId = null,
+                                    isCreating = false,
+                                    newlyCreatedWorkoutId = null,
+                                    newlyCreatedWorkoutName = null,
+                                    newlyCreatedWorkoutOwnerId = null,
+                                    pendingCreateName = null
                                 )
                             }
                         }
                     }
                     nextUserId != null && nextUserId != currentUserId -> {
                         currentUserId = nextUserId
+                        if (savedStateHandle.get<String>("createOwner") != nextUserId) clearCreateCommand()
                         _state.update {
                             it.copy(
                                 isPullRefreshing = false,
                                 lastWorkoutState = SectionLoadState.Loading,
                                 templatesState = SectionLoadState.Loading,
-                                activeWorkoutTemplateId = null
+                                activeWorkoutTemplateId = null,
+                                isCreating = false,
+                                newlyCreatedWorkoutId = null,
+                                newlyCreatedWorkoutName = null,
+                                newlyCreatedWorkoutOwnerId = null,
+                                pendingCreateName = null
                             )
                         }
                         executeRefreshPipeline(nextUserId, HomeRefreshTrigger.INITIAL)
                     }
+                }
+                val commandOwner = savedStateHandle.get<String>("createOwner")
+                if (nextUserId != null && commandOwner != null && !restoredCreate) {
+                    restoredCreate = true
+                    if (commandOwner == nextUserId) {
+                        val createdId = savedStateHandle.get<String>("createdId")
+                        if (createdId != null) {
+                            _state.update { it.copy(newlyCreatedWorkoutId = createdId, newlyCreatedWorkoutName = savedStateHandle["createdName"], newlyCreatedWorkoutOwnerId = commandOwner) }
+                        } else savedStateHandle.get<String>("createName")?.let(::createWorkout)
+                    } else clearCreateCommand()
                 }
             }
         }
@@ -330,15 +366,15 @@ class HomeViewModel(
 
             launch {
                 try {
-                    val result = workoutRepository.fetchRemoteTemplates(userId)
+                    val routines = routineRepository.getRoutines(userId).getOrThrow()
                     ensureActive()
                     if (!isValidRequest(userId, gen)) return@launch
                     _state.update { current ->
                         current.copy(
                             templatesState = SectionLoadState.Success(
-                                data = result.data,
+                                data = routines,
                                 isRefreshing = false,
-                                isFromRemote = result.isFromRemote
+                                isFromRemote = true
                             )
                         )
                     }
@@ -396,29 +432,6 @@ class HomeViewModel(
                     } catch (_: Throwable) {
                     }
                 }
-                launch {
-                    try {
-                        workoutRepository.observeTemplates(userId).drop(1).collect { updatedTemplates ->
-                            ensureActive()
-                            if (!isValidRequest(userId, gen)) return@collect
-                            val active = runCatching { workoutRepository.getActiveSession() }.getOrNull()
-                            _state.update { current ->
-                                val isRemote = (current.templatesState as? SectionLoadState.Success)?.isFromRemote ?: true
-                                current.copy(
-                                    activeWorkoutTemplateId = active?.templateId ?: current.activeWorkoutTemplateId,
-                                    templatesState = SectionLoadState.Success(
-                                        data = updatedTemplates,
-                                        isRefreshing = false,
-                                        isFromRemote = isRemote
-                                    )
-                                )
-                            }
-                        }
-                    } catch (e: CancellationException) {
-                        throw e
-                    } catch (_: Throwable) {
-                    }
-                }
             }
         }
     }
@@ -457,34 +470,47 @@ class HomeViewModel(
 
     fun createWorkout(name: String) {
         if (_state.value.isCreating || _state.value.newlyCreatedWorkoutId != null) return
-        if (name.isBlank()) { _state.update { it.copy(createNameErrorRes = R.string.error_template_name_required) }; return }
-        _state.update { it.copy(isCreating = true, createErrorRes = null, createNameErrorRes = null) }
+        val userId = authRepository.userProfileState.value.userId ?: return
+        val pendingOwner = savedStateHandle.get<String>("createOwner")
+        if (pendingOwner != null && pendingOwner != userId) clearCreateCommand()
+        val commandName = savedStateHandle.get<String>("createName") ?: name.trim()
+        if (commandName.length !in 2..100) {
+            _state.update { it.copy(createNameErrorRes = R.string.error_template_name_required) }
+            return
+        }
+        val requestId = savedStateHandle.get<String>("createRequest") ?: UUID.randomUUID().toString().also {
+            savedStateHandle["createRequest"] = it
+            savedStateHandle["createName"] = commandName
+            savedStateHandle["createOwner"] = userId
+        }
+        _state.update { it.copy(isCreating = true, pendingCreateName = commandName, createErrorRes = null, createNameErrorRes = null) }
         scope.launch {
             try {
-            val user = authRepository.getCurrentUser()
-            if (user == null) {
-                _state.update { it.copy(isCreating = false, createErrorRes = R.string.routine_create_failed) }
-                return@launch
-            }
-
-                val newWorkout = workoutRepository.createTemplate(
-                    userId = user.id,
-                    name = name.trim(),
-                    exercises = emptyList()
-                )
-                _state.update { it.copy(newlyCreatedWorkoutId = newWorkout.id, isCreating = false) }
+                val newWorkout = routineRepository.createRoutine(userId, commandName, requestId).getOrThrow()
+                if ((authRepository.peekLocalUserId() ?: authRepository.userProfileState.value.userId) != userId) return@launch
+                savedStateHandle["createdId"] = newWorkout.id
+                savedStateHandle["createdName"] = newWorkout.name
+                _state.update { it.copy(newlyCreatedWorkoutId = newWorkout.id, newlyCreatedWorkoutName = newWorkout.name, newlyCreatedWorkoutOwnerId = userId, isCreating = false) }
                 refresh()
             } catch (e: CancellationException) { throw e }
             catch (e: Exception) {
+                if ((authRepository.peekLocalUserId() ?: authRepository.userProfileState.value.userId) != userId) return@launch
+                // A transport/response failure has unknown outcome: preserve identity and exact name for replay.
+                if (e is RoutineError.ValidationError || e is RoutineError.Unauthorized) clearCreateCommand()
                 _state.update { it.copy(isCreating = false, createErrorRes = R.string.routine_create_failed) }
-                Log.e("HomeViewModel", "Failed to create workout: ${e.message}", e)
             }
         }
+    }
+
+    private fun clearCreateCommand() {
+        listOf("createRequest", "createName", "createOwner", "createdId", "createdName").forEach { savedStateHandle.remove<String>(it) }
+        _state.update { it.copy(pendingCreateName = null) }
     }
 
     fun clearCreateError() { _state.update { it.copy(createErrorRes = null, createNameErrorRes = null) } }
 
     fun clearNewlyCreatedWorkoutId() {
-        _state.update { it.copy(newlyCreatedWorkoutId = null) }
+        clearCreateCommand()
+        _state.update { it.copy(newlyCreatedWorkoutId = null, newlyCreatedWorkoutName = null, newlyCreatedWorkoutOwnerId = null, pendingCreateName = null) }
     }
 }

@@ -27,28 +27,26 @@ import androidx.compose.ui.platform.testTag
 @Composable
 fun WorkoutDetailScreen(
     workoutId: String, onNavigateBack: () -> Unit,
-    onNavigateToExerciseSelection: (String) -> Unit, onStartWorkout: (String) -> Unit,
-    onNavigateToEdit: (String) -> Unit = {}, selectedExerciseIds: List<String>? = null,
-    onSelectedExercisesConsumed: () -> Unit = {}, viewModel: WorkoutDetailViewModel = hiltViewModel()
+    onNavigateToExerciseSelection: (String, Boolean) -> Unit, onStartWorkout: (String) -> Unit,
+    onNavigateToEdit: (String) -> Unit = {}, viewModel: WorkoutDetailViewModel = hiltViewModel()
 ) {
     val state by viewModel.state.collectAsStateWithLifecycle()
     val startRequest = rememberWorkoutStartRequest(workoutId, state.isCurrentWorkoutActive) { onStartWorkout(workoutId) }
     var deleteDialog by rememberSaveable { mutableStateOf(false) }
     LaunchedEffect(workoutId) { viewModel.initialize(workoutId) }
-    LaunchedEffect(selectedExerciseIds, state.workout?.id) {
-        if (selectedExerciseIds != null && state.workout != null) {
-            viewModel.addExercisesByIds(selectedExerciseIds)
-            onSelectedExercisesConsumed()
+    LaunchedEffect(state.hasPendingDelete, state.isLoading) {
+        if (state.hasPendingDelete && !state.isLoading) deleteDialog = true
+    }
+    LaunchedEffect(state.isDeleted) {
+        if (state.isDeleted) {
+            deleteDialog = false
+            onNavigateBack()
         }
     }
-    LaunchedEffect(state.workoutFinished) {
-        if (state.workoutFinished) { viewModel.clearWorkoutFinished(); viewModel.loadWorkout() }
-    }
-    LaunchedEffect(state.isDeleted) { if (state.isDeleted) onNavigateBack() }
     androidx.activity.compose.BackHandler(enabled = state.isDeleting) {}
     if (deleteDialog) RoutineDialog(
         title = stringResource(R.string.dialog_delete_workout),
-        message = stringResource(R.string.routine_delete_body, state.workout?.name.orEmpty()),
+        message = stringResource(R.string.routine_delete_body, viewModel.deleteRoutineName),
         icon = Symbols.Default.Delete,
         confirmText = stringResource(if (state.isDeleting) R.string.routine_deleting else R.string.routine_delete_action),
         onConfirm = viewModel::deleteWorkout,
@@ -59,18 +57,18 @@ fun WorkoutDetailScreen(
     WorkoutDetailContent(state, viewModel.estimatedDuration,
         onBack = onNavigateBack, onEdit = { onNavigateToEdit(workoutId) },
         onDelete = { viewModel.clearDeleteError(); deleteDialog = true },
-        onAdd = { onNavigateToExerciseSelection(workoutId) }, onRetry = viewModel::loadWorkout, onRetryAdd = viewModel::retryAddExercises,
+        onAdd = { onNavigateToExerciseSelection(workoutId, state.workout?.exercises?.isEmpty() == true) }, onRetry = viewModel::loadWorkout,
         onStart = startRequest.start, startPending = startRequest.pending)
 }
 
 @Composable
 internal fun WorkoutDetailContent(state: WorkoutDetailState, estimatedMinutes: Int,
     onBack: () -> Unit = {}, onEdit: () -> Unit = {}, onDelete: () -> Unit = {},
-    onAdd: () -> Unit = {}, onStart: () -> Unit = {}, onRetry: () -> Unit = {}, onRetryAdd: () -> Unit = {}, startPending: Boolean = false) {
+    onAdd: () -> Unit = {}, onStart: () -> Unit = {}, onRetry: () -> Unit = {}, startPending: Boolean = false) {
     val c = IMFITColors.training
     val workout = state.workout
     val exercises = workout?.exercises.orEmpty()
-    val editable = workout != null && !state.isWorkoutActive && !state.isDeleting && !state.isUpdating
+    val editable = workout != null && !state.isWorkoutActive && !state.isDeleting
     Scaffold(containerColor = c.background, contentWindowInsets = WindowInsets(0),
         topBar = {
             RoutineAppBar(stringResource(R.string.routine_detail_title), onBack, enabled = !state.isDeleting) {
@@ -80,23 +78,41 @@ internal fun WorkoutDetailContent(state: WorkoutDetailState, estimatedMinutes: I
         }, bottomBar = {
             RoutineFooter {
                 if (workout != null && exercises.isEmpty()) Text(stringResource(R.string.routine_start_requirement), color = c.muted, style = MaterialTheme.typography.bodySmall)
-                if (state.isWorkoutActive && !state.isCurrentWorkoutActive) Text(stringResource(R.string.warning_workout_active), color = c.muted, style = MaterialTheme.typography.bodySmall)
+                if (state.isWorkoutActive) Text(stringResource(R.string.routine_mutation_active), color = c.muted, style = MaterialTheme.typography.bodySmall)
                 RoutineButton(stringResource(if (state.isCurrentWorkoutActive) R.string.routine_resume else R.string.action_start_workout), onStart,
-                    enabled = !startPending && workout != null && exercises.isNotEmpty() && !state.isLoading && !state.isDeleting && !state.isUpdating && (!state.isWorkoutActive || state.isCurrentWorkoutActive))
+                    enabled = !startPending && workout != null && exercises.isNotEmpty() && !state.isLoading && !state.isDeleting && (!state.isWorkoutActive || state.isCurrentWorkoutActive))
             }
         }) { padding ->
         LazyColumn(Modifier.fillMaxSize().padding(padding).testTag("routine_detail_list"), contentPadding = PaddingValues(start = 20.dp, end = 20.dp, top = IMFITSpacing.headerContentGap, bottom = 12.dp),
             verticalArrangement = Arrangement.spacedBy(12.dp)) {
             if (state.isLoading && workout == null) item { RoutineLoading(stringResource(R.string.routine_loading), topPadding = 0.dp) }
             state.errorRes?.let { error -> item { RoutineFailure(stringResource(error), onRetry) } }
-            state.operationErrorRes?.let { error -> item { RoutineFailure(stringResource(error), if (!state.isUpdating) onRetryAdd else null) } }
+            if (state.hasPendingDelete) item {
+                RoutineButton(stringResource(R.string.routine_delete_action), onDelete, enabled = !state.isDeleting, outlined = true)
+            }
             if (workout != null) {
                 item {
                     val categories = exercises.map { it.muscleCategory }.distinct().map { stringResource(it.stringResourceId) }
                     Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                        Text(stringResource(R.string.routine_eyebrow), color = c.primary, style = MaterialTheme.typography.labelSmall)
+                        if (exercises.isEmpty()) {
+                            Surface(
+                                color = c.raised,
+                                shape = RoundedCornerShape(8.dp),
+                                modifier = Modifier.padding(bottom = 2.dp)
+                            ) {
+                                Text(
+                                    text = stringResource(R.string.routine_empty_badge),
+                                    color = c.primary,
+                                    style = MaterialTheme.typography.labelSmall,
+                                    fontWeight = FontWeight.SemiBold,
+                                    modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
+                                )
+                            }
+                        } else {
+                            Text(stringResource(R.string.routine_eyebrow), color = c.primary, style = MaterialTheme.typography.labelSmall)
+                        }
                         Text(workout.name, color = c.text, style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.Bold)
-                        Text(if (exercises.isEmpty()) stringResource(R.string.routine_empty_subtitle) else categories.joinToString(" · "), color = c.muted, style = MaterialTheme.typography.bodySmall)
+                        Text(if (exercises.isEmpty()) stringResource(R.string.routine_empty_description) else categories.joinToString(" · "), color = c.muted, style = MaterialTheme.typography.bodySmall)
                     }
                 }
                 item { RoutineSummary(exercises.size, exercises.sumOf { it.sets }, estimatedMinutes) }
@@ -106,7 +122,6 @@ internal fun WorkoutDetailContent(state: WorkoutDetailState, estimatedMinutes: I
                     items(exercises, key = { it.id }) { RoutineExerciseRow(it) }
                     item { RoutineButton(stringResource(R.string.action_add_exercise), onAdd, enabled = editable, outlined = true, icon = Symbols.Default.Add, matchOutlineToContent = true) }
                 }
-                if (state.isUpdating) item { RoutineLoading(stringResource(R.string.routine_adding)) }
             }
         }
     }
@@ -167,6 +182,6 @@ internal fun RoutineEmptyExercises(onAdd: () -> Unit, enabled: Boolean = true) {
         }
         Text(stringResource(R.string.routine_empty_title), color = c.text, fontWeight = FontWeight.SemiBold)
         Text(stringResource(R.string.routine_empty_description), color = c.muted, textAlign = TextAlign.Center, style = MaterialTheme.typography.bodyMedium)
-        RoutineButton(stringResource(R.string.action_add_exercise), onAdd, enabled = enabled, icon = Symbols.Default.Add)
+        RoutineButton(stringResource(R.string.routine_complete_action), onAdd, enabled = enabled, icon = Symbols.Default.Add)
     }
 }

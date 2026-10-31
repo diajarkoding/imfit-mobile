@@ -6,7 +6,6 @@ import com.diajarkoding.imfit.domain.model.ExerciseLog
 import com.diajarkoding.imfit.domain.model.HomeRemoteReadResult
 import com.diajarkoding.imfit.domain.model.ExerciseInputDefaults
 import com.diajarkoding.imfit.domain.model.inputDefaults
-import com.diajarkoding.imfit.domain.model.TemplateExercise
 import com.diajarkoding.imfit.domain.model.WorkoutLog
 import com.diajarkoding.imfit.domain.model.WorkoutSession
 import com.diajarkoding.imfit.domain.model.WorkoutTemplate
@@ -28,66 +27,19 @@ class DemoWorkoutRepository @Inject constructor(
 ) : WorkoutRepository {
     constructor() : this(null)
     private var sessionRestOverride: Int? = null
-    private val templateRevision = MutableStateFlow(0L)
     private val historyRevision = MutableStateFlow(0L)
     private val sessionMutex = Mutex()
     private val lifecycleMutex = Mutex()
     private val terminalSessions = ConcurrentHashMap.newKeySet<String>()
     private val cleanupScope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
-    override fun observeTemplates(userId: String) = templateRevision.map { getTemplates(userId) }.distinctUntilChanged()
-    override fun observeTemplate(templateId: String) = templateRevision.map { getTemplateById(templateId) }.distinctUntilChanged()
     override fun observeWorkoutLogs(userId: String) = historyRevision.map { getWorkoutLogs(userId) }.distinctUntilChanged()
     override fun observeLastWorkoutLog(userId: String) = historyRevision.map { getLastWorkoutLog(userId) }.distinctUntilChanged()
     override fun observeWorkoutLog(logId: String) = historyRevision.map { getWorkoutLogById(logId) }.distinctUntilChanged()
-    override suspend fun fetchRemoteTemplates(userId: String): HomeRemoteReadResult<List<WorkoutTemplate>> =
-        HomeRemoteReadResult.RemotePrimary(getTemplates(userId))
-
     override suspend fun fetchRemoteLastWorkoutLog(userId: String): HomeRemoteReadResult<WorkoutLog?> =
         HomeRemoteReadResult.RemotePrimary(getLastWorkoutLog(userId))
 
-    override suspend fun getTemplates(userId: String): List<WorkoutTemplate> =
-        FakeWorkoutDataSource.getTemplates(userId)
-    override suspend fun getTemplateById(templateId: String): WorkoutTemplate? =
-        FakeWorkoutDataSource.getTemplateById(templateId)
-
-    override suspend fun createTemplate(
-        userId: String,
-        name: String,
-        exercises: List<TemplateExercise>
-    ): WorkoutTemplate = FakeWorkoutDataSource.createTemplate(userId, name, exercises).also { templateRevision.value++ }
-
-    override suspend fun updateTemplate(
-        templateId: String,
-        name: String,
-        exercises: List<TemplateExercise>
-    ): WorkoutTemplate? = FakeWorkoutDataSource.updateTemplate(templateId, name, exercises).also { templateRevision.value++ }
-
-    override suspend fun updateTemplateExercises(
-        templateId: String,
-        exercises: List<TemplateExercise>
-    ): WorkoutTemplate? {
-        val template = FakeWorkoutDataSource.getTemplateById(templateId) ?: return null
-        return FakeWorkoutDataSource.updateTemplate(templateId, template.name, exercises).also { templateRevision.value++ }
-    }
-
-    override suspend fun updateTemplateExercise(
-        templateId: String,
-        exerciseId: String,
-        sets: Int,
-        reps: Int,
-        restSeconds: Int
-    ): WorkoutTemplate? = FakeWorkoutDataSource.updateTemplateExercise(
-        templateId = templateId,
-        exerciseId = exerciseId,
-        sets = sets,
-        reps = reps,
-        restSeconds = restSeconds
-    ).also { templateRevision.value++ }
-
-    override suspend fun deleteTemplate(templateId: String): Boolean =
-        FakeWorkoutDataSource.deleteTemplate(templateId).also { templateRevision.value++ }
-
     override suspend fun startWorkout(template: WorkoutTemplate): WorkoutSession = lifecycleMutex.withLock {
+        getActiveSession()?.let { return@withLock it }
         timerCleanup?.stop("SESSION_REPLACED")
         sessionRestOverride = null
         sessionMutex.withLock {

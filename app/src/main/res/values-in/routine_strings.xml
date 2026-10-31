@@ -45,4 +45,25 @@
     <string name="routine_active_filter">Filter otot aktif: %1$s</string>
     <string name="routine_filter_hint">Pilihan gerakan tetap tersimpan saat filter berubah.</string>
     <string name="routine_apply_filter">Terapkan filter</string>
+    <string name="routine_empty_badge">Belum disiapkan</string>
+    <string name="routine_complete_action">Lengkapi rutinitas</string>
+    <string name="routine_action_move_up">Pindahkan ke atas</string>
+    <string name="routine_action_move_down">Pindahkan ke bawah</string>
+    <string name="routine_setup_title">Atur rutinitas</string>
+    <string name="routine_duration_unsupported">Latihan berbasis durasi/jarak belum didukung pada versi ini.</string>
+    <string name="routine_auth_required">Masuk kembali untuk membuka rutinitas ini.</string>
+    <string name="routine_start_failed">Latihan belum dapat dimulai. Periksa koneksi lalu coba lagi.</string>
+    <string name="routine_start_offline_unavailable">Server tidak dapat dihubungi dan snapshot rutinitas untuk memulai offline belum tersedia. Hubungkan internet lalu coba lagi.</string>
+    <string name="routine_start_last_known">Dimulai dari revisi rutinitas terakhir yang diketahui: %1$d. Revisi terbaru di server belum dapat diperiksa.</string>
+    <string name="routine_delete_unknown">Penghapusan belum dapat dipastikan. Coba lagi untuk memeriksa permintaan yang sama; rutinitas mungkin sudah dihapus.</string>
+    <string name="routine_revision_conflict">Rutinitas berubah di server. Muat ulang sebelum mencoba lagi.</string>
+    <string name="routine_read_failed">Rutinitas gagal diperbarui. Rutinitas yang masih tampil adalah versi terakhir yang diketahui. Coba lagi untuk memeriksa server.</string>
+    <string name="routine_mutation_active">Selesaikan atau batalkan sesi aktif sebelum mengubah atau menghapus rutinitas. Snapshot sesi berjalan dan histori latihan tetap tidak berubah.</string>
+    <string name="routine_load_more">Muat gerakan lainnya</string>
+    <string name="routine_discard_title">Buang perubahan?</string>
+    <string name="routine_discard_message">Perubahan rutinitas yang belum disimpan akan dibuang.</string>
+    <string name="routine_discard_unknown">Penyimpanan mungkin sudah berhasil. Tinggalkan draf dan periksa detail rutinitas? Jangan kirim perintah baru sebelum hasilnya diketahui.</string>
+    <string name="routine_discard_confirm">Tinggalkan draf</string>
+    <string name="routine_save_unknown">Hasil penyimpanan belum diketahui. Perubahan dikunci. Coba lagi akan memeriksa permintaan yang persis sama.</string>
+    <string name="routine_exercise_unavailable">Gerakan ini tidak lagi tersedia. Hapus gerakan sebelum menyimpan rutinitas.</string>
 </resources>

@@ -76,6 +76,7 @@ private data object ProgressTab : NavKey
 fun MainScreen(
     onNavigateToWorkoutDetail: (String) -> Unit,
     onNavigateToActiveWorkout: (String) -> Unit = {},
+    onNavigateToInitialPicker: suspend (routineId: String, routineName: String, flowId: String, ownerId: String) -> Boolean = { _, _, _, _ -> false },
     onNavigateToExerciseList: (String) -> Unit,
     onNavigateToWorkoutHistory: (LocalDate) -> Unit = {},
     onNavigateToYearlyCalendar: (java.time.YearMonth) -> Unit = {},
@@ -192,7 +193,9 @@ fun MainScreen(
                         HomeScreen(
                             onNavigateToWorkoutDetail = onNavigateToWorkoutDetail,
                             onNavigateToActiveWorkout = onNavigateToActiveWorkout,
+                            onNavigateToInitialPicker = onNavigateToInitialPicker,
                             onNavigateToProfile = onNavigateToProfile,
+                            ownerId = userProfileState.userId,
                             viewModel = homeViewModel
                         )
                     }

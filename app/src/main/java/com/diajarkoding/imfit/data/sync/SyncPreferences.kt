@@ -32,12 +32,6 @@ class SyncPreferences @Inject constructor(
         value
     )
 
-    suspend fun setLastTemplatesSyncTimestamp(userId: String, value: Long) = setLong(
-        KEY_LAST_TEMPLATES_SYNC,
-        userId,
-        value
-    )
-
     suspend fun setLastWorkoutLogsSyncTimestamp(userId: String, value: Long) = setLong(
         KEY_LAST_WORKOUT_LOGS_SYNC,
         userId,

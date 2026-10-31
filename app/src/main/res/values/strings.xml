@@ -195,7 +195,7 @@
     <string name="action_add_set">Add Set</string>
     <string name="action_remove_set">Remove set</string>
     <string name="action_finish_workout">Finish Workout</string>
-    <string name="action_save_changes">Save Routine</string>
+    <string name="action_save_changes">Save Changes</string>
     <string name="action_save_template">Save Routine</string>
     <string name="action_add_workout">Add Workout</string>
 
@@ -457,4 +457,12 @@
     <string name="error_rest_pause">Skip the rest timer before pausing</string>
     <string name="error_routine_save">Unable to save routine</string>
     <string name="error_routine_not_found">Routine not found</string>
+    <string name="legacy_recovery_title">%1$d old routines need review</string>
+    <string name="legacy_recovery_notice">Old local changes are kept separately and are not synced automatically. Export them for review before manually recreating a routine. DELETE records are tombstones, not routines to restore.</string>
+    <string name="legacy_recovery_privacy">Export does not change or delete the originals. Save the file in a private location.</string>
+    <string name="legacy_recovery_export">Export old data</string>
+    <string name="legacy_recovery_exporting">Exporting…</string>
+    <string name="legacy_recovery_read_error">Unable to read old routine data. Try reopening this page.</string>
+    <string name="legacy_recovery_success">Export complete. Originals remain on this device and have not been uploaded.</string>
+    <string name="legacy_recovery_failure">Export failed. Originals remain safe on this device. Make sure you are signed in as the data owner and try again.</string>
 </resources>

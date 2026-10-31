@@ -5,6 +5,7 @@ import com.diajarkoding.imfit.domain.model.WorkoutLog
 import com.diajarkoding.imfit.domain.model.WorkoutSet
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
+import kotlinx.serialization.json.JsonElement
 
 @Serializable
 data class WorkoutLogDto(
@@ -59,7 +60,9 @@ data class ExerciseLogDto(
     val totalReps: Int = 0,
     @SerialName("workout_sets")
     val workoutSets: List<WorkoutSetDto>? = null,
-    val exercises: ExerciseDto? = null
+    val exercises: ExerciseDto? = null,
+    @SerialName("input_defaults")
+    val inputDefaults: JsonElement? = null
 )
 
 @Serializable

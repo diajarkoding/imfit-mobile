@@ -339,7 +339,7 @@ internal fun HomeWorkoutCard(template: WorkoutTemplate, active: Boolean, onClick
             horizontalArrangement = Arrangement.spacedBy(IMFITSpacing.md)) {
             // Reorder is deferred: no non-functional drag control is presented.
             Box(Modifier.size(IMFITComponentSizes.templateThumbnail).clip(RoundedCornerShape(IMFITCornerRadius.small)).background(colors.raised).padding(IMFITSpacing.xs)) {
-                MuscleCategoryArtwork(categoryArtAsset(template.exercises.firstOrNull()?.exercise?.muscleCategory), Modifier.fillMaxSize())
+                MuscleCategoryArtwork(categoryArtAsset(template.primaryMuscleCategory), Modifier.fillMaxSize())
             }
             Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(IMFITSpacing.inline)) {
                 Text(template.name, style = IMFITTypography.templateTitle)

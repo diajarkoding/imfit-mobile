@@ -12,9 +12,12 @@ import com.diajarkoding.imfit.domain.model.inputDefaults
 import com.diajarkoding.imfit.domain.model.addDefaultSet
 import com.diajarkoding.imfit.domain.model.appendExercises
 import com.diajarkoding.imfit.domain.model.removeIncompleteExercise
-import com.diajarkoding.imfit.domain.repository.ExerciseRepository
+import com.diajarkoding.imfit.domain.repository.ExerciseCatalogRepository
+import com.diajarkoding.imfit.domain.repository.ExerciseHydrationResult
+import com.diajarkoding.imfit.domain.repository.RoutineError
 import com.diajarkoding.imfit.domain.repository.AuthRepository
 import com.diajarkoding.imfit.domain.repository.WorkoutRepository
+import com.diajarkoding.imfit.domain.repository.RoutineRepository
 import com.diajarkoding.imfit.core.model.WorkoutTimerUpdate
 import com.diajarkoding.imfit.core.timer.RestTimerCoordinator
 import com.diajarkoding.imfit.core.timer.RestTimerState
@@ -54,7 +57,10 @@ data class ActiveWorkoutState(
     val fullScreenAlarmAllowed: Boolean = true,
     val isCancelling: Boolean = false,
     val isAddingExercises: Boolean = false,
-    @StringRes val mutationErrorRes: Int? = null
+    @StringRes val mutationErrorRes: Int? = null,
+    val isStarting: Boolean = false,
+    @StringRes val startErrorRes: Int? = null,
+    val lastKnownRevision: Long? = null
 )
 
 @HiltViewModel
@@ -63,7 +69,8 @@ class ActiveWorkoutViewModel @Inject constructor(
     private val authRepository: AuthRepository,
     private val timer: RestTimerCoordinator,
     private val timerRuntime: com.diajarkoding.imfit.core.timer.RestTimerAndroidRuntime,
-    private val exerciseRepository: ExerciseRepository
+    private val exerciseCatalogRepository: ExerciseCatalogRepository,
+    private val routineRepository: RoutineRepository
 ) : ViewModel() {
 
     private val _state = MutableStateFlow(ActiveWorkoutState())
@@ -75,6 +82,8 @@ class ActiveWorkoutViewModel @Inject constructor(
     private var elapsedTimeJob: Job? = null
     private var started = false
     private var sessionRevision = 0L
+    private var sessionOwnerId: String? = null
+    private val acceptedSelectionResults = mutableSetOf<String>()
     val restState = timer.state
 
     fun extendRest() { viewModelScope.launch { timer.extend() } }
@@ -108,55 +117,38 @@ class ActiveWorkoutViewModel @Inject constructor(
     }
 
     fun startWorkout(templateId: String, expectedSessionId: String? = null) {
-        if (started) return
-        started = true
+        if (started || _state.value.isStarting) return
+        _state.update { it.copy(isStarting = true, startErrorRes = null) }
         viewModelScope.launch {
-            // First check for an existing active session
-            val existingSession = try {
-                withTimeout(2500) { workoutRepository.getActiveSessionForTimer() }
-            } catch (e: TimeoutCancellationException) {
-                _state.update { it.copy(timerError = true) }
-                return@launch
-            } catch (e: CancellationException) {
-                throw e
-            } catch (e: Exception) {
-                _state.update { it.copy(timerError = true) }
-                return@launch
-            }
-            timer.reconcile()
-            if (expectedSessionId != null && existingSession?.id != expectedSessionId) {
-                _state.update { it.copy(sessionEnded = true) }
-                return@launch
-            }
-            
-            if (existingSession != null) {
-                // Restore existing session - preserve all data including completed sets
-                android.util.Log.d("ActiveWorkoutVM", "Restoring existing session: ${existingSession.id}")
-                
-                // Restore session rest override if available
-                val sessionOverride = workoutRepository.getSessionRestOverride()
-                
-                _state.update { 
-                    it.copy(
-                        session = existingSession, 
-                        isPaused = existingSession.isPaused,
-                        sessionRestOverride = sessionOverride
-                    ) 
+            try {
+                val ownerId = authRepository.getLocalUserId() ?: throw RoutineError.Unauthorized()
+                val result = RoutineSessionStarter(workoutRepository, routineRepository, authRepository)
+                    .start(templateId, expectedSessionId)
+                if (authRepository.getLocalUserId() != ownerId) throw RoutineError.Unauthorized()
+                if (result == null) {
+                    _state.update { it.copy(sessionEnded = true) }
+                    return@launch
                 }
-                
+                val sessionOverride = if (result.restored) workoutRepository.getSessionRestOverride() else null
+                if (authRepository.getLocalUserId() != ownerId) throw RoutineError.Unauthorized()
+                sessionOwnerId = ownerId
+                timer.reconcile()
+                started = true
+                _state.update { it.copy(session = result.session, isPaused = result.session.isPaused,
+                    sessionRestOverride = sessionOverride, lastKnownRevision = result.lastKnownRevision) }
                 startElapsedTimeCounter()
-                return@launch
+            } catch (e: CancellationException) { throw e }
+            catch (e: Exception) {
+                _state.update { it.copy(startErrorRes = when (e) {
+                    is RoutineError.NotFound -> R.string.error_routine_not_found
+                    is RoutineError.Unauthorized -> R.string.routine_auth_required
+                    is RoutineError.Network -> R.string.routine_start_offline_unavailable
+                    is RoutineError.ValidationError -> R.string.routine_start_requirement
+                    else -> R.string.routine_start_failed
+                }) }
+            } finally {
+                _state.update { it.copy(isStarting = false) }
             }
-            
-            // No existing session - create a new one
-            val template = workoutRepository.getTemplateById(templateId) ?: return@launch
-            
-            val session = workoutRepository.startWorkout(template)
-            
-            // Repository commits defaults/prefill before exposing the session.
-            _state.update { it.copy(session = session) }
-
-            startElapsedTimeCounter()
         }
     }
 
@@ -166,8 +158,16 @@ class ActiveWorkoutViewModel @Inject constructor(
         elapsedTimeJob = viewModelScope.launch {
             while (true) {
                 try {
+                    if (authRepository.getLocalUserId() != sessionOwnerId) {
+                        _state.update { it.copy(session = null, sessionEnded = true) }
+                        return@launch
+                    }
                     val revision = sessionRevision
                     val session = withTimeout(2500) { workoutRepository.getActiveSessionForTimer() }
+                    if (authRepository.getLocalUserId() != sessionOwnerId) {
+                        _state.update { it.copy(session = null, sessionEnded = true) }
+                        return@launch
+                    }
                     if (session == null) {
                         if (_state.value.session != null && !_state.value.isFinishing && !_state.value.isCancelling) {
                             _state.update { it.copy(session = null, sessionEnded = true, isRestTimerActive = false) }
@@ -314,33 +314,47 @@ class ActiveWorkoutViewModel @Inject constructor(
         }
     }
 
-    fun addExercisesByIds(sessionId: String, exerciseIds: List<String>, onConsumed: () -> Unit) {
+    fun addExercisesByIds(
+        sessionId: String,
+        exerciseIds: List<String>,
+        ownerId: String?,
+        resultId: String?,
+        onConsumed: () -> Unit
+    ) {
+        if (resultId != null && resultId in acceptedSelectionResults) { onConsumed(); return }
         if (_state.value.isAddingExercises || _state.value.isFinishing || _state.value.isCancelling) return
+        if (_state.value.session?.id != sessionId || ownerId == null || ownerId != sessionOwnerId) return
         _state.update { it.copy(isAddingExercises = true, mutationErrorRes = null) }
         viewModelScope.launch {
             try {
-                val userId = authRepository.getLocalUserId() ?: return@launch
-                val additions = exerciseIds.distinct().mapNotNull { id ->
-                    exerciseRepository.getExerciseById(id)?.let { exercise ->
-                        val config = TemplateExercise(exercise)
-                        val lastPerf = workoutRepository.getPrefillForExercise(id, userId, config.inputDefaults())
-                        ExerciseLog(
-                            exercise = exercise,
-                            sets = (1..config.sets).map { setNumber ->
-                                val last = lastPerf[setNumber]
-                                WorkoutSet(
-                                    setNumber = setNumber,
-                                    weight = last?.first ?: 0f,
-                                    reps = last?.second ?: config.reps,
-                                    isCompleted = false
-                                )
-                            },
-                            restSeconds = config.restSeconds,
-                            inputDefaults = config.inputDefaults()
-                        )
-                    }
+                if (authRepository.getLocalUserId() != ownerId) return@launch
+                val ids = exerciseIds.distinct()
+                val hydrated = when (val result = exerciseCatalogRepository.getExercisesByIds(ids)) {
+                    is ExerciseHydrationResult.Success -> result.exercises
+                    is ExerciseHydrationResult.Missing -> error("Selected exercises no longer available: ${result.missingIds}")
+                    is ExerciseHydrationResult.Error -> throw result.cause
+                }.associateBy { it.id }
+                val additions = ids.map { id ->
+                    val exercise = hydrated[id]?.takeIf { it.isActive } ?: error("Exercise is unavailable: $id")
+                    val config = TemplateExercise(exercise)
+                    val lastPerf = workoutRepository.getPrefillForExercise(id, ownerId, config.inputDefaults())
+                    ExerciseLog(
+                        exercise = exercise,
+                        sets = (1..config.sets).map { setNumber ->
+                            val last = lastPerf[setNumber]
+                            WorkoutSet(setNumber = setNumber, weight = last?.first ?: 0f,
+                                reps = last?.second ?: config.reps, isCompleted = false)
+                        },
+                        restSeconds = config.restSeconds,
+                        inputDefaults = config.inputDefaults()
+                    )
                 }
-                workoutRepository.mutateActiveSession(sessionId) { it.appendExercises(additions) }?.let(::publishSession)
+                if (authRepository.getLocalUserId() != ownerId) return@launch
+                val updated = workoutRepository.mutateActiveSession(sessionId) { it.appendExercises(additions) }
+                    ?: error("The selected workout session has ended")
+                if (authRepository.getLocalUserId() != ownerId) return@launch
+                publishSession(updated)
+                if (resultId != null) acceptedSelectionResults.add(resultId)
                 onConsumed()
             } catch (e: CancellationException) { throw e }
             catch (e: Exception) { android.util.Log.e("ActiveWorkoutVM", "Exercise append failed", e); _state.update { it.copy(mutationErrorRes = R.string.error_exercise_add) } }

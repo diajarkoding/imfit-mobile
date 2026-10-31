@@ -9,6 +9,7 @@ import android.os.IBinder
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.imePadding
@@ -17,6 +18,9 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
+import androidx.compose.material3.SnackbarResult
+import androidx.compose.material3.Text
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
@@ -27,6 +31,7 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
@@ -60,6 +65,8 @@ fun ActiveWorkoutScreen(
     onAddExercises: (String, List<String>) -> Unit = { _, _ -> },
     selectionSessionId: String? = null,
     selectedExerciseIds: List<String>? = null,
+    selectionOwnerId: String? = null,
+    selectionResultId: String? = null,
     onSelectedExercisesConsumed: () -> Unit = {}
 ) {
     val state by viewModel.state.collectAsStateWithLifecycle()
@@ -122,25 +129,32 @@ fun ActiveWorkoutScreen(
         }
     }
 
-    LaunchedEffect(templateId) {
+    LaunchedEffect(templateId, selectionSessionId) {
         viewModel.startWorkout(templateId, selectionSessionId)
     }
 
-    LaunchedEffect(state.session?.id, selectedExerciseIds, selectionSessionId) {
+    LaunchedEffect(state.session?.id, selectedExerciseIds, selectionSessionId, selectionResultId, selectionOwnerId) {
         val ids = selectedExerciseIds ?: return@LaunchedEffect
         val session = state.session ?: return@LaunchedEffect
         if (session.id == selectionSessionId) {
-            viewModel.addExercisesByIds(session.id, ids, onSelectedExercisesConsumed)
+            viewModel.addExercisesByIds(session.id, ids, selectionOwnerId, selectionResultId, onSelectedExercisesConsumed)
         } else {
             onSelectedExercisesConsumed()
         }
     }
 
     val mutationErrorMessage = state.mutationErrorRes?.let { stringResource(it) }
+    val retryLabel = stringResource(R.string.routine_retry)
     LaunchedEffect(mutationErrorMessage) {
         mutationErrorMessage?.let {
-            snackbarHostState.showSnackbar(it)
+            val canRetryAdd = state.mutationErrorRes == R.string.error_exercise_add &&
+                selectedExerciseIds != null && state.session?.id == selectionSessionId
+            val result = snackbarHostState.showSnackbar(it, actionLabel = retryLabel.takeIf { canRetryAdd })
             viewModel.clearMutationError()
+            if (result == SnackbarResult.ActionPerformed && canRetryAdd) {
+                viewModel.addExercisesByIds(requireNotNull(selectionSessionId), requireNotNull(selectedExerciseIds),
+                    selectionOwnerId, selectionResultId, onSelectedExercisesConsumed)
+            }
         }
     }
 
@@ -250,6 +264,8 @@ fun ActiveWorkoutScreen(
     ActiveWorkoutScreenContent(
         state = state,
         snackbarHostState = snackbarHostState,
+        onRetryStart = { viewModel.startWorkout(templateId, selectionSessionId) },
+        onBack = onNavigateBack,
         onCancelClick = { viewModel.showCancelDialog() },
         onPauseToggle = {
             if (state.isPaused) viewModel.resumeWorkout() else viewModel.pauseWorkout()
@@ -287,6 +303,8 @@ internal fun ActiveWorkoutScreenContent(
     onSetComplete: (exerciseIndex: Int, setIndex: Int) -> Unit,
     onAddSet: (exerciseIndex: Int) -> Unit,
     onRemoveSet: (exerciseIndex: Int, setIndex: Int) -> Unit,
+    onRetryStart: () -> Unit = {},
+    onBack: () -> Unit = {},
     modifier: Modifier = Modifier
 ) {
     val colors = IMFITColors.training
@@ -337,11 +355,16 @@ internal fun ActiveWorkoutScreenContent(
                 .padding(padding)
                 .padding(top = IMFITSpacing.headerContentGap)
         ) {
-            if (session == null) {
+            if (session == null && state.startErrorRes != null) {
+                Column(Modifier.fillMaxSize().padding(horizontal = IMFITSpacing.screenHorizontal),
+                    verticalArrangement = Arrangement.spacedBy(16.dp, Alignment.CenterVertically)) {
+                    com.diajarkoding.imfit.presentation.components.common.RoutineFailure(
+                        stringResource(state.startErrorRes), onRetryStart)
+                    RoutineButton(stringResource(R.string.action_back), onBack, outlined = true)
+                }
+            } else if (session == null) {
                 ActiveSessionLoadingState(
-                    modifier = Modifier
-                        .fillMaxSize()
-                        .padding(horizontal = IMFITSpacing.screenHorizontal)
+                    modifier = Modifier.fillMaxSize().padding(horizontal = IMFITSpacing.screenHorizontal)
                 )
             } else {
                 LazyColumn(
@@ -354,6 +377,12 @@ internal fun ActiveWorkoutScreenContent(
                     ),
                     verticalArrangement = Arrangement.spacedBy(16.dp)
                 ) {
+                    state.lastKnownRevision?.let { revision ->
+                        item(key = "last_known_revision") {
+                            Text(stringResource(R.string.routine_start_last_known, revision),
+                                color = colors.muted, style = MaterialTheme.typography.bodySmall)
+                        }
+                    }
                     // 1. Live Session Overview
                     item(key = "overview") {
                         ActiveSessionOverview(

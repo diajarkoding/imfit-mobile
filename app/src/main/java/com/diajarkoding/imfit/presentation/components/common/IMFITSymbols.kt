@@ -98,6 +98,11 @@ val Symbols.Filled.Visibility: ImageVector get() = ImageVector.vectorResource(R.
 
 @get:Composable
 val Symbols.Filled.VisibilityOff: ImageVector get() = ImageVector.vectorResource(R.drawable.msr_visibility_off_filled)
+@get:Composable
+val Symbols.Filled.KeyboardArrowUp: ImageVector get() = ImageVector.vectorResource(R.drawable.msr_keyboard_arrow_up_filled)
+
+@get:Composable
+val Symbols.Filled.KeyboardArrowDown: ImageVector get() = ImageVector.vectorResource(R.drawable.msr_keyboard_arrow_down_filled)
 
 @get:Composable
 val Symbols.Outlined.CalendarMonth: ImageVector get() = ImageVector.vectorResource(R.drawable.msr_calendar_month_outlined)

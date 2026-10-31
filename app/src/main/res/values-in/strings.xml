@@ -196,7 +196,7 @@
     <string name="action_add_set">Tambah Set</string>
     <string name="action_remove_set">Hapus set</string>
     <string name="action_finish_workout">Selesaikan sesi</string>
-    <string name="action_save_changes">Simpan rutinitas</string>
+    <string name="action_save_changes">Simpan perubahan</string>
     <string name="action_save_template">Simpan rutinitas</string>
     <string name="action_add_workout">Tambah Latihan</string>
 
@@ -454,4 +454,12 @@
     <string name="error_rest_pause">Lewati timer istirahat sebelum menjeda</string>
     <string name="error_routine_save">Tidak dapat menyimpan rutinitas</string>
     <string name="error_routine_not_found">Rutinitas tidak ditemukan</string>
+    <string name="legacy_recovery_title">%1$d rutinitas lama perlu ditinjau</string>
+    <string name="legacy_recovery_notice">Perubahan lokal lama disimpan terpisah dan tidak disinkronkan otomatis. Ekspor untuk ditinjau sebelum membuat ulang secara manual. Catatan DELETE adalah penghapusan, bukan rutinitas untuk dipulihkan.</string>
+    <string name="legacy_recovery_privacy">Ekspor tidak mengubah atau menghapus data asli. Simpan file di lokasi pribadi.</string>
+    <string name="legacy_recovery_export">Ekspor data lama</string>
+    <string name="legacy_recovery_exporting">Mengekspor…</string>
+    <string name="legacy_recovery_read_error">Data rutinitas lama tidak dapat dibaca. Coba buka kembali halaman ini.</string>
+    <string name="legacy_recovery_success">Ekspor berhasil. Data asli tetap disimpan di perangkat dan tidak diunggah.</string>
+    <string name="legacy_recovery_failure">Ekspor gagal. Data asli tetap aman di perangkat. Pastikan Anda masuk sebagai pemilik data lalu coba lagi.</string>
 </resources>

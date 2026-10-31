@@ -78,31 +78,49 @@ fun RoutineButton(text: String, onClick: () -> Unit, enabled: Boolean = true, lo
 }
 
 @Composable
-fun RoutineFooter(content: @Composable ColumnScope.() -> Unit) {
+fun RoutineFooter(
+    topPadding: Dp = 12.dp,
+    contentGap: Dp = 8.dp,
+    content: @Composable ColumnScope.() -> Unit
+) {
     val c = IMFITColors.training
     Column(Modifier.fillMaxWidth().background(c.surface).navigationBarsPadding()) {
         HorizontalDivider(color = c.border)
-        Column(Modifier.fillMaxWidth().padding(start = 20.dp, end = 20.dp, top = 12.dp, bottom = 8.dp),
-            verticalArrangement = Arrangement.spacedBy(8.dp), content = content)
+        Column(Modifier.fillMaxWidth().padding(start = 20.dp, end = 20.dp, top = topPadding, bottom = 8.dp),
+            verticalArrangement = Arrangement.spacedBy(contentGap), content = content)
     }
 }
 
 @Composable
-fun RoutineNameField(value: String, onChange: (String) -> Unit, enabled: Boolean = true, errorMessage: String? = null,
-    onDone: () -> Unit = {}, requestFocus: Boolean = false) {
+fun RoutineNameField(value: String, onChange: (String) -> Unit, enabled: Boolean = true, readOnly: Boolean = false,
+    errorMessage: String? = null, onDone: () -> Unit = {}, requestFocus: Boolean = false) {
     val c = IMFITColors.training
     val focus = remember { FocusRequester() }
     LaunchedEffect(requestFocus) { if (requestFocus) focus.requestFocus() }
     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
         Text(stringResource(R.string.routine_name_label), style = MaterialTheme.typography.labelMedium, color = c.text)
-        OutlinedTextField(value, onChange, enabled = enabled, singleLine = true, isError = errorMessage != null,
+        OutlinedTextField(value, onChange, enabled = enabled, readOnly = readOnly, singleLine = true, isError = errorMessage != null,
             modifier = Modifier.fillMaxWidth().heightIn(min = 56.dp).focusRequester(focus).semantics { if (errorMessage != null) error(errorMessage) },
             shape = RoutineControlShape, textStyle = MaterialTheme.typography.bodyLarge.copy(color = c.text),
             keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done), keyboardActions = KeyboardActions(onDone = { onDone() }),
             placeholder = { Text(stringResource(R.string.home_workout_placeholder), color = c.muted) },
-            colors = OutlinedTextFieldDefaults.colors(focusedBorderColor = c.primary,
-                unfocusedBorderColor = MaterialTheme.colorScheme.onSurfaceVariant, errorBorderColor = c.error,
-                focusedContainerColor = c.surface, unfocusedContainerColor = c.surface, errorContainerColor = c.surface, cursorColor = c.primary))
+            colors = OutlinedTextFieldDefaults.colors(
+                focusedBorderColor = c.primary,
+                unfocusedBorderColor = MaterialTheme.colorScheme.onSurfaceVariant,
+                disabledBorderColor = MaterialTheme.colorScheme.onSurfaceVariant,
+                errorBorderColor = c.error,
+                focusedContainerColor = c.surface,
+                unfocusedContainerColor = c.surface,
+                disabledContainerColor = c.surface,
+                errorContainerColor = c.surface,
+                focusedTextColor = c.text,
+                unfocusedTextColor = c.text,
+                disabledTextColor = c.text,
+                cursorColor = c.primary,
+                focusedPlaceholderColor = c.muted,
+                unfocusedPlaceholderColor = c.muted,
+                disabledPlaceholderColor = c.muted
+            ))
         if (errorMessage != null) RoutineFailure(errorMessage)
     }
 }

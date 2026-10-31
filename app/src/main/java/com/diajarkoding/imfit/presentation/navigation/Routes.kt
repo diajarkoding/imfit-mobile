@@ -1,6 +1,7 @@
 package com.diajarkoding.imfit.presentation.navigation
 
 import androidx.navigation3.runtime.NavKey
+import com.diajarkoding.imfit.domain.model.RoutineFlowContext
 import kotlinx.serialization.Serializable
 
 @Serializable
@@ -19,20 +20,30 @@ data object RegisterConfirmation : NavKey
 data object Main : NavKey
 
 @Serializable
-data class WorkoutDetail(val workoutId: String) : NavKey
+data class WorkoutDetail(val workoutId: String, val refreshId: String = "") : NavKey
 
 @Serializable
-data class EditWorkout(val workoutId: String) : NavKey
+data class EditWorkout(val context: RoutineFlowContext, val openPicker: Boolean = false) : NavKey
 
+@Serializable
+data class SetupRoutine(val context: RoutineFlowContext, val routineName: String = "") : NavKey
 @Serializable
 data class ExerciseList(val categoryName: String) : NavKey
 
 @Serializable
-data class ExerciseSelection(val templateId: String, val excludedIds: List<String>? = null,
-    val routineName: String? = null, val forEdit: Boolean = false) : NavKey
-
+data class ExerciseSelection(
+    val context: RoutineFlowContext,
+    val excludedIds: List<String> = emptyList(),
+    val routineName: String? = null,
+    val isInitial: Boolean
+) : NavKey
 @Serializable
-data class ActiveExerciseSelection(val sessionId: String, val excludedIds: List<String>) : NavKey
+data class ActiveExerciseSelection(
+    val sessionId: String,
+    val excludedIds: List<String>,
+    val ownerId: String,
+    val pickerId: String
+) : NavKey
 
 @Serializable
 data class ActiveWorkout(val templateId: String) : NavKey

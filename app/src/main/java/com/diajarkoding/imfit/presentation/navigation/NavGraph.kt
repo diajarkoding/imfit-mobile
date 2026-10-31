@@ -6,9 +6,12 @@ import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.compose.LifecycleEventEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.saveable.rememberSaveable
-import androidx.compose.runtime.setValue
+import androidx.compose.runtime.rememberCoroutineScope
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.diajarkoding.imfit.domain.model.RoutineFlowContext
+import com.diajarkoding.imfit.presentation.ui.workout.ActiveSelectionResult
+import kotlinx.coroutines.launch
+import java.util.UUID
 import androidx.lifecycle.viewmodel.navigation3.rememberViewModelStoreNavEntryDecorator
 import androidx.navigation3.runtime.NavKey
 import androidx.navigation3.runtime.entryProvider
@@ -28,6 +31,8 @@ import com.diajarkoding.imfit.presentation.ui.splash.SplashScreen
 import com.diajarkoding.imfit.presentation.ui.workout.ActiveWorkoutScreen
 import com.diajarkoding.imfit.presentation.ui.workout.EditWorkoutScreen
 import com.diajarkoding.imfit.presentation.ui.workout.WorkoutDetailScreen
+import com.diajarkoding.imfit.domain.model.RoutineFormMode
+import com.diajarkoding.imfit.presentation.ui.workout.RoutineFlowManager
 import com.diajarkoding.imfit.presentation.ui.workout.WorkoutSummaryScreen
 
 @Composable
@@ -42,16 +47,24 @@ fun NavGraph(
     authenticatedFromDeepLink: Boolean = false,
     onAuthenticatedFromDeepLinkConsumed: () -> Unit = {},
     remoteRefresh: RemoteRefreshViewModel = hiltViewModel(),
+    routineFlowManager: RoutineFlowManager = hiltViewModel()
 ) {
     val backStack = rememberNavBackStack(Splash)
     LifecycleEventEffect(Lifecycle.Event.ON_RESUME) { remoteRefresh.refresh() }
     LaunchedEffect(backStack.lastOrNull()) { remoteRefresh.refresh() }
-    var exerciseSelectionResult by rememberSaveable {
-        mutableStateOf<ArrayList<String>?>(null)
+    val scope = rememberCoroutineScope()
+    val flows by routineFlowManager.flows.collectAsStateWithLifecycle()
+    val activeResult by routineFlowManager.activeResult.collectAsStateWithLifecycle()
+    val accountGeneration by routineFlowManager.accountGeneration.collectAsStateWithLifecycle()
+
+    LaunchedEffect(accountGeneration) {
+        if (accountGeneration > 0 && backStack.any {
+                it is EditWorkout || it is SetupRoutine || it is ExerciseSelection ||
+                    it is ActiveExerciseSelection || it is ActiveWorkout || it is WorkoutDetail
+            }) {
+            backStack.trimToMain()
+        }
     }
-    var activeSelectionSessionId by rememberSaveable { mutableStateOf<String?>(null) }
-    var editExerciseSelectionResult by rememberSaveable { mutableStateOf<ArrayList<String>?>(null) }
-    var activeSelectionResult by rememberSaveable { mutableStateOf<ArrayList<String>?>(null) }
 
     LaunchedEffect(
         openActiveWorkout,
@@ -78,8 +91,17 @@ fun NavGraph(
     NavDisplay(
         backStack = backStack,
         onBack = {
-            if (backStack.size > 1) {
-                backStack.removeLastOrNull()
+            when (val key = backStack.lastOrNull()) {
+                is ExerciseSelection -> {
+                    if (key.isInitial) {
+                        scope.launch {
+                            if (!routineFlowManager.isCurrent(key.context)) return@launch
+                            routineFlowManager.clearFlow(key.context)
+                            backStack.finishRoutineFlow(key.context)
+                        }
+                    } else backStack.removeLastOrNull()
+                }
+                else -> if (backStack.size > 1) backStack.removeLastOrNull()
             }
         },
         entryDecorators = listOf(
@@ -128,6 +150,17 @@ fun NavGraph(
                     onNavigateToActiveWorkout = { templateId ->
                         backStack.add(ActiveWorkout(templateId))
                     },
+                    onNavigateToInitialPicker = navigate@{ routineId, routineName, flowId, ownerId ->
+                        val context = routineFlowManager.startFlow(routineId, RoutineFormMode.SETUP, flowId, ownerId)
+                            ?: return@navigate false
+                        if (backStack.none {
+                                (it is ExerciseSelection && it.context == context) ||
+                                    (it is SetupRoutine && it.context == context)
+                            }) {
+                            backStack.add(ExerciseSelection(context, routineName = routineName, isInitial = true))
+                        }
+                        true
+                    },
                     onNavigateToExerciseList = { categoryName ->
                         backStack.add(ExerciseList(categoryName))
                     },
@@ -147,34 +180,91 @@ fun NavGraph(
                 WorkoutDetailScreen(
                     workoutId = key.workoutId,
                     onNavigateBack = { backStack.removeLastOrNull() },
-                    onNavigateToExerciseSelection = { templateId ->
-                        exerciseSelectionResult = null
-                        backStack.add(ExerciseSelection(templateId))
+                    onNavigateToExerciseSelection = { routineId, isSetup ->
+                        scope.launch {
+                            val mode = if (isSetup) RoutineFormMode.SETUP else RoutineFormMode.EDIT
+                            val context = routineFlowManager.startFlow(routineId, mode) ?: return@launch
+                            if (isSetup) {
+                                backStack.add(ExerciseSelection(context, isInitial = true))
+                            } else {
+                                backStack.add(EditWorkout(context, openPicker = true))
+                            }
+                        }
                     },
-                    onStartWorkout = { templateId ->
-                        backStack.add(ActiveWorkout(templateId))
-                    },
-                    onNavigateToEdit = { workoutId ->
-                        backStack.add(EditWorkout(workoutId))
-                    },
-                    selectedExerciseIds = exerciseSelectionResult,
-                    onSelectedExercisesConsumed = { exerciseSelectionResult = null }
+                    onStartWorkout = { templateId -> backStack.add(ActiveWorkout(templateId)) },
+                    onNavigateToEdit = { routineId ->
+                        scope.launch {
+                            val context = routineFlowManager.startFlow(routineId, RoutineFormMode.EDIT)
+                                ?: return@launch
+                            backStack.add(EditWorkout(context))
+                        }
+                    }
                 )
             }
 
             entry<EditWorkout> { key ->
                 EditWorkoutScreen(
-                    workoutId = key.workoutId,
-                    onNavigateBack = { backStack.removeLastOrNull() },
-                    onAddExercises = { id, excludedIds, name ->
-                        editExerciseSelectionResult = null
-                        backStack.add(ExerciseSelection(id, excludedIds, name, forEdit = true))
+                    workoutId = key.context.routineId,
+                    mode = key.context.mode,
+                    flowId = key.context.flowId,
+                    ownerId = key.context.ownerId,
+                    openPickerOnLoad = key.openPicker,
+                    onNavigateBack = {
+                        scope.launch {
+                            if (!routineFlowManager.isCurrent(key.context)) return@launch
+                            routineFlowManager.clearFlow(key.context)
+                            backStack.finishRoutineFlow(key.context)
+                        }
                     },
-                    selectedExerciseIds = editExerciseSelectionResult,
-                    onSelectedExercisesConsumed = { editExerciseSelectionResult = null }
+                    onSaved = {
+                        scope.launch {
+                            if (!routineFlowManager.isCurrent(key.context)) return@launch
+                            routineFlowManager.clearFlow(key.context)
+                            backStack.finishRoutineFlow(key.context)
+                        }
+                    },
+                    onAddExercises = { _, excludedIds, name ->
+                        scope.launch {
+                            if (!routineFlowManager.isCurrent(key.context)) return@launch
+                            backStack.add(ExerciseSelection(key.context, excludedIds, name, isInitial = false))
+                        }
+                    },
+                    selectionResult = flows[key.context.flowId]?.takeIf { it.context == key.context }?.pendingResult,
+                    onSelectionAccepted = { routineFlowManager.acknowledgeResult(key.context, it) }
                 )
             }
 
+            entry<SetupRoutine> { key ->
+                EditWorkoutScreen(
+                    workoutId = key.context.routineId,
+                    mode = key.context.mode,
+                    flowId = key.context.flowId,
+                    ownerId = key.context.ownerId,
+                    initialName = key.routineName,
+                    onNavigateBack = {
+                        scope.launch {
+                            if (!routineFlowManager.isCurrent(key.context)) return@launch
+                            routineFlowManager.clearFlow(key.context)
+                            backStack.finishRoutineFlow(key.context)
+                        }
+                    },
+                    onSaved = {
+                        scope.launch {
+                            if (!routineFlowManager.isCurrent(key.context)) return@launch
+                            routineFlowManager.clearFlow(key.context)
+                            backStack.finishRoutineFlow(key.context)
+                        }
+                    },
+                    onAddExercises = { _, excludedIds, name ->
+                        scope.launch {
+                            if (!routineFlowManager.isCurrent(key.context)) return@launch
+                            backStack.add(ExerciseSelection(key.context, excludedIds, name, isInitial = false))
+                        }
+                    },
+                    selectionResult = flows[key.context.flowId]?.takeIf { it.context == key.context }?.pendingResult,
+                    onSelectionAccepted = { routineFlowManager.acknowledgeResult(key.context, it) }
+                )
+            }
             entry<ExerciseList> { key ->
                 ExerciseListScreen(
                     categoryName = key.categoryName,
@@ -184,14 +274,29 @@ fun NavGraph(
 
             entry<ExerciseSelection> { key ->
                 ExerciseSelectionScreen(
-                    templateId = key.templateId,
-                    excludedExerciseIds = key.excludedIds?.toSet(),
+                    templateId = key.context.routineId,
+                    selectionContextId = key.context.flowId,
+                    excludedExerciseIds = key.excludedIds.toSet(),
                     routineName = key.routineName,
-                    onNavigateBack = { backStack.removeLastOrNull() },
+                    onNavigateBack = {
+                        if (key.isInitial) {
+                            scope.launch {
+                                if (!routineFlowManager.isCurrent(key.context)) return@launch
+                                routineFlowManager.clearFlow(key.context)
+                                backStack.finishRoutineFlow(key.context)
+                            }
+                        } else if (backStack.lastOrNull() == key) backStack.removeLastOrNull()
+                    },
                     onExercisesSelected = { selectedExercises ->
-                        if (key.forEdit) editExerciseSelectionResult = ArrayList(selectedExercises.map { it.id })
-                        else exerciseSelectionResult = ArrayList(selectedExercises.map { it.id })
-                        backStack.removeLastOrNull()
+                        scope.launch {
+                            if (backStack.lastOrNull() != key) return@launch
+                            if (!routineFlowManager.updateSelection(key.context, selectedExercises)) return@launch
+                            if (key.isInitial) {
+                                backStack[backStack.lastIndex] = SetupRoutine(key.context, key.routineName.orEmpty())
+                            } else {
+                                backStack.removeLastOrNull()
+                            }
+                        }
                     }
                 )
             }
@@ -199,12 +304,20 @@ fun NavGraph(
             entry<ActiveExerciseSelection> { key ->
                 ExerciseSelectionScreen(
                     templateId = "",
+                    selectionContextId = key.pickerId,
                     excludedExerciseIds = key.excludedIds.toSet(),
-                    onNavigateBack = { backStack.removeLastOrNull() },
+                    onNavigateBack = {
+                        if (backStack.lastOrNull() == key) backStack.removeLastOrNull()
+                    },
                     onExercisesSelected = { selected ->
-                        activeSelectionSessionId = key.sessionId
-                        activeSelectionResult = ArrayList(selected.map { it.id })
-                        backStack.removeLastOrNull()
+                        scope.launch {
+                            if (backStack.lastOrNull() != key) return@launch
+                            val result = ActiveSelectionResult(
+                                key.ownerId, key.sessionId, key.pickerId, UUID.randomUUID().toString(),
+                                selected.map { it.id }
+                            )
+                            if (routineFlowManager.publishActiveResult(result)) backStack.removeLastOrNull()
+                        }
                     }
                 )
             }
@@ -213,13 +326,18 @@ fun NavGraph(
                 ActiveWorkoutScreen(
                     templateId = key.templateId,
                     onNavigateBack = { backStack.removeLastOrNull() },
-                    selectionSessionId = activeSelectionSessionId,
-                    selectedExerciseIds = activeSelectionResult,
-                    onSelectedExercisesConsumed = { activeSelectionResult = null; activeSelectionSessionId = null },
+                    selectionSessionId = activeResult?.sessionId,
+                    selectionOwnerId = activeResult?.ownerId,
+                    selectionResultId = activeResult?.resultId,
+                    selectedExerciseIds = activeResult?.selectedExerciseIds,
+                    onSelectedExercisesConsumed = {
+                        activeResult?.resultId?.let(routineFlowManager::acknowledgeActiveResult)
+                    },
                     onAddExercises = { sessionId, existingIds ->
-                        activeSelectionSessionId = sessionId
-                        activeSelectionResult = null
-                        backStack.add(ActiveExerciseSelection(sessionId, existingIds))
+                        scope.launch {
+                            val owner = routineFlowManager.currentOwnerId() ?: return@launch
+                            backStack.add(ActiveExerciseSelection(sessionId, existingIds, owner, UUID.randomUUID().toString()))
+                        }
                     },
                     onWorkoutFinished = { workoutLogId ->
                         backStack.trimToMain()
@@ -256,7 +374,10 @@ fun NavGraph(
             entry<Profile> {
                 ProfileScreen(
                     onNavigateBack = { backStack.removeLastOrNull() },
-                    onLogout = { backStack.resetTo(Login) },
+                    onLogout = {
+                        routineFlowManager.clear()
+                        backStack.resetTo(Login)
+                    },
                     isDarkMode = isDarkMode,
                     onToggleTheme = onToggleTheme,
                     isIndonesian = isIndonesian,
@@ -279,4 +400,25 @@ private fun MutableList<NavKey>.trimToMain() {
     while (lastIndex > mainIndex) {
         removeAt(lastIndex)
     }
+}
+
+/** Replace the entire abandoned/completed flow, reusing the existing Detail position. */
+internal fun MutableList<NavKey>.finishRoutineFlow(
+    context: RoutineFlowContext,
+    refreshId: String = UUID.randomUUID().toString()
+) {
+    val detailIndex = indexOfFirst { it is WorkoutDetail && it.workoutId == context.routineId }
+    val flowIndex = indexOfFirst {
+        when (it) {
+            is EditWorkout -> it.context == context
+            is SetupRoutine -> it.context == context
+            is ExerciseSelection -> it.context == context
+            else -> false
+        }
+    }
+    val replaceFrom = if (detailIndex >= 0) detailIndex else flowIndex
+    if (replaceFrom >= 0) {
+        while (size > replaceFrom) removeAt(lastIndex)
+    }
+    add(WorkoutDetail(context.routineId, refreshId))
 }

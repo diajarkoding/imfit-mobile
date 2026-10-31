@@ -7,20 +7,14 @@ import com.diajarkoding.imfit.data.local.dao.ExerciseDao
 import com.diajarkoding.imfit.data.local.dao.ExerciseLogDao
 import com.diajarkoding.imfit.data.local.dao.WorkoutLogDao
 import com.diajarkoding.imfit.data.local.dao.WorkoutSetDao
-import com.diajarkoding.imfit.data.local.dao.WorkoutTemplateDao
-import com.diajarkoding.imfit.data.local.dao.TemplateExerciseDao
 import com.diajarkoding.imfit.data.local.entity.ExerciseEntity
 import com.diajarkoding.imfit.data.local.entity.WorkoutLogEntity
-import com.diajarkoding.imfit.data.local.entity.WorkoutTemplateEntity
 import com.diajarkoding.imfit.data.local.database.IMFITDatabase
-import com.diajarkoding.imfit.data.local.sync.PendingOperation
 import com.diajarkoding.imfit.data.local.sync.SyncStatus
 import com.diajarkoding.imfit.data.remote.ImfitAggregateRemoteDataSource
-import com.diajarkoding.imfit.data.remote.dto.TemplateExerciseDto
 import io.github.jan.supabase.SupabaseClient
 import io.github.jan.supabase.auth.auth
 import io.github.jan.supabase.postgrest.postgrest
-import io.github.jan.supabase.postgrest.query.Columns
 import io.github.jan.supabase.postgrest.query.Order
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -36,27 +30,17 @@ import kotlinx.coroutines.sync.withLock
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.JsonElement
+import kotlinx.serialization.json.JsonPrimitive
+import kotlinx.serialization.json.contentOrNull
+import kotlinx.serialization.json.decodeFromJsonElement
 import kotlinx.serialization.json.encodeToJsonElement
 import kotlinx.serialization.json.jsonArray
 import kotlinx.serialization.json.jsonObject
-import kotlinx.serialization.json.JsonArray
-import kotlinx.serialization.json.JsonNull
-import kotlinx.serialization.json.JsonPrimitive
-import kotlinx.serialization.json.buildJsonArray
-import kotlinx.serialization.json.buildJsonObject
-import kotlinx.serialization.json.intOrNull
-import kotlinx.serialization.json.jsonArray
-import kotlinx.serialization.json.jsonObject
-import kotlinx.serialization.json.jsonPrimitive
-import kotlinx.serialization.json.longOrNull
-import kotlinx.serialization.json.put
-import java.nio.charset.StandardCharsets
-import java.time.Instant
 import java.time.OffsetDateTime
 import java.time.ZoneOffset
 import java.time.format.DateTimeFormatter
 import java.util.Collections
-import java.util.UUID
 import javax.inject.Inject
 import javax.inject.Singleton
 /**
@@ -69,8 +53,6 @@ class SyncManager @Inject constructor(
     private val networkMonitor: NetworkMonitor,
     private val supabaseClient: SupabaseClient,
     private val syncPreferences: SyncPreferences,
-    private val workoutTemplateDao: WorkoutTemplateDao,
-    private val templateExerciseDao: TemplateExerciseDao,
     private val workoutLogDao: WorkoutLogDao,
     private val exerciseLogDao: ExerciseLogDao,
     private val workoutSetDao: WorkoutSetDao,
@@ -119,12 +101,9 @@ class SyncManager @Inject constructor(
                 _syncState.value = _syncState.value.copy(pendingCount = 0)
                 return
             }
-            val pendingTemplates = workoutTemplateDao.getPendingSyncTemplates(userId).size
-            val pendingLogs = workoutLogDao.getPendingLogs(userId).size
-            val total = pendingTemplates + pendingLogs
-
+            val total = workoutLogDao.getPendingLogs(userId).size
             _syncState.value = _syncState.value.copy(pendingCount = total)
-            Log.d(TAG, "Pending aggregate count updated: $total ($pendingTemplates templates, $pendingLogs logs)")
+            Log.d(TAG, "Pending workout aggregate count updated: $total")
         } catch (e: CancellationException) {
             throw e
         } catch (e: Exception) {
@@ -200,10 +179,9 @@ class SyncManager @Inject constructor(
             // Independent server-owned reads must not be blocked by an unrelated failed upload.
             val exerciseFailure = captureRead { pullExercises(userId) }
             val profileFailure = captureRead { pullProfile(userId) }
-            // Always preserve and upload durable local changes before pulling remote state.
-            val templatesSynced = syncPendingTemplates(userId)
+            // Legacy routines remain quarantined; only workout history is queued for upload.
             val workoutsSynced = syncPendingWorkoutLogs(userId)
-            if (!templatesSynced || !workoutsSynced) {
+            if (!workoutsSynced) {
                 throw IllegalStateException("One or more local aggregates are still pending retry")
             }
 
@@ -215,7 +193,6 @@ class SyncManager @Inject constructor(
 
             // PULL: Remote changes -> Local (delta sync)
             requireCurrentUser(userId)
-            pullTemplates(userId)
             pullWorkoutLogs(userId)
 
             exerciseFailure?.let { throw it }
@@ -243,17 +220,8 @@ class SyncManager @Inject constructor(
     /**
      * Checks if initial sync is needed (fresh install, reinstall, or first login).
      */
-    private suspend fun needsInitialSync(userId: String): Boolean {
-        // If initial sync was never completed OR local DB is empty
-        if (!syncPreferences.isInitialSyncCompleted(userId)) {
-            return true
-        }
-        
-        // Check if templates exist locally (basic DB presence check)
-        val templates = workoutTemplateDao.getTemplatesByUserList(userId)
-        
-        return templates.isEmpty() && syncPreferences.getLastSyncTimestamp(userId) == 0L
-    }
+    private suspend fun needsInitialSync(userId: String): Boolean =
+        !syncPreferences.isInitialSyncCompleted(userId)
 
     /**
      * Performs initial sync for cold start (reinstall, new device, first login).
@@ -277,25 +245,8 @@ class SyncManager @Inject constructor(
             pullExercises(userId)
             pullProfile(userId)
             
-            // Step 2: Pull all user templates (30%)
-            updateProgress(0.15f, "Downloading workout templates...")
-            pullTemplates(userId)
-            
-            // Step 3: Pull template exercises (45%)
-            updateProgress(0.30f, "Downloading template exercises...")
-            // Template children were applied atomically with each parent.
-            
-            // Step 4: Pull all workout logs (60%)
             updateProgress(0.45f, "Downloading workout history...")
             pullWorkoutLogs(userId)
-            
-            // Step 5: Pull exercise logs (75%)
-            updateProgress(0.60f, "Downloading exercise logs...")
-            // Workout children were applied atomically with each parent.
-            
-            // Step 6: Pull workout sets (90%)
-            updateProgress(0.75f, "Downloading workout sets...")
-            // No separately visible partial history snapshots.
             
             // Mark initial sync as completed
             syncPreferences.setInitialSyncCompleted(userId, true)
@@ -333,77 +284,6 @@ class SyncManager @Inject constructor(
         Log.d(TAG, "Sync progress: ${(progress * 100).toInt()}% - $message")
     }
     
-    /**
-     * Syncs pending workout templates with the remote server.
-     */
-    private suspend fun syncPendingTemplates(userId: String): Boolean {
-        val pendingTemplates = workoutTemplateDao.getPendingSyncTemplates(userId)
-        Log.d(TAG, "Found ${pendingTemplates.size} pending templates to sync")
-        var allSucceeded = true
-
-        for (template in pendingTemplates) {
-            try {
-                val operation = template.pendingOperation ?: continue
-                val exercises = templateExerciseDao.getExercisesForTemplateList(template.id)
-                try {
-                    when (template.pendingOperation) {
-                        PendingOperation.CREATE.name -> {
-                            createTemplateRemote(template.id, template.userId, template.name)
-                            syncTemplateExercises(template.id, exercises)
-                        }
-                        PendingOperation.UPDATE.name -> {
-                            updateTemplateRemote(template.id, template.name)
-                            syncTemplateExercises(template.id, exercises)
-                        }
-                        PendingOperation.DELETE.name -> {
-                            deleteTemplateRemote(template.id)
-                        }
-                    }
-                } catch (e: Exception) {
-                    if (e.message?.contains("permission denied", ignoreCase = true) == true) {
-                        saveTemplateViaRevisionRpc(template, operation, exercises)
-                    } else {
-                        throw e
-                    }
-                }
-                val uploadedSnapshot = exercises.map {
-                    listOf(it.exerciseId, it.orderIndex, it.sets, it.reps, it.restSeconds, it.updatedAt)
-                }
-                val markedCompletely = database.withTransaction {
-                    val currentChildren = templateExerciseDao.getExercisesForTemplateList(template.id).map {
-                        listOf(it.exerciseId, it.orderIndex, it.sets, it.reps, it.restSeconds, it.updatedAt)
-                    }
-                    if (currentChildren != uploadedSnapshot) {
-                        false
-                    } else {
-                        val marked = workoutTemplateDao.markAsSyncedIfUnchanged(
-                            template.id,
-                            template.updatedAt,
-                            operation
-                        )
-                        if (marked == 1) {
-                            templateExerciseDao.markTemplateExercisesAsSynced(template.id)
-                            true
-                        } else {
-                            false
-                        }
-                    }
-                }
-                if (!markedCompletely) {
-                    allSucceeded = false
-                }
-                Log.d(TAG, "Synced template: ${template.id} (${template.pendingOperation}, marked=$markedCompletely)")
-            } catch (e: CancellationException) {
-                throw e
-            } catch (e: Exception) {
-                Log.e(TAG, "Failed to sync template ${template.id}: ${e.message}", e)
-                workoutTemplateDao.updateSyncStatus(template.id, SyncStatus.SYNC_FAILED.name)
-                allSucceeded = false
-            }
-        }
-        return allSucceeded
-    }
-
     /**
      * Syncs pending workout logs with the remote server.
      * Uses atomic sync to ensure WorkoutLog + ExerciseLogs + WorkoutSets sync together.
@@ -530,135 +410,76 @@ class SyncManager @Inject constructor(
     }
 
     /**
-     * Pulls owner-scoped complete aggregates; pending/newer local state is protected.
-     */
-    private suspend fun pullTemplates(userId: String) {
-        try {
-            val remoteTemplates = pages { from, to -> supabaseClient.postgrest.from("workout_templates").select {
-                filter { eq("user_id", userId) }; order("id", Order.ASCENDING); range(from, to)
-            }.decodeList<RemoteTemplateDto>() }
-
-            Log.d(TAG, "Pulled ${remoteTemplates.size} templates from server")
-
-            for (remote in remoteTemplates) {
-                val remoteUpdatedAt = parseTimestamp(remote.updatedAt)
-                require(remote.userId == userId)
-                val children = pages { from, to -> supabaseClient.postgrest.from("template_exercises").select {
-                    filter { eq("template_id", remote.id) }; order("order_index", Order.ASCENDING)
-                    order("exercise_id", Order.ASCENDING); range(from, to)
-                }.decodeList<RemoteTemplateExerciseDto>() }
-                val latest = supabaseClient.postgrest.from("workout_templates").select {
-                    filter { eq("id", remote.id); eq("user_id", userId) }
-                }.decodeList<RemoteTemplateDto>().singleOrNull()
-                check(latest == remote) { "Remote template changed while reading its children; retry required" }
-                requireCurrentUser(userId)
-                importer.template(
-                    parent = WorkoutTemplateEntity(
-                        id = remote.id,
-                        userId = remote.userId,
-                        name = remote.name,
-                        isDeleted = remote.isDeleted ?: false,
-                        syncStatus = SyncStatus.SYNCED.name,
-                        pendingOperation = null,
-                        createdAt = parseTimestamp(remote.createdAt),
-                        updatedAt = remoteUpdatedAt
-                    ),
-                    exercises = children.map { child ->
-                        com.diajarkoding.imfit.data.local.entity.TemplateExerciseEntity(
-                            child.templateId, child.exerciseId, child.orderIndex ?: 0,
-                            child.sets ?: 3, child.reps ?: 8, child.restSeconds ?: 60,
-                            syncStatus = SyncStatus.SYNCED.name, pendingOperation = null,
-                            createdAt = remoteUpdatedAt, updatedAt = remoteUpdatedAt
-                        )
-                    },
-                    isCurrentOwner = {
-                        supabaseClient.auth.currentUserOrNull()?.id == userId && userId !in blockedUsers
-                    }
-                )
-            }
-            
-            syncPreferences.setLastTemplatesSyncTimestamp(userId, System.currentTimeMillis())
-        } catch (e: Exception) {
-            if (e.message?.contains("permission denied", ignoreCase = true) == true) {
-                pullTemplatesViaRpc(userId)
-            } else {
-                Log.e(TAG, "Failed to pull templates: ${e.message}", e)
-                throw e
-            }
-        }
-    }
-
-    /**
      * Pulls complete owner-scoped history snapshots, including updates/removals of children.
      */
     private suspend fun pullWorkoutLogs(userId: String) {
         try {
-            val remoteLogs = pages { from, to -> supabaseClient.postgrest.from("workout_logs").select {
-                filter { eq("user_id", userId) }; order("id", Order.ASCENDING); range(from, to)
-            }.decodeList<RemoteWorkoutLogDto>() }
-
-            Log.d(TAG, "Pulled ${remoteLogs.size} workout logs from server")
-
-            for (remote in remoteLogs) {
-                val remoteUpdatedAt = parseTimestamp(remote.updatedAt ?: remote.startTime)
-                require(remote.userId == userId)
-                val children = pages { from, to -> supabaseClient.postgrest.from("exercise_logs").select {
-                    filter { eq("workout_log_id", remote.id) }; order("id", Order.ASCENDING); range(from, to)
-                }.decodeList<RemoteExerciseLogDto>() }
-                val sets = pages { from, to -> supabaseClient.postgrest.from("workout_sets").select {
-                    filter { eq("workout_log_id", remote.id) }; order("id", Order.ASCENDING); range(from, to)
-                }.decodeList<RemoteWorkoutSetDto>() }
-                val latest = supabaseClient.postgrest.from("workout_logs").select {
-                    filter { eq("id", remote.id); eq("user_id", userId) }
-                }.decodeList<RemoteWorkoutLogDto>().singleOrNull()
-                check(latest == remote) { "Remote workout changed while reading its children; retry required" }
-                requireCurrentUser(userId)
-                importer.workout(
-                    parent = WorkoutLogEntity(
-                        id = remote.id,
-                        userId = remote.userId,
-                        templateId = remote.templateId,
-                        templateName = remote.templateName,
-                        date = parseTimestamp(remote.date),
-                        startTime = parseTimestamp(remote.startTime),
-                        endTime = parseTimestamp(remote.endTime),
-                        totalVolume = remote.totalVolume.toFloat(),
-                        totalSets = remote.totalSets,
-                        totalReps = remote.totalReps,
-                        syncStatus = SyncStatus.SYNCED.name,
-                        pendingOperation = null,
-                        deletedAt = remote.deletedAt?.let(::parseTimestamp),
-                        createdAt = parseTimestamp(remote.createdAt ?: remote.startTime),
-                        updatedAt = remoteUpdatedAt
-                    ),
-                    exercises = children.map { child ->
-                        com.diajarkoding.imfit.data.local.entity.ExerciseLogEntity(
-                            child.id, child.workoutLogId, child.exerciseId, child.exerciseName, child.muscleCategory,
-                            child.orderIndex, child.totalVolume.toFloat(), child.totalSets, child.totalReps,
-                            syncStatus = SyncStatus.SYNCED.name, pendingOperation = null
-                        )
-                    },
-                    sets = sets.map { set ->
-                        com.diajarkoding.imfit.data.local.entity.WorkoutSetEntity(
-                            set.id, set.exerciseLogId, set.workoutLogId, set.exerciseId, set.setNumber,
-                            set.weight.toFloat(), set.reps, set.isCompleted ?: false,
-                            syncStatus = SyncStatus.SYNCED.name, pendingOperation = null
-                        )
-                    },
-                    isCurrentOwner = {
-                        supabaseClient.auth.currentUserOrNull()?.id == userId && userId !in blockedUsers
-                    }
+            var afterId: String? = null
+            do {
+                val page = rpcJson.decodeFromJsonElement<RemoteWorkoutPageDto>(
+                    aggregateRemoteDataSource.getWorkoutPage(afterId)
                 )
-            }
+                require(page.ownerId == userId)
+                for (aggregate in page.items) {
+                    val remote = aggregate.workout
+                    val children = aggregate.exercises
+                    val sets = aggregate.sets
+                    val remoteUpdatedAt = parseTimestamp(remote.updatedAt ?: remote.startTime)
+                    require(remote.userId == userId)
+                    require(children.all { it.workoutLogId == remote.id })
+                    require(sets.all { it.workoutLogId == remote.id })
+                    requireCurrentUser(userId)
+                    importer.workout(
+                        parent = WorkoutLogEntity(
+                            id = remote.id,
+                            userId = remote.userId,
+                            templateId = remote.templateId,
+                            templateName = remote.templateName,
+                            date = parseTimestamp(remote.date),
+                            startTime = parseTimestamp(remote.startTime),
+                            endTime = parseTimestamp(remote.endTime),
+                            totalVolume = remote.totalVolume.toFloat(),
+                            totalSets = remote.totalSets,
+                            totalReps = remote.totalReps,
+                            syncStatus = SyncStatus.SYNCED.name,
+                            pendingOperation = null,
+                            deletedAt = remote.deletedAt?.let(::parseTimestamp),
+                            createdAt = parseTimestamp(remote.createdAt ?: remote.startTime),
+                            updatedAt = remoteUpdatedAt
+                        ),
+                        exercises = children.map { child ->
+                            com.diajarkoding.imfit.data.local.entity.ExerciseLogEntity(
+                                child.id, child.workoutLogId, child.exerciseId, child.exerciseName, child.muscleCategory,
+                                child.orderIndex, child.totalVolume.toFloat(), child.totalSets, child.totalReps,
+                                syncStatus = SyncStatus.SYNCED.name, pendingOperation = null,
+                                inputDefaults = (child.inputDefaults as? JsonPrimitive)?.contentOrNull
+                            )
+                        },
+                        sets = sets.map { set ->
+                            com.diajarkoding.imfit.data.local.entity.WorkoutSetEntity(
+                                set.id, set.exerciseLogId, set.workoutLogId, set.exerciseId, set.setNumber,
+                                set.weight.toFloat(), set.reps, set.isCompleted ?: false,
+                                syncStatus = SyncStatus.SYNCED.name, pendingOperation = null
+                            )
+                        },
+                        isCurrentOwner = {
+                            supabaseClient.auth.currentUserOrNull()?.id == userId && userId !in blockedUsers
+                        }
+                    )
+                }
+                check(page.nextCursor == null || (
+                    page.items.isNotEmpty() && page.nextCursor == page.items.last().workout.id &&
+                        (afterId == null || page.nextCursor > afterId)
+                    )) { "Invalid workout history continuation" }
+                afterId = page.nextCursor
+            } while (afterId != null)
             
             syncPreferences.setLastWorkoutLogsSyncTimestamp(userId, System.currentTimeMillis())
+        } catch (e: CancellationException) {
+            throw e
         } catch (e: Exception) {
-            if (e.message?.contains("permission denied", ignoreCase = true) == true) {
-                syncPreferences.setLastWorkoutLogsSyncTimestamp(userId, System.currentTimeMillis())
-            } else {
-                Log.e(TAG, "Failed to pull workout logs: ${e.message}", e)
-                throw e
-            }
+            Log.e(TAG, "Failed to pull workout logs: ${e.message}", e)
+            throw e
         }
     }
 
@@ -682,193 +503,6 @@ class SyncManager @Inject constructor(
         check(supabaseClient.auth.currentUserOrNull()?.id == expectedUserId && expectedUserId !in blockedUsers) {
             "Authenticated user changed during synchronization"
         }
-    }
-
-    // ============ PUSH METHODS (Local -> Remote) ============
-
-    private suspend fun createTemplateRemote(id: String, userId: String, name: String) {
-        val dto = CreateTemplateDto(id = id, userId = userId, name = name)
-        supabaseClient.postgrest.from("workout_templates").upsert(dto) {
-            onConflict = "id"
-        }
-    }
-
-    private suspend fun updateTemplateRemote(id: String, name: String) {
-        supabaseClient.postgrest.from("workout_templates")
-            .update({
-                set("name", name)
-                set("updated_at", OffsetDateTime.now(ZoneOffset.UTC).format(DateTimeFormatter.ISO_OFFSET_DATE_TIME))
-            }) {
-                filter { eq("id", id) }
-            }
-    }
-
-    private suspend fun deleteTemplateRemote(id: String) {
-        supabaseClient.postgrest.from("workout_templates")
-            .update({ set("is_deleted", true) }) {
-                filter { eq("id", id) }
-            }
-    }
-
-    private suspend fun syncTemplateExercises(
-        templateId: String,
-        exercises: List<com.diajarkoding.imfit.data.local.entity.TemplateExerciseEntity>
-    ) {
-        // Eventual consistency with durable Room-backed retry recovery:
-        // delete existing remote children, then insert all current children in a single batch request.
-        supabaseClient.postgrest.from("template_exercises")
-            .delete { filter { eq("template_id", templateId) } }
-
-        val dtos = exercises
-            .sortedWith(compareBy({ it.orderIndex }, { it.exerciseId }))
-            .mapIndexed { index, exercise ->
-                TemplateExerciseDto(
-                    templateId = templateId,
-                    exerciseId = exercise.exerciseId,
-                    orderIndex = index,
-                    sets = exercise.sets,
-                    reps = exercise.reps,
-                    restSeconds = exercise.restSeconds
-                )
-            }
-        if (dtos.isNotEmpty()) {
-            supabaseClient.postgrest.from("template_exercises").insert(dtos)
-        }
-    }
-
-    private suspend fun saveTemplateViaRevisionRpc(
-        template: WorkoutTemplateEntity,
-        operation: String,
-        exercises: List<com.diajarkoding.imfit.data.local.entity.TemplateExerciseEntity>
-    ) {
-        val existingDetail = runCatching {
-            supabaseClient.postgrest.rpc(
-                "get_template_detail",
-                buildJsonObject { put("p_template_id", template.id) }
-            ).decodeAs<kotlinx.serialization.json.JsonObject>()
-        }.getOrNull()
-
-        val isDelete = operation == PendingOperation.DELETE.name || template.isDeleted
-        if (isDelete && existingDetail == null) {
-            return
-        }
-
-        val expectedRevision: Long? = existingDetail?.get("revision")?.jsonPrimitive?.longOrNull
-        val existingRemoteIds: Set<String> = existingDetail
-            ?.get("exercises")
-            ?.jsonArray
-            ?.mapNotNull { it.jsonObject["exercise_id"]?.jsonPrimitive?.content }
-            ?.toSet()
-            ?: emptySet()
-
-        val sortedExercises = if (isDelete) {
-            emptyList()
-        } else {
-            exercises
-                .sortedWith(compareBy({ it.orderIndex }, { it.exerciseId }))
-                .distinctBy { it.exerciseId }
-        }
-        val submittedIds = sortedExercises.map { it.exerciseId }.toSet()
-        val removedIds = existingRemoteIds - submittedIds
-        val requestId = UUID.nameUUIDFromBytes(
-            "save-template-rev:${template.id}:${template.updatedAt}:$operation".toByteArray(StandardCharsets.UTF_8)
-        ).toString()
-
-        val params = buildJsonObject {
-            put("p_request_id", requestId)
-            put("p_template_id", template.id)
-            if (expectedRevision != null) put("p_expected_revision", expectedRevision) else put("p_expected_revision", JsonNull)
-            put("p_name", template.name)
-            put("p_exercises", buildJsonArray {
-                sortedExercises.forEachIndexed { index, child ->
-                    add(buildJsonObject {
-                        put("exercise_id", child.exerciseId)
-                        put("order_index", index)
-                        put("sets", child.sets)
-                        put("reps", child.reps)
-                        put("rest_seconds", child.restSeconds)
-                    })
-                }
-            })
-            put("p_removed_exercise_ids", buildJsonArray {
-                removedIds.forEach { add(JsonPrimitive(it)) }
-            })
-            put("p_is_deleted", isDelete)
-            put("p_owner_id", template.userId)
-        }
-        supabaseClient.postgrest.rpc("save_template_revision", params)
-    }
-
-    private suspend fun pullTemplatesViaRpc(userId: String) {
-        var cursor: String? = null
-        while (true) {
-            val pageObj = supabaseClient.postgrest.rpc(
-                "get_template_page",
-                buildJsonObject {
-                    cursor?.let { put("p_cursor", it) }
-                    put("p_limit", 50)
-                }
-            ).decodeAs<kotlinx.serialization.json.JsonObject>()
-            val items = pageObj["data"]?.jsonArray.orEmpty()
-            for (element in items) {
-                val item = element.jsonObject
-                val templateId = item["id"]?.jsonPrimitive?.content ?: continue
-                val name = item["name"]?.jsonPrimitive?.content ?: continue
-                val updatedAtStr = item["updated_at"]?.jsonPrimitive?.content
-                val remoteUpdatedAt = updatedAtStr?.let { runCatching { parseTimestamp(it) }.getOrNull() }
-                    ?: System.currentTimeMillis()
-                val exerciseCount = item["exercise_count"]?.jsonPrimitive?.intOrNull ?: 0
-                val detailObj = if (exerciseCount > 0) {
-                    runCatching {
-                        supabaseClient.postgrest.rpc(
-                            "get_template_detail",
-                            buildJsonObject { put("p_template_id", templateId) }
-                        ).decodeAs<kotlinx.serialization.json.JsonObject>()
-                    }.getOrNull()
-                } else {
-                    null
-                }
-                val children = detailObj?.get("exercises")?.jsonArray.orEmpty().mapNotNull { childEl ->
-                    val c = childEl.jsonObject
-                    val exId = c["exercise_id"]?.jsonPrimitive?.content ?: return@mapNotNull null
-                    com.diajarkoding.imfit.data.local.entity.TemplateExerciseEntity(
-                        templateId = templateId,
-                        exerciseId = exId,
-                        orderIndex = c["order_index"]?.jsonPrimitive?.intOrNull ?: 0,
-                        sets = c["sets"]?.jsonPrimitive?.intOrNull ?: 3,
-                        reps = c["reps"]?.jsonPrimitive?.intOrNull ?: 10,
-                        restSeconds = c["rest_seconds"]?.jsonPrimitive?.intOrNull ?: 60,
-                        syncStatus = SyncStatus.SYNCED.name,
-                        pendingOperation = null,
-                        createdAt = remoteUpdatedAt,
-                        updatedAt = remoteUpdatedAt
-                    )
-                }
-                requireCurrentUser(userId)
-                importer.template(
-                    parent = WorkoutTemplateEntity(
-                        id = templateId,
-                        userId = userId,
-                        name = name,
-                        isDeleted = false,
-                        syncStatus = SyncStatus.SYNCED.name,
-                        pendingOperation = null,
-                        createdAt = remoteUpdatedAt,
-                        updatedAt = remoteUpdatedAt
-                    ),
-                    exercises = children,
-                    isCurrentOwner = {
-                        supabaseClient.auth.currentUserOrNull()?.id == userId && userId !in blockedUsers
-                    }
-                )
-            }
-            val pageInfo = pageObj["page_info"]?.jsonObject
-            val hasMore = pageInfo?.get("has_more")?.jsonPrimitive?.content?.toBooleanStrictOrNull() ?: false
-            val nextCursor = pageInfo?.get("next_cursor")?.jsonPrimitive?.content?.takeIf { it != "null" && it.isNotBlank() }
-            if (!hasMore || nextCursor == null) break
-            cursor = nextCursor
-        }
-        syncPreferences.setLastTemplatesSyncTimestamp(userId, System.currentTimeMillis())
     }
 
     private fun workoutDto(log: WorkoutLogEntity): UpsertWorkoutLogDto {
@@ -914,7 +548,8 @@ class SyncManager @Inject constructor(
             orderIndex = log.orderIndex,
             totalVolume = log.totalVolume.toDouble(),
             totalSets = log.totalSets,
-            totalReps = log.totalReps
+            totalReps = log.totalReps,
+            inputDefaults = log.inputDefaults
         )
     private fun workoutSetDto(
         set: com.diajarkoding.imfit.data.local.entity.WorkoutSetEntity
@@ -933,17 +568,11 @@ class SyncManager @Inject constructor(
         private val rpcJson = Json {
             encodeDefaults = true
             explicitNulls = false
+            ignoreUnknownKeys = true
         }
     }
 }
 
-@Serializable
-private data class CreateTemplateDto(
-    val id: String,
-    @SerialName("user_id")
-    val userId: String,
-    val name: String
-)
 
 @Serializable
 private data class UpsertWorkoutLogDto(
@@ -987,7 +616,9 @@ private data class UpsertExerciseLogDto(
     @SerialName("total_sets")
     val totalSets: Int,
     @SerialName("total_reps")
-    val totalReps: Int
+    val totalReps: Int,
+    @SerialName("input_defaults")
+    val inputDefaults: String? = null
 )
 
 @Serializable
@@ -1008,6 +639,20 @@ private data class UpsertWorkoutSetDto(
 )
 
 // ============ REMOTE DTOs (for Pull) ============
+
+@Serializable
+private data class RemoteWorkoutPageDto(
+    @SerialName("owner_id") val ownerId: String,
+    val items: List<RemoteWorkoutAggregateDto>,
+    @SerialName("next_cursor") val nextCursor: String? = null,
+)
+
+@Serializable
+private data class RemoteWorkoutAggregateDto(
+    val workout: RemoteWorkoutLogDto,
+    val exercises: List<RemoteExerciseLogDto>,
+    val sets: List<RemoteWorkoutSetDto>,
+)
 
 @Serializable
 private data class RemoteExerciseDto(
@@ -1082,7 +727,9 @@ private data class RemoteExerciseLogDto(
     @SerialName("total_sets")
     val totalSets: Int,
     @SerialName("total_reps")
-    val totalReps: Int
+    val totalReps: Int,
+    @SerialName("input_defaults")
+    val inputDefaults: JsonElement? = null
 )
 
 @Serializable

@@ -40,7 +40,7 @@ data class ExerciseLogEntity(
     val createdAt: Long = System.currentTimeMillis(),
     @ColumnInfo(name = "updated_at")
     val updatedAt: Long = System.currentTimeMillis(),
-    // Local provenance only; not part of the Supabase payload/schema.
+    // Prescription provenance is persisted with the completed-workout snapshot.
     @ColumnInfo(name = "input_defaults")
     val inputDefaults: String? = null
 )

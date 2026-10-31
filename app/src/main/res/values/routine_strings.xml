@@ -45,4 +45,25 @@
     <string name="routine_active_filter">Muscle filter active: %1$s</string>
     <string name="routine_filter_hint">Exercise selections are kept when filters change.</string>
     <string name="routine_apply_filter">Apply filter</string>
+    <string name="routine_empty_badge">Not configured yet</string>
+    <string name="routine_complete_action">Complete routine</string>
+    <string name="routine_action_move_up">Move up</string>
+    <string name="routine_action_move_down">Move down</string>
+    <string name="routine_setup_title">Set up routine</string>
+    <string name="routine_duration_unsupported">Duration/distance tracking is not supported in this version.</string>
+    <string name="routine_auth_required">Sign in again to access this routine.</string>
+    <string name="routine_start_failed">Workout could not be started. Check your connection and try again.</string>
+    <string name="routine_start_offline_unavailable">The server could not be reached and no routine snapshot is available for offline start. Connect and retry.</string>
+    <string name="routine_start_last_known">Started from last known routine revision %1$d. The latest server revision could not be checked.</string>
+    <string name="routine_delete_unknown">Deletion could not be confirmed. Retry to check the same request; the routine may already be deleted.</string>
+    <string name="routine_revision_conflict">This routine changed on the server. Reload before trying again.</string>
+    <string name="routine_read_failed">Routine could not be refreshed. Any routine shown is the last known version. Retry to check the server.</string>
+    <string name="routine_mutation_active">Finish or cancel your active workout before editing or deleting routines. The running session and completed history remain unchanged.</string>
+    <string name="routine_load_more">Load more exercises</string>
+    <string name="routine_discard_title">Discard changes?</string>
+    <string name="routine_discard_message">Your unsaved routine changes will be discarded.</string>
+    <string name="routine_discard_unknown">The save may already have committed. Leave this draft and check routine details? Do not submit a new command until its result is known.</string>
+    <string name="routine_discard_confirm">Leave draft</string>
+    <string name="routine_save_unknown">Save outcome is unknown. Changes are locked. Retry checks the exact same request.</string>
+    <string name="routine_exercise_unavailable">This exercise is no longer available. Remove it before saving this routine.</string>
 </resources>

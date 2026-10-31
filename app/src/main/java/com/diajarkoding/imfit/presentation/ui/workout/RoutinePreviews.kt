@@ -49,7 +49,8 @@ private fun PickerPreview(selected: Boolean) {
     ExercisePickerContent(ExerciseSelectionState(allExercises = previewExercises, filteredExercises = previewExercises,
         selectedExercises = if (selected) previewExercises.take(2) else emptyList(), routineName = "Push Day", isLoading = false,
         selectedCategory = if (selected) ExerciseCategory.CHEST else ExerciseCategory.ALL),
-        onBack = {}, onSearch = {}, onCategory = {}, onToggle = {}, onReset = {}, onClearFilters = {}, onRetry = {}, onFilter = {}, onConfirm = {})
+        onBack = {}, onSearch = {}, onCategory = {}, onToggle = {}, onReset = {}, onClearFilters = {},
+        onRetry = {}, onRefresh = {}, onLoadNext = {}, onFilter = {}, onConfirm = {})
 }
 
 @Preview(name = "Choose · None · Light", widthDp = 412, heightDp = 956)

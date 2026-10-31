@@ -1,5 +1,7 @@
 package com.diajarkoding.imfit.presentation.ui.home
 
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.background
 import androidx.compose.foundation.lazy.LazyColumn
@@ -27,19 +29,38 @@ import java.util.Locale
 fun HomeScreen(
     onNavigateToWorkoutDetail: (String) -> Unit,
     onNavigateToActiveWorkout: (String) -> Unit = {},
+    onNavigateToInitialPicker: suspend (routineId: String, routineName: String, flowId: String, ownerId: String) -> Boolean = { _, _, _, _ -> false },
     viewModel: HomeViewModel = hiltViewModel(),
-    onNavigateToProfile: () -> Unit = {}
+    onNavigateToProfile: () -> Unit = {},
+    recoveryViewModel: LegacyRoutineRecoveryViewModel = hiltViewModel(),
+    ownerId: String? = null,
 ) {
     val state by viewModel.state.collectAsStateWithLifecycle()
-    var showDialog by rememberSaveable { mutableStateOf(false) }
-    var name by rememberSaveable { mutableStateOf("") }
+    val recoveryCount by recoveryViewModel.count.collectAsStateWithLifecycle()
+    val recoveryExporting by recoveryViewModel.exporting.collectAsStateWithLifecycle()
+    val recoveryMessage by recoveryViewModel.message.collectAsStateWithLifecycle()
+    val exportLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.CreateDocument("application/json"),
+        recoveryViewModel::exportTo
+    )
+    var showDialog by rememberSaveable(ownerId) { mutableStateOf(false) }
+    var name by rememberSaveable(ownerId) { mutableStateOf("") }
     LaunchedEffect(Unit) { viewModel.refreshOnEntry() }
-    LaunchedEffect(state.newlyCreatedWorkoutId) {
-        state.newlyCreatedWorkoutId?.let {
-            showDialog = false
-            name = ""
-            viewModel.clearNewlyCreatedWorkoutId()
-            onNavigateToWorkoutDetail(it)
+    LaunchedEffect(state.pendingCreateName) {
+        state.pendingCreateName?.let {
+            name = it
+            showDialog = true
+        }
+    }
+    LaunchedEffect(state.newlyCreatedWorkoutId, state.newlyCreatedWorkoutOwnerId) {
+        state.newlyCreatedWorkoutId?.let { createdId ->
+            val createdName = state.newlyCreatedWorkoutName.orEmpty()
+            val owner = state.newlyCreatedWorkoutOwnerId ?: return@LaunchedEffect
+            if (onNavigateToInitialPicker(createdId, createdName, "create:$createdId", owner)) {
+                showDialog = false
+                name = ""
+                viewModel.clearNewlyCreatedWorkoutId()
+            }
         }
     }
     if (showDialog) RoutineDialog(
@@ -52,7 +73,8 @@ fun HomeScreen(
         errorMessage = state.createErrorRes?.let { stringResource(it) },
         onConfirm = { viewModel.createWorkout(name) }
     ) {
-        RoutineNameField(name, { name = it; viewModel.clearCreateError() }, enabled = !state.isCreating,
+        RoutineNameField(name, { name = it; viewModel.clearCreateError() },
+            enabled = !state.isCreating && state.pendingCreateName == null,
             errorMessage = state.createNameErrorRes?.let { stringResource(it) }, onDone = { viewModel.createWorkout(name) }, requestFocus = true)
     }
     Column(Modifier.fillMaxSize().background(homePalette().background)) {
@@ -100,8 +122,32 @@ fun HomeScreen(
             item(key = "workout_section") {
                 HomeWorkoutSectionHeader(
                     enabled = !state.isTemplatesLoading && !state.isCreating,
-                    onAdd = { viewModel.clearCreateError(); showDialog = true }
+                    onAdd = {
+                        viewModel.clearCreateError()
+                        state.pendingCreateName?.let { name = it }
+                        showDialog = true
+                    }
                 )
+            }
+            if (recoveryCount > 0 || recoveryMessage != null) {
+                item(key = "legacy_routine_recovery") {
+                    Card(Modifier.fillMaxWidth().testTag("legacy_routine_recovery")) {
+                        Column(Modifier.padding(IMFITSpacing.md), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                            if (recoveryCount > 0) {
+                                Text(stringResource(R.string.legacy_recovery_title, recoveryCount), style = MaterialTheme.typography.titleSmall)
+                                Text(stringResource(R.string.legacy_recovery_notice))
+                                Text(stringResource(R.string.legacy_recovery_privacy))
+                                OutlinedButton(
+                                    enabled = !recoveryExporting,
+                                    onClick = {
+                                        if (recoveryViewModel.beginExport()) exportLauncher.launch("imfit-routine-recovery.json")
+                                    }
+                                ) { Text(stringResource(if (recoveryExporting) R.string.legacy_recovery_exporting else R.string.legacy_recovery_export)) }
+                            }
+                            recoveryMessage?.let { Text(it, style = MaterialTheme.typography.bodySmall) }
+                        }
+                    }
+                }
             }
             when (val tplState = state.templatesState) {
                 is SectionLoadState.Loading -> {

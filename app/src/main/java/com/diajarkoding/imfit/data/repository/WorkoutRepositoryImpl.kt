@@ -7,15 +7,12 @@ import com.diajarkoding.imfit.data.local.database.IMFITDatabase
 import com.diajarkoding.imfit.data.local.entity.ActiveSessionEntity
 import com.diajarkoding.imfit.data.local.entity.ExerciseEntity
 import com.diajarkoding.imfit.data.local.entity.ExerciseLogEntity
-import com.diajarkoding.imfit.data.local.entity.TemplateExerciseEntity
 import com.diajarkoding.imfit.data.local.entity.WorkoutLogEntity
 import com.diajarkoding.imfit.data.local.entity.WorkoutSetEntity
-import com.diajarkoding.imfit.data.local.entity.WorkoutTemplateEntity
 import com.diajarkoding.imfit.data.local.sync.PendingOperation
 import com.diajarkoding.imfit.data.local.sync.SyncStatus
 import com.diajarkoding.imfit.data.remote.WorkoutRemoteDataSource
 import com.diajarkoding.imfit.data.remote.dto.WorkoutLogDto
-import com.diajarkoding.imfit.data.remote.dto.WorkoutTemplateDto
 import com.diajarkoding.imfit.data.remote.dto.parseRemoteTimestamp
 import com.diajarkoding.imfit.data.remote.dto.toDomain
 import com.diajarkoding.imfit.data.sync.RemoteSnapshotImporter
@@ -26,7 +23,6 @@ import com.diajarkoding.imfit.domain.model.ExerciseInputDefaults
 import com.diajarkoding.imfit.domain.model.HomeRemoteReadResult
 import com.diajarkoding.imfit.domain.model.inputDefaults
 import com.diajarkoding.imfit.domain.model.MuscleCategory
-import com.diajarkoding.imfit.domain.model.TemplateExercise
 import com.diajarkoding.imfit.domain.model.WorkoutLog
 import com.diajarkoding.imfit.domain.model.WorkoutSession
 import com.diajarkoding.imfit.domain.model.WorkoutSet
@@ -37,6 +33,8 @@ import com.diajarkoding.imfit.domain.repository.WorkoutRepository
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.JsonPrimitive
+import kotlinx.serialization.json.contentOrNull
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.Flow
@@ -46,12 +44,11 @@ import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.withContext
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.withContext
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import java.util.concurrent.ConcurrentHashMap
-import java.util.concurrent.atomic.AtomicLong
 import java.nio.charset.StandardCharsets
 import java.util.UUID
 import javax.inject.Inject
@@ -64,8 +61,6 @@ class WorkoutRepositoryImpl @Inject constructor(
     private val workoutSetDao: com.diajarkoding.imfit.data.local.dao.WorkoutSetDao,
     private val exerciseDao: com.diajarkoding.imfit.data.local.dao.ExerciseDao,
     private val workoutLogDao: com.diajarkoding.imfit.data.local.dao.WorkoutLogDao,
-    private val workoutTemplateDao: com.diajarkoding.imfit.data.local.dao.WorkoutTemplateDao,
-    private val templateExerciseDao: com.diajarkoding.imfit.data.local.dao.TemplateExerciseDao,
     private val activeSessionDao: ActiveSessionDao,
     private val database: IMFITDatabase,
     private val syncScheduler: SyncScheduler,
@@ -79,8 +74,6 @@ class WorkoutRepositoryImpl @Inject constructor(
         workoutSetDao: com.diajarkoding.imfit.data.local.dao.WorkoutSetDao,
         exerciseDao: com.diajarkoding.imfit.data.local.dao.ExerciseDao,
         workoutLogDao: com.diajarkoding.imfit.data.local.dao.WorkoutLogDao,
-        workoutTemplateDao: com.diajarkoding.imfit.data.local.dao.WorkoutTemplateDao,
-        templateExerciseDao: com.diajarkoding.imfit.data.local.dao.TemplateExerciseDao,
         activeSessionDao: ActiveSessionDao,
         database: IMFITDatabase,
         syncScheduler: SyncScheduler,
@@ -91,8 +84,6 @@ class WorkoutRepositoryImpl @Inject constructor(
         workoutSetDao = workoutSetDao,
         exerciseDao = exerciseDao,
         workoutLogDao = workoutLogDao,
-        workoutTemplateDao = workoutTemplateDao,
-        templateExerciseDao = templateExerciseDao,
         activeSessionDao = activeSessionDao,
         database = database,
         syncScheduler = syncScheduler,
@@ -106,20 +97,11 @@ class WorkoutRepositoryImpl @Inject constructor(
     private val lifecycleMutex = Mutex()
     private val terminalSessions = ConcurrentHashMap.newKeySet<String>()
     private val cleanupScope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
-    private val localMutationRevision = AtomicLong(0L)
     private val snapshotImporter = RemoteSnapshotImporter(database)
     private val json = Json {
         ignoreUnknownKeys = true 
         encodeDefaults = true
     }
-
-    override fun observeTemplates(userId: String): Flow<List<WorkoutTemplate>> =
-        database.invalidationTracker.createFlow("workout_templates", "template_exercises", "exercises")
-            .map { database.withTransaction { getTemplates(userId) } }.distinctUntilChanged().flowOn(Dispatchers.IO)
-
-    override fun observeTemplate(templateId: String): Flow<WorkoutTemplate?> =
-        database.invalidationTracker.createFlow("workout_templates", "template_exercises", "exercises")
-            .map { database.withTransaction { getTemplateById(templateId) } }.distinctUntilChanged().flowOn(Dispatchers.IO)
 
     override fun observeWorkoutLogs(userId: String): Flow<List<WorkoutLog>> =
         database.invalidationTracker.createFlow("workout_logs", "exercise_logs", "workout_sets", "exercises")
@@ -138,46 +120,6 @@ class WorkoutRepositoryImpl @Inject constructor(
             .map { database.withTransaction {
                 workoutLogDao.getWorkoutLogById(logId)?.takeIf { it.deletedAt == null }?.let { mapWorkoutLogEntityToDomain(it) }
             } }.distinctUntilChanged().flowOn(Dispatchers.IO)
-    override suspend fun fetchRemoteTemplates(userId: String): HomeRemoteReadResult<List<WorkoutTemplate>> =
-        withContext(Dispatchers.IO) {
-            ensureActiveOwner(userId)
-            enqueuePendingSyncIfNeeded(userId)
-            val startRevision = localMutationRevision.get()
-            val source = remoteDataSource
-            if (source == null) {
-                return@withContext HomeRemoteReadResult.RemotePrimary(getTemplates(userId))
-            }
-            try {
-                val remoteDtos = source.fetchActiveTemplates(userId).filter { it.userId == userId && !it.isDeleted }
-                ensureActiveOwner(userId)
-                val allowMissingDeletion = (localMutationRevision.get() == startRevision)
-                importRemoteTemplatesSnapshot(
-                    userId = userId,
-                    remoteDtos = remoteDtos,
-                    allowMissingDeletion = allowMissingDeletion,
-                    expectedStartRevision = startRevision
-                )
-                val merged = mergeRemoteTemplatesWithLocalOverlay(
-                    userId = userId,
-                    remoteTemplates = remoteDtos.map { it.toDomain() }
-                )
-                HomeRemoteReadResult.RemotePrimary(merged)
-            } catch (e: CancellationException) {
-                throw e
-            } catch (e: Exception) {
-                ensureActiveOwner(userId)
-                val localTemplates = getTemplates(userId)
-                val hasLocalState = localTemplates.isNotEmpty() ||
-                    workoutTemplateDao.countAllUserTemplates(userId) > 0
-                if (hasLocalState) {
-                    Log.w("WorkoutRepository", "Remote templates fetch failed, using local fallback: ${e.message}")
-                    HomeRemoteReadResult.LocalFallback(localTemplates, e)
-                } else {
-                    throw e
-                }
-            }
-        }
-
     override suspend fun fetchRemoteLastWorkoutLog(userId: String): HomeRemoteReadResult<WorkoutLog?> =
         withContext(Dispatchers.IO) {
             ensureActiveOwner(userId)
@@ -222,230 +164,11 @@ class WorkoutRepositoryImpl @Inject constructor(
                 }
             }
         }
-    override suspend fun getTemplates(userId: String): List<WorkoutTemplate> {
-        return try {
-            val localTemplates = workoutTemplateDao.getTemplatesByUserList(userId)
-
-            localTemplates.map { templateEntity ->
-                val templateExercises = templateExerciseDao.getExercisesForTemplateList(templateEntity.id)
-                val exercises = templateExercises.mapNotNull { te ->
-                    val exerciseEntity = exerciseDao.getExerciseById(te.exerciseId)
-                    exerciseEntity?.let {
-                        val muscleCategory = MuscleCategory.entries.getOrNull(it.muscleCategoryId - 1) 
-                            ?: MuscleCategory.CHEST
-                        TemplateExercise(
-                            exercise = Exercise(
-                                id = it.id,
-                                name = it.name,
-                                muscleCategory = muscleCategory,
-                                description = it.description,
-                                imageUrl = it.imageUrl
-                            ),
-                            sets = te.sets,
-                            reps = te.reps,
-                            restSeconds = te.restSeconds
-                        )
-                    }
-                }
-                
-                WorkoutTemplate(
-                    id = templateEntity.id,
-                    userId = templateEntity.userId,
-                    name = templateEntity.name,
-                    exercises = exercises
-                )
-            }
-        } catch (e: Exception) {
-            Log.e("WorkoutRepository", "Error fetching templates from local: ${e.message}", e)
-            emptyList()
-        }
-    }
-
-    override suspend fun getTemplateById(templateId: String): WorkoutTemplate? {
-        return try {
-            val templateEntity = workoutTemplateDao.getTemplateById(templateId) ?: return null
-            
-            val templateExercises = templateExerciseDao.getExercisesForTemplateList(templateEntity.id)
-            val exercises = templateExercises.mapNotNull { te ->
-                val exerciseEntity = exerciseDao.getExerciseById(te.exerciseId)
-                exerciseEntity?.let {
-                    val muscleCategory = MuscleCategory.entries.getOrNull(it.muscleCategoryId - 1) 
-                        ?: MuscleCategory.CHEST
-                    TemplateExercise(
-                        exercise = Exercise(
-                            id = it.id,
-                            name = it.name,
-                            muscleCategory = muscleCategory,
-                            description = it.description,
-                            imageUrl = it.imageUrl
-                        ),
-                        sets = te.sets,
-                        reps = te.reps,
-                        restSeconds = te.restSeconds
-                    )
-                }
-            }
-            
-            WorkoutTemplate(
-                id = templateEntity.id,
-                userId = templateEntity.userId,
-                name = templateEntity.name,
-                exercises = exercises
-            )
-        } catch (e: Exception) {
-            Log.e("WorkoutRepository", "Error fetching template from local: ${e.message}", e)
-            null
-        }
-    }
-
-    override suspend fun createTemplate(userId: String, name: String, exercises: List<TemplateExercise>): WorkoutTemplate {
-        requireDistinctExercises(exercises)
-        val templateId = UUID.randomUUID().toString()
-        val now = System.currentTimeMillis()
-
-        val templateEntity = WorkoutTemplateEntity(
-            id = templateId,
-            userId = userId,
-            name = name,
-            isDeleted = false,
-            createdAt = now,
-            updatedAt = now,
-            syncStatus = SyncStatus.PENDING_SYNC.name,
-            pendingOperation = PendingOperation.CREATE.name
-        )
-
-        val exerciseEntities = exercises.mapIndexed { index, exercise ->
-            TemplateExerciseEntity(
-                templateId = templateId,
-                exerciseId = exercise.exercise.id,
-                orderIndex = index,
-                sets = exercise.sets,
-                reps = exercise.reps,
-                restSeconds = exercise.restSeconds,
-                syncStatus = SyncStatus.PENDING_SYNC.name,
-                pendingOperation = PendingOperation.CREATE.name,
-                createdAt = now,
-                updatedAt = now
-            )
-        }
-
-        database.withTransaction {
-            localMutationRevision.incrementAndGet()
-            workoutTemplateDao.insertTemplate(templateEntity)
-            if (exerciseEntities.isNotEmpty()) {
-                templateExerciseDao.insertTemplateExercises(exerciseEntities)
-            }
-        }
-        syncScheduler.enqueue(userId)
-        return WorkoutTemplate(
-            id = templateId,
-            userId = userId,
-            name = name,
-            exercises = exercises
-        )
-    }
-
-    override suspend fun updateTemplate(templateId: String, name: String, exercises: List<TemplateExercise>): WorkoutTemplate? {
-        requireDistinctExercises(exercises)
-        val result = database.withTransaction {
-            val existingTemplate = workoutTemplateDao.getTemplateById(templateId)
-                ?: return@withTransaction null
-            val now = System.currentTimeMillis()
-            val operation = pendingUpdateOperation(existingTemplate)
-            localMutationRevision.incrementAndGet()
-            workoutTemplateDao.updateTemplate(
-                existingTemplate.copy(
-                    name = name,
-                    updatedAt = now,
-                    syncStatus = SyncStatus.PENDING_SYNC.name,
-                    pendingOperation = operation
-                )
-            )
-            templateExerciseDao.deleteExercisesByTemplate(templateId)
-            val exerciseEntities = exercises.mapIndexed { index, exercise ->
-                TemplateExerciseEntity(
-                    templateId = templateId,
-                    exerciseId = exercise.exercise.id,
-                    orderIndex = index,
-                    sets = exercise.sets,
-                    reps = exercise.reps,
-                    restSeconds = exercise.restSeconds,
-                    syncStatus = SyncStatus.PENDING_SYNC.name,
-                    pendingOperation = PendingOperation.CREATE.name,
-                    createdAt = now,
-                    updatedAt = now
-                )
-            }
-            if (exerciseEntities.isNotEmpty()) {
-                templateExerciseDao.insertTemplateExercises(exerciseEntities)
-            }
-            WorkoutTemplate(templateId, existingTemplate.userId, name, exercises)
-        }
-
-        if (result != null) syncScheduler.enqueue(result.userId)
-        return result
-    }
-
-    override suspend fun updateTemplateExercises(templateId: String, exercises: List<TemplateExercise>): WorkoutTemplate? {
-        val template = getTemplateById(templateId) ?: return null
-        return updateTemplate(templateId, template.name, exercises)
-    }
-
-    override suspend fun updateTemplateExercise(templateId: String, exerciseId: String, sets: Int, reps: Int, restSeconds: Int): WorkoutTemplate? {
-        val userId = database.withTransaction {
-            val template = workoutTemplateDao.getTemplateById(templateId)
-                ?: return@withTransaction null
-            val existingExercise = templateExerciseDao.getTemplateExercise(templateId, exerciseId)
-                ?: return@withTransaction null
-            val now = System.currentTimeMillis()
-            localMutationRevision.incrementAndGet()
-            workoutTemplateDao.updateTemplate(
-                template.copy(
-                    updatedAt = now,
-                    syncStatus = SyncStatus.PENDING_SYNC.name,
-                    pendingOperation = pendingUpdateOperation(template)
-                )
-            )
-            templateExerciseDao.updateTemplateExercise(existingExercise.copy(
-                sets = sets,
-                reps = reps,
-                restSeconds = restSeconds,
-                syncStatus = SyncStatus.PENDING_SYNC.name,
-                pendingOperation = PendingOperation.UPDATE.name,
-                updatedAt = now
-            ))
-            template.userId
-        }
-
-        if (userId == null) return null
-        syncScheduler.enqueue(userId)
-        return getTemplateById(templateId)
-    }
-
-    override suspend fun deleteTemplate(templateId: String): Boolean {
-        val userId = database.withTransaction {
-            val existing = workoutTemplateDao.getTemplateById(templateId)
-                ?: return@withTransaction null
-            localMutationRevision.incrementAndGet()
-            workoutTemplateDao.updateTemplate(
-                existing.copy(
-                    isDeleted = true,
-                    syncStatus = SyncStatus.PENDING_SYNC.name,
-                    pendingOperation = PendingOperation.DELETE.name,
-                    updatedAt = System.currentTimeMillis()
-                )
-            )
-            existing.userId
-        }
-
-        if (userId == null) return false
-        syncScheduler.enqueue(userId)
-        return true
-    }
-
     override suspend fun startWorkout(template: WorkoutTemplate): WorkoutSession = lifecycleMutex.withLock {
+        val userId = authRepository.getLocalUserId() ?: throw IllegalStateException("Authentication required")
+        require(template.userId == userId) { "Routine owner does not match authenticated user" }
+        getActiveSessionForTimer()?.let { return@withLock it }
         timerCleanup?.stop("SESSION_REPLACED")
-        val userId = authRepository.getLocalUserId() ?: template.userId
         val exerciseLogs = template.exercises.map { templateExercise ->
             val defaults = templateExercise.inputDefaults()
             val previous = getPrefillForExercise(templateExercise.id, userId, defaults)
@@ -487,6 +210,7 @@ class WorkoutRepositoryImpl @Inject constructor(
             lastPauseTime = session.lastPauseTime
         )
         withContext(Dispatchers.IO) { sessionMutex.withLock { database.withTransaction {
+            ensureActiveOwner(userId)
             activeSessionDao.deleteSession(userId)
             activeSessionDao.insertSession(entity)
         } } }
@@ -635,7 +359,6 @@ class WorkoutRepositoryImpl @Inject constructor(
                         )
                     }
                 }
-                localMutationRevision.incrementAndGet()
                 workoutLogDao.insertWorkoutLog(workoutLogEntity)
                 if (exerciseEntities.isNotEmpty()) exerciseLogDao.insertExerciseLogs(exerciseEntities)
                 if (setEntities.isNotEmpty()) workoutSetDao.insertWorkoutSets(setEntities)
@@ -868,9 +591,8 @@ class WorkoutRepositoryImpl @Inject constructor(
     }
     private suspend fun enqueuePendingSyncIfNeeded(userId: String) {
         try {
-            val hasPendingTemplates = workoutTemplateDao.getPendingSyncTemplates(userId).isNotEmpty()
             val hasPendingLogs = workoutLogDao.getPendingLogs(userId).isNotEmpty()
-            if (hasPendingTemplates || hasPendingLogs) {
+            if (hasPendingLogs) {
                 syncScheduler.enqueue(userId)
             }
         } catch (e: CancellationException) {
@@ -878,112 +600,6 @@ class WorkoutRepositoryImpl @Inject constructor(
         } catch (e: Exception) {
             Log.w("WorkoutRepository", "Unable to inspect pending sync queue: ${e.message}")
         }
-    }
-
-    private suspend fun importRemoteTemplatesSnapshot(
-        userId: String,
-        remoteDtos: List<WorkoutTemplateDto>,
-        allowMissingDeletion: Boolean,
-        expectedStartRevision: Long
-    ) {
-        val catalogExercises = remoteDtos.asSequence()
-            .flatMap { it.templateExercises.orEmpty().asSequence() }
-            .mapNotNull { it.exercises }
-            .distinctBy { it.id }
-            .map { dto ->
-                ExerciseEntity(
-                    id = dto.id,
-                    name = dto.name,
-                    description = dto.description,
-                    muscleCategoryId = dto.muscleCategoryId,
-                    imageUrl = dto.imageUrl,
-                    isActive = dto.isActive
-                )
-            }
-            .toList()
-        if (catalogExercises.isNotEmpty() && isStillCurrentOwner(userId)) {
-            exerciseDao.insertExercises(catalogExercises)
-        }
-
-        val now = System.currentTimeMillis()
-        val snapshots = remoteDtos.map { remote ->
-            val createdAt = parseRemoteTimestamp(remote.createdAt, fallbackMs = now)
-            val updatedAt = parseRemoteTimestamp(remote.updatedAt, fallbackMs = createdAt)
-            val parent = WorkoutTemplateEntity(
-                id = remote.id,
-                userId = remote.userId,
-                name = remote.name,
-                isDeleted = remote.isDeleted,
-                syncStatus = SyncStatus.SYNCED.name,
-                pendingOperation = null,
-                createdAt = createdAt,
-                updatedAt = updatedAt
-            )
-            val sortedChildren = remote.templateExercises.orEmpty()
-                .sortedWith(compareBy({ it.orderIndex }, { it.exerciseId }))
-                .distinctBy { it.exerciseId }
-                .map { child ->
-                    TemplateExerciseEntity(
-                        templateId = remote.id,
-                        exerciseId = child.exerciseId,
-                        orderIndex = child.orderIndex,
-                        sets = child.sets,
-                        reps = child.reps,
-                        restSeconds = child.restSeconds,
-                        syncStatus = SyncStatus.SYNCED.name,
-                        pendingOperation = null,
-                        createdAt = updatedAt,
-                        updatedAt = updatedAt
-                    )
-                }
-            parent to sortedChildren
-        }
-        val canDeleteMissing = allowMissingDeletion && (localMutationRevision.get() == expectedStartRevision)
-        snapshotImporter.reconcileActiveTemplates(
-            userId = userId,
-            snapshots = snapshots,
-            allowMissingDeletion = { allowMissingDeletion && localMutationRevision.get() == expectedStartRevision },
-            isCurrentOwner = { isStillCurrentOwner(userId) }
-        )
-    }
-
-    private suspend fun mergeRemoteTemplatesWithLocalOverlay(
-        userId: String,
-        remoteTemplates: List<WorkoutTemplate>
-    ): List<WorkoutTemplate> = database.withTransaction {
-        val allLocal = workoutTemplateDao.getAllTemplatesByUserIncludingDeleted(userId)
-        val localById = allLocal.associateBy { it.id }
-        val result = mutableListOf<WorkoutTemplate>()
-        val seenIds = mutableSetOf<String>()
-
-        for (remote in remoteTemplates) {
-            seenIds += remote.id
-            val local = localById[remote.id]
-            if (local != null) {
-                if (local.isDeleted || local.pendingOperation == PendingOperation.DELETE.name) {
-                    continue
-                }
-                val hasParentPending = local.syncStatus != SyncStatus.SYNCED.name || local.pendingOperation != null
-                val hasChildPending = !hasParentPending && templateExerciseDao.getExercisesForTemplateList(remote.id)
-                    .any { it.syncStatus != SyncStatus.SYNCED.name || it.pendingOperation != null }
-                if (hasParentPending || hasChildPending) {
-                    result += getTemplateById(remote.id) ?: remote
-                } else {
-                    result += remote
-                }
-            } else {
-                result += remote
-            }
-        }
-
-        for (local in allLocal) {
-            if (local.id in seenIds) continue
-            if (local.isDeleted || local.pendingOperation == PendingOperation.DELETE.name) continue
-            if (local.syncStatus != SyncStatus.SYNCED.name || local.pendingOperation != null) {
-                getTemplateById(local.id)?.let { result += it }
-            }
-        }
-        result
     }
 
     private suspend fun importRemoteWorkoutLogSnapshot(userId: String, remote: WorkoutLogDto) {
@@ -1044,7 +660,8 @@ class WorkoutRepositoryImpl @Inject constructor(
                 totalSets = if (child.totalSets > 0) child.totalSets else sets.size,
                 totalReps = if (child.totalReps > 0) child.totalReps else sets.sumOf { it.reps },
                 syncStatus = SyncStatus.SYNCED.name,
-                pendingOperation = null
+                pendingOperation = null,
+                inputDefaults = (child.inputDefaults as? JsonPrimitive)?.contentOrNull
             )
         }
         val setEntities = sortedExercises.flatMapIndexed { exerciseIndex, child ->
@@ -1081,18 +698,6 @@ class WorkoutRepositoryImpl @Inject constructor(
             parts.joinToString("\u001F").toByteArray(StandardCharsets.UTF_8)
         ).toString()
 
-        private fun requireDistinctExercises(exercises: List<TemplateExercise>) {
-            require(exercises.map { it.exercise.id }.distinct().size == exercises.size) {
-                "A workout template cannot contain duplicate exercises"
-            }
-        }
-
-        private fun pendingUpdateOperation(template: WorkoutTemplateEntity): String =
-            if (template.pendingOperation == PendingOperation.CREATE.name) {
-                PendingOperation.CREATE.name
-            } else {
-                PendingOperation.UPDATE.name
-            }
     }
 }
 

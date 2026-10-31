@@ -60,7 +60,7 @@ class RestTimerBackgroundTest {
         val timer = ports.timer()
         val repository = ports.workouts()
         val user = requireNotNull(ports.auth().getLocalUserId())
-        val session = repository.startWorkout(repository.getTemplates(user).first())
+        val session = repository.startWorkout(ports.routines().getRoutines(user).getOrThrow().first())
         val exercise = session.exerciseLogs.first().exercise
         val manager = context.getSystemService(NotificationManager::class.java)
         try {
@@ -111,7 +111,7 @@ class RestTimerBackgroundTest {
         val timer = ports.timer()
         val repository = ports.workouts()
         val user = requireNotNull(ports.auth().getLocalUserId())
-        val session = repository.startWorkout(repository.getTemplates(user).first())
+        val session = repository.startWorkout(ports.routines().getRoutines(user).getOrThrow().first())
         val exercise = session.exerciseLogs.first().exercise
         val manager = context.getSystemService(NotificationManager::class.java)
         try {
@@ -158,7 +158,7 @@ class RestTimerBackgroundTest {
         val timer = ports.timer()
         val repository = ports.workouts()
         val userId = requireNotNull(ports.auth().getLocalUserId())
-        val template = repository.getTemplates(userId).first()
+        val template = ports.routines().getRoutines(userId).getOrThrow().first()
         context.startActivity(Intent(context, MainActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
         val session = repository.startWorkout(template)
         val exercise = session.exerciseLogs.first().exercise

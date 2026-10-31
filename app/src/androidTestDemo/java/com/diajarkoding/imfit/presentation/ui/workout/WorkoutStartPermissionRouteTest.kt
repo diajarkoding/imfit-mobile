@@ -54,11 +54,13 @@ class WorkoutStartPermissionRouteTest {
         prefs.edit().clear().putBoolean(WORKOUT_NOTIFICATION_ASKED, mode == "asked").commit()
         val ports = EntryPointAccessors.fromApplication(rule.activity.application, RestTimerEntryPoint::class.java)
         val repository = ports.workouts()
+        val routines = ports.routines()
         waitFor(text(R.string.redesign_ready))
         val template = runBlocking {
             repository.cancelWorkout()
-            repository.createTemplate(requireNotNull(ports.auth().getLocalUserId()), "Permission fixture $mode",
-                listOf(TemplateExercise(FakeExerciseDataSource.exercises.first(), sets = 1)))
+            val created = routines.createRoutine(requireNotNull(ports.auth().getLocalUserId()), "Permission fixture $mode").getOrThrow()
+            routines.saveRoutine(created.id, created.name,
+                listOf(TemplateExercise(FakeExerciseDataSource.exercises.first(), sets = 1)), created.revision).getOrThrow()
         }
         try {
             rule.onNode(hasScrollToNodeAction()).performScrollToNode(hasText(template.name))
@@ -66,8 +68,7 @@ class WorkoutStartPermissionRouteTest {
             waitFor(text(R.string.action_start_workout))
             val resumed = if (mode == "resume") runBlocking { repository.startWorkout(template) } else null
             if (resumed != null) {
-                // Enter via the real Home resume affordance. An externally seeded session does
-                // not itself emit an observeTemplate update to the already open Detail fixture.
+                // Enter through the real Home resume affordance for the persisted session.
                 rule.onNodeWithContentDescription(text(R.string.action_back)).performClick()
                 waitFor(text(R.string.nav_home))
                 rule.onNode(hasScrollToNodeAction()).performScrollToNode(hasText(template.name))
@@ -90,7 +91,12 @@ class WorkoutStartPermissionRouteTest {
             rule.onAllNodesWithText(text(R.string.rest_alert_limited)).assertCountEquals(0)
             capture("permission-$mode-active")
         } finally {
-            runBlocking { repository.cancelWorkout(); repository.deleteTemplate(template.id) }
+            runBlocking {
+                repository.cancelWorkout()
+                val current = routines.getRoutineById(template.id).getOrThrow()
+                routines.deleteRoutine(template.id, current?.revision,
+                    baselineExerciseIds = current?.exercises?.map { it.id }.orEmpty(), name = template.name).getOrThrow()
+            }
             context.stopService(Intent(context, WorkoutService::class.java))
             prefs.edit().clear().commit()
         }

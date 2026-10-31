@@ -20,6 +20,8 @@ import com.diajarkoding.imfit.domain.model.WorkoutSession
 import com.diajarkoding.imfit.domain.model.WorkoutTemplate
 import com.diajarkoding.imfit.domain.repository.AuthRepository
 import com.diajarkoding.imfit.domain.repository.WorkoutRepository
+import com.diajarkoding.imfit.domain.repository.RoutineRepository
+import androidx.lifecycle.SavedStateHandle
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -118,7 +120,7 @@ class HomeRemoteReadAndStateTest {
 
         val testScope = CoroutineScope(SupervisorJob() + Dispatchers.Unconfined)
         try {
-            val vm = HomeViewModel(auth, workoutRepo, testScope)
+            val vm = HomeViewModel(auth, workoutRepo, workoutRepo, overrideScope = testScope)
             awaitCondition { !vm.state.value.isLoading }
 
             val state = vm.state.value
@@ -149,7 +151,7 @@ class HomeRemoteReadAndStateTest {
 
         val testScope = CoroutineScope(SupervisorJob() + Dispatchers.Unconfined)
         try {
-            val vm = HomeViewModel(auth, workoutRepo, testScope)
+            val vm = HomeViewModel(auth, workoutRepo, workoutRepo, overrideScope = testScope)
             awaitCondition { vm.state.value.lastWorkoutState is SectionLoadState.Success }
 
             val initialLastState = vm.state.value.lastWorkoutState as SectionLoadState.Success
@@ -169,34 +171,6 @@ class HomeRemoteReadAndStateTest {
         }
     }
 
-    @Test
-    fun localFallbackResultMarksSectionAsNotFromRemote() = runBlocking {
-        val user = User("u1", "Iskan", "iskan@imfit.com")
-        val auth = ControllableAuthRepository(user)
-        val offlineLog = WorkoutLog("offline_log", "u1", "Leg Day", 1000L, 1000L, 121000L, 1000f, emptyList())
-        val offlineTemplate = WorkoutTemplate("tpl_local", "u1", "Leg Day", emptyList())
-
-        val workoutRepo = ControllableWorkoutRepository(
-            templatesProvider = { HomeRemoteReadResult.LocalFallback(listOf(offlineTemplate), IOException("Offline")) },
-            lastWorkoutProvider = { HomeRemoteReadResult.LocalFallback(offlineLog, IOException("Offline")) }
-        )
-
-        val testScope = CoroutineScope(SupervisorJob() + Dispatchers.Unconfined)
-        try {
-            val vm = HomeViewModel(auth, workoutRepo, testScope)
-            awaitCondition { !vm.state.value.isLoading }
-
-            val lastState = vm.state.value.lastWorkoutState as SectionLoadState.Success
-            assertFalse(lastState.isFromRemote)
-            assertEquals(offlineLog, lastState.data)
-
-            val tplState = vm.state.value.templatesState as SectionLoadState.Success
-            assertFalse(tplState.isFromRemote)
-            assertEquals(listOf(offlineTemplate), tplState.data)
-        } finally {
-            testScope.cancel()
-        }
-    }
 
     @Test
     fun staleResponseFromPreviousUserOrGenerationCannotOverwriteNewState() = runBlocking {
@@ -217,7 +191,7 @@ class HomeRemoteReadAndStateTest {
 
         val testScope = CoroutineScope(SupervisorJob() + Dispatchers.Unconfined)
         try {
-            val vm = HomeViewModel(auth, workoutRepo, testScope)
+            val vm = HomeViewModel(auth, workoutRepo, workoutRepo, overrideScope = testScope)
             // Switch to User B while User A's template fetch is still suspended
             auth.switchUser(userB)
             slowUserADeferred.complete(HomeRemoteReadResult.RemotePrimary(listOf(templateA)))
@@ -260,7 +234,7 @@ class HomeRemoteReadAndStateTest {
 
         val testScope = CoroutineScope(SupervisorJob() + Dispatchers.Unconfined)
         try {
-            val vm = HomeViewModel(auth, workoutRepo, testScope)
+            val vm = HomeViewModel(auth, workoutRepo, workoutRepo, overrideScope = testScope)
             awaitCondition { !vm.state.value.isLoading }
             assertEquals(listOf(initialTemplate), vm.state.value.templates)
             assertFalse(vm.state.value.isPullRefreshing)
@@ -317,7 +291,7 @@ class HomeRemoteReadAndStateTest {
 
         val testScope = CoroutineScope(SupervisorJob() + Dispatchers.Unconfined)
         try {
-            val vm = HomeViewModel(auth, workoutRepo, testScope)
+            val vm = HomeViewModel(auth, workoutRepo, workoutRepo, overrideScope = testScope)
             awaitCondition { !vm.state.value.isLoading }
 
             // Trigger AUTO refresh (callCount = 2, suspended on autoGate)
@@ -336,6 +310,60 @@ class HomeRemoteReadAndStateTest {
         } finally {
             testScope.cancel()
         }
+    }
+
+    @Test
+    fun unknownCreateOutcomeReplaysOriginalNameAndIdentityAfterRecreation() = runBlocking {
+        val auth = ControllableAuthRepository(User("u1", "User", "user@example.com"))
+        val repo = ControllableWorkoutRepository(
+            templatesProvider = { HomeRemoteReadResult.RemotePrimary(emptyList()) },
+            lastWorkoutProvider = { HomeRemoteReadResult.RemotePrimary(null) }
+        )
+        val requests = mutableListOf<Pair<String, String>>()
+        repo.create = { owner, name, request ->
+            requests += name to request
+            if (requests.size == 1) Result.failure(IOException("response lost after commit"))
+            else Result.success(WorkoutTemplate("committed-routine", owner, name, emptyList(), revision = 1))
+        }
+        val firstScope = CoroutineScope(SupervisorJob() + Dispatchers.Unconfined)
+        val firstHandle = SavedStateHandle()
+        val first = HomeViewModel(auth, repo, repo, firstHandle, firstScope)
+        first.createWorkout("Original routine")
+        assertEquals("Original routine", first.state.value.pendingCreateName)
+        assertNull(first.state.value.newlyCreatedWorkoutId)
+        val restored = SavedStateHandle(firstHandle.keys().associateWith { firstHandle.get<Any?>(it) })
+        firstScope.cancel()
+        val secondScope = CoroutineScope(SupervisorJob() + Dispatchers.Unconfined)
+        try {
+            val second = HomeViewModel(auth, repo, repo, restored, secondScope)
+            assertEquals("committed-routine", second.state.value.newlyCreatedWorkoutId)
+            assertEquals(listOf(requests.first(), requests.first()), requests)
+            second.createWorkout("Changed name")
+            assertEquals(2, requests.size)
+        } finally { secondScope.cancel() }
+    }
+
+    @Test
+    fun accountSwitchNeverAppliesLateCreateReceipt() = runBlocking {
+        val auth = ControllableAuthRepository(User("a", "A", "a@example.com"))
+        val repo = ControllableWorkoutRepository(
+            templatesProvider = { HomeRemoteReadResult.RemotePrimary(emptyList()) },
+            lastWorkoutProvider = { HomeRemoteReadResult.RemotePrimary(null) }
+        )
+        val receipt = CompletableDeferred<Result<WorkoutTemplate>>()
+        repo.create = { _, _, _ -> receipt.await() }
+        val scope = CoroutineScope(SupervisorJob() + Dispatchers.Unconfined)
+        try {
+            val handle = SavedStateHandle()
+            val vm = HomeViewModel(auth, repo, repo, handle, scope)
+            vm.createWorkout("Owner A routine")
+            auth.switchUser(User("b", "B", "b@example.com"))
+            receipt.complete(Result.success(WorkoutTemplate("a-routine", "a", "Owner A routine", emptyList())))
+            assertNull(vm.state.value.newlyCreatedWorkoutId)
+            assertNull(vm.state.value.pendingCreateName)
+            assertFalse(vm.state.value.isCreating)
+            assertNull(handle.get<String>("createRequest"))
+        } finally { scope.cancel() }
     }
 
     private suspend fun awaitCondition(predicate: () -> Boolean) {
@@ -392,21 +420,22 @@ private class ControllableWorkoutRepository(
     private val templatesProvider: suspend (String) -> HomeRemoteReadResult<List<WorkoutTemplate>>,
     private val lastWorkoutProvider: suspend (String) -> HomeRemoteReadResult<WorkoutLog?>,
     private val activeSessionProvider: suspend () -> WorkoutSession? = { null }
-) : WorkoutRepository {
-    override suspend fun fetchRemoteTemplates(userId: String): HomeRemoteReadResult<List<WorkoutTemplate>> =
-        templatesProvider(userId)
+) : WorkoutRepository, RoutineRepository {
+    override suspend fun getRoutines(userId: String): Result<List<WorkoutTemplate>> =
+        runCatching { templatesProvider(userId).data }
+    override suspend fun getRoutineById(routineId: String): Result<WorkoutTemplate?> = Result.success(null)
+    var create: suspend (String, String, String) -> Result<WorkoutTemplate> = { owner, name, _ ->
+        Result.success(WorkoutTemplate("new", owner, name, emptyList(), revision = 1))
+    }
+    override suspend fun createRoutine(userId: String, name: String, requestId: String) = create(userId, name, requestId)
+    override suspend fun saveRoutine(routineId: String, name: String, exercises: List<TemplateExercise>, expectedRevision: Long?, requestId: String, baselineExerciseIds: List<String>): Result<WorkoutTemplate> =
+        Result.failure(UnsupportedOperationException())
+    override suspend fun deleteRoutine(routineId: String, expectedRevision: Long?, requestId: String, baselineExerciseIds: List<String>, name: String): Result<Boolean> =
+        Result.failure(UnsupportedOperationException())
 
     override suspend fun fetchRemoteLastWorkoutLog(userId: String): HomeRemoteReadResult<WorkoutLog?> =
         lastWorkoutProvider(userId)
 
-    override suspend fun getTemplates(userId: String): List<WorkoutTemplate> = emptyList()
-    override suspend fun getTemplateById(templateId: String): WorkoutTemplate? = null
-    override suspend fun createTemplate(userId: String, name: String, exercises: List<TemplateExercise>): WorkoutTemplate =
-        WorkoutTemplate("new", userId, name, exercises)
-    override suspend fun updateTemplate(templateId: String, name: String, exercises: List<TemplateExercise>): WorkoutTemplate? = null
-    override suspend fun updateTemplateExercises(templateId: String, exercises: List<TemplateExercise>): WorkoutTemplate? = null
-    override suspend fun updateTemplateExercise(templateId: String, exerciseId: String, sets: Int, reps: Int, restSeconds: Int): WorkoutTemplate? = null
-    override suspend fun deleteTemplate(templateId: String): Boolean = true
     override suspend fun startWorkout(template: WorkoutTemplate): WorkoutSession =
         throw UnsupportedOperationException()
     override suspend fun getActiveSession(): WorkoutSession? = activeSessionProvider()

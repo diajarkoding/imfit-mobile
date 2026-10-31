@@ -4,6 +4,8 @@ import androidx.activity.ComponentActivity
 import androidx.compose.foundation.layout.Column
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.test.assertCountEquals
+import androidx.compose.ui.test.assertHasClickAction
+import androidx.compose.ui.test.assertIsEnabled
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
@@ -12,8 +14,10 @@ import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
+import androidx.compose.ui.test.performScrollTo
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import com.diajarkoding.imfit.R
+import com.diajarkoding.imfit.data.recovery.LegacyRoutineRecovery
 import com.diajarkoding.imfit.domain.model.ExerciseLog
 import com.diajarkoding.imfit.domain.model.HomeRemoteReadResult
 import com.diajarkoding.imfit.domain.model.RegisterResult
@@ -24,11 +28,14 @@ import com.diajarkoding.imfit.domain.model.WorkoutLog
 import com.diajarkoding.imfit.domain.model.WorkoutSession
 import com.diajarkoding.imfit.domain.model.WorkoutTemplate
 import com.diajarkoding.imfit.domain.repository.AuthRepository
+import com.diajarkoding.imfit.domain.repository.RoutineRepository
 import com.diajarkoding.imfit.domain.repository.WorkoutRepository
 import com.diajarkoding.imfit.presentation.components.common.ImfitMainAppBar
 import com.diajarkoding.imfit.theme.IMFITTheme
 import com.diajarkoding.imfit.theme.LocaleManager
 import kotlinx.coroutines.CompletableDeferred
+import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import org.junit.Assert.assertEquals
@@ -48,15 +55,20 @@ class HomeScreenPresentationTest {
     @Test
     fun loadingShowsComponentMatchingShimmersThenEmptyWorkoutRendersZeroMetrics() {
         val lastLogGate = CompletableDeferred<HomeRemoteReadResult<WorkoutLog?>>()
-        val templatesGate = CompletableDeferred<HomeRemoteReadResult<List<WorkoutTemplate>>>()
+        val templatesGate = CompletableDeferred<Result<List<WorkoutTemplate>>>()
         val auth = FakeHomeUiAuthRepository(
             UserProfileState(isProfileLoadingOverride = true)
         )
         val workoutRepo = FakeHomeUiWorkoutRepository(
-            onFetchTemplates = { templatesGate.await() },
             onFetchLastWorkout = { lastLogGate.await() }
         )
-        val viewModel = HomeViewModel(auth, workoutRepo)
+        val routineRepo = FakeHomeUiRoutineRepository(
+            onGetRoutines = { templatesGate.await() }
+        )
+        val recoveryViewModel = LegacyRoutineRecoveryViewModel(
+            FakeHomeUiLegacyRoutineRecovery(), auth, rule.activity
+        )
+        val viewModel = HomeViewModel(auth, workoutRepo, routineRepo)
         rule.setContent {
             IMFITTheme {
                 Column {
@@ -69,7 +81,8 @@ class HomeScreenPresentationTest {
                     )
                     HomeScreen(
                         onNavigateToWorkoutDetail = {},
-                        viewModel = viewModel
+                        viewModel = viewModel,
+                        recoveryViewModel = recoveryViewModel
                     )
                 }
             }
@@ -85,12 +98,13 @@ class HomeScreenPresentationTest {
         val user = User("u1", "Iskan", "iskan@imfit.com")
         auth.emitProfile(UserProfileState.fromDirectUser(user))
         lastLogGate.complete(HomeRemoteReadResult.RemotePrimary(null))
-        templatesGate.complete(HomeRemoteReadResult.RemotePrimary(emptyList()))
+        templatesGate.complete(Result.success(emptyList()))
 
         rule.waitForIdle()
         rule.onNodeWithTag("home_last_workout_card").assertIsDisplayed()
         rule.onNodeWithText(text(R.string.workout_duration_zero)).assertIsDisplayed()
         rule.onNodeWithText("0 kg").assertIsDisplayed()
+        rule.onAllNodesWithTag("legacy_routine_recovery").assertCountEquals(0)
     }
 
     @Test
@@ -99,21 +113,27 @@ class HomeScreenPresentationTest {
         val auth = FakeHomeUiAuthRepository(UserProfileState.fromDirectUser(user))
         var retryCount = 0
         val workoutRepo = FakeHomeUiWorkoutRepository(
-            onFetchTemplates = {
-                retryCount++
-                throw IOException("Network failure")
-            },
             onFetchLastWorkout = {
                 throw IOException("Network failure")
             }
         )
-        val viewModel = HomeViewModel(auth, workoutRepo)
+        val routineRepo = FakeHomeUiRoutineRepository(
+            onGetRoutines = {
+                retryCount++
+                Result.failure(IOException("Network failure"))
+            }
+        )
+        val viewModel = HomeViewModel(auth, workoutRepo, routineRepo)
+        val recoveryViewModel = LegacyRoutineRecoveryViewModel(
+            FakeHomeUiLegacyRoutineRecovery(), auth, rule.activity
+        )
 
         rule.setContent {
             IMFITTheme {
                 HomeScreen(
                     onNavigateToWorkoutDetail = {},
-                    viewModel = viewModel
+                    viewModel = viewModel,
+                    recoveryViewModel = recoveryViewModel
                 )
             }
         }
@@ -127,6 +147,39 @@ class HomeScreenPresentationTest {
         rule.onNodeWithTag("home_templates_error_retry").performClick()
         rule.waitForIdle()
         assertEquals(beforeRetry + 1, retryCount)
+    }
+
+    @Test
+    fun legacyRecoveryShowsReadOnlyNoticeAndEnabledExportActionForCurrentOwner() {
+        val auth = FakeHomeUiAuthRepository(
+            UserProfileState.fromDirectUser(User("u1", "Iskan", "iskan@imfit.com"))
+        )
+        val recovery = FakeHomeUiLegacyRoutineRecovery(mapOf("u1" to 2, "other" to 5))
+        val recoveryViewModel = LegacyRoutineRecoveryViewModel(recovery, auth, rule.activity)
+        val viewModel = HomeViewModel(
+            auth,
+            FakeHomeUiWorkoutRepository { HomeRemoteReadResult.RemotePrimary(null) },
+            FakeHomeUiRoutineRepository { Result.success(emptyList()) }
+        )
+        rule.setContent {
+            IMFITTheme {
+                HomeScreen(
+                    onNavigateToWorkoutDetail = {},
+                    viewModel = viewModel,
+                    recoveryViewModel = recoveryViewModel
+                )
+            }
+        }
+
+        rule.onNodeWithTag("legacy_routine_recovery").performScrollTo().assertIsDisplayed()
+        rule.onNodeWithText(LocaleManager.getUpdatedContext(rule.activity).getString(R.string.legacy_recovery_title, 2)).assertIsDisplayed()
+        rule.onNodeWithText(text(R.string.legacy_recovery_privacy)).performScrollTo().assertIsDisplayed()
+        rule.onNodeWithText(text(R.string.legacy_recovery_export))
+            .performScrollTo()
+            .assertIsDisplayed()
+            .assertIsEnabled()
+            .assertHasClickAction()
+        assertEquals(0, recovery.exportCalls)
     }
 
     private fun UserProfileState(isProfileLoadingOverride: Boolean): UserProfileState =
@@ -164,21 +217,10 @@ private class FakeHomeUiAuthRepository(initial: UserProfileState) : AuthReposito
 }
 
 private class FakeHomeUiWorkoutRepository(
-    private val onFetchTemplates: suspend (String) -> HomeRemoteReadResult<List<WorkoutTemplate>>,
     private val onFetchLastWorkout: suspend (String) -> HomeRemoteReadResult<WorkoutLog?>
 ) : WorkoutRepository {
-    override suspend fun fetchRemoteTemplates(userId: String): HomeRemoteReadResult<List<WorkoutTemplate>> =
-        onFetchTemplates(userId)
     override suspend fun fetchRemoteLastWorkoutLog(userId: String): HomeRemoteReadResult<WorkoutLog?> =
         onFetchLastWorkout(userId)
-    override suspend fun getTemplates(userId: String): List<WorkoutTemplate> = emptyList()
-    override suspend fun getTemplateById(templateId: String): WorkoutTemplate? = null
-    override suspend fun createTemplate(userId: String, name: String, exercises: List<TemplateExercise>): WorkoutTemplate =
-        WorkoutTemplate("new", userId, name, exercises)
-    override suspend fun updateTemplate(templateId: String, name: String, exercises: List<TemplateExercise>): WorkoutTemplate? = null
-    override suspend fun updateTemplateExercises(templateId: String, exercises: List<TemplateExercise>): WorkoutTemplate? = null
-    override suspend fun updateTemplateExercise(templateId: String, exerciseId: String, sets: Int, reps: Int, restSeconds: Int): WorkoutTemplate? = null
-    override suspend fun deleteTemplate(templateId: String): Boolean = true
     override suspend fun startWorkout(template: WorkoutTemplate): WorkoutSession =
         throw UnsupportedOperationException()
     override suspend fun getActiveSession(): WorkoutSession? = null
@@ -192,4 +234,43 @@ private class FakeHomeUiWorkoutRepository(
     override suspend fun getLastWorkoutLog(userId: String): WorkoutLog? = null
     override suspend fun getLastExerciseLog(exerciseId: String): ExerciseLog? = null
     override suspend fun getLastWeightsForExercise(exerciseId: String, userId: String): Map<Int, Float> = emptyMap()
+}
+
+private class FakeHomeUiRoutineRepository(
+    private val onGetRoutines: suspend (String) -> Result<List<WorkoutTemplate>>
+) : RoutineRepository {
+    override suspend fun getRoutines(userId: String): Result<List<WorkoutTemplate>> = onGetRoutines(userId)
+    override suspend fun getRoutineById(routineId: String): Result<WorkoutTemplate?> =
+        Result.failure(UnsupportedOperationException())
+    override suspend fun createRoutine(userId: String, name: String, requestId: String): Result<WorkoutTemplate> =
+        Result.failure(UnsupportedOperationException())
+    override suspend fun saveRoutine(
+        routineId: String,
+        name: String,
+        exercises: List<TemplateExercise>,
+        expectedRevision: Long?,
+        requestId: String,
+        baselineExerciseIds: List<String>
+    ): Result<WorkoutTemplate> = Result.failure(UnsupportedOperationException())
+    override suspend fun deleteRoutine(
+        routineId: String,
+        expectedRevision: Long?,
+        requestId: String,
+        baselineExerciseIds: List<String>,
+        name: String
+    ): Result<Boolean> = Result.failure(UnsupportedOperationException())
+}
+
+private class FakeHomeUiLegacyRoutineRecovery(
+    private val countsByOwner: Map<String, Int> = emptyMap()
+) : LegacyRoutineRecovery {
+    var exportCalls = 0
+        private set
+
+    override fun observeCount(ownerId: String): Flow<Int> = flowOf(countsByOwner[ownerId] ?: 0)
+
+    override suspend fun export(ownerId: String): String {
+        exportCalls++
+        error("Presentation tests must not execute filesystem exports")
+    }
 }

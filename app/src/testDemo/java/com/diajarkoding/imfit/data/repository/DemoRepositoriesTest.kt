@@ -46,18 +46,16 @@ class DemoRepositoriesTest {
     }
 
     @Test
-    fun workoutRepositorySupportsTemplateAndSessionFlowInMemory() = runBlocking {
+    fun workoutRepositorySupportsSessionFromRemoteSnapshotInMemory() = runBlocking {
         DemoAuthRepository()
         val exercises = DemoExerciseRepository().getAllExercises().take(2)
         val repository = DemoWorkoutRepository()
         repository.cancelWorkout()
 
-        val template = repository.createTemplate(
-            userId = "user_1",
-            name = "UI Test Workout",
-            exercises = exercises.map { com.diajarkoding.imfit.domain.model.TemplateExercise(it) }
+        val template = WorkoutTemplate(
+            id = "remote-snapshot", userId = "user_1", name = "UI Test Workout",
+            exercises = exercises.map { TemplateExercise(it) }
         )
-        assertNotNull(repository.getTemplateById(template.id))
 
         val session = repository.startWorkout(template)
         repository.updateSessionRestOverride(90)
@@ -74,7 +72,6 @@ class DemoRepositoriesTest {
         val log = repository.finishWorkout()
         assertNotNull(log)
         assertNull(repository.getActiveSession())
-        assertTrue(repository.deleteTemplate(template.id))
     }
 
     @Test
@@ -85,22 +82,11 @@ class DemoRepositoriesTest {
         assertEquals(0, provider.syncState.value.pendingCount)
     }
 
-    @Test fun templateObservationUpdatesWithoutSyncOrReopeningRepository() = runBlocking {
-        val repository = DemoWorkoutRepository()
-        val template = repository.createTemplate("user_1", "Before", emptyList())
-        val observed = async(start = CoroutineStart.UNDISPATCHED) {
-            repository.observeTemplate(template.id).first { it?.name == "After" }
-        }
-        repository.updateTemplate(template.id, "After", emptyList())
-        assertEquals("After", withTimeout(2000) { observed.await() }?.name)
-        assertTrue(repository.deleteTemplate(template.id))
-    }
-
     @Test fun concurrentSessionEditsAndCancellationCannotLoseOrResurrectData() = runBlocking {
         val repository = DemoWorkoutRepository()
         repository.cancelWorkout()
         val exercise = DemoExerciseRepository().getAllExercises().first()
-        val template = repository.createTemplate("user_1", "Atomic", listOf(TemplateExercise(exercise)))
+        val template = WorkoutTemplate("atomic-remote", "user_1", "Atomic", listOf(TemplateExercise(exercise)))
         val session = repository.startWorkout(template)
         coroutineScope {
             (1..20).map { async(Dispatchers.Default) {
@@ -116,7 +102,6 @@ class DemoRepositoriesTest {
         assertEquals(replacement.id, repository.getActiveSession()?.id)
         assertNull(repository.mutateActiveSession(session.id) { it })
         repository.cancelWorkout()
-        assertTrue(repository.deleteTemplate(template.id))
     }
 
     @Test fun finishingSessionPublishesOnlyLatestSessionToHomeAndAllLogsToProgress() = runBlocking {
@@ -126,7 +111,7 @@ class DemoRepositoriesTest {
         repository.cancelWorkout()
         val name = "Latest history ${System.nanoTime()}"
         val exercise = DemoExerciseRepository().getAllExercises().first()
-        val template = repository.createTemplate(userId, name, listOf(TemplateExercise(exercise, sets = 1)))
+        val template = WorkoutTemplate("history-remote", userId, name, listOf(TemplateExercise(exercise, sets = 1)))
         val previousLogs = repository.getWorkoutLogs(userId)
         val home = async(start = CoroutineStart.UNDISPATCHED) {
             repository.observeLastWorkoutLog(userId).first { it?.templateName == name }
@@ -151,7 +136,6 @@ class DemoRepositoriesTest {
         } finally {
             home.cancel(); progress.cancel()
             repository.cancelWorkout()
-            repository.deleteTemplate(template.id)
         }
     }
 }

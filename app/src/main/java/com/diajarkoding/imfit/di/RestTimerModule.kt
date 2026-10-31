@@ -8,6 +8,7 @@ import dagger.hilt.components.SingletonComponent
 import javax.inject.Singleton
 import dagger.hilt.EntryPoint
 import com.diajarkoding.imfit.domain.repository.AuthRepository
+import com.diajarkoding.imfit.domain.repository.RoutineRepository
 import com.diajarkoding.imfit.domain.repository.WorkoutRepository
 
 /** Access to the app's real singleton graph for Android integration checks. */
@@ -16,6 +17,7 @@ import com.diajarkoding.imfit.domain.repository.WorkoutRepository
 interface RestTimerEntryPoint {
     fun timer(): RestTimerCoordinator
     fun workouts(): WorkoutRepository
+    fun routines(): RoutineRepository
     fun auth(): AuthRepository
     fun runtime(): RestTimerAndroidRuntime
 }

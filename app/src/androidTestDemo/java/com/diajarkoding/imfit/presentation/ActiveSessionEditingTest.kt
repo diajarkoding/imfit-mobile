@@ -36,12 +36,14 @@ class ActiveSessionEditingTest {
         }
         val ports = EntryPointAccessors.fromApplication(rule.activity.application, RestTimerEntryPoint::class.java)
         val repository = ports.workouts()
+        val routines = ports.routines()
         val first = FakeExerciseDataSource.exercises.first { it.id == "ex_chest_1" }
         val added = FakeExerciseDataSource.exercises.first { it.id == "ex_back_3" }
         val name = "Session edits ${System.nanoTime()}"
         val template = runBlocking {
             repository.cancelWorkout()
-            repository.createTemplate(requireNotNull(ports.auth().getLocalUserId()), name, listOf(TemplateExercise(first)))
+            val created = routines.createRoutine(requireNotNull(ports.auth().getLocalUserId()), name).getOrThrow()
+            routines.saveRoutine(created.id, name, listOf(TemplateExercise(first)), created.revision).getOrThrow()
         }
         try {
             rule.onNode(hasScrollToNodeAction()).performScrollToNode(hasText(name))
@@ -60,7 +62,7 @@ class ActiveSessionEditingTest {
             rule.onNodeWithText(addOne).performClick()
             rule.waitUntil(15_000) { runBlocking { repository.getActiveSession()?.exerciseLogs?.any { it.exercise.id == added.id } == true } }
             assertEquals(original.id, runBlocking { repository.getActiveSession()?.id })
-            assertEquals(1, runBlocking { repository.getTemplateById(template.id)?.exercises?.size })
+            assertEquals(1, runBlocking { routines.getRoutineById(template.id).getOrThrow()?.exercises?.size })
             runBlocking {
                 repository.mutateActiveSession(original.id) { current -> current.copy(exerciseLogs = current.exerciseLogs.map { log ->
                     if (log.exercise.id != first.id) log else log.copy(sets = log.sets.mapIndexed { index, set ->
@@ -85,7 +87,12 @@ class ActiveSessionEditingTest {
             runBlocking { repository.updateActiveSession(original) }
             assertNull(runBlocking { repository.getActiveSession() })
         } finally {
-            runBlocking { repository.cancelWorkout(); repository.deleteTemplate(template.id) }
+            runBlocking {
+                repository.cancelWorkout()
+                val current = routines.getRoutineById(template.id).getOrThrow()
+                routines.deleteRoutine(template.id, current?.revision,
+                    baselineExerciseIds = current?.exercises?.map { it.id }.orEmpty(), name = template.name).getOrThrow()
+            }
         }
     }
 }

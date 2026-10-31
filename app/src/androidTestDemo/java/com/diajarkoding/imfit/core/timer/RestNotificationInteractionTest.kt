@@ -31,7 +31,7 @@ class RestNotificationInteractionTest {
         val ports = EntryPointAccessors.fromApplication(context.applicationContext, RestTimerEntryPoint::class.java)
         val user = requireNotNull(ports.auth().getLocalUserId())
         val repository = ports.workouts()
-        val template = repository.getTemplates(user).first()
+        val template = ports.routines().getRoutines(user).getOrThrow().first()
         val session = repository.startWorkout(template)
         val timer = ports.timer()
         val manager = context.getSystemService(NotificationManager::class.java)

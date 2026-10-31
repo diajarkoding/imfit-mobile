@@ -41,7 +41,9 @@ class HeaderSpacingTest {
                                 if (current.page.endsWith("loading")) "" else "Synthetic User"),
                             false, true, {}, {}, {}, {}, {})
                         "catalog" -> ExerciseListContent(ExerciseCategory.CHEST, ExerciseBrowserState(), {}, {}, {})
-                        "picker" -> ExercisePickerContent(ExerciseSelectionState(), {}, {}, {}, {}, {}, {}, {}, {}, {})
+                        "picker" -> ExercisePickerContent(ExerciseSelectionState(), onBack = {}, onSearch = {},
+                            onCategory = {}, onToggle = {}, onReset = {}, onClearFilters = {}, onRetry = {},
+                            onRefresh = {}, onLoadNext = {}, onFilter = {}, onConfirm = {})
                         "detail", "detail-loading" -> WorkoutDetailContent(
                             WorkoutDetailState(workout = if (current.page.endsWith("loading")) null
                                 else WorkoutTemplate("fixture", "fixture", "Synthetic Routine", emptyList()),

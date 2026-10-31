@@ -18,7 +18,7 @@ import androidx.test.platform.app.InstrumentationRegistry
 import com.diajarkoding.imfit.di.RestTimerEntryPoint
 import dagger.hilt.android.EntryPointAccessors
 import com.diajarkoding.imfit.domain.model.TemplateExercise
-import com.diajarkoding.imfit.domain.repository.ExerciseRepository
+import com.diajarkoding.imfit.domain.repository.RoutineRepository
 import com.diajarkoding.imfit.data.local.FakeExerciseDataSource
 import kotlinx.coroutines.runBlocking
 import java.time.YearMonth
@@ -40,6 +40,11 @@ class RedesignNavigationTest {
         File(directory, "$name-$profile.png").outputStream().use {
             rule.onRoot().captureToImage().asAndroidBitmap().compress(Bitmap.CompressFormat.PNG, 100, it)
         }
+    }
+
+    private suspend fun deleteFixture(repository: RoutineRepository, id: String) {
+        val current = repository.getRoutineById(id).getOrThrow() ?: return
+        repository.deleteRoutine(id, current.revision, baselineExerciseIds = current.exercises.map { it.id }, name = current.name).getOrThrow()
     }
 
     @Test fun rootTabsSearchCategoryAndProfileUseRealDestinations() {
@@ -79,18 +84,21 @@ class RedesignNavigationTest {
         waitForText(text(R.string.title_profile))
     }
 
-    @Test fun homeCreateDialogStillCreatesNamedEmptyTemplateAndOpensDetail() {
+    @Test fun homeCreateDialogOpensInitialPickerAndBackShowsOneEmptyDetail() {
         waitForText(text(R.string.redesign_ready))
         rule.onNode(hasScrollToNodeAction()).performScrollToNode(hasText(text(R.string.home_add_day)))
         rule.onNodeWithText(text(R.string.home_add_day)).performClick()
         rule.onNode(hasText(text(R.string.home_workout_placeholder)) and hasSetTextAction())
             .performTextInput("Redesign smoke template")
         rule.onNode(hasText(text(R.string.routine_create_action)) and hasClickAction()).performClick()
+        waitForText(text(R.string.routine_picker_title))
+        rule.onNodeWithTag("exercise_picker_search").assertIsDisplayed()
+        rule.onNodeWithContentDescription(text(R.string.action_back)).performClick()
         waitForText("Redesign smoke template")
-        // Assert navigation completed, rather than matching text in the open dialog.
-        rule.waitUntil(15_000) {
-            rule.onAllNodesWithText(text(R.string.home_create_workout_title)).fetchSemanticsNodes().isEmpty()
-        }
+        rule.onNodeWithText(text(R.string.routine_empty_badge)).assertIsDisplayed()
+        rule.onNodeWithContentDescription(text(R.string.action_back)).performClick()
+        waitForText(text(R.string.redesign_ready))
+        rule.onNodeWithText(text(R.string.routine_picker_title)).assertDoesNotExist()
     }
 
     @Test fun lightDarkAndBothLocalesRenderAllRootTabs() {
@@ -127,13 +135,14 @@ class RedesignNavigationTest {
     @Test fun editedNameAppearsOnRetainedDetailAndHomeWithoutSync() {
         waitForText(text(R.string.redesign_ready))
         val ports = EntryPointAccessors.fromApplication(rule.activity.application, RestTimerEntryPoint::class.java)
-        val repository = ports.workouts()
+        val repository = ports.routines()
         val before = "Rename ${System.nanoTime()}"
         val after = "$before saved"
         val template = runBlocking {
-            repository.createTemplate(requireNotNull(ports.auth().getLocalUserId()), before, emptyList())
+            repository.createRoutine(requireNotNull(ports.auth().getLocalUserId()), before).getOrThrow()
         }
         try {
+            rule.onNodeWithTag("home_pull_to_refresh").performTouchInput { swipeDown() }
             rule.onNode(hasScrollToNodeAction()).performScrollToNode(hasText(before))
             rule.onNodeWithText(before).performClick()
             waitForText(before)
@@ -145,7 +154,7 @@ class RedesignNavigationTest {
             rule.onNodeWithContentDescription(text(R.string.action_back)).performClick()
             rule.onNode(hasScrollToNodeAction()).performScrollToNode(hasText(after))
             rule.onNodeWithText(after).assertIsDisplayed()
-        } finally { runBlocking { repository.deleteTemplate(template.id) } }
+        } finally { runBlocking { deleteFixture(repository, template.id) } }
     }
 
     @Test fun homeHistoryUpdatesToOneFinishedSessionWithoutReopeningHomeOrWaitingForCloud() {
@@ -155,8 +164,9 @@ class RedesignNavigationTest {
         val name = "Latest card ${System.nanoTime()}"
         val template = runBlocking {
             repository.cancelWorkout()
-            repository.createTemplate(requireNotNull(ports.auth().getLocalUserId()), name,
-                listOf(TemplateExercise(FakeExerciseDataSource.exercises.first(), sets = 1)))
+            val empty = ports.routines().createRoutine(requireNotNull(ports.auth().getLocalUserId()), name).getOrThrow()
+            ports.routines().saveRoutine(empty.id, name,
+                listOf(TemplateExercise(FakeExerciseDataSource.exercises.first(), sets = 1)), empty.revision).getOrThrow()
         }
         try {
             val finished = runBlocking {
@@ -172,6 +182,44 @@ class RedesignNavigationTest {
             waitForText(heading)
             rule.onNodeWithText(heading).assertIsDisplayed()
             rule.onNodeWithText(String.format(locale, "%,.0f kg", finished.totalVolume)).assertIsDisplayed()
-        } finally { runBlocking { repository.cancelWorkout(); repository.deleteTemplate(template.id) } }
+        } finally { runBlocking { repository.cancelWorkout(); deleteFixture(ports.routines(), template.id) } }
+    }
+
+    @Test fun completeExistingRoutineRecreatesSetupAndAcceptsInitialSelectionOnce() {
+        waitForText(text(R.string.redesign_ready))
+        val ports = EntryPointAccessors.fromApplication(rule.activity.application, RestTimerEntryPoint::class.java)
+        val repository = ports.routines()
+        val owner = runBlocking { requireNotNull(ports.auth().getLocalUserId()) }
+        val name = "Complete existing ${System.nanoTime()}"
+        val routine = runBlocking { repository.createRoutine(owner, name).getOrThrow() }
+        val beforeCount = runBlocking { repository.getRoutines(owner).getOrThrow().size }
+        try {
+            rule.onNodeWithTag("home_pull_to_refresh").performTouchInput { swipeDown() }
+            rule.onNode(hasScrollToNodeAction()).performScrollToNode(hasText(name))
+            rule.onNodeWithText(name).performClick()
+            waitForText(text(R.string.routine_complete_action))
+            rule.onNodeWithText(text(R.string.routine_complete_action)).performClick()
+            waitForText(text(R.string.routine_picker_title))
+            val exercise = FakeExerciseDataSource.exercises.first { it.id == "ex_chest_1" }
+            rule.onNodeWithTag("exercise_picker_search").performTextInput(exercise.name)
+            androidx.test.espresso.Espresso.closeSoftKeyboard()
+            waitForText(exercise.name)
+            rule.onNodeWithText(exercise.name).performClick()
+            val addOne = LocaleManager.getUpdatedContext(rule.activity).getString(R.string.routine_add_count, 1)
+            rule.onNodeWithText(addOne).performClick()
+            waitForText(text(R.string.routine_setup_title))
+            rule.activityRule.scenario.recreate()
+            waitForText(text(R.string.routine_setup_title))
+            rule.onAllNodesWithText(exercise.name).assertCountEquals(1)
+            rule.onNodeWithText(text(R.string.action_save_template)).performClick()
+            waitForText(name)
+            rule.onNodeWithText(text(R.string.routine_setup_title)).assertDoesNotExist()
+            val saved = runBlocking { requireNotNull(repository.getRoutineById(routine.id).getOrThrow()) }
+            org.junit.Assert.assertEquals(listOf(exercise.id), saved.exercises.map { it.exercise.id })
+            org.junit.Assert.assertEquals(beforeCount, runBlocking { repository.getRoutines(owner).getOrThrow().size })
+            rule.onNodeWithContentDescription(text(R.string.action_back)).performClick()
+            waitForText(text(R.string.redesign_ready))
+            rule.onNodeWithText(text(R.string.routine_picker_title)).assertDoesNotExist()
+        } finally { runBlocking { deleteFixture(repository, routine.id) } }
     }
 }

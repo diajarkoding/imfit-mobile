@@ -477,16 +477,16 @@ gantt
 ```
 
 ### Phase 0: Baseline, Rekonsiliasi, dan Logical Backup
-- [ ] Buat logical backup penuh Supabase project `imfit` menggunakan pg_dump / SQL export.
-- [ ] Lakukan uji restore hasil backup pada schema terisolasi.
-- [ ] Verifikasi rekonsiliasi file migrasi repo lokal (`supabase/migrations`) dengan tabel `supabase_migrations.schema_migrations` pada server live.
-- [ ] Freeze review tabel mapping 161 exercise sebelum eksekusi DML.
+- [x] Buat logical backup penuh Supabase project `imfit` menggunakan pg_dump / SQL export. (SELESAI - 5 file SQL di `IMFIT-SAFE/phase0/backups`, SHA256 verified)
+- [x] Lakukan uji restore hasil backup pada schema terisolasi. (SELESAI - PostgreSQL 17 cluster lokal 127.0.0.1:54322, 0 exit code, row counts match 100%, 0 orphan)
+- [x] Verifikasi rekonsiliasi file migrasi repo lokal (`supabase/migrations`) dengan tabel `supabase_migrations.schema_migrations` pada server live. (SELESAI - Timestamp diselaraskan, 20261031154000 repaired)
+- [x] Freeze review tabel mapping 161 exercise sebelum eksekusi DML. (SELESAI - Review 161 exercise PASS)
 
 ### Phase 1: Database Additive Schema & Catalog Backfill
-- [ ] Terapkan DDL migrasi additive (`20261101000100_exercise_multimodality_tracking.sql`).
-- [ ] Terapkan DML backfill default tracking type dan tabel `exercise_tracking_modes` untuk 161 latihan.
-- [ ] Verifikasi RLS dan integritas foreign keys untuk tabel baru.
-- [ ] Tambahkan snapshot schema version 2 pada `active_sessions`.
+- [x] Terapkan DDL migrasi additive (`20261101000100_exercise_multimodality_tracking.sql`). (SELESAI - Deployed to live Supabase)
+- [x] Terapkan DML backfill default tracking type dan tabel `exercise_tracking_modes` untuk 161 latihan. (SELESAI - 161 exercises, 196 mode relations)
+- [x] Verifikasi RLS dan integritas foreign keys untuk tabel baru. (SELESAI - authenticated SELECT granted, anon denied, no client writes)
+- [x] Tambahkan snapshot schema version 2 pada `active_sessions`. (SELESAI - Constraint updated to schema_version IN (1, 2))
 
 ### Phase 2: Backend Services & RPC Modernization
 - [ ] Update RPC `save_template_revision` agar menerima `tracking_type`, `target_duration_seconds`, dan `target_distance_meters`.

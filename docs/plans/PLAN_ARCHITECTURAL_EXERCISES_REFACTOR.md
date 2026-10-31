@@ -489,12 +489,12 @@ gantt
 - [x] Tambahkan snapshot schema version 2 pada `active_sessions`. (SELESAI - Constraint updated to schema_version IN (1, 2))
 
 ### Phase 2: Backend Services & RPC Modernization
-- [ ] Update RPC `save_template_revision` agar menerima `tracking_type`, `target_duration_seconds`, dan `target_distance_meters`.
-- [ ] Update RPC `create_active_session` untuk memproduksi snapshot session JSON v2.
-- [ ] Update RPC `update_active_session` dengan validasi per `tracking_type` pada `complete_set` dan `edit_set`.
-- [ ] Update RPC `terminal_session` dan `persist_local_workout_aggregate` untuk kalkulasi metrik terpisah.
-- [ ] Update RPC `get_exercise_prefill` agar mem-prefill metrik yang relevan dengan tipe tracking.
-- [ ] Update RPC `get_progress_summary` dan `get_workout_detail`.
+- [x] Update RPC `save_template_revision` agar menerima `tracking_type`, `target_duration_seconds`, dan `target_distance_meters`. (SELESAI - Backward-compatible v1 & v2 deployed)
+- [x] Update RPC `create_active_session` untuk memproduksi snapshot session JSON v2. (SELESAI - schema_version = 2 with typed metadata deployed)
+- [x] Update RPC `update_active_session` dengan validasi per `tracking_type` pada `complete_set` dan `edit_set`. (SELESAI - Typed set validation deployed, Push-Up 0kg PASS, Bench Press 0kg rejected)
+- [x] Update RPC `terminal_session` dan `persist_local_workout_aggregate` untuk kalkulasi metrik terpisah. (SELESAI - Independent metrics & idempotency receipts deployed)
+- [x] Update RPC `get_exercise_prefill` agar mem-prefill metrik yang relevan dengan tipe tracking. (SELESAI - Typed prefill without cross-contamination deployed)
+- [x] Update RPC `get_progress_summary` dan `get_workout_detail`. (SELESAI - Modality-separated metrics & raw parity verified)
 
 ### Phase 3: Android Domain, Room Migration, & Repository
 - [ ] Buat enum `TrackingType`, model `ExerciseTarget`, dan `SetMeasurement`.

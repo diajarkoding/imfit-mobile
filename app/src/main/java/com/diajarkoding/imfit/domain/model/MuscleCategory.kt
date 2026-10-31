@@ -11,5 +11,7 @@ enum class MuscleCategory(@StringRes val stringResourceId: Int, val displayName:
     TRICEPS(R.string.muscle_category_triceps, "Triceps"),
     LEGS(R.string.muscle_category_legs, "Legs"),
     CORE(R.string.muscle_category_core, "Core"),
-    CARDIO(R.string.muscle_category_cardio, "Cardio")
+    CARDIO(R.string.muscle_category_cardio, "Cardio");
+
+    val databaseId: Int get() = ordinal + 1
 }

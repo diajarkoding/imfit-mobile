@@ -17,6 +17,10 @@ import com.diajarkoding.imfit.data.sync.SyncStateProvider
 import com.diajarkoding.imfit.domain.repository.AuthRepository
 import com.diajarkoding.imfit.domain.repository.ExerciseRepository
 import com.diajarkoding.imfit.domain.repository.WorkoutRepository
+import com.diajarkoding.imfit.domain.repository.RoutineRepository
+import com.diajarkoding.imfit.domain.repository.ExerciseCatalogRepository
+import com.diajarkoding.imfit.data.repository.SupabaseRoutineRepository
+import com.diajarkoding.imfit.data.repository.SupabaseExerciseCatalogRepository
 import dagger.Binds
 import dagger.Module
 import dagger.hilt.InstallIn
@@ -52,6 +56,13 @@ abstract class AppModule {
     @Binds
     @Singleton
     abstract fun bindWorkoutRepository(impl: WorkoutRepositoryImpl): WorkoutRepository
+    @Binds
+    @Singleton
+    abstract fun bindRoutineRepository(impl: SupabaseRoutineRepository): RoutineRepository
+
+    @Binds
+    @Singleton
+    abstract fun bindExerciseCatalogRepository(impl: SupabaseExerciseCatalogRepository): ExerciseCatalogRepository
 
     @Binds
     @Singleton

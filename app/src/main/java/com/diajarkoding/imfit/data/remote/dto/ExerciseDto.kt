@@ -34,6 +34,7 @@ fun ExerciseDto.toDomain(): Exercise {
         name = name,
         muscleCategory = category,
         description = description,
-        imageUrl = imageUrl
+        imageUrl = imageUrl,
+        isActive = isActive
     )
 }

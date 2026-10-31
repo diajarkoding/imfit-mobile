@@ -16,6 +16,11 @@ object DatabaseModule {
 
     @Provides
     @Singleton
+    fun provideLegacyRoutineRecovery(implementation: com.diajarkoding.imfit.data.recovery.RoomLegacyRoutineRecovery):
+        com.diajarkoding.imfit.data.recovery.LegacyRoutineRecovery = implementation
+
+    @Provides
+    @Singleton
     fun provideIMFITDatabase(
         @ApplicationContext context: Context
     ): IMFITDatabase {
@@ -38,12 +43,6 @@ object DatabaseModule {
 
     @Provides
     fun provideExerciseDao(database: IMFITDatabase) = database.exerciseDao()
-
-    @Provides
-    fun provideWorkoutTemplateDao(database: IMFITDatabase) = database.workoutTemplateDao()
-
-    @Provides
-    fun provideTemplateExerciseDao(database: IMFITDatabase) = database.templateExerciseDao()
 
     @Provides
     fun provideWorkoutLogDao(database: IMFITDatabase) = database.workoutLogDao()

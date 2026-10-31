@@ -52,8 +52,8 @@ abstract class IMFITDatabase : RoomDatabase() {
         workoutSetDao().deleteSetsByUser(userId)
         exerciseLogDao().deleteExerciseLogsByUser(userId)
         workoutLogDao().deleteWorkoutLogsByUser(userId)
-        templateExerciseDao().deleteExercisesByUser(userId)
-        workoutTemplateDao().deleteTemplatesByUser(userId)
+        // Legacy routines are an owner-scoped recovery archive, not cached server data.
+        // Preserve originals across logout; only that owner can access their export after login.
         activeSessionDao().deleteSession(userId)
         userDao().deleteUserById(userId)
     }

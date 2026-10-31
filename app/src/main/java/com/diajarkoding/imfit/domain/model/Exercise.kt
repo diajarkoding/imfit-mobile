@@ -5,5 +5,6 @@ data class Exercise(
     val name: String,
     val muscleCategory: MuscleCategory,
     val description: String,
-    val imageUrl: String? = null
+    val imageUrl: String? = null,
+    val isActive: Boolean = true
 )

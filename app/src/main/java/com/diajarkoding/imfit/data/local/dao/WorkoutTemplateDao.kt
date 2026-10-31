@@ -2,72 +2,38 @@ package com.diajarkoding.imfit.data.local.dao
 
 import androidx.room.*
 import com.diajarkoding.imfit.data.local.entity.WorkoutTemplateEntity
-import kotlinx.coroutines.flow.Flow
 
 @Dao
 interface WorkoutTemplateDao {
-    @Query("SELECT * FROM workout_templates WHERE user_id = :userId AND is_deleted = 0")
-    fun getTemplatesByUser(userId: String): Flow<List<WorkoutTemplateEntity>>
+    /** Legacy quarantine only; includes tombstones and dirty children without reviving them. */
+    @Query("""
+        SELECT * FROM workout_templates AS parent
+        WHERE parent.user_id = :userId AND (
+            parent.pending_operation IS NOT NULL OR parent.sync_status != 'SYNCED'
+            OR EXISTS (
+                SELECT 1 FROM template_exercises AS child
+                WHERE child.template_id = parent.id
+                AND (child.pending_operation IS NOT NULL OR child.sync_status != 'SYNCED')
+            )
+        )
+        ORDER BY parent.id
+    """)
+    suspend fun getQuarantinedTemplates(userId: String): List<WorkoutTemplateEntity>
 
-    @Query("SELECT * FROM workout_templates WHERE user_id = :userId AND is_deleted = 0")
-    suspend fun getTemplatesByUserList(userId: String): List<WorkoutTemplateEntity>
-
+    @Query("""
+        SELECT COUNT(*) FROM workout_templates AS parent
+        WHERE parent.user_id = :userId AND (
+            parent.pending_operation IS NOT NULL OR parent.sync_status != 'SYNCED'
+            OR EXISTS (
+                SELECT 1 FROM template_exercises AS child
+                WHERE child.template_id = parent.id
+                AND (child.pending_operation IS NOT NULL OR child.sync_status != 'SYNCED')
+            )
+        )
+    """)
+    suspend fun countQuarantinedTemplates(userId: String): Int
 
     @Query("SELECT * FROM workout_templates WHERE user_id = :userId")
     suspend fun getAllTemplatesByUserIncludingDeleted(userId: String): List<WorkoutTemplateEntity>
 
-    @Query("SELECT COUNT(*) FROM workout_templates WHERE user_id = :userId")
-    suspend fun countAllUserTemplates(userId: String): Int
-    @Query("SELECT * FROM workout_templates WHERE id = :id AND is_deleted = 0")
-    suspend fun getTemplateById(id: String): WorkoutTemplateEntity?
-
-    @Query("SELECT * FROM workout_templates WHERE id = :id")
-    suspend fun getTemplateByIdIncludingDeleted(id: String): WorkoutTemplateEntity?
-
-    @Insert(onConflict = OnConflictStrategy.REPLACE)
-    suspend fun insertTemplate(template: WorkoutTemplateEntity)
-
-    @Insert(onConflict = OnConflictStrategy.REPLACE)
-    suspend fun insertTemplates(templates: List<WorkoutTemplateEntity>)
-
-    @Update
-    suspend fun updateTemplate(template: WorkoutTemplateEntity)
-
-    @Query("UPDATE workout_templates SET is_deleted = 1, sync_status = :syncStatus, pending_operation = 'DELETE' WHERE id = :id")
-    suspend fun softDeleteTemplate(id: String, syncStatus: String)
-
-    @Query("UPDATE workout_templates SET is_deleted = 1 WHERE id = :id")
-    suspend fun deleteTemplate(id: String)
-
-    @Query("DELETE FROM workout_templates WHERE user_id = :userId")
-    suspend fun deleteTemplatesByUser(userId: String)
-
-    @Query("DELETE FROM workout_templates")
-    suspend fun deleteAllTemplates()
-
-    // Sync-aware queries
-    @Query("SELECT * FROM workout_templates WHERE sync_status = :syncStatus")
-    suspend fun getTemplatesBySyncStatus(syncStatus: String): List<WorkoutTemplateEntity>
-
-    @Query("SELECT * FROM workout_templates WHERE user_id = :userId AND pending_operation IS NOT NULL")
-    suspend fun getPendingSyncTemplates(userId: String): List<WorkoutTemplateEntity>
-
-    @Query("UPDATE workout_templates SET sync_status = :syncStatus, pending_operation = NULL WHERE id = :id")
-    suspend fun markAsSynced(id: String, syncStatus: String)
-
-    @Query("""
-        UPDATE workout_templates
-        SET sync_status = 'SYNCED', pending_operation = NULL
-        WHERE id = :id
-          AND updated_at = :expectedUpdatedAt
-          AND pending_operation = :expectedOperation
-    """)
-    suspend fun markAsSyncedIfUnchanged(
-        id: String,
-        expectedUpdatedAt: Long,
-        expectedOperation: String
-    ): Int
-
-    @Query("UPDATE workout_templates SET sync_status = :syncStatus WHERE id = :id")
-    suspend fun updateSyncStatus(id: String, syncStatus: String)
 }

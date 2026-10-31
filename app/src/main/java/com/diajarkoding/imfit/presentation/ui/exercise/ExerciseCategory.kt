@@ -9,7 +9,7 @@ import com.diajarkoding.imfit.domain.model.MuscleCategory
 enum class ExerciseCategory(
     @StringRes val labelRes: Int,
     val artwork: String,
-    private val domainCategory: MuscleCategory? = null
+    val domainCategory: MuscleCategory? = null
 ) {
     CHEST(R.string.muscle_category_chest, "chest.svg", MuscleCategory.CHEST),
     BACK(R.string.muscle_category_back, "back.svg", MuscleCategory.BACK),
@@ -23,6 +23,12 @@ enum class ExerciseCategory(
     CALVES(R.string.exercise_category_calves, "calves.svg"),
     CARDIO(R.string.muscle_category_cardio, "cardio.svg", MuscleCategory.CARDIO),
     ALL(R.string.exercise_category_all, "all-muscles.svg");
+
+    val databaseId: Int? get() = when (this) {
+        ALL, FOREARMS -> null
+        GLUTES, CALVES -> MuscleCategory.LEGS.databaseId
+        else -> domainCategory?.databaseId
+    }
 
     fun includes(exercise: Exercise): Boolean = when (this) {
         ALL -> true
@@ -38,7 +44,13 @@ enum class ExerciseCategory(
         private val verifiedSubgroups = mapOf(
             "ex_legs_3" to setOf(GLUTES), // Romanian deadlift
             "ex_legs_6" to setOf(CALVES), // Calf raises
-            "ex_legs_7" to setOf(GLUTES) // Lunges
+            "ex_legs_7" to setOf(GLUTES), // Lunges
+            "ex_legs_10" to setOf(GLUTES), // Glute Bridge
+            "ex_legs_14" to setOf(GLUTES), // Barbell Hip Thrust
+            "ex_legs_15" to setOf(GLUTES), // Dumbbell Walking Lunges
+            "ex_legs_17" to setOf(CALVES), // Seated Calf Raise Machine
+            "ex_legs_18" to setOf(GLUTES), // Cable Pull-Through
+            "ex_legs_20" to setOf(GLUTES) // Hip Abductor Machine
         )
 
         fun fromRoute(name: String): ExerciseCategory =

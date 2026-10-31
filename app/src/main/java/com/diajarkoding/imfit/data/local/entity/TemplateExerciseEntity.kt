@@ -16,7 +16,7 @@ data class TemplateExerciseEntity(
     @ColumnInfo(name = "order_index")
     val orderIndex: Int,
     val sets: Int,
-    val reps: Int,
+    val reps: Int? = null,
     @ColumnInfo(name = "rest_seconds")
     val restSeconds: Int,
     @ColumnInfo(name = "sync_status")
@@ -26,5 +26,11 @@ data class TemplateExerciseEntity(
     @ColumnInfo(name = "created_at")
     val createdAt: Long = System.currentTimeMillis(),
     @ColumnInfo(name = "updated_at")
-    val updatedAt: Long = System.currentTimeMillis()
+    val updatedAt: Long = System.currentTimeMillis(),
+    @ColumnInfo(name = "tracking_type")
+    val trackingType: String = "WEIGHT_REPS",
+    @ColumnInfo(name = "target_duration_seconds")
+    val targetDurationSeconds: Int? = null,
+    @ColumnInfo(name = "target_distance_meters")
+    val targetDistanceMeters: Int? = null
 )

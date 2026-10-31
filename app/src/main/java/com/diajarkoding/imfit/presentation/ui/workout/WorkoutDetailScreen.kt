@@ -165,7 +165,7 @@ internal fun RoutineExerciseRow(exercise: TemplateExercise) {
             MuscleCategoryArtwork(categoryArtAsset(exercise.muscleCategory), Modifier.size(48.dp, 56.dp).background(c.raised, RoutineControlShape))
             Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
                 Text(exercise.name, color = c.text, style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.SemiBold)
-                Text(stringResource(R.string.routine_prescription, stringResource(exercise.muscleCategory.stringResourceId), exercise.sets, exercise.reps, exercise.restSeconds),
+                Text(stringResource(R.string.routine_prescription, stringResource(exercise.muscleCategory.stringResourceId), exercise.sets, exercise.reps ?: 0, exercise.restSeconds),
                     color = c.muted, style = MaterialTheme.typography.bodySmall)
             }
         }

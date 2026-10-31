@@ -1,6 +1,8 @@
 package com.diajarkoding.imfit.data.remote.dto
 
 import com.diajarkoding.imfit.domain.model.ExerciseLog
+import com.diajarkoding.imfit.domain.model.ExerciseModality
+import com.diajarkoding.imfit.domain.model.TrackingType
 import com.diajarkoding.imfit.domain.model.WorkoutLog
 import com.diajarkoding.imfit.domain.model.WorkoutSet
 import kotlinx.serialization.SerialName
@@ -36,7 +38,15 @@ data class WorkoutLogDto(
     @SerialName("deleted_at")
     val deletedAt: String? = null,
     @SerialName("exercise_logs")
-    val exerciseLogs: List<ExerciseLogDto>? = null
+    val exerciseLogs: List<ExerciseLogDto>? = null,
+    @SerialName("total_duration_seconds")
+    val totalDurationSeconds: Int = 0,
+    @SerialName("total_distance_meters")
+    val totalDistanceMeters: Int = 0,
+    @SerialName("additional_volume")
+    val additionalVolume: Double = 0.0,
+    @SerialName("data_quality")
+    val dataQuality: String = "LEGACY_UNVERIFIED"
 )
 
 @Serializable
@@ -62,7 +72,19 @@ data class ExerciseLogDto(
     val workoutSets: List<WorkoutSetDto>? = null,
     val exercises: ExerciseDto? = null,
     @SerialName("input_defaults")
-    val inputDefaults: JsonElement? = null
+    val inputDefaults: JsonElement? = null,
+    @SerialName("tracking_type")
+    val trackingType: String? = null,
+    @SerialName("modality")
+    val modality: String? = null,
+    @SerialName("total_duration_seconds")
+    val totalDurationSeconds: Int = 0,
+    @SerialName("total_distance_meters")
+    val totalDistanceMeters: Int = 0,
+    @SerialName("additional_volume")
+    val additionalVolume: Double = 0.0,
+    @SerialName("metric_quality")
+    val metricQuality: String = "LEGACY_UNVERIFIED"
 )
 
 @Serializable
@@ -82,7 +104,15 @@ data class WorkoutSetDto(
     val isCompleted: Boolean = false,
     @SerialName("is_warmup")
     val isWarmup: Boolean = false,
-    val notes: String? = null
+    val notes: String? = null,
+    @SerialName("duration_seconds")
+    val durationSeconds: Int? = null,
+    @SerialName("distance_meters")
+    val distanceMeters: Int? = null,
+    @SerialName("additional_weight")
+    val additionalWeight: Double? = null,
+    @SerialName("assistance_weight")
+    val assistanceWeight: Double? = null
 )
 
 fun WorkoutLogDto.toDomain(): WorkoutLog {
@@ -98,13 +128,18 @@ fun WorkoutLogDto.toDomain(): WorkoutLog {
         startTime = parseTimestamp(startTime),
         endTime = parseTimestamp(endTime),
         totalVolume = totalVolume.toFloat(),
-        exerciseLogs = sortedExercises
+        exerciseLogs = sortedExercises,
+        totalSets = if (totalSets > 0) totalSets else sortedExercises.sumOf { it.completedSets },
+        totalReps = if (totalReps > 0) totalReps else sortedExercises.sumOf { it.totalReps },
+        totalDurationSeconds = totalDurationSeconds,
+        totalDistanceMeters = totalDistanceMeters,
+        additionalVolume = additionalVolume.toFloat(),
+        dataQuality = dataQuality
     )
 }
+
 fun ExerciseLogDto.toDomain(): ExerciseLog {
-    // Try to use the nested exercise, or create a fallback from DTO data
     val exercise = exercises?.toDomain() ?: run {
-        // Create fallback exercise using data from the ExerciseLogDto itself
         val category = try {
             com.diajarkoding.imfit.domain.model.MuscleCategory.valueOf(muscleCategory.uppercase())
         } catch (e: Exception) {
@@ -122,9 +157,18 @@ fun ExerciseLogDto.toDomain(): ExerciseLog {
         ?.sortedWith(compareBy<WorkoutSetDto> { it.setNumber }.thenBy { it.id.orEmpty() })
         ?.map { it.toDomain() }
         ?: emptyList()
+
+    val parsedTracking = trackingType?.let { runCatching { TrackingType.valueOf(it) }.getOrNull() }
+        ?: exercise.defaultTrackingType
+    val parsedModality = modality?.let { runCatching { ExerciseModality.valueOf(it) }.getOrNull() }
+        ?: exercise.modality
+
     return ExerciseLog(
         exercise = exercise,
-        sets = sortedSets
+        sets = sortedSets,
+        trackingType = parsedTracking,
+        modality = parsedModality,
+        metricQuality = metricQuality
     )
 }
 
@@ -133,7 +177,11 @@ fun WorkoutSetDto.toDomain(): WorkoutSet {
         setNumber = setNumber,
         weight = weight.toFloat(),
         reps = reps,
-        isCompleted = isCompleted
+        isCompleted = isCompleted,
+        durationSeconds = durationSeconds,
+        distanceMeters = distanceMeters,
+        additionalWeight = additionalWeight?.toFloat(),
+        assistanceWeight = assistanceWeight?.toFloat()
     )
 }
 
@@ -143,7 +191,11 @@ fun WorkoutSet.toDto(exerciseLogId: String? = null): WorkoutSetDto {
         setNumber = setNumber,
         weight = weight.toDouble(),
         reps = reps,
-        isCompleted = isCompleted
+        isCompleted = isCompleted,
+        durationSeconds = durationSeconds,
+        distanceMeters = distanceMeters,
+        additionalWeight = additionalWeight?.toDouble(),
+        assistanceWeight = assistanceWeight?.toDouble()
     )
 }
 

@@ -47,7 +47,7 @@ class DemoRoutineRepository @Inject constructor() : RoutineRepository {
         }
         if (command.name.length !in 2..100 || command.exercises.size > 100 ||
             command.exercises.map { it.id }.distinct().size != command.exercises.size ||
-            command.exercises.any { it.sets !in 1..20 || it.reps !in 1..100 || it.restSeconds !in 0..600 || !it.exercise.isActive || !it.exercise.supportsRepetitions }) {
+            command.exercises.any { !it.exercise.isActive || !it.target.isValidFor(it.trackingType) }) {
             return Result.failure(RoutineError.ValidationError("Invalid routine name or prescription"))
         }
         val existing = routines[command.id]

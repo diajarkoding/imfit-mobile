@@ -144,7 +144,7 @@ class RoutineSessionCutoverTest {
                     val template = args[0] as WorkoutTemplate
                     startedTemplate = template
                     WorkoutSession("stable-local-session", template.id, template.name, 0,
-                        template.exercises.map { ExerciseLog(it.exercise, listOf(WorkoutSet(1, 0f, it.reps))) })
+                        template.exercises.map { ExerciseLog(it.exercise, listOf(WorkoutSet(1, 0f, it.reps ?: 0))) })
                         .also { active = it }
                 }
                 else -> error("Unexpected repository access (including Room routine lookup): $method")

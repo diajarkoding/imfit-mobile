@@ -342,11 +342,19 @@ class ActiveWorkoutViewModel @Inject constructor(
                         exercise = exercise,
                         sets = (1..config.sets).map { setNumber ->
                             val last = lastPerf[setNumber]
-                            WorkoutSet(setNumber = setNumber, weight = last?.first ?: 0f,
-                                reps = last?.second ?: config.reps, isCompleted = false)
+                            WorkoutSet(
+                                setNumber = setNumber,
+                                weight = last?.first ?: 0f,
+                                reps = last?.second ?: (config.reps ?: 0),
+                                durationSeconds = config.targetDurationSeconds,
+                                distanceMeters = config.targetDistanceMeters,
+                                isCompleted = false
+                            )
                         },
                         restSeconds = config.restSeconds,
-                        inputDefaults = config.inputDefaults()
+                        inputDefaults = config.inputDefaults(),
+                        trackingType = config.trackingType,
+                        modality = exercise.modality
                     )
                 }
                 if (authRepository.getLocalUserId() != ownerId) return@launch

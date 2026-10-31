@@ -40,8 +40,7 @@ internal class RoutineSessionStarter(
             throw RoutineError.ValidationError("Routine must contain at least one exercise.")
         }
         if (routine.revision < 0 || routine.exercises.any {
-                !it.exercise.isActive || !it.exercise.supportsRepetitions ||
-                    it.sets !in 1..20 || it.reps !in 1..100 || it.restSeconds !in 0..600
+                !it.exercise.isActive || !it.target.isValidFor(it.trackingType)
             }) throw RoutineError.ValidationError("Routine contains an unsupported or invalid prescription.")
         requireOwner(ownerId)
         // A session may have appeared while the remote read was in flight. Never replace it.

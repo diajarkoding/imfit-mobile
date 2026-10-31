@@ -10,6 +10,7 @@ import androidx.room.testing.MigrationTestHelper
 import androidx.test.platform.app.InstrumentationRegistry
 import org.junit.Rule
 import org.junit.After
+import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -20,6 +21,11 @@ class IMFITDatabaseMigrationTest {
     private val context = ApplicationProvider.getApplicationContext<Context>()
     private val databaseName = "migration-test.db"
 
+    @After
+    fun cleanUp() {
+        context.deleteDatabase(databaseName)
+    }
+
     @Test fun fullRoomSchemaSixToSevenIsValidatedAndRetainsHistory() {
         migrations.createDatabase(databaseName, 6).use { db ->
             db.execSQL("INSERT INTO exercise_logs (id, workout_log_id, exercise_id, exercise_name, muscle_category, order_index, total_volume, total_sets, total_reps, sync_status, created_at, updated_at) VALUES ('legacy','workout','exercise','Bench','CHEST',0,80,1,8,'SYNCED',1,1)")
@@ -27,16 +33,78 @@ class IMFITDatabaseMigrationTest {
         migrations.runMigrationsAndValidate(databaseName, 7, true, IMFITDatabase.MIGRATION_6_7).use { db ->
             db.query("SELECT exercise_name, total_volume, input_defaults FROM exercise_logs WHERE id = 'legacy'").use {
                 assertTrue(it.moveToFirst())
-                org.junit.Assert.assertEquals("Bench", it.getString(0))
-                org.junit.Assert.assertEquals(80f, it.getFloat(1))
+                assertEquals("Bench", it.getString(0))
+                assertEquals(80f, it.getFloat(1))
                 assertTrue(it.isNull(2))
             }
         }
     }
 
-    @After
-    fun cleanUp() {
-        context.deleteDatabase(databaseName)
+    @Test fun fullRoomSchemaSevenToEightIsValidatedAndRetainsHistory() {
+        migrations.createDatabase(databaseName, 7).use { db ->
+            db.execSQL("INSERT INTO exercises (id, name, muscle_category_id, description, is_active, created_at, updated_at) VALUES ('ex_1', 'Bench', 1, 'Chest press', 1, 100, 100)")
+            db.execSQL("INSERT INTO workout_templates (id, user_id, name, created_at, updated_at) VALUES ('tmpl_1', 'user_1', 'Chest Day', 100, 100)")
+            db.execSQL("INSERT INTO template_exercises (template_id, exercise_id, order_index, sets, reps, rest_seconds, sync_status, created_at, updated_at) VALUES ('tmpl_1', 'ex_1', 0, 3, 10, 60, 'SYNCED', 100, 100)")
+            db.execSQL("INSERT INTO workout_logs (id, user_id, template_name, date, start_time, end_time, total_volume, total_sets, total_reps, sync_status, created_at, updated_at) VALUES ('wkt_1', 'user_1', 'Chest Day', 100, 100, 200, 300, 3, 30, 'SYNCED', 100, 200)")
+            db.execSQL("INSERT INTO exercise_logs (id, workout_log_id, exercise_id, exercise_name, muscle_category, order_index, total_volume, total_sets, total_reps, sync_status, created_at, updated_at, input_defaults) VALUES ('elog_1', 'wkt_1', 'ex_1', 'Bench', 'CHEST', 0, 300, 3, 30, 'SYNCED', 100, 200, '3:10')")
+            db.execSQL("INSERT INTO workout_sets (id, exercise_log_id, workout_log_id, exercise_id, set_number, weight, reps, is_completed, sync_status, created_at, updated_at) VALUES ('set_1', 'elog_1', 'wkt_1', 'ex_1', 1, 10.0, 10, 1, 'SYNCED', 100, 200)")
+        }
+
+        migrations.runMigrationsAndValidate(databaseName, 8, true, IMFITDatabase.MIGRATION_7_8).use { db ->
+            // Verify template_exercises
+            db.query("SELECT tracking_type, sets, reps, target_duration_seconds FROM template_exercises WHERE template_id = 'tmpl_1'").use {
+                assertTrue(it.moveToFirst())
+                assertEquals("WEIGHT_REPS", it.getString(0))
+                assertEquals(3, it.getInt(1))
+                assertEquals(10, it.getInt(2))
+                assertTrue(it.isNull(3))
+            }
+            // Verify workout_sets
+            db.query("SELECT weight, reps, duration_seconds, additional_weight FROM workout_sets WHERE id = 'set_1'").use {
+                assertTrue(it.moveToFirst())
+                assertEquals(10f, it.getFloat(0))
+                assertEquals(10, it.getInt(1))
+                assertTrue(it.isNull(2))
+                assertTrue(it.isNull(3))
+            }
+            // Verify exercise_logs
+            db.query("SELECT tracking_type, modality, metric_quality, total_volume FROM exercise_logs WHERE id = 'elog_1'").use {
+                assertTrue(it.moveToFirst())
+                assertEquals("WEIGHT_REPS", it.getString(0))
+                assertEquals("STRENGTH", it.getString(1))
+                assertEquals("LEGACY_UNVERIFIED", it.getString(2))
+                assertEquals(300f, it.getFloat(3))
+            }
+            // Verify workout_logs
+            db.query("SELECT data_quality, total_volume, total_duration_seconds FROM workout_logs WHERE id = 'wkt_1'").use {
+                assertTrue(it.moveToFirst())
+                assertEquals("LEGACY_UNVERIFIED", it.getString(0))
+                assertEquals(300f, it.getFloat(1))
+                assertEquals(0, it.getInt(2))
+            }
+            // Verify exercises
+            db.query("SELECT default_tracking_type, modality FROM exercises WHERE id = 'ex_1'").use {
+                assertTrue(it.moveToFirst())
+                assertEquals("WEIGHT_REPS", it.getString(0))
+                assertEquals("STRENGTH", it.getString(1))
+            }
+        }
+    }
+
+    @Test fun fullRoomSchemaSixToEightChainedMigrationPasses() {
+        migrations.createDatabase(databaseName, 6).use { db ->
+            db.execSQL("INSERT INTO exercise_logs (id, workout_log_id, exercise_id, exercise_name, muscle_category, order_index, total_volume, total_sets, total_reps, sync_status, created_at, updated_at) VALUES ('legacy','workout','exercise','Bench','CHEST',0,80,1,8,'SYNCED',1,1)")
+        }
+        migrations.runMigrationsAndValidate(databaseName, 8, true, IMFITDatabase.MIGRATION_6_7, IMFITDatabase.MIGRATION_7_8).use { db ->
+            db.query("SELECT exercise_name, total_volume, input_defaults, tracking_type, metric_quality FROM exercise_logs WHERE id = 'legacy'").use {
+                assertTrue(it.moveToFirst())
+                assertEquals("Bench", it.getString(0))
+                assertEquals(80f, it.getFloat(1))
+                assertTrue(it.isNull(2))
+                assertEquals("WEIGHT_REPS", it.getString(3))
+                assertEquals("LEGACY_UNVERIFIED", it.getString(4))
+            }
+        }
     }
 
     @Test
@@ -108,8 +176,8 @@ class IMFITDatabaseMigrationTest {
             IMFITDatabase.MIGRATION_6_7.migrate(db)
             db.query("SELECT id, exercise_name, input_defaults FROM exercise_logs").use {
                 assertTrue(it.moveToFirst())
-                org.junit.Assert.assertEquals("legacy", it.getString(0))
-                org.junit.Assert.assertEquals("Bench", it.getString(1))
+                assertEquals("legacy", it.getString(0))
+                assertEquals("Bench", it.getString(1))
                 assertTrue(it.isNull(2))
             }
         } finally { helper.close() }

@@ -35,5 +35,13 @@ data class WorkoutLogEntity(
     @ColumnInfo(name = "created_at")
     val createdAt: Long = System.currentTimeMillis(),
     @ColumnInfo(name = "updated_at")
-    val updatedAt: Long = System.currentTimeMillis()
+    val updatedAt: Long = System.currentTimeMillis(),
+    @ColumnInfo(name = "total_duration_seconds")
+    val totalDurationSeconds: Int = 0,
+    @ColumnInfo(name = "total_distance_meters")
+    val totalDistanceMeters: Int = 0,
+    @ColumnInfo(name = "additional_volume")
+    val additionalVolume: Float = 0f,
+    @ColumnInfo(name = "data_quality")
+    val dataQuality: String = "LEGACY_UNVERIFIED"
 )

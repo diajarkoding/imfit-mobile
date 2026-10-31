@@ -28,5 +28,13 @@ data class WorkoutSetEntity(
     @ColumnInfo(name = "created_at")
     val createdAt: Long = System.currentTimeMillis(),
     @ColumnInfo(name = "updated_at")
-    val updatedAt: Long = System.currentTimeMillis()
+    val updatedAt: Long = System.currentTimeMillis(),
+    @ColumnInfo(name = "duration_seconds")
+    val durationSeconds: Int? = null,
+    @ColumnInfo(name = "distance_meters")
+    val distanceMeters: Int? = null,
+    @ColumnInfo(name = "additional_weight")
+    val additionalWeight: Float? = null,
+    @ColumnInfo(name = "assistance_weight")
+    val assistanceWeight: Float? = null
 )

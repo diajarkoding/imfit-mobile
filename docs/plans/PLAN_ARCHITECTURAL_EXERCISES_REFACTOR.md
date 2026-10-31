@@ -497,11 +497,11 @@ gantt
 - [x] Update RPC `get_progress_summary` dan `get_workout_detail`. (SELESAI - Modality-separated metrics & raw parity verified)
 
 ### Phase 3: Android Domain, Room Migration, & Repository
-- [ ] Buat enum `TrackingType`, model `ExerciseTarget`, dan `SetMeasurement`.
-- [ ] Update entity Room `TemplateExerciseEntity`, `WorkoutSetEntity`, `ExerciseLogEntity`, `WorkoutLogEntity`, `ExerciseEntity`.
-- [ ] Implementasikan `MIGRATION_7_8` pada `IMFITDatabase.kt` beserta unit test migrasi Room.
-- [ ] Update mapper DTO $\leftrightarrow$ Entity $\leftrightarrow$ Domain.
-- [ ] Perbarui `SupabaseRoutineRepository.kt` dan `WorkoutRepositoryImpl.kt` untuk transport data bertipe.
+- [x] Buat enum `TrackingType`, model `ExerciseTarget`, dan `SetMeasurement`. (SELESAI - Domain models created, A3-01 to A3-06 unit tests PASS)
+- [x] Update entity Room `TemplateExerciseEntity`, `WorkoutSetEntity`, `ExerciseLogEntity`, `WorkoutLogEntity`, `ExerciseEntity`. (SELESAI - All 5 Room entities updated for typed tracking)
+- [x] Implementasikan `MIGRATION_7_8` pada `IMFITDatabase.kt` beserta unit test migrasi Room. (SELESAI - Version 8, schema 8.json exported, Room 7->8 and 6->8 tests PASS)
+- [x] Update mapper DTO $\leftrightarrow$ Entity $\leftrightarrow$ Domain. (SELESAI - ExerciseDto, WorkoutLogDto, RemoteSnapshotImporter, and SyncManager DTOs updated)
+- [x] Perbarui `SupabaseRoutineRepository.kt` dan `WorkoutRepositoryImpl.kt` untuk transport data bertipe. (SELESAI - Typed target validation, typed start/mutate/finish, and SyncManager safety verified)
 
 ### Phase 4: Android Presentation & UI/UX
 - [ ] Implementasikan komponen polymorphic `ActiveSetRow.kt` dengan input dinamis.

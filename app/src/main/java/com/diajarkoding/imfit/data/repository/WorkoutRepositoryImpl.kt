@@ -26,6 +26,8 @@ import com.diajarkoding.imfit.domain.model.MuscleCategory
 import com.diajarkoding.imfit.domain.model.WorkoutLog
 import com.diajarkoding.imfit.domain.model.WorkoutSession
 import com.diajarkoding.imfit.domain.model.WorkoutSet
+import com.diajarkoding.imfit.domain.model.TrackingType
+import com.diajarkoding.imfit.domain.model.ExerciseModality
 import com.diajarkoding.imfit.domain.model.WorkoutTemplate
 import com.diajarkoding.imfit.domain.model.validateActiveSessionEdit
 import com.diajarkoding.imfit.domain.repository.AuthRepository
@@ -178,15 +180,18 @@ class WorkoutRepositoryImpl @Inject constructor(
                     WorkoutSet(
                         setNumber = setNumber,
                         weight = previous[setNumber]?.first ?: 0f,
-                        reps = previous[setNumber]?.second ?: templateExercise.reps,
+                        reps = previous[setNumber]?.second ?: (templateExercise.reps ?: 0),
+                        durationSeconds = templateExercise.targetDurationSeconds,
+                        distanceMeters = templateExercise.targetDistanceMeters,
                         isCompleted = false
                     )
                 },
                 restSeconds = templateExercise.restSeconds,
-                inputDefaults = defaults
+                inputDefaults = defaults,
+                trackingType = templateExercise.trackingType,
+                modality = templateExercise.exercise.modality
             )
         }
-        
         val session = WorkoutSession(
             id = UUID.randomUUID().toString(),
             templateId = template.id,
@@ -302,9 +307,10 @@ class WorkoutRepositoryImpl @Inject constructor(
                 val now = endTime
                 val totalVolume = session.totalVolume
                 val totalSets = session.totalCompletedSets
-                val totalReps = session.exerciseLogs.sumOf { log ->
-                    log.sets.sumOf { it.reps }
-                }
+                val totalReps = session.exerciseLogs.sumOf { it.totalReps }
+                val totalDurationSeconds = session.exerciseLogs.sumOf { it.totalDurationSeconds }
+                val totalDistanceMeters = session.exerciseLogs.sumOf { it.totalDistanceMeters }
+                val additionalVolume = session.exerciseLogs.sumOf { it.additionalVolume.toDouble() }.toFloat()
 
                 val workoutLogEntity = WorkoutLogEntity(
                     id = workoutLogId,
@@ -320,7 +326,11 @@ class WorkoutRepositoryImpl @Inject constructor(
                     syncStatus = SyncStatus.PENDING_SYNC.name,
                     pendingOperation = PendingOperation.CREATE.name,
                     createdAt = now,
-                    updatedAt = now
+                    updatedAt = now,
+                    totalDurationSeconds = totalDurationSeconds,
+                    totalDistanceMeters = totalDistanceMeters,
+                    additionalVolume = additionalVolume,
+                    dataQuality = "VERIFIED"
                 )
                 val exerciseEntities = session.exerciseLogs.mapIndexed { index, exerciseLog ->
                     ExerciseLogEntity(
@@ -337,7 +347,13 @@ class WorkoutRepositoryImpl @Inject constructor(
                         pendingOperation = PendingOperation.CREATE.name,
                         createdAt = now,
                         updatedAt = now,
-                        inputDefaults = exerciseLog.inputDefaults?.key
+                        inputDefaults = exerciseLog.inputDefaults?.key,
+                        trackingType = exerciseLog.trackingType.name,
+                        modality = exerciseLog.modality.name,
+                        totalDurationSeconds = exerciseLog.totalDurationSeconds,
+                        totalDistanceMeters = exerciseLog.totalDistanceMeters,
+                        additionalVolume = exerciseLog.additionalVolume,
+                        metricQuality = "VERIFIED"
                     )
                 }
                 val setEntities = session.exerciseLogs.flatMapIndexed { exerciseIndex, exerciseLog ->
@@ -355,7 +371,11 @@ class WorkoutRepositoryImpl @Inject constructor(
                             syncStatus = SyncStatus.PENDING_SYNC.name,
                             pendingOperation = PendingOperation.CREATE.name,
                             createdAt = now,
-                            updatedAt = now
+                            updatedAt = now,
+                            durationSeconds = set.durationSeconds,
+                            distanceMeters = set.distanceMeters,
+                            additionalWeight = set.additionalWeight,
+                            assistanceWeight = set.assistanceWeight
                         )
                     }
                 }
@@ -372,7 +392,13 @@ class WorkoutRepositoryImpl @Inject constructor(
                     startTime = session.startTime,
                     endTime = endTime,
                     totalVolume = totalVolume,
-                    exerciseLogs = session.exerciseLogs
+                    exerciseLogs = session.exerciseLogs,
+                    totalSets = totalSets,
+                    totalReps = totalReps,
+                    totalDurationSeconds = totalDurationSeconds,
+                    totalDistanceMeters = totalDistanceMeters,
+                    additionalVolume = additionalVolume,
+                    dataQuality = "VERIFIED"
                 )
             } }
 
@@ -490,12 +516,21 @@ class WorkoutRepositoryImpl @Inject constructor(
                 ?: exerciseEntity?.let { MuscleCategory.entries.getOrNull(it.muscleCategoryId - 1) }
                 ?: MuscleCategory.CHEST
             
+            val parsedTracking = runCatching { TrackingType.valueOf(exerciseLogEntity.trackingType) }.getOrNull()
+                ?: exerciseEntity?.let { runCatching { TrackingType.valueOf(it.defaultTrackingType) }.getOrNull() }
+                ?: TrackingType.WEIGHT_REPS
+            val parsedModality = runCatching { ExerciseModality.valueOf(exerciseLogEntity.modality) }.getOrNull()
+                ?: exerciseEntity?.let { runCatching { ExerciseModality.valueOf(it.modality) }.getOrNull() }
+                ?: ExerciseModality.STRENGTH
+
             val exercise = Exercise(
                 id = exerciseLogEntity.exerciseId,
                 name = exerciseLogEntity.exerciseName,
                 muscleCategory = muscleCategory,
                 description = exerciseEntity?.description ?: "",
-                imageUrl = exerciseEntity?.imageUrl
+                imageUrl = exerciseEntity?.imageUrl,
+                defaultTrackingType = parsedTracking,
+                modality = parsedModality
             )
             
             val sets = setEntities.map { setEntity ->
@@ -503,17 +538,23 @@ class WorkoutRepositoryImpl @Inject constructor(
                     setNumber = setEntity.setNumber,
                     weight = setEntity.weight,
                     reps = setEntity.reps,
-                    isCompleted = setEntity.isCompleted
+                    isCompleted = setEntity.isCompleted,
+                    durationSeconds = setEntity.durationSeconds,
+                    distanceMeters = setEntity.distanceMeters,
+                    additionalWeight = setEntity.additionalWeight,
+                    assistanceWeight = setEntity.assistanceWeight
                 )
             }
             
             ExerciseLog(
                 exercise = exercise,
                 sets = sets,
-                restSeconds = 60
+                restSeconds = 60,
+                trackingType = parsedTracking,
+                modality = parsedModality,
+                metricQuality = exerciseLogEntity.metricQuality
             )
         }
-        
         return WorkoutLog(
             id = logEntity.id,
             userId = logEntity.userId,

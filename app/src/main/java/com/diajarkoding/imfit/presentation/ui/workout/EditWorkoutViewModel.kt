@@ -59,11 +59,17 @@ private data class DraftRow(val id: String, val sets: String, val reps: String, 
 @Serializable
 private data class CommandExercise(
     val id: String, val name: String, val category: String,
-    val active: Boolean, val sets: Int, val reps: Int, val rest: Int
+    val active: Boolean, val sets: Int, val reps: Int?, val rest: Int,
+    val trackingType: String? = null,
+    val targetDurationSeconds: Int? = null,
+    val targetDistanceMeters: Int? = null
 ) {
     fun template() = TemplateExercise(
         Exercise(id, name, MuscleCategory.valueOf(category), "", null, active),
-        sets = sets, reps = reps, restSeconds = rest
+        sets = sets, reps = reps, restSeconds = rest,
+        trackingType = trackingType?.let { runCatching { TrackingType.valueOf(it) }.getOrNull() } ?: TrackingType.WEIGHT_REPS,
+        targetDurationSeconds = targetDurationSeconds,
+        targetDistanceMeters = targetDistanceMeters
     )
 }
 
@@ -274,7 +280,8 @@ class EditWorkoutViewModel(
         }
         val command = draft.command ?: SaveCommand(UUID.randomUUID().toString(), draft.name.trim(),
             state.exercises.map { row -> CommandExercise(row.id, row.name, row.exercise.muscleCategory.name,
-                row.exercise.isActive, row.sets, row.reps, row.restSeconds) },
+                row.exercise.isActive, row.sets, row.reps, row.restSeconds, row.trackingType.name,
+                row.targetDurationSeconds, row.targetDistanceMeters) },
             draft.revision, draft.baselineIds)
         durable = draft.copy(command = command)
         persist() // Save the immutable command BEFORE dispatch, including its request identity.

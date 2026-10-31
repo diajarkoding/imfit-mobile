@@ -4,8 +4,8 @@
 |---|---|
 |**Nama Fitur**|Memilih exercise|
 |**Status**|`Implemented`|
-|**Versi Dokumen**|v1.0|
-|**Tanggal Dibuat / Update**|2026-08-27|
+|**Versi Dokumen**|v2.3|
+|**Tanggal Dibuat / Update**|2026-10-31|
 |**Android Module / Flavor**|`:app`; demo, production|
 |**Source Scope**|Exercise selector dari template detail|
 |**Last Verified Against Commit**|`5b3dd1af81698b0e47de8db598d5cba694907a65`|
@@ -18,16 +18,18 @@ Selector memuat semua exercise, mendukung search/filter kategori dan multi-selec
 **Entry point**: `WorkoutDetailScreen` -> `ExerciseSelection(templateId)`.
 ```mermaid
 flowchart TD
- A[Detail] --> B[ExerciseSelection] --> C[Result IDs] --> D[Detail update]
+    P[Picker: ExerciseSelectionScreen] -->|Pilih kategori| C[Filter Reaktif on-demand + Page 10 + Infinite Scroll]
+    P -->|Buka MuscleFilterSheet| S[Single-Tap Chip: Langsung aktif & auto-dismiss tanpa Cancel/Apply]
+    P -->|Konfirmasi Tambahkan| H[Handoff Otomatis Langsung]
+    H -->|Alur Initial| SETUP[SetupRoutine: Mode SETUP]
+    H -->|Alur Edit| EDIT[EditWorkout: Mode EDIT]
 ```
-1. Filter/search dan toggle pilihan.
-2. Aksi add muncul jika ada pilihan.
-3. `NavGraph` mengembalikan ID lalu detail menyimpan hasil.
 ## 3. UI/UX dan Interaksi
 |Screen / Composable|Perilaku aktual|Evidence|
 |---|---|---|
-|`ExerciseSelectionScreen`|Shimmer, filter, search, checkbox/card, add N|`ExerciseSelectionScreen.kt:107-127,226-241`|
-**State UI**: loading/content; tidak ada pesan empty result; aksi hidden ketika zero selected. Accessibility/adaptive UI: TODO/VERIFY.
+|`ExerciseSelectionScreen`|Search, chip filter kategori reaktif, shimmer, infinite scroll page 10, checkbox selection, Card bottom compact (topPadding 4.dp, contentGap 4.dp)|`ExerciseSelectionScreen.kt`|
+|`MuscleFilterSheet`|Daftar opsi kategori otot, single-tap langsung aktif dan seketika dismiss, tanpa tombol Cancel dan Apply filter|`ExerciseSelectionScreen.kt:368-410`|
+|`RoutineFooter`|Card bottom footer compact dengan jarak vertikal masing-masing 4.dp|`ImfitRoutineComponents.kt:80-92`|
 ## 4. Implementasi Teknis
 |Peran|File / Symbol|Evidence|
 |---|---|---|
@@ -66,6 +68,7 @@ flowchart TD
 |Versi|Tanggal|Perubahan|Commit|
 |---|---|---|---|
 |v1.0|2026-08-27|Dokumen awal dibuat|`5b3dd1a`|
+|v2.3|2026-10-31|Update spesifikasi v2.3: filter kategori reaktif on-demand page 1 + pagination limit 10/infinite scroll; bottom sheet single-tap auto-dismiss tanpa Cancel/Apply; card bottom spacing 4.dp/4.dp; handoff otomatis langsung ke SETUP/EDIT; batasan ketat scope tidak menyentuh session aktif|current|
 ## 11. Referensi
 - Source code: `ExerciseSelectionScreen.kt`, `ExerciseSelectionViewModel.kt`.
 - Design / screenshot: N/A.

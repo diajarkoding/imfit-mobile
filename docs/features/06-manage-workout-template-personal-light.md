@@ -4,8 +4,8 @@
 |---|---|
 |**Nama Fitur**|Mengelola template workout|
 |**Status**|`Implemented`|
-|**Versi Dokumen**|v1.0|
-|**Tanggal Dibuat / Update**|2026-08-27|
+|**Versi Dokumen**|v2.5|
+|**Tanggal Dibuat / Update**|2026-10-31|
 |**Android Module / Flavor**|`:app`; demo, production|
 |**Source Scope**|Detail/edit template|
 |**Last Verified Against Commit**|`5b3dd1af81698b0e47de8db598d5cba694907a65`|
@@ -26,7 +26,7 @@ flowchart TD
 ## 3. UI/UX dan Interaksi
 |Screen / Composable|Perilaku aktual|Evidence|
 |---|---|---|
-|`WorkoutDetailScreen`|Shimmer, empty, add/start/edit/delete, swipe confirmation|`presentation/ui/workout/WorkoutDetailScreen.kt`|
+|`WorkoutDetailScreen`|Shimmer, empty, add/start/edit/delete, RoutineDialog konfirmasi hapus async bebas jank dengan penutupan dialog terlebih dahulu sebelum navigasi ke Beranda (zero-bleed)|`presentation/ui/workout/WorkoutDetailScreen.kt:35-51`|
 |`EditWorkoutScreen`|Nama, remove, set/reps/rest, add/remove set, save|`EditWorkoutScreen.kt`|
 **State UI**: loading shimmer; empty exercise; sesi aktif memblokir edit/delete/start. Accessibility/adaptive UI: TODO/VERIFY.
 ## 4. Implementasi Teknis
@@ -68,6 +68,7 @@ flowchart TD
 |Versi|Tanggal|Perubahan|Commit|
 |---|---|---|---|
 |v1.0|2026-08-27|Dokumen awal dibuat|`5b3dd1a`|
+|v2.5|2026-10-31|Penjaminan alur hapus routine async bebas jank dan zero-bleed dialog: dialog di-dismiss sebelum memicu onNavigateBack() sehingga jendela dialog tidak bocor ke Beranda|current|
 ## 11. Referensi
 - Source code: `WorkoutDetailScreen.kt`, `EditWorkoutScreen.kt`, `WorkoutRepositoryImpl.kt`.
 - Design / screenshot: N/A.

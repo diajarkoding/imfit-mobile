@@ -4,17 +4,24 @@
 
 | Field | Detail |
 | --- | --- |
-| Versi / tanggal | **2.2 — Final Implementation-Ready Specification (Architecture & Fitness Coaching Refinements)** / 2026-10-31 |
-| Status | **APPROVED FOR IMPLEMENTATION WITH RELEASE GATES** (Dokumen spesifikasi final; siap dikembangkan per langkah, release diblokir gate verifikasi backend & cutover) |
+| Versi / tanggal | **2.5 — UI Delete Dialog Dismissal & Zero-Bleed Navigation Specification (Penutupan Dialog Sebelum Navigasi Beranda)** / 2026-10-31 |
+| Status | **APPROVED FOR IMPLEMENTATION (v2.5: Zero-Bleed Delete Dialog Dismissal, Async Remote Verified Clean, & Fresh Home Return)** |
 | Platform / topology | Android native, Jetpack Compose; single application module `:app` |
 | Flavor | Production memakai API Supabase; demo tetap implementasi in-memory eksplisit untuk UI/testing, bukan fallback production |
 | Source revision scan | `5129c53e4e42` beserta source working tree yang dibaca; bukan klaim seluruh file identik dengan commit |
-| Scope | Seluruh CRUD routine template, Home routine list, detail, create → picker → setup, edit draft, delete, shared picker, navigation dan dependency cutover |
+| Scope | Seluruh CRUD routine template, Home routine list, detail, create → picker → setup, edit draft, delete, shared picker, navigation dan dependency cutover. **DIBATASI KETAT: tidak melebar ke session/routine aktif atau sedang latihan.** |
 | Confidence | Source dan definisi/metadata RPC yang diinspeksi: Verified; perilaku target/E2E: belum diverifikasi sebagai implementasi |
 | Deliverable | Revisi dokumen ini saja; tidak mengubah aplikasi atau database remote |
 | Ticket / target rilis | N/A |
 
-**Prioritas kontrak:** revisi pengguna dan review arsitektur/fitness v2.1 & v2.2 menggantikan keputusan v1.0 yang masih menggunakan Room mirror, create → Detail, serta direct-add mutation dari picker Detail. Dokumen ini mengunci 3 area prioritas P0 teknis (`RoutineFlowContext` & `RoutineFlowState` handoff owner, verifikasi hak akses & order preservation pada targeted exercise hydration, serta finish workout compatibility release blocker) dan 2 penyempurnaan domain fitness (integritas semantik repetisi vs durasi/volume, serta kebijakan edit/delete saat sesi aktif). “Saat ini” berarti fakta source; “target/usulan” berarti rancangan yang disepakati untuk diimplementasikan.
+**Prioritas kontrak & revisi minor v2.3–v2.5:**
+1. **Filter Kategori Otot Reaktif:** Setiap kategori otot yang dipilih pada halaman gerakan langsung memperbarui daftar data secara on-demand sesuai kategori masing-masing dengan remote pagination (limit 10) dan infinite scroll.
+2. **Bottom Sheet Filter Single-Tap:** Pada bottom sheet filter kategori otot (`MuscleFilterSheet`), klik pada opsi kategori langsung mengaktifkan filter dan seketika menutup bottom sheet (single-tap apply & close). Fungsi dan tombol *"Cancel"* (*Batal*) serta *"Apply filter"* (*Terapkan Filter*) dihapus sepenuhnya.
+3. **Card Bottom Picker Spacing 4.dp:** Pada card bottom halaman pilih gerakan yang memuat tombol tambahkan dan row (pilihan dan reset), jarak vertikal diubah dari 16.dp menjadi masing-masing **4.dp** (top padding 4.dp, content gap 4.dp).
+4. **Handoff Langsung Otomatis:** Saat gerakan dipilih dan tombol konfirmasi ditekan, seleksi langsung secara otomatis terbawa ke halaman SETUP (pada alur create initial) atau halaman EDIT routine workout (pada alur edit).
+5. **Strict Scope Boundary Guard:** Scope refactor routine template workout dibatasi secara ketat dan dilarang melebar ke "session/routine aktif atau sedang latihan" (`ActiveWorkout`, timer, background service). Fokus 100% pada flow CRUD routine template workout terlebih dahulu.
+6. **Async Delete Lifecycle Bebas Jank:** Alur hapus routine dirancang fully asynchronous dengan visual state yang jelas: `user klik tombol hapus` $\rightarrow$ `dialog konfirmasi hapus` $\rightarrow$ `klik Ya Hapus` $\rightarrow$ `state loading async aktif mengunci seluruh UI (anti-lag/anti-jank)` $\rightarrow$ `tunggu hingga benar-benar bersih dan terupdate ke remote` $\rightarrow$ `baru navigasi ke beranda dengan data list routine yang segar`.
+7. **Eliminasi UI Dialog Bleed Saat Hapus Routine (Goals UI):** Menutup celah UI di mana dialog hapus masih sempat terlihat mengambang di atas halaman Beranda saat transisi kembali. Alur penghapusan mengunci urutan: `klik tombol hapus dari dialog` $\rightarrow$ `proses hapus (state loading aktif)` $\rightarrow$ `remote acknowledge sukses` $\rightarrow$ `dialog di-close terlebih dahulu (deleteDialog = false)` $\rightarrow$ `proses & state lokal selesai dipastikan bersih` $\rightarrow$ `baru navigasi kembali ke beranda (onNavigateBack())`. UI dialog dijamin tidak pernah ikut terbawa atau bocor (*leak*) saat navigasi ke Beranda.
 
 ## 1. Ringkasan dan Invariants
 
@@ -40,8 +47,12 @@
     - **Isolasi Rencana vs Pelaksanaan:** Sesi aktif dan completed history terisolasi penuh dari mutasi routine; edit/delete routine tidak mengubah running session snapshot atau catatan historis. Kebijakan mutasi saat sesi aktif dijelaskan transparan pada UI bila ditolak guard.
     - **Keandalan di Gym (Offline Start):** Jika koneksi gagal di gym, workout dapat dimulai menggunakan canonical snapshot routine yang sudah ada di memori berdasarkan last known revision (bukan diklaim sebagai revision server terbaru), tanpa membuat mirror Room terselubung.
 
-**Batas non-goal:** migrasi session aktif, timer, finish workout, history/progress atau profil menjadi remote-only tidak termasuk permintaan ini. Infrastruktur lokal fitur tersebut boleh tetap ada, tetapi **tidak boleh dijadikan alasan menyisakan CRUD/mirror routine di Room**.
+13. **Strict Scope Boundary Guard (Kunci Batasan Scope CRUD Routine):**
+    - Scope refactor ini dibatasi secara mutlak pada **alur CRUD routine template workout**: Home routine list, create routine dialog, initial picker, reusable form (SETUP/EDIT), detail routine (status *"Belum disiapkan"* & aksi *"Lengkapi rutinitas"*), exercise reordering, dan delete routine.
+    - **Dilarang keras melebar ke "session/routine aktif atau sedang latihan"** (`ActiveWorkoutScreen`, `ActiveWorkoutViewModel`, workout timer, rest state machine, audio/vibration alarm, background workout service). Session aktif tetap berjalan pada arsitektur snapshot lokal Room/service existing yang stabil.
+    - Isolasi rencana vs eksekusi dijaga ketat: routine template adalah resep program, sedangkan session aktif adalah eksekusi yang telah disalin dan terisolasi. Mutasi atau penghapusan routine tidak merombak engine session yang sedang berjalan.
 
+**Batas non-goal:** Perombakan session aktif, timer, finish workout, history/progress, atau profil menjadi remote-only tidak termasuk dalam pekerjaan ini. Infrastruktur lokal fitur tersebut tetap dipertahankan apa adanya dan tidak boleh dijadikan alasan menyisakan CRUD/mirror routine di Room.
 ## 2. Kebutuhan dan Acceptance Criteria
 
 ### 2.1 Requirement map
@@ -54,7 +65,7 @@
 | R4 | Konfirmasi pilihan → setup awal | Tambahkan pilihan ke draft state dan buka form mode SETUP; callback picker tidak mengirim update routine |
 | R5 | Setup/Edit draft-only dan CTA berbeda | SETUP: **Simpan rutinitas**; EDIT: **Simpan perubahan**. Semua field/add/remove hanya state sampai CTA final |
 | R6 | Async loading/success/error dan fresh return | Await remote save; success buka Detail dengan data remote fresh; error tetap di form dengan draft dan modal reusable |
-| R7 | Picker footer/paging/refresh | Atas ke row 16.dp, row ke tombol 16.dp; on-entry remote page size 10, infinite scroll, pull-to-refresh |
+| R7 | Picker footer/paging/refresh/filter | Card bottom spacing masing-masing 4.dp (top padding 4.dp, content gap 4.dp); remote page size 10, infinite scroll, pull-to-refresh; filter kategori otot reaktif on-demand; bottom sheet filter single-tap apply & close tanpa Cancel/Apply; handoff seleksi otomatis langsung terbawa ke SETUP atau EDIT |
 | R8 | Reuse dan theme | Satu form/shared primitives, wording kontekstual ID/EN; light/dark, large font, IME dan accessibility diperiksa |
 
 ### 2.2 Acceptance criteria — seluruhnya target, belum klaim pass
@@ -65,10 +76,10 @@
 | AC-02 | Create gagal | Dialog/nama tetap; error jelas; tidak navigate atau membuat routine lokal/pending |
 | AC-03 | Create double tap / response hilang setelah commit | Tidak duplicate routine; request identity dan payload tetap untuk resolve outcome/replay |
 | AC-04 | Back dari initial picker, tanpa/dengan pilihan | Detail routine yang sudah dibuat terbuka; tidak update exercise atau otomatis delete routine |
-| AC-05 | Pilih exercise lalu konfirmasi Tambahkan gerakan | Mode SETUP terbuka, pilihan ada di draft saja; remote routine masih kosong dan tidak ada routine Room write |
+| AC-05 | Pilih exercise lalu konfirmasi Tambahkan gerakan | Seleksi otomatis langsung terbawa ke form mode SETUP, pilihan ada di draft saja; remote routine masih kosong dan tidak ada routine Room write |
 | AC-06 | Mode SETUP/EDIT | Form dan komponen sama; CTA masing-masing Simpan rutinitas / Simpan perubahan; title/body/hint sesuai mode |
 | AC-07 | Ketik nama/config, remove/add exercise di kedua mode | Tidak ada remote write atau local routine write sebelum CTA final |
-| AC-08 | SETUP/EDIT → picker tambahan → kembali | Draft asal dan mode tetap; confirm menggabungkan pilihan satu kali; Back nested picker hanya kembali ke form |
+| AC-08 | SETUP/EDIT → picker tambahan → kembali/tambahkan | Pilihan tambahan langsung otomatis terbawa ke halaman SETUP atau EDIT pemanggil; draft asal dan mode tetap; confirm menggabungkan pilihan satu kali; Back nested picker hanya kembali ke form |
 | AC-09 | Detail → tambah gerakan | Masuk flow draft form/picker, bukan legacy direct-add remote atau local mutation |
 | AC-10 | Save valid | Satu async aggregate update remote dengan baseline revision; loading menonaktifkan konflik; success buka Detail dengan data tersimpan |
 | AC-11 | Save gagal | Loading berhenti, tetap pada mode/form yang sama, draft utuh dan dialog error reusable; retry/close tidak membuang draft |
@@ -77,7 +88,7 @@
 | AC-14 | Rotate/process recreation/picker round-trip | Nama, membership/order, raw angka invalid, mode, owner/routine ID, baseline dan pilihan pulih tanpa Room |
 | AC-15 | Home/list/detail request gagal | Error read yang jelas; bukan `Success(empty/null)` dan bukan fallback Room. Memory response lama boleh terlihat sebagai stale/error, bukan klaim request sukses |
 | AC-16 | CRUD routine saat routine tables lokal kosong | Create/read/setup/edit/delete tetap bekerja; tidak ada routine Room access/import/enqueue sebagai prerequisite atau side effect |
-| AC-17 | Delete confirmed sukses/gagal | Sukses: routine hilang dari active remote list dan UI; gagal: tetap Detail dengan error dialog, bukan local tombstone success |
+| AC-17 | Hapus routine async bebas jank, dialog auto-dismiss & navigasi beranda | User klik tombol hapus $\rightarrow$ dialog konfirmasi $\rightarrow$ klik Ya Hapus $\rightarrow$ state loading async (`isDeleting = true`), tombol dialog terkunci anti-spam, UI bebas jank/lag $\rightarrow$ tunggu hingga remote commit acknowledge bersih $\rightarrow$ dialog di-close/unmount terlebih dahulu (`deleteDialog = false`) $\rightarrow$ proses selesai dipastikan bersih $\rightarrow$ baru navigasi ke beranda (`onNavigateBack()`) $\rightarrow$ UI dialog tidak ikut terbawa/bocor saat transisi ke beranda $\rightarrow$ beranda me-refresh remote list routine sehingga tampil segar tanpa card lama. Bila gagal: loading berhenti, dialog tetap terbuka dengan pesan error, data tidak hilang |
 | AC-18 | Start dari Detail routine remote | Session dibuat dari remote routine snapshot, tidak memanggil local `getTemplateById` atau membuat mirror template |
 | AC-19 | Picker dibuka | Remote page pertama limit 10; tidak full catalog download/observe Room sebelum atau sebagai prasyarat |
 | AC-20 | Scroll / page seluruhnya excluded | Continuation maju; satu request per demand, stable row IDs, tidak duplicate atau menganggap habis dari jumlah row terlihat |
@@ -85,7 +96,7 @@
 | AC-22 | Query/filter berubah saat request berjalan | Reset page dan request generation; stale response ditolak; selection lintas filter tetap |
 | AC-23 | Pull-to-refresh sukses/gagal | Reload page pertama query aktif; selection lintas page tetap; data lama tidak hilang saat error; spinner berakhir sesuai request owner |
 | AC-24 | Append/refresh/query berlomba | Response/finally lama tidak append ke query baru atau menghentikan spinner baru; rapid duplicate refresh coalesced/diabaikan |
-| AC-25 | Footer normal/large font/IME | Top padding 16.dp dan row-to-button gap 16.dp berdasarkan bounds; wrap-content, touch target/tombol tidak terpotong |
+| AC-25 | Card bottom footer spacing 4.dp | Top padding batas atas content footer ke row (pilihan dan reset) 4.dp, dan gap dari row ke tombol Tambahkan gerakan 4.dp (bukan 16.dp); wrap-content, touch target/tombol tetap nyaman dan tidak terpotong |
 | AC-26 | Hasil picker remote dengan catalog Room kosong | Setup/Edit/ActiveWorkout menerima pilihan lengkap atau error eksplisit, tidak silent skip ID |
 | AC-27 | Shared active-session picker | `sessionId` guard/prefill tetap; menambah gerakan sesi tidak mengubah routine template |
 | AC-28 | Account switch/logout saat request/draft aktif | Tidak ada response, draft, selection/result atau navigation akun A diterapkan ke akun B |
@@ -103,6 +114,9 @@
 | AC-40 | Hydration beberapa exercise dengan urutan berbeda dari respons server | Urutan draft dan `order_index` tidak berubah mengikuti urutan respons; exercise yang tidak ditemukan dilaporkan eksplisit |
 | AC-41 | Exercise berbasis durasi dipilih dalam SETUP | Unit prescription konsisten sampai ActiveWorkout dan History, atau fitur ditandai belum didukung secara jelas tanpa merusak semantik repetisi/volume |
 | AC-42 | Start workout dari snapshot memori saat remote gagal | Session dibuat dari last known revision hanya jika kontrak session existing mendukung; tidak ada success palsu atau kehilangan workout |
+| AC-43 | Filter kategori otot reaktif | Setiap filter/kategori otot dipilih di halaman gerakan, daftar data langsung diperbarui secara on-demand sesuai kategori masing-masing dengan remote pagination (limit 10) dan infinite scroll yang tetap aktif |
+| AC-44 | Bottom sheet filter single-tap & auto-dismiss | Klik pada opsi kategori di bottom sheet langsung mengaktifkan filter dan seketika menutup bottom sheet (single-tap apply & close); tombol Cancel dan Apply filter ditiadakan |
+| AC-45 | Strict scope boundary lock | Seluruh perubahan refactor terkunci pada alur CRUD routine template; tidak ada perombakan arsitektur atau pelebaran ke session/routine aktif maupun timer latihan |
 
 ## 3. User Flow Target
 
@@ -174,6 +188,47 @@ flowchart TD
 - Sukses final Save menyelesaikan flow ke satu Detail routine yang sama. Jika Detail retained sudah ada, pop ke sana; jika create flow belum memiliki Detail, replace flow entry dengan Detail. Jangan menumpuk duplicate Detail atau meninggalkan form yang sudah sukses di backstack.
 - Result selection envelope memuat owner, routine/session ID, `flowId`, dan selected snapshots berurutan. Acknowledge hanya setelah parent menerima result ke draft; bukan segera setelah coroutine diluncurkan.
 - Navigation success event dikonsumsi tepat satu kali; recomposition/rotation/theme change bukan alasan replay create/save/navigation.
+### 3.4 Alur Hapus Routine (Async Delete Lifecycle & Zero-Bleed Dialog)
+
+```mermaid
+flowchart TD
+    D[Detail Routine: Klik Tombol Hapus] --> DG[Dialog Konfirmasi Hapus]
+    DG -->|Klik Batal| D
+    DG -->|Klik Ya Hapus| L[State Loading Async: isDeleting=true]
+    L --> LK[Kunci Interaksi UI: BackHandler aktif, tombol disabled, anti-jank]
+    LK --> R[Remote RPC: save_template_revision p_is_deleted=true]
+    R -->|Gagal / Error / Jaringan| E[Loading Berhenti: isDeleting=false, Dialog Error, tetap di Detail, data utuh]
+    R -->|Sukses Di-Acknowledge| CL[Bersihkan Memory Cache Routine Client]
+    CL --> CD[Tutup Dialog Terlebih Dahulu: deleteDialog = false]
+    CD --> SYN[Proses Selesai Bersih: Dialog Unmounted dari Window]
+    SYN --> NAV[Navigasi Kembali ke Beranda: onNavigateBack]
+    NAV --> H[Beranda: Auto-Refresh Remote List Segar Tanpa Bocoran Dialog]
+```
+
+**Penjaminan Anti-Jank, Zero-Bleed Dialog, & Sinkronisasi Segar Beranda:**
+1. **User Action & Confirmation:** Tombol hapus pada Detail membuka dialog konfirmasi `RoutineDialog` (*"Hapus Rutinitas?"*). Tombol di dialog menyajikan pilihan *"Batal"* dan *"Hapus"*.
+2. **State Loading Asynchronous:**
+   - Saat pengguna menekan *"Hapus"*, `WorkoutDetailViewModel` mengaktifkan state `isDeleting = true`.
+   - Tombol konfirmasi dialog berubah teks menjadi *"Menghapus..."* (`routine_deleting`) disertai indikator spinner loading (`CircularProgressIndicator`).
+   - Tombol dialog dan seluruh interaksi pada layar Detail (top bar, action edit/delete, tombol mulai latihan) dinonaktifkan (`enabled = false`) untuk mencegah spam click, double-submission, atau gesture tidak sengaja yang memicu frame drop/jank.
+   - `BackHandler(enabled = state.isDeleting)` aktif untuk menahan tombol Back hardware agar tidak memotong proses hapus di tengah jalan.
+3. **Penyelesaian di Remote Terlebih Dahulu (No Local Tombstone):**
+   - Coroutine dieksekusi di background thread (`Dispatchers.IO`) memanggil RPC remote `save_template_revision(..., p_is_deleted = true)`.
+   - UI **tidak melakukan optimistik delete lokal** atau navigasi dini sebelum ada bukti tanda terima (`receipt`) dari server.
+   - Cache memori routine pada client dihapus tepat setelah receipt remote berhasil diterima.
+4. **Eliminasi Gap UI Dialog Bleed & Navigasi ke Beranda (Goals UI):**
+   - **Gap UI yang Ditangani:** Jika navigasi dipicu saat dialog masih terbuka, jendela sub-layer dialog Compose dapat terlambat di-unmount sehingga sempat terlihat "mengambang/bocor" di atas halaman Beranda selama transisi animasi pop backstack.
+   - **Urutan Eksekusi Terkunci (Zero-Bleed Dismissal):**
+     1. Pengguna klik tombol hapus di dialog.
+     2. Proses hapus berjalan (state loading terlihat pada dialog).
+     3. Setelah server merespons sukses acknowledge, **dialog di-close terlebih dahulu** (`deleteDialog = false`).
+     4. Proses dan state lokal dipastikan selesai bersih (jendela dialog telah di-unmount dari hierarki tampilan).
+     5. **Baru kemudian memicu navigasi kembali ke halaman beranda** (`onNavigateBack()`).
+     6. Hasil: **UI dialog tidak akan pernah ikut terbawa atau bocor pada layar Beranda.**
+   - Saat Beranda aktif kembali, lifecycle observer (`Lifecycle.Event.ON_RESUME` / `refreshOnEntry()`) secara otomatis memicu pemuatan ulang remote list (`refreshHome()`), sehingga daftar routine di Beranda terjamin 100% segar dan kartu routine yang baru dihapus tidak lagi muncul.
+5. **Penanganan Error Tanpa Kehilangan Data:**
+   - Jika operasi remote gagal (network timeout / conflict), `isDeleting` di-reset ke `false`, dialog tetap berada di layar Detail menampilkan pesan error kontekstual, dan navigasi tidak dijalankan.
+   - Tidak ada data lokal yang terhapus atau berstatus rusak akibat kegagalan jaringan.
 
 ## 4. Gap Implementasi Saat Ini
 
@@ -240,13 +295,19 @@ Gunakan state types/conventions existing bila semantiknya cocok; jangan memperba
 | Create | Dialog processing, nama/submit terkunci | Receipt routine dibuat; navigate initial picker sekali | Dialog tetap, input utuh, pesan sesuai create |
 | Read/list/detail | Initial loading; refresh mempertahankan response memory lama bila ada | Data remote atau empty yang benar-benar dikonfirmasi server | Error read/retry; data memory lama ditandai stale, bukan Room fallback |
 | Save setup/edit | CTA loading, field/add/remove/back conflicting action terkunci | Receipt + canonical response; success state/event, lalu Detail | Draft tetap, modal kontekstual; loading selesai |
-| Delete | Confirmation processing existing | Server acknowledge; remove ID dari state Home, selesai ke Home | Tetap Detail/dialog dengan error; tidak local tombstone |
+| Delete | Dialog processing (`isDeleting = true`), tombol dialog terkunci anti-spam, BackHandler aktif (anti-jank) | Server acknowledge bersih $\rightarrow$ bersihkan memory snapshot $\rightarrow$ tutup dialog $\rightarrow$ navigasi ke Beranda $\rightarrow$ Beranda auto-refresh remote list segar | Loading berhenti (`isDeleting = false`), tetap di Detail/dialog dengan pesan error; tidak local tombstone; data tidak hilang |
 | Catalog | Initial/append/refresh terpisah | Page + continuation valid | Initial/append/refresh error di konteks masing-masing |
 
 Success state wajib ada, tetapi tidak membutuhkan layar success atau modal baru bila navigation ke Detail sudah menjadi feedback. Jangan menambahkan confirmation success kedua yang memperpanjang flow tanpa kebutuhan.
 
 Network error setelah request terkirim dapat berarti outcome belum diketahui. State error harus membedakan definitive rejection dari pending verification; jangan menyebut commit gagal pasti atau routine belum dibuat/dihapus tanpa bukti.
 
+**Aturan Siklus Hidup `hasPendingSave` dan Guard Banner UI:**
+- Flag `hasPendingSave` merepresentasikan perintah simpan (*SaveCommand*) yang telah terkirim tetapi kepastian commit-nya belum diketahui oleh client (karena timeout jaringan, error 5xx, atau *process death* saat request in-flight).
+- **Dilarang menyalakan `hasPendingSave = true` saat request simpan baru pertama kali dimulai (`isSaving = true`).** Saat fresh save dimulai, state hanya `isSaving = true, hasPendingSave = false`. Flag `hasPendingSave` hanya boleh menjadi `true` pada blok `catch` untuk error `RoutineError.Network` atau `RoutineError.Server`, atau saat restore dari `SavedStateHandle` di mana `draft.command != null`.
+- Pada UI (`EditWorkoutScreen`), item banner `RoutineFailure(stringResource(R.string.routine_save_unknown))` **wajib** diproteksi dengan kondisi:
+  `if (state.hasPendingSave && !state.isSaving)`
+  Hal ini menjamin pengguna tidak akan melihat pesan peringatan *"Save outcome is unknown..."* saat aplikasi sedang aktif memproses simpanan ke server.
 ### 5.3 Draft owner yang sama untuk SETUP dan EDIT
 
 Reuse `EditWorkoutScreen`, `EditWorkoutContent`, `EditWorkoutViewModel` dan `RoutineExerciseEditor` sebagai dasar form shared. Tambahkan mode/context pada satu implementation, bukan membuat `SetupScreen` dan editor kedua berisi salinan form. Penamaan akhir boleh disesuaikan saat coding setelah referensi dievaluasi; simbol mode di dokumen ini **usulan**.
@@ -295,7 +356,8 @@ public.save_template_revision(
 | Aksi | Parameter/outcome penting |
 | --- | --- |
 | Create routine kosong | Stable template/request UUID, expected revision null, exercises/removals kosong, `p_is_deleted=false` |
-| Read list/detail | `get_template_page(p_cursor, p_limit)`; `get_template_detail(p_template_id)`; owner-active routines, revision/configs server |
+| Read list (Home) | `get_template_page(p_cursor, p_limit)` mengembalikan ringkasan: ID, nama, revision, `exercise_count`, dan `primary_category_id` (berbasis pembobotan working sets). **Eliminasi N+1:** Home hanya memerlukan 1 list request tanpa memanggil `get_template_detail` dan hidrasi katalog per kartu. |
+| Read detail | `get_template_detail(p_template_id)` hanya dipanggil on-demand saat pengguna membuka halaman Detail atau Edit routine. |
 | Simpan SETUP | Update routine yang sudah dibuat, expected revision hasil create/baseline; bukan create kedua |
 | Simpan EDIT | Expected revision ketika draft dibentuk; payload final exercises dan removed IDs persis baseline identities yang dikeluarkan |
 | Delete | `save_template_revision` dengan expected revision, `p_is_deleted=true`, exercises kosong dan removals seluruh baseline children |
@@ -329,7 +391,19 @@ Definisi SQL menunjukkan satu transaksi untuk parent/children/removal/reorder/re
 - Request ID dan seluruh payload dibekukan selama outcome unknown. Jangan menghitung ulang revision/removals dengan ID sama. NOT_FOUND status tidak membuktikan request in-flight tidak mungkin commit; exact replay digunakan untuk keamanan retry.
 - Server delete merupakan **logical deletion parent + removal children**, menghilangkan routine dari daftar/detail aktif; bukan physical purge parent/history. Ini perlu selaras dengan wording UI “hapus permanen”, tanpa mengklaim physical deletion yang tidak dilakukan API.
 
-**Source/deployment mismatch:** tiga migration lokal Agustus belum mereproduksi deployed revision writes/receipts/read RPC/session lifecycle/lockdown Oktober. Authenticated table CRUD routine dan execute legacy aggregate RPC telah dicabut pada deployment yang diinspeksi. Gunakan RPC terverifikasi, bukan membuka grant kembali atau mencoba direct-table fallback.
+**Optimasi Routine Card Thumbnail & Eliminasi N+1 Query:**
+- Halaman Beranda (`HomeWorkoutCard`) tidak lagi bergantung pada `firstOrNull()?.exercise?.muscleCategory` yang menuntut seluruh detail latihan di-fetch di awal.
+- RPC `get_template_page` mengagregasi working sets per kelompok otot dan mengembalikan `primary_category_id` secara langsung:
+  - Dominan Chest $\rightarrow$ `chest.svg`
+  - Dominan Back $\rightarrow$ `back.svg`
+  - Dominan Legs $\rightarrow$ `upper-legs.svg`
+  - Dominan Shoulders $\rightarrow$ `shoulders.svg`
+  - Dominan Core $\rightarrow$ `core.svg`
+  - Hanya Cardio $\rightarrow$ `cardio.svg`
+  - Kombinasi Upper dan Lower signifikan $\rightarrow$ `all-muscles.svg` (Full Body / netral)
+  - Routine kosong $\rightarrow$ `all-muscles.svg` (artwork netral)
+  - Pemanasan cardio tidak memengaruhi dominasi latihan beban.
+- Pemetaan di Android berjalan $O(1)$ melalui `categoryArtAsset(template.primaryMuscleCategory)`.
 
 ### 5.5 Fresh remote state tanpa Room
 
@@ -357,20 +431,55 @@ Definisi SQL menunjukkan satu transaksi untuk parent/children/removal/reorder/re
 **Data lama:** pending routine lokal sebelum cutover tidak boleh dihapus atau otomatis di-upload menimpa remote. Sebelum rollout, inventarisasi pending lama dan tetapkan penanganan eksplisit terpisah (rekonsiliasi/migrasi satu kali yang disetujui sesuai data). Itu gate migrasi data, **bukan** alasan mempertahankan Room CRUD/mirror pada flow runtime baru. Jangan destructive-reset database hanya untuk menghilangkan pending rows.
 
 Tabel/skema Room routine lama boleh tetap tidak terpakai sampai migration schema aman dilakukan; **tidak ada reader/writer produksi untuk routine CRUD** setelah cutover. Hapus API/helpers/callbacks obsolete setelah semua caller dimigrasikan, bukan menyisakan alias fallback. Session/history/timer Room tetap di luar scope; regression memastikan tidak ikut rusak.
+### 5.7 Arsitektur Async Delete & Penjaminan Anti-Jank
+
+Untuk memastikan pengalaman pengguna mulus tanpa jank, frame drop, atau glitch UI saat menghapus routine:
+
+1. **State Machine Eksplisit pada ViewModel:**
+   `WorkoutDetailState` mengelola status penghapusan dengan field-field reaktif:
+   - `isDeleting: Boolean` — `true` saat coroutine delete aktif; mengunci semua interaksi tombol dan modal konfirmasi.
+   - `isDeleted: Boolean` — `true` **hanya** setelah receipt penghapusan dari remote server berhasil diterima.
+   - `deleteErrorRes: Int?` — Menampung resource ID pesan error jika remote delete gagal (mis. jaringan putus atau konflik sesi aktif).
+   - `hasPendingDelete: Boolean` — Menyimpan status command delete yang belum terselesaikan di `SavedStateHandle` untuk mendukung pemulihan setelah rotasi layar / process death.
+
+2. **Kunci Interaksi UI & Anti-Spam (Zero Junk):**
+   - Dialog konfirmasi `RoutineDialog` mengikat parameter `processing = state.isDeleting`. Tombol konfirmasi menampilkan teks *"Menghapus..."* (`routine_deleting`) dan disabled.
+   - `BackHandler(enabled = state.isDeleting)` aktif selama proses berlangsung, mencegah interaksi tombol Back fisik memutus coroutine di tengah jalan.
+   - Tombol AppBar (Back, Edit, Delete) dan tombol Mulai Latihan dinonaktifkan (`enabled = !state.isDeleting`) sehingga tidak ada event klik bertumpuk.
+   - Coroutine dieksekusi secara asinkron di `viewModelScope` dengan `Dispatchers.IO`, sehingga main thread Compose tidak mengalami blokade komputasi/I/O.
+
+3. **Verifikasi Remote Bersih Sebelum Navigasi (No Premature Pop):**
+   - Aplikasi tidak melakukan penghapusan lokal optimistik atau navigasi instan sebelum remote merespons.
+   - Setelah RPC `save_template_revision(..., p_is_deleted = true)` mengembalikan receipt sukses, in-memory routine cache di client dibersihkan, dan barulah `_state.update { it.copy(isDeleting = false, isDeleted = true) }` dijalankan.
+
+4. **Navigasi ke Beranda & Auto-Refresh List Segar:**
+   - `LaunchedEffect(state.isDeleted)` mendeteksi perubahan status dan mengeksekusi `onNavigateBack()`.
+   - Entry Beranda (`HomeScreen`) yang menerima kembali fokus secara otomatis memicu `refreshHome()` melalui event lifecycle (`Lifecycle.Event.ON_RESUME` / `refreshOnEntry()`).
+   - Daftar routine di Beranda memuat data terbaru langsung dari remote, memastikan kartu routine yang telah dihapus tidak muncul kembali sebagai data usang (*stale*).
 
 ## 6. Picker: Layout, Remote Pagination dan Pull-to-Refresh
 
-### 6.1 Footer 16.dp / 16.dp
+### 6.1 Card Bottom Spacing: 4.dp / 4.dp
 
-Reuse `RoutineFooter`, row count/reset dan `RoutineButton`. Tambahkan parameter top padding/content gap dengan default lama; override khusus picker menjadi:
+Reuse `RoutineFooter`, row count/reset dan `RoutineButton`. Override khusus card bottom pada picker menjadi:
 
-- Batas atas content footer → bounds row “gerakan dipilih / Reset”: **16.dp**.
-- Bounds bawah row → bounds atas tombol Tambahkan gerakan: **16.dp**.
-- Horizontal gutter existing 20.dp; bottom padding existing dan navigation-bar inset dihitung terpisah.
-- Tinggi wrap-content: padding + row aktual + gap + tombol aktual + bottom/inset. Tidak fixed-height card, tidak memperkecil touch target untuk mengejar tinggi.
-- Touch target minimal 48.dp; tombol existing minimum 54.dp. Large font boleh menaikkan tinggi footer, tanpa clipping/overlap; IME inset dipasang sekali.
+- Batas atas content footer → bounds row “gerakan dipilih / Reset”: **4.dp** (menggantikan 16.dp).
+- Bounds bawah row → bounds atas tombol Tambahkan gerakan: **4.dp** (menggantikan 16.dp).
+- Spacing 4.dp/4.dp menghasilkan card bottom yang compact, ringkas, dan memaksimalkan ruang scroll daftar gerakan tanpa mengorbankan kenyamanan sentuh (touch target tombol tetap $\ge 48\text{ dp}$, tombol $\ge 54\text{ dp}$).
+- Horizontal gutter 20.dp dan navigation-bar insets tetap dihitung otomatis.
 
-### 6.2 Remote page contract
+### 6.2 Filter Kategori Otot Reaktif & Single-Tap BottomSheet
+
+1. **Filter Kategori Otot Reaktif:**
+   - Setiap kali filter chip atau opsi kategori otot dipilih, data gerakan **langsung diperbarui secara on-demand** sesuai kategori otot masing-masing (`p_category_id`).
+   - Request query sebelumnya dibatalkan, request generation dinaikkan, dan page pertama (limit 10) langsung dimuat.
+   - Mekanisme **remote pagination (limit 10)** dan **infinite scroll (loadNextPage)** tetap aktif sepenuhnya untuk kategori yang dipilih tersebut.
+   - Pilihan exercise yang sudah dipilih sebelumnya (`selectedExercises`) tetap dipertahankan melintasi pergantian kategori otot.
+
+2. **Single-Tap BottomSheet (`MuscleFilterSheet`):**
+   - Saat pengguna membuka bottom sheet filter dan mengetuk salah satu opsi kategori otot, filter tersebut **langsung aktif dan seketika menutup bottom sheet** (single-tap apply & auto-dismiss).
+   - Tombol dan fungsi *"Cancel"* (*Batal*) serta *"Apply filter"* (*Terapkan Filter*) **dihapus sepenuhnya** dari bottom sheet. Tidak diperlukan konfirmasi sekunder dua tahap.
+### 6.3 Remote page contract
 
 RPC deployed:
 
@@ -387,10 +496,31 @@ Kirim `p_limit=10` (valid 1–100). Response `data` + `page_info { limit, has_mo
 - Page 1/2/3 adalah urutan UI. Teruskan opaque cursor server, bukan menghitung offset/page number palsu. Satu append mengambil satu page, bukan semua halaman sekaligus.
 - Server search nama normalized lower/trim, substring; trimmed search maksimal 100 karakter, null search ditolak. Cursor terikat owner/search/category; order lower(name), ID dengan collation C.
 - Search/category memulai query generation baru; debounce pencarian singkat, misalnya 300 ms. Jangan filter sepuluh item lokal lalu mengklaim pencarian seluruh remote catalog.
-- RPC belum mempunyai exclusions atau subgroup parameter. Filter exclusions pada page response dengan continuation asli; subgroup FOREARMS/GLUTES/CALVES memerlukan metadata/server mapping yang benar, bukan ID demo atau ordinal presentation.
-- Kategori/exclusions memakai konteks tepat: initial setup kosong, nested setup/edit dari draft saat ini, active-session dari sesi aktif.
-
-### 6.3 Paging, selection dan refresh state
+- **Debounce Pencarian Tanpa Screen Blinking (Search UX Smoothness):**
+  Pada `onSearchQueryChange`, dilarang mengosongkan list secara agresif (`allExercises = emptyList()`) di setiap ketukan keyboard sebelum delay debounce selesai. List latihan lama harus tetap dipertahankan selama jeda debounce 300 ms, dan reset/fetch baru hanya diluncurkan setelah debounce timer selesai, untuk mencegah UI berkedip (*flicker/jank*).
+- **Pencegahan Efek Blink pada Field Pencarian Picker (Search Field Anti-Blink):**
+  - **Memoization Colors:** `OutlinedTextFieldDefaults.colors` pada field pencarian wajib di-memoize dengan `remember(c)` agar instance warna tidak di-generate ulang setiap kali user memilih/men-toggle kartu gerakan di list (yang memicu recomposition).
+  - **Disabled Color Parity:** Seluruh atribut disabled (`disabledBorderColor`, `disabledTextColor`, `disabledContainerColor`, `disabledLeadingIconColor`, `disabledTrailingIconColor`, `disabledPlaceholderColor`) diselaraskan dengan warna solid normal agar field tidak meredup/berkedip saat tombol konfirmasi *"Tambahkan gerakan"* ditekan (`confirmed = true`).
+  - **Pembersihan Fokus Keyboard:** Pemanggilan `focusManager.clearFocus()` dilakukan secara terkontrol saat tombol *"Tambahkan gerakan"* ditekan sebelum callback `onExercisesSelected` dipicu, mencegah layout `imePadding` melompat.
+  - **Trailing Icon Lambda:** Sintaks icon pembersih pencarian dipastikan menggunakan composable lambda tunggal yang stabil tanpa alokasi fungsi ganda di setiap frame recompose.
+- **Sinkronisasi ID Kategori Database vs Enum UI (1-Based Database ID vs Ordinal):**
+  - Tabel `public.muscle_categories` di Supabase menggunakan primary key integer 1-based (1 s/d 8):
+    `1: CHEST, 2: BACK, 3: SHOULDERS, 4: BICEPS, 5: TRICEPS, 6: LEGS, 7: CORE, 8: CARDIO`.
+  - Fungsi SQL `get_exercise_catalog_page` memiliki validasi ketat `not exists (select 1 from public.muscle_categories where id = p_category_id)` yang langsung melempar error `PT400 VALIDATION` jika `p_category_id` tidak ada di database (misalnya nilai 0, 9, atau 10).
+  - **Dilarang keras menggunakan `category.ordinal` sebagai parameter `p_category_id`.** Enum UI `ExerciseCategory` memiliki urutan 0-based dan menyisipkan item non-domain (`FOREARMS`, `GLUTES`, `CALVES`), sehingga ordinal tidak pernah cocok dengan ID tabel database.
+  - `ExerciseCatalogRepository.fetchCatalogPage` wajib menggunakan `category.databaseId` yang bersumber dari `domainCategory.databaseId = ordinal + 1`:
+    - `CHEST` $\rightarrow$ `1`
+    - `BACK` $\rightarrow$ `2`
+    - `SHOULDERS` $\rightarrow$ `3`
+    - `BICEPS` $\rightarrow$ `4`
+    - `TRICEPS` $\rightarrow$ `5`
+    - `LEGS` $\rightarrow$ `6`
+    - `CORE` $\rightarrow$ `7`
+    - `CARDIO` $\rightarrow$ `8`
+    - `ALL` $\rightarrow$ `null` (tanpa filter kategori di database)
+  - Subkategori presentasi (`GLUTES`, `CALVES`) yang di database tersimpan dalam kategori `LEGS` dipetakan ke `databaseId = 6` (LEGS) dan disaring menggunakan `category.includes(exercise)` dengan metadata mapping yang valid. Subkategori tanpa data remote (`FOREARMS`) dipetakan ke `databaseId = null` dan disaring via `category.includes(exercise)`.
+- RPC belum mempunyai exclusions atau subgroup parameter. Filter exclusions pada page response dengan continuation asli.
+### 6.4 Paging, selection dan refresh state
 
 State picker minimum: query key, items remote terakumulasi, next cursor/hasMore, initial-load status, append status, refresh status, selected snapshots berurutan, target draft/session context dan request generation.
 
@@ -407,15 +537,19 @@ State picker minimum: query key, items remote terakumulasi, next cursor/hasMore,
 | finally lama | Tidak boleh mengakhiri indikator operasi/generation terbaru |
 Reuse `PullToRefreshBox` Home dan `LazyColumn`. Bungkus area list dengan ukuran terbatas di bawah search/filter; footer tetap di luar gesture list. Loading/error/empty tetap memungkinkan pull-to-refresh. Refresh menunggu request list, tidak image loading atau observer tanpa akhir.
 
-### 6.4 Handoff selection tanpa Room
+### 6.5 Handoff Seleksi Langsung Otomatis ke SETUP atau EDIT
 
-NavGraph sekarang mengirim ID saja. Target mengirim saveable typed selection snapshots minimum, owner + target routine/session + draft/request identity. Parent menerima ke state dan baru acknowledge; hasil busy/stale tidak hilang tanpa error. Dedup by ID dan preserve urutan pilihan.
+Saat pengguna telah memilih satu atau beberapa gerakan di picker dan menekan tombol konfirmasi *"Tambahkan gerakan"*:
+1. **Alur Initial Picker (Create Routine Baru):** Seleksi langsung dan otomatis terbawa ke halaman **SETUP** (`RoutineFormMode.SETUP`) melalui `RoutineFlowManager`. Entry picker digantikan oleh `SetupRoutine` tanpa langkah perantara.
+2. **Alur Nested Picker (Edit Routine Existing):** Seleksi langsung dan otomatis terbawa kembali ke halaman **EDIT** (`RoutineFormMode.EDIT`). Entry picker di-pop dan seleksi di-merge ke dalam draft form secara reaktif.
+3. Tidak ada kehilangan seleksi, tidak ada duplicate handoff, dan tidak ada operasi autosave ke server sebelum tombol final pada form ditekan.
 
-ActiveWorkout tetap session-only mutation dan prefill existing. Jangan menggunakan `mapNotNull(getExerciseById)` yang silently membuang item remote absent dari Room. Jika snapshot/data kurang, lakukan remote selected-ID lookup atau tampil error; jangan unduh seluruh katalog atau membuat mirror routine.
+### 6.6 Scope Boundary Guard (Kunci Batasan CRUD Routine)
 
-### 6.5 Hilangkan preload yang bertentangan
+Picker dan CRUD routine template workout **dibatasi secara ketat dan dilarang melebar ke "session/routine aktif atau sedang latihan"** (`ActiveWorkoutScreen`, `ActiveWorkoutViewModel`, timer, rest state machine, audio/vibration alarm, background workout service). Fokus implementasi adalah keandalan penuh pada siklus hidup template: Home list, create dialog, initial picker, setup draft, detail view, edit draft, reorder, dan delete.
 
-`WorkoutRemoteDataSource.fetchActiveTemplatesViaRpc` saat ini preload seluruh exercises; `SyncManager` network/startup menarik katalog penuh. Putus eager full-catalog coupling untuk picker. Home/detail boleh hydrate **referenced IDs** secara remote bila dibutuhkan; itu bukan catalog preload. Browser gerakan read-only tetap punya lifecycle sendiri; jangan mengubah seluruh browser tanpa scope.
+### 6.7 Hilangkan preload yang bertentangan
+
 
 Partial page tidak boleh masuk complete-catalog reconciliation “missing berarti inactive”. Untuk flow routine/picker baru, tidak diperlukan insert/observe Room catalog sebagai source list maupun result bridge.
 
@@ -426,7 +560,7 @@ Partial page tidak boleh masuk complete-catalog reconciliation “missing berart
 | Existing | Dipakai untuk | Perubahan minimum |
 | --- | --- | --- |
 | Home `RoutineDialog` + `RoutineNameField` | Create remote | Processing/error existing; success tujuan picker |
-| `EditWorkoutScreen` / `EditWorkoutContent` | Satu form SETUP dan EDIT | Parameter mode/title/CTA/context, shared draft pipeline, **kontrol reorder gerakan (move up/down)** |
+| `EditWorkoutScreen` / `EditWorkoutContent` | Satu form SETUP dan EDIT | Parameter mode/title/CTA/context, shared draft pipeline, **kontrol reorder gerakan (move up/down)**, **anti-blink RoutineNameField (key stabil, disabled colors parity, readOnly saat save, inisialisasi awal instan)** |
 | `RoutineExerciseEditor`, `RoutineConfigNumber` | Field set/reps/rest, reorder dan remove | Raw value ownership pindah ke draft; tombol reorder 48.dp; tidak copy editor |
 | `RoutineAppBar`, `RoutineFooter`, `RoutineButton` | Header/footer/CTA di kedua mode | Mode-specific labels; spacing override khusus picker |
 | `RoutineLoading`, `RoutineFailure` | Loading/read/catalog/inline errors | Gunakan sesuai initial/append/refresh state |
@@ -434,6 +568,12 @@ Partial page tidak boleh masuk complete-catalog reconciliation “missing berart
 | `RoutineDialog` / `IMFITPlatformDialog` | Save error, discard dan delete | Configurable label/action bila dibutuhkan; tidak membangun modal engine kedua |
 | Home `PullToRefreshBox` pattern | Picker refresh | Reuse library/pattern yang sudah terpasang, bukan refresh component baru |
 | `IMFITColors.training`, MaterialTheme, shared shapes/spacing/type | Seluruh surface/theme | Tidak membuat hardcoded light palette atau duplicate dark components |
+
+### 7.1.1 Pencegahan Efek Blink / Flicker pada Field Nama Routine (`RoutineNameField`)
+- **Pencegahan Color Drop / Opacity Jump:** Saat proses simpan (`isSaving == true`), field dikunci menggunakan `readOnly = state.isSaving` dengan `disabledTextColor`, `disabledBorderColor`, dan `disabledContainerColor` yang eksplisit diselaraskan ke warna solid `c.text` dan `c.surface`. Ini mencegah kontras Material3 meredup ke alpha 38% lalu menyala kembali ke 100% saat response tiba.
+- **Stabilitas Key Item LazyColumn:** Item `RoutineNameField` di dalam `LazyColumn` wajib menggunakan `key = "routine_name_field"` yang unik dan persisten. Item-item kondisional di atasnya (`routine_loading`, `routine_error`, `routine_save_unknown`) juga wajib memiliki key unik agar indeks posisi field nama tidak bergeser atau menyebabkan penghancuran (*disposal/recreation*) composable.
+- **Inisialisasi Nama Awal Instan (Zero-Blink Setup Entrance):** Pada `EditWorkoutViewModel.initialize`, state `workoutName` langsung diisi dari `durable?.name.orEmpty()` (yang membawa `initialName`) sejak frame pertama, menghilangkan jeda blank string (`""`) sebelum pembacaan asinkron selesai.
+- **Pembersihan Fokus Keyboard Terkoordinasi:** Pemanggilan `focusManager.clearFocus()` dilakukan secara terkontrol pada handler tombol simpan sebelum coroutine dispatch dijalankan, memastikan penurunan keyboard berjalan halus tanpa pergeseran mendadak pada `imePadding`.
 
 ### 7.2 Label dan wording per mode
 
@@ -559,6 +699,9 @@ Setelah implementasi: jalankan unit/instrumented suite relevan, build demo/produ
 4. **Langkah 7 — Production Readiness Release Gate:**
    - Uji E2E penuh: `Create Routine → Save SETUP → Start Workout → Complete Workout → Persist Workout Log → Resume/History`.
    - Uji retry, revision conflict, account switch, offline in gym, dan prosedur cutover dari data lokal existing.
+5. **Scope Boundary Verification Gate:**
+   - Seluruh implementasi CRUD routine template terkunci pada domain pengelolaan template latihan (Home, create dialog, initial picker, setup draft, detail view, edit draft, reorder, delete).
+   - Dilarang keras melakukan perombakan arsitektur atau pelebaran ke session aktif, workout timer, atau background service.
 
 ### 11.2 Urutan Langkah Implementasi
 
@@ -567,10 +710,10 @@ Setelah implementasi: jalankan unit/instrumented suite relevan, build demo/produ
 | 1 | Kunci kontrak remote-only, RPC payload/receipt/error/revision, mode/flow ownership (`RoutineFlowContext`) serta penanganan legacy pending | Tidak ada rancangan mirror/fallback Room; source/deployed contract dipetakan |
 | 2 | Implementasikan repository routine remote-only + targeted exercise hydration (`getExercisesByIds`) + response state dan katalog remote adapter; binding production/demo | Semua CRUD tidak bergantung routine DAO/importer/scheduler; tests production contract dan failure behavior |
 | 3 | Cutover Home/list/detail/start-workout template read; keluarkan routine dari sync/Room runtime | Remote routine dapat dibaca/start tanpa local template; session/history tetap berfungsi |
-| 4 | Rewire create → initial picker dengan `RoutineFlowContext`, Back → Detail, confirm → form SETUP; targeted result envelopes | Tidak ada direct Detail-after-create atau picker-autosave; backstack tidak duplikat |
-| 5 | Satu form SETUP/EDIT + durable raw draft + kontrol reorder gerakan + CTA labels + async Save/error dialog/fresh Detail | Tidak ada routine write sebelum final Save; reorder exercise konsisten; mode/restoration/conflict/loading/success/error benar |
-| 6 | Catalog page 10/infinite scroll/pull refresh, footer 16/16, controlled exclusion pagination, typed shared selection | Tidak ada full Room list/preload dependency; no selection loss dan ActiveWorkout regression |
-| 7 | Regression remote CRUD, navigation, empty routine UX, session boundary, finish workout compatibility (**P0-3 Release Gate**) dan theme matrix | Seluruh AC-01–AC-42 punya bukti actual behavior, bukan compile/mock-only |
+| 4 | Rewire create → initial picker dengan `RoutineFlowContext`, Back → Detail, konfirmasi gerakan langsung otomatis terbawa ke form SETUP atau EDIT; targeted result envelopes | Tidak ada direct Detail-after-create atau picker-autosave; backstack tidak duplikat |
+| 5 | Satu form SETUP/EDIT + durable raw draft + kontrol reorder gerakan + CTA labels + async Save/error dialog/fresh Detail; menerima handoff otomatis dari picker | Tidak ada routine write sebelum final Save; reorder exercise konsisten; mode/restoration/conflict/loading/success/error benar |
+| 6 | Catalog page 10/infinite scroll/pull refresh, card bottom footer 4.dp/4.dp (top padding 4.dp, content gap 4.dp), filter kategori otot reaktif on-demand page 1, bottom sheet filter single-tap auto-dismiss (tanpa Cancel/Apply), controlled exclusion pagination, typed shared selection | Tidak ada full Room list/preload dependency; no selection loss; footer compact 4.dp/4.dp |
+| 7 | Regression remote CRUD, navigation, empty routine UX, session boundary, finish workout compatibility (**P0-3 Release Gate**), theme matrix, dan scope boundary lock | Seluruh AC-01–AC-45 punya bukti actual behavior, bukan compile/mock-only |
 
 ### 11.3 Final Verdict
 
@@ -636,6 +779,9 @@ Dependencies existing: Compose Material 3 dari BOM 2026.08.00, Navigation 3 1.1.
 | 2.0 | 2026-10-31 | Semua CRUD routine remote-only tanpa mirror Room; create → initial picker → shared SETUP; draft-only SETUP/EDIT, label terpisah, Back ke routine existing, explicit operation states, reusable UI dan light/dark; gap start/sync dan AC diperbarui |
 | 2.1 | 2026-10-31 | Architecture & Fitness Coaching Review Updates: P0-1 `RoutineFlowContext` draft ownership, P0-2 targeted exercise hydration contract (`getExercisesByIds`), P0-3 finish workout compatibility release blocker, fitness empty routine UX (*Belum disiapkan* / *Lengkapi rutinitas*), exercise reordering, audit prescription types, isolasi sesi aktif, 4 pre-step gates, dan AC-33 s/d AC-39. |
 | **2.2** | **2026-10-31** | **Final Implementation-Ready Specification (Architecture & Fitness Coaching Refinements):** P0-1 concrete `RoutineFlowState` handoff owner, P0-2 client authenticated `SELECT` verification gate & input order preservation (`is_active` included), P0-3 finish workout release gate confirmation, fitness prescription semantic integrity (no reps-as-seconds aliasing), edit/delete policy during active session, offline gym start on last known revision, SavedStateHandle 10 KB testing target, and AC-40..AC-42. |
+| **2.3** | **2026-10-31** | **Minor Tasks Revision & Strict Scope Boundary Lock:** 1) Filter kategori otot di halaman gerakan langsung diperbarui secara reaktif on-demand sesuai kategori yang dipilih dengan remote pagination (limit 10) dan infinite scroll; 2) Bottom sheet filter kategori otot (`MuscleFilterSheet`) single-tap apply & auto-dismiss (menghapus tombol Cancel dan Apply filter); 3) Card bottom picker yang memuat tombol tambahkan dan row pilihan/reset diganti jarak vertikalnya menjadi masing-masing **4.dp** (top padding 4.dp, content gap 4.dp); 4) Konfirmasi penambahan gerakan langsung secara otomatis terbawa ke halaman SETUP (create initial) atau EDIT routine; 5) Batasan ketat scope refactor CRUD routine template: dilarang melebar ke session/routine aktif atau sedang latihan (AC-43 s/d AC-45). |
+| **2.4** | **2026-10-31** | **Async Delete Lifecycle & Fresh Home Return:** Penjaminan lifecycle hapus routine asinkron bebas jank: 1) User klik tombol hapus $\rightarrow$ dialog konfirmasi $\rightarrow$ klik Ya Hapus; 2) State loading async (`isDeleting = true`) mengunci tombol dialog, disable navigasi dan action bar, serta mengaktifkan `BackHandler` anti-spam; 3) Coroutine dieksekusi di background thread (`Dispatchers.IO`) menunggu hingga server Supabase mengonfirmasi receipt deletion (`Result.success(true)`) dan membersihkan cache memori; 4) Hanya setelah terbukti bersih di remote, dialog ditutup dan navigasi ke Beranda dipicu (`onNavigateBack()`); 5) Beranda secara otomatis me-refresh remote list (`refreshHome()`) saat resume sehingga daftar routine tampil segar tanpa sisa card lama; 6) Bila gagal, loading berhenti (`isDeleting = false`), tetap di Detail dengan pesan error, data lokal utuh tidak hilang (AC-17, Bab 3.4, Bab 5.7). |
+| **2.5** | **2026-10-31** | **UI Delete Dialog Dismissal & Zero-Bleed Navigation:** Penutupan gap UI di mana dialog hapus sempat terlihat mengambang di atas Beranda setelah penghapusan: 1) Urutan eksekusi dikunci ketat: klik hapus $\rightarrow$ proses loading pada dialog $\rightarrow$ remote acknowledge sukses $\rightarrow$ dialog di-close/dismiss terlebih dahulu (`deleteDialog = false`) $\rightarrow$ proses & state lokal dipastikan selesai bersih $\rightarrow$ baru navigasi dipicu kembali ke Beranda (`onNavigateBack()`); 2) UI dialog dijamin tidak pernah ikut terbawa atau bocor (*leak*) pada layar Beranda selama transisi animasi pop backstack; 3) Beranda me-refresh remote list secara otomatis saat resume sehingga daftar routine tampil bersih dan segar (AC-17, Bab 3.4, Bab 5.7). |
 ## 15. Referensi
 
 - `docs/plans/PLAN_HOME_REFACTOR.md`: konteks source Home remote-primary lama. Khusus routine list/CRUD, ketentuan mirror/local fallback dokumen lama digantikan rancangan ini; section profil/last workout di luar scope tetap.

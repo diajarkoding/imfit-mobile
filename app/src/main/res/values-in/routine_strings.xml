@@ -22,7 +22,7 @@
     <string name="routine_add_failed">Gerakan belum ditambahkan. Silakan coba lagi.</string>
     <string name="routine_edit_history_hint">Perubahan hanya berlaku untuk rutinitas ini, bukan riwayat latihan.</string>
     <string name="routine_config_hint">Berlaku untuk semua set gerakan ini.</string>
-    <string name="routine_config_invalid">Isi set dan repetisi minimal 1, serta jeda minimal 0 detik.</string>
+    <string name="routine_config_invalid">Isi 1–20 set, 1–100 repetisi atau 1–86400 detik, jarak opsional 1–1000000 m, serta jeda 0–600 detik.</string>
     <string name="routine_remove_named">Hapus %1$s dari rutinitas</string>
     <string name="routine_picker_title">Pilih gerakan</string>
     <string name="routine_picker_context">Untuk rutinitas • %1$s</string>
@@ -66,4 +66,13 @@
     <string name="routine_discard_confirm">Tinggalkan draf</string>
     <string name="routine_save_unknown">Hasil penyimpanan belum diketahui. Perubahan dikunci. Coba lagi akan memeriksa permintaan yang persis sama.</string>
     <string name="routine_exercise_unavailable">Gerakan ini tidak lagi tersedia. Hapus gerakan sebelum menyimpan rutinitas.</string>
+    <string name="routine_tracking_mode">Mode pencatatan</string>
+    <string name="routine_tracking_weight_reps">Beban eksternal dan repetisi</string>
+    <string name="routine_tracking_bodyweight_reps">Berat badan dan repetisi</string>
+    <string name="routine_tracking_assisted_reps">Bantuan dan repetisi</string>
+    <string name="routine_tracking_reps_only">Repetisi saja</string>
+    <string name="routine_tracking_duration">Durasi</string>
+    <string name="routine_tracking_distance_duration">Jarak dan durasi</string>
+    <string name="routine_duration_seconds">Durasi (s)</string>
+    <string name="routine_distance_meters">Jarak (m, opsional)</string>
 </resources>

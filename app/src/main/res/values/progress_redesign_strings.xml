@@ -1,8 +1,8 @@
 <resources>
     <string name="progress_overview_title">Progress</string>
-    <string name="progress_overview_volume">Workout volume</string>
+    <string name="progress_overview_volume">External-load volume</string>
     <!-- Legacy key retained; the metric now uses the displayed calendar month. -->
-    <string name="progress_overview_weekly_time">Workout duration</string>
+    <string name="progress_overview_weekly_time">Session duration</string>
     <string name="progress_overview_all_history">All history</string>
     <string name="progress_overview_this_week">This week</string>
     <string name="progress_overview_has_workout">Workout logged</string>
@@ -25,4 +25,16 @@
     <string-array name="progress_overview_weekdays">
         <item>Mo</item><item>Tu</item><item>We</item><item>Th</item><item>Fr</item><item>Sa</item><item>Su</item>
     </string-array>
+    <string name="progress_additional_volume">Additional-load volume</string>
+    <string name="progress_repetitions">Completed repetitions</string>
+    <string name="progress_hold_duration">Isometric hold time</string>
+    <string name="progress_cardio_duration">Cardio / conditioning time</string>
+    <string name="progress_cardio_distance">Cardio / conditioning distance</string>
+    <string name="progress_volume_unit">%1$s kg·reps</string>
+    <string name="progress_repetitions_unit">%1$s reps</string>
+    <string name="progress_seconds_unit">%1$s s</string>
+    <string name="progress_meters_unit">%1$s m</string>
+    <string name="progress_metric_unavailable">—</string>
+    <string name="progress_no_external_volume">No verified external-load volume</string>
+    <string name="progress_unverified_notice">%1$d sessions contain unverified historical measurements. Those measurements are excluded from typed progress; session duration remains included.</string>
 </resources>

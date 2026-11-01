@@ -27,13 +27,14 @@ import androidx.compose.ui.platform.testTag
 @Composable
 fun WorkoutDetailScreen(
     workoutId: String, onNavigateBack: () -> Unit,
-    onNavigateToExerciseSelection: (String, Boolean) -> Unit, onStartWorkout: (String) -> Unit,
-    onNavigateToEdit: (String) -> Unit = {}, viewModel: WorkoutDetailViewModel = hiltViewModel()
+    onNavigateToExerciseSelection: (String, String, Boolean) -> Unit, onStartWorkout: (String) -> Unit,
+    onNavigateToEdit: (String) -> Unit = {}, viewModel: WorkoutDetailViewModel = hiltViewModel(),
+    refreshId: String = ""
 ) {
     val state by viewModel.state.collectAsStateWithLifecycle()
     val startRequest = rememberWorkoutStartRequest(workoutId, state.isCurrentWorkoutActive) { onStartWorkout(workoutId) }
     var deleteDialog by rememberSaveable { mutableStateOf(false) }
-    LaunchedEffect(workoutId) { viewModel.initialize(workoutId) }
+    LaunchedEffect(workoutId, refreshId) { viewModel.initialize(workoutId) }
     LaunchedEffect(state.hasPendingDelete, state.isLoading) {
         if (state.hasPendingDelete && !state.isLoading) deleteDialog = true
     }
@@ -57,7 +58,7 @@ fun WorkoutDetailScreen(
     WorkoutDetailContent(state, viewModel.estimatedDuration,
         onBack = onNavigateBack, onEdit = { onNavigateToEdit(workoutId) },
         onDelete = { viewModel.clearDeleteError(); deleteDialog = true },
-        onAdd = { onNavigateToExerciseSelection(workoutId, state.workout?.exercises?.isEmpty() == true) }, onRetry = viewModel::loadWorkout,
+        onAdd = { onNavigateToExerciseSelection(workoutId, state.workout?.name.orEmpty(), state.workout?.exercises?.isEmpty() == true) }, onRetry = viewModel::loadWorkout,
         onStart = startRequest.start, startPending = startRequest.pending)
 }
 

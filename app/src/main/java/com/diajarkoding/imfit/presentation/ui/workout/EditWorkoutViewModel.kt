@@ -150,7 +150,7 @@ class EditWorkoutViewModel(
             invalidateAccount()
             return
         }
-        durable = restored ?: DurableRoutineDraft(workoutId, ownerId, mode.name, flowId, name = initialName)
+        durable = restored ?: DurableRoutineDraft(workoutId, ownerId, mode.name, flowId, name = initialName, loaded = (mode == RoutineFormMode.SETUP))
         persist()
         _state.value = EditWorkoutState(workoutName = durable?.name.orEmpty(), mode = mode, flowId = flowId)
         accountJob = scope.launch {
@@ -197,6 +197,13 @@ class EditWorkoutViewModel(
                 } else if (draft.loaded) {
                     val exercises = hydrate(draft.rows.map { it.id })
                     if (!ownsDraft()) return@launch
+                    val routine = routineRepository.getRoutineById(draft.routineId).getOrNull()
+                    val routineName = if (draft.name.isBlank()) routine?.name ?: draft.name else draft.name
+                    val revision = draft.revision ?: routine?.revision
+                    if (routineName != draft.name || revision != draft.revision) {
+                        durable = draft.copy(name = routineName, revision = revision)
+                        persist()
+                    }
                     publishDraft(exercises)
                 } else {
                     val routine = routineRepository.getRoutineById(draft.routineId).getOrThrow()
@@ -262,7 +269,10 @@ class EditWorkoutViewModel(
         _state.value = _state.value.copy(workoutName = draft.name, exercises = templates, rawConfigs = raw,
             baseRevision = draft.revision, hasLoaded = true, isLoading = false, isDirty = draft.dirty,
             hasPendingSave = draft.command != null,
-            invalidConfigIds = templates.filter { !raw.getValue(it.id).isValid || !it.exercise.supportsRoutinePrescription() }.map { it.id }.toSet(),
+            invalidConfigIds = templates.filter {
+                val config = raw.getValue(it.id)
+                !config.isValid || !it.exercise.supportsRoutinePrescription() || config.trackingType !in it.exercise.allowedTrackingTypes
+            }.map { it.id }.toSet(),
             errorRes = null)
     }
     private fun canEdit() = _state.value.let {
@@ -282,28 +292,12 @@ class EditWorkoutViewModel(
         _state.value = _state.value.copy(nameErrorRes = null)
     }
 
-    fun updateRawConfig(
-        id: String,
-        sets: String,
-        reps: String,
-        rest: String,
-        trackingType: TrackingType? = null,
-        durationSeconds: String? = null,
-        distanceMeters: String? = null
-    ) {
-        if (_state.value.exercises.find { it.id == id }?.exercise?.supportsRoutinePrescription() != true) return
-        mutate { it.copy(rows = it.rows.map { row ->
-            if (row.id == id) {
-                DraftRow(
-                    id = id,
-                    sets = sets,
-                    reps = reps,
-                    rest = rest,
-                    trackingType = trackingType?.name ?: row.trackingType,
-                    durationSeconds = durationSeconds ?: row.durationSeconds,
-                    distanceMeters = distanceMeters ?: row.distanceMeters
-                )
-            } else row
+    fun updateRawConfig(id: String, config: RawExerciseConfig) {
+        val exercise = _state.value.exercises.find { it.id == id }?.exercise ?: return
+        if (!exercise.supportsRoutinePrescription() || config.trackingType !in exercise.allowedTrackingTypes) return
+        mutate { draft -> draft.copy(rows = draft.rows.map { row ->
+            if (row.id == id) DraftRow(id, config.sets, config.reps, config.rest,
+                config.trackingType.name, config.durationSeconds, config.distanceMeters) else row
         }) }
     }
 
@@ -311,15 +305,16 @@ class EditWorkoutViewModel(
         val exercise = _state.value.exercises.find { it.id == id }?.exercise ?: return
         if (mode !in exercise.allowedTrackingTypes) return
         val current = _state.value.rawConfigs[id] ?: return
-        updateRawConfig(
-            id = id,
-            sets = current.sets,
-            reps = current.reps,
-            rest = current.rest,
+        if (mode == current.trackingType) return
+        val repetitions = mode in listOf(TrackingType.WEIGHT_REPS, TrackingType.BODYWEIGHT_REPS,
+            TrackingType.ASSISTED_REPS, TrackingType.REPS_ONLY)
+        val duration = mode == TrackingType.DURATION || mode == TrackingType.DISTANCE_DURATION
+        updateRawConfig(id, current.copy(
             trackingType = mode,
-            durationSeconds = current.durationSeconds,
-            distanceMeters = current.distanceMeters
-        )
+            reps = if (repetitions) current.reps else "",
+            durationSeconds = if (duration) current.durationSeconds else "",
+            distanceMeters = if (mode == TrackingType.DISTANCE_DURATION) current.distanceMeters else ""
+        ))
     }
 
     fun removeExercise(index: Int) = mutate { draft ->
@@ -344,8 +339,12 @@ class EditWorkoutViewModel(
         if (!canEdit()) return false
         val existing = draft.rows.map { it.id }.toSet()
         val additions = result.selectedExercises.distinctBy { it.id }.filterNot { it.id in existing }
-        durable = draft.copy(rows = draft.rows + additions.map {
-            if (it.supportsRoutinePrescription()) DraftRow(it.id, "3", "10", "60") else DraftRow(it.id, "", "", "")
+        durable = draft.copy(loaded = true, rows = draft.rows + additions.map {
+            if (it.supportsRoutinePrescription()) {
+                val mode = it.defaultTrackingType
+                val reps = if (mode == TrackingType.DURATION || mode == TrackingType.DISTANCE_DURATION) "" else "10"
+                DraftRow(it.id, "3", reps, "60", mode.name, "", "")
+            } else DraftRow(it.id, "", "", "")
         }, dirty = draft.dirty || additions.isNotEmpty(), acceptedResults = draft.acceptedResults + result.resultId)
         persist()
         publishDraft(_state.value.exercises.map { it.exercise } + additions)
@@ -410,7 +409,7 @@ class EditWorkoutViewModel(
     private fun TemplateExercise.row() = DraftRow(
         id = id,
         sets = sets.toString(),
-        reps = (reps ?: 10).toString(),
+        reps = reps?.toString() ?: "",
         rest = restSeconds.toString(),
         trackingType = trackingType.name,
         durationSeconds = targetDurationSeconds?.toString() ?: "",

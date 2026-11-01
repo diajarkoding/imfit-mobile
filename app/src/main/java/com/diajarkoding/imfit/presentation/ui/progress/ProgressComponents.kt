@@ -73,28 +73,53 @@ internal fun ProgressProfileRow(state: ProgressState, onProfile: () -> Unit) {
 @Composable
 internal fun ProgressMetricOverview(metrics: ProgressMetrics) {
     val locale = LocalConfiguration.current.locales[0] ?: Locale.ROOT
-    val volume = stringResource(R.string.redesign_kg, NumberFormat.getNumberInstance(locale).apply {
-        maximumFractionDigits = 0
-    }.format(metrics.monthlyVolume))
-    val time = pluralStringResource(R.plurals.progress_overview_minutes, metrics.monthlyMinutes, metrics.monthlyMinutes)
+    val number = NumberFormat.getNumberInstance(locale).apply { maximumFractionDigits = 1 }
     val period = metrics.month.format(DateTimeFormatter.ofPattern("LLLL yyyy", locale)).replaceFirstChar { it.uppercaseChar() }
-    BoxWithConstraints(Modifier.fillMaxWidth()) {
-        val stacked = maxWidth < IMFITComponentSizes.sectionStackWidth ||
-            LocalDensity.current.fontScale > IMFITComponentSizes.adaptiveFontScale
-        if (stacked) {
+    val cards = mutableListOf<Triple<String, String, ImageVector>>()
+    cards += Triple(
+        if (metrics.monthlyVolume > 0) stringResource(R.string.progress_volume_unit, number.format(metrics.monthlyVolume))
+        else stringResource(R.string.progress_metric_unavailable),
+        stringResource(R.string.progress_overview_volume), Symbols.Outlined.FitnessCenter)
+    if (metrics.monthlyAdditionalVolume > 0) cards += Triple(
+        stringResource(R.string.progress_volume_unit, number.format(metrics.monthlyAdditionalVolume)),
+        stringResource(R.string.progress_additional_volume), Symbols.Outlined.FitnessCenter)
+    if (metrics.monthlyRepetitions > 0) cards += Triple(
+        stringResource(R.string.progress_repetitions_unit, number.format(metrics.monthlyRepetitions)),
+        stringResource(R.string.progress_repetitions), Symbols.Outlined.FitnessCenter)
+    if (metrics.monthlyHoldDurationSeconds > 0) cards += Triple(
+        stringResource(R.string.progress_seconds_unit, number.format(metrics.monthlyHoldDurationSeconds)),
+        stringResource(R.string.progress_hold_duration), Symbols.Default.Timer)
+    if (metrics.monthlyCardioDurationSeconds > 0) cards += Triple(
+        stringResource(R.string.progress_seconds_unit, number.format(metrics.monthlyCardioDurationSeconds)),
+        stringResource(R.string.progress_cardio_duration), Symbols.Default.Timer)
+    if (metrics.monthlyCardioDistanceMeters > 0) cards += Triple(
+        stringResource(R.string.progress_meters_unit, number.format(metrics.monthlyCardioDistanceMeters)),
+        stringResource(R.string.progress_cardio_distance), Symbols.Default.LocalFireDepartment)
+    cards += Triple(
+        pluralStringResource(R.plurals.progress_overview_minutes, metrics.monthlyMinutes, metrics.monthlyMinutes),
+        stringResource(R.string.progress_overview_weekly_time), Symbols.Default.Timer)
+    Column(verticalArrangement = Arrangement.spacedBy(IMFITSpacing.md)) {
+        BoxWithConstraints(Modifier.fillMaxWidth()) {
+            val stacked = maxWidth < IMFITComponentSizes.sectionStackWidth ||
+                LocalDensity.current.fontScale > IMFITComponentSizes.adaptiveFontScale
             Column(verticalArrangement = Arrangement.spacedBy(IMFITSpacing.md)) {
-                ProgressMetricCard(volume, stringResource(R.string.progress_overview_volume),
-                    period, Symbols.Outlined.FitnessCenter)
-                ProgressMetricCard(time, stringResource(R.string.progress_overview_weekly_time),
-                    period, Symbols.Default.Timer)
+                cards.chunked(if (stacked) 1 else 2).forEach { row ->
+                    Row(horizontalArrangement = Arrangement.spacedBy(IMFITSpacing.md)) {
+                        row.forEach { (value, caption, icon) ->
+                            ProgressMetricCard(value, caption, period, icon, Modifier.weight(1f))
+                        }
+                        if (!stacked && row.size == 1) Spacer(Modifier.weight(1f))
+                    }
+                }
             }
-        } else {
-            Row(horizontalArrangement = Arrangement.spacedBy(IMFITSpacing.md)) {
-                ProgressMetricCard(volume, stringResource(R.string.progress_overview_volume),
-                    period, Symbols.Outlined.FitnessCenter, Modifier.weight(1f))
-                ProgressMetricCard(time, stringResource(R.string.progress_overview_weekly_time),
-                    period, Symbols.Default.Timer, Modifier.weight(1f))
-            }
+        }
+        if (metrics.monthlyVolume == 0.0) {
+            Text(stringResource(R.string.progress_no_external_volume), color = IMFITColors.training.muted,
+                style = IMFITTypography.caption)
+        }
+        if (metrics.monthlyUnverifiedWorkouts > 0) {
+            Text(stringResource(R.string.progress_unverified_notice, metrics.monthlyUnverifiedWorkouts),
+                color = IMFITColors.training.muted, style = IMFITTypography.caption)
         }
     }
 }
@@ -210,8 +235,13 @@ internal fun ProgressSelectedDay(date: LocalDate, logs: List<WorkoutLog>, onHist
     val colors = IMFITColors.training
     val locale = LocalConfiguration.current.locales[0] ?: Locale.ROOT
     val duration = logs.sumOf { it.durationMinutes }
-    val volume = stringResource(R.string.redesign_kg,
-        NumberFormat.getNumberInstance(locale).apply { maximumFractionDigits = 0 }.format(logs.sumOf { it.totalVolume.toDouble() }))
+    val verifiedVolume = logs.sumOf { log ->
+        if (log.dataQuality == "VERIFIED" && log.exerciseLogs.all { it.metricQuality == "VERIFIED" }) log.totalVolume.toDouble()
+        else log.exerciseLogs.filter { it.metricQuality == "VERIFIED" }.sumOf { it.totalVolume.toDouble() }
+    }
+    val volume = if (verifiedVolume > 0) stringResource(R.string.progress_volume_unit,
+        NumberFormat.getNumberInstance(locale).apply { maximumFractionDigits = 1 }.format(verifiedVolume))
+        else stringResource(R.string.progress_no_external_volume)
     val minutes = pluralStringResource(R.plurals.progress_overview_minutes, duration, duration)
     val description = if (logs.isEmpty()) stringResource(R.string.progress_overview_empty_day)
         else pluralStringResource(R.plurals.progress_overview_day_workouts, logs.size, logs.size, minutes, volume)

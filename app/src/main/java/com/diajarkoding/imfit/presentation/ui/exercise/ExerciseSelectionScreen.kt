@@ -314,8 +314,8 @@ internal fun ExercisePickerRow(exercise: Exercise, selected: Boolean, enabled: B
         Row(
             Modifier
                 .fillMaxWidth()
+                .testTag("exercise_row_${exercise.id}")
                 .toggleable(selected, enabled = enabled, role = Role.Checkbox, onValueChange = { onToggle() })
-                .heightIn(min = 76.dp)
                 .padding(12.dp),
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(12.dp)

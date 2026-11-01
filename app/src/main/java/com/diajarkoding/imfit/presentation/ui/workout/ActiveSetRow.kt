@@ -17,6 +17,8 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.platform.LocalConfiguration
+import androidx.compose.ui.platform.LocalContext
+import com.diajarkoding.imfit.core.timer.AndroidMonotonicClock
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.contentDescription
@@ -44,12 +46,12 @@ internal fun ActiveSetRow(
     mutationEnabled: Boolean,
     canDelete: Boolean,
     isPaused: Boolean,
-    onUpdate: (Float, Int) -> Unit = { _, _ -> },
     onComplete: () -> Unit,
     onDelete: () -> Unit,
     modifier: Modifier = Modifier,
     trackingType: TrackingType = TrackingType.WEIGHT_REPS,
-    onMeasurementUpdate: (SetMeasurement) -> Unit = { m -> onUpdate(m.weight ?: 0f, m.reps ?: 0) }
+    onMeasurementUpdate: (SetMeasurement) -> Unit,
+    onStopwatchToggle: () -> Unit
 ) {
     val colors = IMFITColors.training
     val configuration = LocalConfiguration.current
@@ -69,34 +71,54 @@ internal fun ActiveSetRow(
     var assistanceWeightText by rememberSaveable(set.assistanceWeight, locale) {
         mutableStateOf(if ((set.assistanceWeight ?: 0f) > 0f) formatSetWeight(set.assistanceWeight ?: 0f, locale) else "")
     }
-    var durationText by rememberSaveable(set.durationSeconds) {
-        mutableStateOf(if ((set.durationSeconds ?: 0) > 0) (set.durationSeconds ?: 0).toString() else "")
+    var durationText by rememberSaveable(exerciseName, set.setNumber) {
+        mutableStateOf(set.durationSeconds?.takeIf { it > 0 }?.toString() ?: "")
+    }
+    var lastPublishedDuration by rememberSaveable(exerciseName, set.setNumber) { mutableStateOf(set.durationSeconds) }
+    LaunchedEffect(set.durationSeconds) {
+        if (set.durationSeconds != lastPublishedDuration) {
+            durationText = set.durationSeconds?.takeIf { it > 0 }?.toString() ?: ""
+            lastPublishedDuration = set.durationSeconds
+        }
     }
     var distanceText by rememberSaveable(set.distanceMeters) {
         mutableStateOf(if ((set.distanceMeters ?: 0) > 0) (set.distanceMeters ?: 0).toString() else "")
     }
 
-    // Stopwatch state for duration-based sets
-    var isStopwatchRunning by rememberSaveable { mutableStateOf(false) }
-    var stopwatchStartRealtime by rememberSaveable { mutableStateOf(0L) }
-    var baseDurationSeconds by rememberSaveable { mutableStateOf(set.durationSeconds ?: 0) }
-
-    LaunchedEffect(isStopwatchRunning, isPaused) {
-        if (isStopwatchRunning && !isPaused) {
-            stopwatchStartRealtime = SystemClock.elapsedRealtime()
-            while (isStopwatchRunning && !isPaused) {
-                delay(200)
-                val elapsedSec = baseDurationSeconds + ((SystemClock.elapsedRealtime() - stopwatchStartRealtime) / 1000).toInt()
-                durationText = elapsedSec.toString()
-                onMeasurementUpdate(set.measurement.copy(durationSeconds = elapsedSec))
-            }
+    val context = LocalContext.current
+    val stopwatch = set.executionStopwatch
+    val isStopwatchRunning = stopwatch?.isRunning == true
+    val bootIdentity = remember(context, isStopwatchRunning) {
+        if (isStopwatchRunning) AndroidMonotonicClock(context.applicationContext).bootIdentity() else null
+    }
+    var nowElapsedMs by remember { mutableLongStateOf(0L) }
+    LaunchedEffect(stopwatch?.anchorElapsedMs, isPaused, set.isCompleted) {
+        while (isStopwatchRunning && !isPaused && !set.isCompleted) {
+            nowElapsedMs = SystemClock.elapsedRealtime()
+            delay(200)
+        }
+    }
+    val displayedSeconds = if (isStopwatchRunning && !isPaused && !set.isCompleted) {
+        (stopwatch!!.elapsedMillis(nowElapsedMs, bootIdentity) / 1000).coerceAtMost(Int.MAX_VALUE.toLong()).toInt()
+    } else set.durationSeconds
+    val displayedDuration = if (isStopwatchRunning || set.isCompleted) displayedSeconds?.toString() ?: "" else durationText
+    val updateDuration: (String) -> Unit = { raw ->
+        if (raw.all { it.isDigit() || it == ':' } && raw.count { it == ':' } <= 1) {
+            durationText = raw
+            val seconds = parseSetDurationSeconds(raw) ?: 0
+            lastPublishedDuration = seconds
+            onMeasurementUpdate(set.measurement.copy(durationSeconds = seconds))
         }
     }
 
     val completeLabel = stringResource(R.string.active_session_complete_set, exerciseName, set.setNumber)
     val deleteLabel = stringResource(R.string.active_session_delete_set, exerciseName, set.setNumber)
 
-    val isCompleteEligible = set.measurement.isCompleteEligible(trackingType)
+    val isCompleteEligible = SetMeasurement(
+        weight = set.weight, reps = set.reps, durationSeconds = displayedSeconds,
+        distanceMeters = set.distanceMeters, additionalWeight = set.additionalWeight,
+        assistanceWeight = set.assistanceWeight
+    ).isCompleteEligible(trackingType)
 
     val inputs: @Composable () -> Unit = {
         when (trackingType) {
@@ -194,15 +216,7 @@ internal fun ActiveSetRow(
                 Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
                     if (editable && !isPaused) {
                         IconButton(
-                            onClick = {
-                                if (isStopwatchRunning) {
-                                    isStopwatchRunning = false
-                                    baseDurationSeconds = durationText.toIntOrNull() ?: 0
-                                } else {
-                                    baseDurationSeconds = durationText.toIntOrNull() ?: 0
-                                    isStopwatchRunning = true
-                                }
-                            },
+                            onClick = onStopwatchToggle,
                             modifier = Modifier.size(40.dp)
                         ) {
                             Icon(
@@ -214,14 +228,8 @@ internal fun ActiveSetRow(
                     }
                     Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
                         if (compact) Text("Durasi (detik)", color = colors.muted, style = MaterialTheme.typography.labelSmall)
-                        SetNumberInput(durationText, { raw ->
-                            if (raw.all(Char::isDigit) && (raw.isEmpty() || raw.toIntOrNull() != null)) {
-                                durationText = raw
-                                val sec = raw.toIntOrNull() ?: 0
-                                baseDurationSeconds = sec
-                                onMeasurementUpdate(set.measurement.copy(durationSeconds = sec))
-                            }
-                        }, "Durasi dalam detik", editable && !isStopwatchRunning, set.isCompleted, KeyboardType.Number)
+                        SetNumberInput(displayedDuration, updateDuration,
+                            "Durasi dalam detik", editable && !isStopwatchRunning, set.isCompleted, KeyboardType.Text)
                     }
                 }
             }
@@ -237,14 +245,17 @@ internal fun ActiveSetRow(
                             }
                         }, "Jarak dalam meter", editable, set.isCompleted, KeyboardType.Number)
                     }
+                    if (editable && !isPaused) {
+                        IconButton(onClick = onStopwatchToggle, modifier = Modifier.size(40.dp)) {
+                            Icon(if (isStopwatchRunning) Symbols.Filled.Pause else Symbols.Filled.PlayArrow,
+                                contentDescription = if (isStopwatchRunning) "Pause Stopwatch" else "Start Stopwatch",
+                                tint = colors.primary)
+                        }
+                    }
                     Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
                         if (compact) Text("Durasi (detik)", color = colors.muted, style = MaterialTheme.typography.labelSmall)
-                        SetNumberInput(durationText, { raw ->
-                            if (raw.all(Char::isDigit) && (raw.isEmpty() || raw.toIntOrNull() != null)) {
-                                durationText = raw
-                                onMeasurementUpdate(set.measurement.copy(durationSeconds = raw.toIntOrNull() ?: 0))
-                            }
-                        }, "Durasi dalam detik", editable, set.isCompleted, KeyboardType.Number)
+                        SetNumberInput(displayedDuration, updateDuration,
+                            "Durasi dalam detik", editable && !isStopwatchRunning, set.isCompleted, KeyboardType.Text)
                     }
                 }
             }
@@ -273,6 +284,9 @@ internal fun ActiveSetRow(
     Column(modifier.fillMaxWidth().clip(RoundedCornerShape(8.dp))
         .background(if (set.isCompleted) colors.successContainer else Color.Transparent)
         .padding(vertical = 4.dp).testTag("active_set_${set.setNumber}")) {
+        if (stopwatch?.recoveryRequired == true) {
+            Text(stringResource(R.string.execution_stopwatch_review), color = colors.error, style = MaterialTheme.typography.bodySmall)
+        }
         if (compact) {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Text(stringResource(R.string.active_workout_set_number, set.setNumber),

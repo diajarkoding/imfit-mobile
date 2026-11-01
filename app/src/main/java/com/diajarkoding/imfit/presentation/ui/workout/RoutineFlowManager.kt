@@ -47,7 +47,6 @@ class RoutineFlowManager internal constructor(
 
     init {
         scope.launch {
-            setOwner(authRepository.getLocalUserId())
             authRepository.userProfileState.collect { profile ->
                 when (profile.sessionState) {
                     AuthSessionState.Initializing -> Unit

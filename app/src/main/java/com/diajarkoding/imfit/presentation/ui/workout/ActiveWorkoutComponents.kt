@@ -353,14 +353,12 @@ internal fun ActiveExerciseCard(
     mutationEnabled: Boolean,
     isPaused: Boolean,
     onRemoveExercise: () -> Unit,
-    onSetUpdate: (setIndex: Int, weight: Float, reps: Int) -> Unit = { _, _, _ -> },
     onSetComplete: (setIndex: Int) -> Unit,
     onAddSet: () -> Unit,
     onRemoveSet: (setIndex: Int) -> Unit,
     modifier: Modifier = Modifier,
-    onSetMeasurementUpdate: (setIndex: Int, measurement: SetMeasurement) -> Unit = { setIndex, m ->
-        onSetUpdate(setIndex, m.weight ?: 0f, m.reps ?: 0)
-    }
+    onSetMeasurementUpdate: (setIndex: Int, measurement: SetMeasurement) -> Unit,
+    onStopwatchToggle: (setIndex: Int) -> Unit
 ) {
     val colors = IMFITColors.training
     Surface(
@@ -483,11 +481,11 @@ internal fun ActiveExerciseCard(
                         mutationEnabled = mutationEnabled,
                         canDelete = exerciseLog.sets.size > 1 && !set.isCompleted && mutationEnabled,
                         isPaused = isPaused,
-                        onUpdate = { weight, reps -> onSetUpdate(setIndex, weight, reps) },
                         onComplete = { onSetComplete(setIndex) },
                         onDelete = { onRemoveSet(setIndex) },
                         trackingType = exerciseLog.trackingType,
-                        onMeasurementUpdate = { measurement -> onSetMeasurementUpdate(setIndex, measurement) }
+                        onMeasurementUpdate = { measurement -> onSetMeasurementUpdate(setIndex, measurement) },
+                        onStopwatchToggle = { onStopwatchToggle(setIndex) }
                     )
                 }
             }

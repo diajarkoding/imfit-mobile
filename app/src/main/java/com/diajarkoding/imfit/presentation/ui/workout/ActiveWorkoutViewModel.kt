@@ -13,6 +13,11 @@ import com.diajarkoding.imfit.domain.model.inputDefaults
 import com.diajarkoding.imfit.domain.model.addDefaultSet
 import com.diajarkoding.imfit.domain.model.appendExercises
 import com.diajarkoding.imfit.domain.model.removeIncompleteExercise
+import com.diajarkoding.imfit.domain.model.TrackingType
+import com.diajarkoding.imfit.domain.model.checkpointExecutionStopwatch
+import com.diajarkoding.imfit.domain.model.freezeExecutionStopwatch
+import com.diajarkoding.imfit.domain.model.toggleExecutionStopwatch
+import com.diajarkoding.imfit.core.timer.AndroidMonotonicClock
 import com.diajarkoding.imfit.domain.repository.ExerciseCatalogRepository
 import com.diajarkoding.imfit.domain.repository.ExerciseHydrationResult
 import com.diajarkoding.imfit.domain.repository.RoutineError
@@ -71,7 +76,8 @@ class ActiveWorkoutViewModel @Inject constructor(
     private val timer: RestTimerCoordinator,
     private val timerRuntime: com.diajarkoding.imfit.core.timer.RestTimerAndroidRuntime,
     private val exerciseCatalogRepository: ExerciseCatalogRepository,
-    private val routineRepository: RoutineRepository
+    private val routineRepository: RoutineRepository,
+    private val executionClock: AndroidMonotonicClock
 ) : ViewModel() {
 
     private val _state = MutableStateFlow(ActiveWorkoutState())
@@ -164,12 +170,12 @@ class ActiveWorkoutViewModel @Inject constructor(
                         return@launch
                     }
                     val revision = sessionRevision
-                    val session = withTimeout(2500) { workoutRepository.getActiveSessionForTimer() }
+                    val stored = withTimeout(2500) { workoutRepository.getActiveSessionForTimer() }
                     if (authRepository.getLocalUserId() != sessionOwnerId) {
                         _state.update { it.copy(session = null, sessionEnded = true) }
                         return@launch
                     }
-                    if (session == null) {
+                    if (stored == null) {
                         if (_state.value.session != null && !_state.value.isFinishing && !_state.value.isCancelling) {
                             _state.update { it.copy(session = null, sessionEnded = true, isRestTimerActive = false) }
                             return@launch
@@ -177,6 +183,7 @@ class ActiveWorkoutViewModel @Inject constructor(
                         delay(1000)
                         continue
                     }
+                    val session = checkpointExecutionStopwatches(stored)
                     // Use actualElapsedMs which excludes paused time.
                     val elapsed = session.actualElapsedMs / 1000
                     timer.reconcile(source = "ui_ticker")
@@ -209,6 +216,20 @@ class ActiveWorkoutViewModel @Inject constructor(
                 delay(1000)
             }
         }
+    }
+
+    private suspend fun checkpointExecutionStopwatches(session: WorkoutSession): WorkoutSession {
+        if (session.exerciseLogs.none { log -> log.sets.any { !it.isCompleted && it.executionStopwatch?.isRunning == true } }) return session
+        val now = executionClock.elapsedRealtime()
+        val boot = executionClock.bootIdentity()
+        return workoutRepository.mutateActiveSession(session.id) { current ->
+            current.copy(exerciseLogs = current.exerciseLogs.map { log ->
+                log.copy(sets = log.sets.map { set ->
+                    if (current.isPaused) set.freezeExecutionStopwatch(now, boot)
+                    else set.checkpointExecutionStopwatch(now, boot)
+                })
+            })
+        } ?: session
     }
 
     /**
@@ -257,9 +278,6 @@ class ActiveWorkoutViewModel @Inject constructor(
 
     fun updateRestTimer(exerciseIndex: Int, seconds: Int) = editExercise(exerciseIndex) { it.copy(restSeconds = seconds) }
 
-    fun updateSet(exerciseIndex: Int, setIndex: Int, weight: Float, reps: Int) =
-        updateSetMeasurement(exerciseIndex, setIndex, SetMeasurement(weight = weight, reps = reps))
-
     fun updateSetMeasurement(exerciseIndex: Int, setIndex: Int, measurement: SetMeasurement) = editExercise(exerciseIndex) { log ->
         log.copy(sets = log.sets.mapIndexed { index, set ->
             if (index == setIndex && !set.isCompleted) {
@@ -269,10 +287,37 @@ class ActiveWorkoutViewModel @Inject constructor(
                     durationSeconds = measurement.durationSeconds ?: set.durationSeconds,
                     distanceMeters = measurement.distanceMeters ?: set.distanceMeters,
                     additionalWeight = measurement.additionalWeight ?: set.additionalWeight,
-                    assistanceWeight = measurement.assistanceWeight ?: set.assistanceWeight
+                    assistanceWeight = measurement.assistanceWeight ?: set.assistanceWeight,
+                    executionStopwatch = if (measurement.durationSeconds != set.durationSeconds) null else set.executionStopwatch
                 )
             } else set
         })
+    }
+
+    fun toggleSetStopwatch(exerciseIndex: Int, setIndex: Int) {
+        val snapshot = _state.value
+        if (snapshot.isPaused || snapshot.isFinishing || snapshot.isCancelling) return
+        val session = snapshot.session ?: return
+        val exercise = session.exerciseLogs.getOrNull(exerciseIndex) ?: return
+        if (exercise.trackingType != TrackingType.DURATION && exercise.trackingType != TrackingType.DISTANCE_DURATION) return
+        val setNumber = exercise.sets.getOrNull(setIndex)?.setNumber ?: return
+        viewModelScope.launch {
+            try {
+                val now = executionClock.elapsedRealtime()
+                val boot = executionClock.bootIdentity()
+                workoutRepository.mutateActiveSession(session.id) { current ->
+                    if (current.isPaused) current else current.copy(exerciseLogs = current.exerciseLogs.map { log ->
+                        if (log.exercise.id != exercise.exercise.id) log else log.copy(sets = log.sets.map { set ->
+                            if (set.setNumber == setNumber) set.toggleExecutionStopwatch(now, boot) else set
+                        })
+                    })
+                }?.let(::publishSession)
+            } catch (e: CancellationException) { throw e }
+            catch (e: Exception) {
+                android.util.Log.e("ActiveWorkoutVM", "Stopwatch save failed", e)
+                _state.update { it.copy(mutationErrorRes = R.string.error_session_save) }
+            }
+        }
     }
 
     fun completeSet(exerciseIndex: Int, setIndex: Int) {
@@ -287,8 +332,11 @@ class ActiveWorkoutViewModel @Inject constructor(
                 val updated = workoutRepository.mutateActiveSession(session.id) { current ->
                     if (current.isPaused) current else current.copy(exerciseLogs = current.exerciseLogs.map { log ->
                         if (log.exercise.id != exercise.exercise.id) log else log.copy(sets = log.sets.map { set ->
-                            if (set.setNumber == setNumber && !set.isCompleted && set.measurement.isCompleteEligible(log.trackingType)) {
-                                completed = set.copy(isCompleted = true); completed!!
+                            if (set.setNumber == setNumber && !set.isCompleted) {
+                                val frozen = set.freezeExecutionStopwatch(executionClock.elapsedRealtime(), executionClock.bootIdentity())
+                                if (frozen.measurement.isCompleteEligible(log.trackingType)) {
+                                    completed = frozen.copy(isCompleted = true); completed!!
+                                } else set
                             } else set
                         })
                     })
@@ -401,7 +449,14 @@ class ActiveWorkoutViewModel @Inject constructor(
     private suspend fun persistWorkoutPause() {
         val session = _state.value.session ?: return
         workoutRepository.mutateActiveSession(session.id) { current ->
-            if (current.isPaused) current else current.copy(isPaused = true, lastPauseTime = System.currentTimeMillis())
+            if (current.isPaused) current else {
+                val now = executionClock.elapsedRealtime()
+                val boot = executionClock.bootIdentity()
+                current.copy(isPaused = true, lastPauseTime = System.currentTimeMillis(),
+                    exerciseLogs = current.exerciseLogs.map { log ->
+                        log.copy(sets = log.sets.map { it.freezeExecutionStopwatch(now, boot) })
+                    })
+            }
         }?.let(::publishSession)
     }
     

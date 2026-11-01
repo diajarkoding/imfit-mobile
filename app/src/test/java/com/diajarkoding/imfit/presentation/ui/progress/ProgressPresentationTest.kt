@@ -88,4 +88,95 @@ class ProgressPresentationTest {
         assertEquals((1..31).toList(), grid.filterNotNull())
         assertEquals(5, grid.takeLastWhile { it == null }.size)
     }
+
+    @Test fun typedMetricsKeepExternalAdditionalHoldCardioAndRepetitionsSeparate() {
+        val start = Instant.parse("2026-10-13T08:00:00Z")
+        val exercises = listOf(
+            ExerciseLog(Exercise("ex_chest_1", "Bench", MuscleCategory.CHEST, ""),
+                listOf(WorkoutSet(1, weight = 50f, reps = 10, isCompleted = true))),
+            ExerciseLog(Exercise("ex_chest_4", "Push up", MuscleCategory.CHEST, ""),
+                listOf(WorkoutSet(1, reps = 20, additionalWeight = 5f, isCompleted = true))),
+            ExerciseLog(Exercise("ex_back_17", "Assisted", MuscleCategory.BACK, ""),
+                listOf(WorkoutSet(1, reps = 8, assistanceWeight = 20f, isCompleted = true))),
+            ExerciseLog(Exercise("ex_cardio_5", "Conditioning", MuscleCategory.CARDIO, ""),
+                listOf(WorkoutSet(1, reps = 30, isCompleted = true))),
+            ExerciseLog(Exercise("ex_core_1", "Plank", MuscleCategory.CORE, ""),
+                listOf(WorkoutSet(1, durationSeconds = 90, isCompleted = true),
+                    WorkoutSet(2, durationSeconds = 900, isCompleted = false))),
+            ExerciseLog(Exercise("ex_cardio_1", "Run", MuscleCategory.CARDIO, ""),
+                listOf(WorkoutSet(1, durationSeconds = 600, distanceMeters = 2000, isCompleted = true))))
+        val session = log(start).copy(exerciseLogs = exercises, totalVolume = 500f,
+            additionalVolume = 100f)
+        val result = progressMetrics(listOf(session), start.plusSeconds(3600), ZoneOffset.UTC)
+        assertEquals(500.0, result.monthlyVolume, 0.0)
+        assertEquals(100.0, result.monthlyAdditionalVolume, 0.0)
+        assertEquals(68, result.monthlyRepetitions)
+        assertEquals(90, result.monthlyHoldDurationSeconds)
+        assertEquals(600, result.monthlyCardioDurationSeconds)
+        assertEquals(2000, result.monthlyCardioDistanceMeters)
+        assertEquals(60, result.monthlyMinutes)
+        assertEquals(0, result.monthlyUnverifiedWorkouts)
+    }
+
+    @Test fun bodyweightRepetitionsDoNotInventExternalLoadOrBodyMassVolume() {
+        val start = Instant.parse("2026-10-13T08:00:00Z")
+        val exercise = ExerciseLog(Exercise("ex_chest_4", "Push up", MuscleCategory.CHEST, ""),
+            listOf(WorkoutSet(1, reps = 15, isCompleted = true)))
+        val result = progressMetrics(listOf(log(start).copy(totalVolume = 0f, exerciseLogs = listOf(exercise))),
+            start.plusSeconds(3600), ZoneOffset.UTC)
+        assertEquals(15, result.monthlyRepetitions)
+        assertEquals(0.0, result.monthlyVolume, 0.0)
+        assertEquals(0.0, result.monthlyAdditionalVolume, 0.0)
+        assertEquals(0, result.monthlyHoldDurationSeconds)
+        assertEquals(0, result.monthlyCardioDurationSeconds)
+    }
+
+    @Test fun unverifiedHistoricalMeasurementsRemainVisibleButNeverBecomeTypedProgress() {
+        val start = Instant.parse("2026-10-13T08:00:00Z")
+        val sessionLegacy = log(start, 999f).let { log ->
+            log.copy(dataQuality = "LEGACY_UNVERIFIED",
+                exerciseLogs = log.exerciseLogs.map { it.copy(metricQuality = "LEGACY_UNVERIFIED") })
+        }
+        val exerciseLegacy = log(start.plusSeconds(1), 888f).let { log ->
+            log.copy(exerciseLogs = log.exerciseLogs.map { it.copy(metricQuality = "LEGACY_UNVERIFIED") })
+        }
+        val result = progressMetrics(listOf(sessionLegacy, exerciseLegacy), start.plusSeconds(7200), ZoneOffset.UTC)
+        assertEquals(2, result.monthlyUnverifiedWorkouts)
+        assertEquals(2, result.monthlyWorkouts)
+        assertEquals(120, result.monthlyMinutes)
+        assertEquals(0.0, result.monthlyVolume, 0.0)
+        assertEquals(0.0, result.monthlyAdditionalVolume, 0.0)
+        assertEquals(0, result.monthlyRepetitions)
+        assertEquals(0, result.monthlyHoldDurationSeconds)
+        assertEquals(0, result.monthlyCardioDurationSeconds)
+        assertEquals(0, result.monthlyCardioDistanceMeters)
+    }
+
+    @Test fun mixedLegacySessionKeepsVerifiedChildrenWithoutTrustingLegacySessionTotals() {
+        val start = Instant.parse("2026-10-13T08:00:00Z")
+        val legacy = ExerciseLog(Exercise("ex_chest_1", "Legacy bench", MuscleCategory.CHEST, ""),
+            listOf(WorkoutSet(1, weight = 999f, reps = 99, isCompleted = true)),
+            metricQuality = "LEGACY_UNVERIFIED")
+        val strength = ExerciseLog(Exercise("ex_chest_1", "Verified bench", MuscleCategory.CHEST, ""),
+            listOf(WorkoutSet(1, weight = 40f, reps = 5, isCompleted = true)))
+        val bodyweight = ExerciseLog(Exercise("ex_chest_4", "Push up", MuscleCategory.CHEST, ""),
+            listOf(WorkoutSet(1, reps = 10, additionalWeight = 5f, isCompleted = true)))
+        val cardio = ExerciseLog(Exercise("ex_cardio_1", "Run", MuscleCategory.CARDIO, ""),
+            listOf(WorkoutSet(1, durationSeconds = 600, distanceMeters = 2000, isCompleted = true)))
+        val hold = ExerciseLog(Exercise("ex_core_1", "Plank", MuscleCategory.CORE, ""),
+            listOf(WorkoutSet(1, durationSeconds = 30, isCompleted = true)))
+        val session = log(start).copy(dataQuality = "LEGACY_UNVERIFIED",
+            totalVolume = 999999f, additionalVolume = 999999f,
+            exerciseLogs = listOf(legacy, strength, bodyweight, cardio, hold))
+        val result = progressMetrics(listOf(session), start.plusSeconds(3600), ZoneOffset.UTC)
+        assertEquals(200.0, result.monthlyVolume, 0.0)
+        assertEquals(50.0, result.monthlyAdditionalVolume, 0.0)
+        assertEquals(15, result.monthlyRepetitions)
+        assertEquals(30, result.monthlyHoldDurationSeconds)
+        assertEquals(600, result.monthlyCardioDurationSeconds)
+        assertEquals(2000, result.monthlyCardioDistanceMeters)
+        assertEquals(60, result.monthlyMinutes)
+        assertEquals(1, result.monthlyWorkouts)
+        assertEquals(1, result.monthlyUnverifiedWorkouts)
+    }
 }

@@ -15,7 +15,9 @@ data class ProgressMetrics(
     val monthlyHoldDurationSeconds: Int = 0,
     val monthlyCardioDurationSeconds: Int = 0,
     val monthlyCardioDistanceMeters: Int = 0,
-    val monthlyAdditionalVolume: Double = 0.0
+    val monthlyAdditionalVolume: Double = 0.0,
+    val monthlyRepetitions: Int = 0,
+    val monthlyUnverifiedWorkouts: Int = 0
 )
 
 /** Presentation-only windows; persisted duration semantics are deliberately unchanged. */
@@ -29,25 +31,35 @@ internal fun progressMetrics(
         val sessionStart = Instant.ofEpochMilli(log.startTime)
         !sessionStart.isBefore(start) && sessionStart.isBefore(end) && !sessionStart.isAfter(now)
     }
-    val holdDuration = monthly.sumOf { log ->
-        log.exerciseLogs.filter { it.modality == ExerciseModality.ISOMETRIC }.sumOf { it.totalDurationSeconds }
+    // Quality belongs to each measurement: a mixed legacy session can contain verified typed children.
+    val exercises = monthly.flatMap { it.exerciseLogs }.filter { it.metricQuality == "VERIFIED" }
+    val holdDuration = exercises.filter { it.modality == ExerciseModality.ISOMETRIC }.sumOf { it.totalDurationSeconds }
+    val cardio = exercises.filter { it.modality == ExerciseModality.CARDIO || it.modality == ExerciseModality.CONDITIONING }
+    val cardioDuration = cardio.sumOf { it.totalDurationSeconds }
+    val cardioDistance = cardio.sumOf { it.totalDistanceMeters }
+    val volume = monthly.sumOf { log ->
+        if (log.dataQuality == "VERIFIED" && log.exerciseLogs.all { it.metricQuality == "VERIFIED" }) log.totalVolume.toDouble()
+        else log.exerciseLogs.filter { it.metricQuality == "VERIFIED" }.sumOf { it.totalVolume.toDouble() }
     }
-    val cardioDuration = monthly.sumOf { log ->
-        log.exerciseLogs.filter { it.modality in listOf(ExerciseModality.CARDIO, ExerciseModality.CONDITIONING) }.sumOf { it.totalDurationSeconds }
+    val addVol = monthly.sumOf { log ->
+        if (log.dataQuality == "VERIFIED" && log.exerciseLogs.all { it.metricQuality == "VERIFIED" }) log.additionalVolume.toDouble()
+        else log.exerciseLogs.filter { it.metricQuality == "VERIFIED" }.sumOf { it.additionalVolume.toDouble() }
     }
-    val cardioDistance = monthly.sumOf { it.totalDistanceMeters }
-    val addVol = monthly.sumOf { it.additionalVolume.toDouble() }
 
     return ProgressMetrics(
         month = month,
-        monthlyVolume = monthly.sumOf { it.totalVolume.toDouble() },
+        monthlyVolume = volume,
         monthlyMinutes = monthly.sumOf { it.durationMinutes },
         monthlyWorkouts = monthly.size,
         monthlyCompletedSets = monthly.sumOf { log -> log.exerciseLogs.sumOf { exercise -> exercise.sets.count { it.isCompleted } } },
         monthlyHoldDurationSeconds = holdDuration,
         monthlyCardioDurationSeconds = cardioDuration,
         monthlyCardioDistanceMeters = cardioDistance,
-        monthlyAdditionalVolume = addVol
+        monthlyAdditionalVolume = addVol,
+        monthlyRepetitions = exercises.sumOf { it.totalReps },
+        monthlyUnverifiedWorkouts = monthly.count { log ->
+            log.dataQuality != "VERIFIED" || log.exerciseLogs.any { it.metricQuality != "VERIFIED" }
+        }
     )
 }
 

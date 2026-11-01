@@ -22,7 +22,7 @@
     <string name="routine_add_failed">Exercises could not be added. Please try again.</string>
     <string name="routine_edit_history_hint">Changes apply only to this routine, not to completed workout history.</string>
     <string name="routine_config_hint">Applies to all sets of this exercise.</string>
-    <string name="routine_config_invalid">Enter sets and reps of at least 1, and rest of 0 or more seconds.</string>
+    <string name="routine_config_invalid">Use 1–20 sets, 1–100 reps or 1–86400 seconds, optional distance 1–1000000 m, and rest 0–600 seconds.</string>
     <string name="routine_remove_named">Remove %1$s</string>
     <string name="routine_picker_title">Choose exercises</string>
     <string name="routine_picker_context">For routine • %1$s</string>
@@ -66,4 +66,13 @@
     <string name="routine_discard_confirm">Leave draft</string>
     <string name="routine_save_unknown">Save outcome is unknown. Changes are locked. Retry checks the exact same request.</string>
     <string name="routine_exercise_unavailable">This exercise is no longer available. Remove it before saving this routine.</string>
+    <string name="routine_tracking_mode">Tracking mode</string>
+    <string name="routine_tracking_weight_reps">External weight and reps</string>
+    <string name="routine_tracking_bodyweight_reps">Bodyweight and reps</string>
+    <string name="routine_tracking_assisted_reps">Assistance and reps</string>
+    <string name="routine_tracking_reps_only">Repetitions only</string>
+    <string name="routine_tracking_duration">Duration</string>
+    <string name="routine_tracking_distance_duration">Distance and duration</string>
+    <string name="routine_duration_seconds">Duration (s)</string>
+    <string name="routine_distance_meters">Distance (m, optional)</string>
 </resources>

@@ -7,6 +7,9 @@ import androidx.lifecycle.compose.LifecycleEventEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.setValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.diajarkoding.imfit.domain.model.RoutineFlowContext
 import com.diajarkoding.imfit.presentation.ui.workout.ActiveSelectionResult
@@ -49,20 +52,24 @@ fun NavGraph(
     remoteRefresh: RemoteRefreshViewModel = hiltViewModel(),
     routineFlowManager: RoutineFlowManager = hiltViewModel()
 ) {
-    val backStack = rememberNavBackStack(Splash)
+    val backStack = rememberNavBackStack(navSavedStateConfig, Splash)
     LifecycleEventEffect(Lifecycle.Event.ON_RESUME) { remoteRefresh.refresh() }
     LaunchedEffect(backStack.lastOrNull()) { remoteRefresh.refresh() }
     val scope = rememberCoroutineScope()
     val flows by routineFlowManager.flows.collectAsStateWithLifecycle()
     val activeResult by routineFlowManager.activeResult.collectAsStateWithLifecycle()
     val accountGeneration by routineFlowManager.accountGeneration.collectAsStateWithLifecycle()
+    var handledAccountGeneration by rememberSaveable { mutableStateOf(accountGeneration) }
 
     LaunchedEffect(accountGeneration) {
-        if (accountGeneration > 0 && backStack.any {
-                it is EditWorkout || it is SetupRoutine || it is ExerciseSelection ||
-                    it is ActiveExerciseSelection || it is ActiveWorkout || it is WorkoutDetail
-            }) {
-            backStack.trimToMain()
+        if (accountGeneration != handledAccountGeneration) {
+            handledAccountGeneration = accountGeneration
+            if (accountGeneration > 0 && backStack.any {
+                    it is EditWorkout || it is SetupRoutine || it is ExerciseSelection ||
+                        it is ActiveExerciseSelection || it is ActiveWorkout || it is WorkoutDetail
+                }) {
+                backStack.trimToMain()
+            }
         }
     }
 
@@ -179,13 +186,14 @@ fun NavGraph(
             entry<WorkoutDetail> { key ->
                 WorkoutDetailScreen(
                     workoutId = key.workoutId,
+                    refreshId = key.refreshId,
                     onNavigateBack = { backStack.removeLastOrNull() },
-                    onNavigateToExerciseSelection = { routineId, isSetup ->
+                    onNavigateToExerciseSelection = { routineId, routineName, isSetup ->
                         scope.launch {
                             val mode = if (isSetup) RoutineFormMode.SETUP else RoutineFormMode.EDIT
                             val context = routineFlowManager.startFlow(routineId, mode) ?: return@launch
                             if (isSetup) {
-                                backStack.add(ExerciseSelection(context, isInitial = true))
+                                backStack.add(ExerciseSelection(context, routineName = routineName, isInitial = true))
                             } else {
                                 backStack.add(EditWorkout(context, openPicker = true))
                             }

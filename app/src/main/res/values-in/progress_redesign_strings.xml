@@ -1,8 +1,8 @@
 <resources>
     <string name="progress_overview_title">Progres</string>
-    <string name="progress_overview_volume">Volume latihan</string>
+    <string name="progress_overview_volume">Volume beban eksternal</string>
     <!-- Legacy key retained; the metric now uses the displayed calendar month. -->
-    <string name="progress_overview_weekly_time">Durasi latihan</string>
+    <string name="progress_overview_weekly_time">Durasi sesi</string>
     <string name="progress_overview_all_history">Semua riwayat</string>
     <string name="progress_overview_this_week">Minggu ini</string>
     <string name="progress_overview_has_workout">Ada sesi tercatat</string>
@@ -22,4 +22,16 @@
     <string-array name="progress_overview_weekdays">
         <item>Sn</item><item>Sl</item><item>Rb</item><item>Km</item><item>Jm</item><item>Sb</item><item>Mg</item>
     </string-array>
+    <string name="progress_additional_volume">Volume beban tambahan</string>
+    <string name="progress_repetitions">Repetisi selesai</string>
+    <string name="progress_hold_duration">Waktu tahan isometrik</string>
+    <string name="progress_cardio_duration">Waktu kardio / pengondisian</string>
+    <string name="progress_cardio_distance">Jarak kardio / pengondisian</string>
+    <string name="progress_volume_unit">%1$s kg·repetisi</string>
+    <string name="progress_repetitions_unit">%1$s repetisi</string>
+    <string name="progress_seconds_unit">%1$s dtk</string>
+    <string name="progress_meters_unit">%1$s m</string>
+    <string name="progress_metric_unavailable">—</string>
+    <string name="progress_no_external_volume">Belum ada volume beban eksternal terverifikasi</string>
+    <string name="progress_unverified_notice">%1$d sesi berisi pengukuran historis yang belum terverifikasi. Pengukuran tersebut tidak dihitung dalam progres per metrik; durasi sesi tetap dihitung.</string>
 </resources>

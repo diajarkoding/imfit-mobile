@@ -197,14 +197,21 @@ class EditWorkoutViewModel(
                 } else if (draft.loaded) {
                     val exercises = hydrate(draft.rows.map { it.id })
                     if (!ownsDraft()) return@launch
-                    val routine = routineRepository.getRoutineById(draft.routineId).getOrNull()
-                    val routineName = if (draft.name.isBlank()) routine?.name ?: draft.name else draft.name
-                    val revision = draft.revision ?: routine?.revision
-                    if (routineName != draft.name || revision != draft.revision) {
-                        durable = draft.copy(name = routineName, revision = revision)
-                        persist()
+                    if (draft.dirty) {
+                        // A dirty restored draft already owns its baseline (name, revision,
+                        // membership). Re-reading the routine would silently rebase the
+                        // user's unpersisted edits across process recreation.
+                        publishDraft(exercises)
+                    } else {
+                        val routine = routineRepository.getRoutineById(draft.routineId).getOrNull()
+                        val routineName = if (draft.name.isBlank()) routine?.name ?: draft.name else draft.name
+                        val revision = draft.revision ?: routine?.revision
+                        if (routineName != draft.name || revision != draft.revision) {
+                            durable = draft.copy(name = routineName, revision = revision)
+                            persist()
+                        }
+                        publishDraft(exercises)
                     }
-                    publishDraft(exercises)
                 } else {
                     val routine = routineRepository.getRoutineById(draft.routineId).getOrThrow()
                         ?: throw RoutineError.NotFound()

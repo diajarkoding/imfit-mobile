@@ -12,6 +12,7 @@ from pathlib import Path
 
 
 SCENARIOS = [
+    ("desugaring-contract", "desugaredAuthSessionMatchesTargetClasspath", "allow", False),
     ("render-fault", "sessionRenderingReadFailureMustNotBlockExpiry", "allow", False),
     ("background", "backgroundExactProductionRelease", "allow", False),
     ("receiver-only", "receiverWithoutServiceProductionRelease", "allow", False),
@@ -29,8 +30,8 @@ def main():
     parser.add_argument("--user", required=True)
     parser.add_argument("--output", type=Path, required=True)
     args = parser.parse_args()
-    if not args.serial.startswith("emulator-") or not args.user.isdigit() or int(args.user) == 0:
-        parser.error("Use a disposable emulator and a non-owner Android user")
+    if not args.serial.startswith("emulator-") or not args.user.isdigit() or int(args.user) in (0, 10):
+        parser.error("Use a disposable emulator and an isolated Android user other than 0 or 10")
     args.output.mkdir(parents=True, exist_ok=False)
     results = []
     for name, method, exact, cold in SCENARIOS:

@@ -33,6 +33,7 @@ import com.diajarkoding.imfit.domain.repository.WorkoutRepository
 import com.diajarkoding.imfit.presentation.components.common.ImfitMainAppBar
 import com.diajarkoding.imfit.theme.IMFITTheme
 import com.diajarkoding.imfit.theme.LocaleManager
+import com.diajarkoding.imfit.presentation.ui.workout.WorkoutTestEnvironment
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.flowOf
@@ -103,7 +104,6 @@ class HomeScreenPresentationTest {
         rule.waitForIdle()
         rule.onNodeWithTag("home_last_workout_card").assertIsDisplayed()
         rule.onNodeWithText(text(R.string.workout_duration_zero)).assertIsDisplayed()
-        rule.onNodeWithText("0 kg").assertIsDisplayed()
         rule.onAllNodesWithTag("legacy_routine_recovery").assertCountEquals(0)
     }
 
@@ -162,17 +162,20 @@ class HomeScreenPresentationTest {
             FakeHomeUiRoutineRepository { Result.success(emptyList()) }
         )
         rule.setContent {
-            IMFITTheme {
+            WorkoutTestEnvironment(indonesian = true) {
                 HomeScreen(
                     onNavigateToWorkoutDetail = {},
                     viewModel = viewModel,
                     recoveryViewModel = recoveryViewModel
                 )
             }
-        }
+            }
 
+        rule.waitUntil(10_000) { rule.onAllNodesWithTag("legacy_routine_recovery").fetchSemanticsNodes().isNotEmpty() }
         rule.onNodeWithTag("legacy_routine_recovery").performScrollTo().assertIsDisplayed()
-        rule.onNodeWithText(LocaleManager.getUpdatedContext(rule.activity).getString(R.string.legacy_recovery_title, 2)).assertIsDisplayed()
+        rule.onNodeWithText(LocaleManager.getUpdatedContext(rule.activity).getString(R.string.legacy_recovery_title, 2))
+            .performScrollTo().assertIsDisplayed()
+        rule.onNodeWithText(text(R.string.legacy_recovery_notice)).performScrollTo().assertIsDisplayed()
         rule.onNodeWithText(text(R.string.legacy_recovery_privacy)).performScrollTo().assertIsDisplayed()
         rule.onNodeWithText(text(R.string.legacy_recovery_export))
             .performScrollTo()

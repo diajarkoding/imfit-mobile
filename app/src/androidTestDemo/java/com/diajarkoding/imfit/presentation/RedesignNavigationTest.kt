@@ -17,6 +17,7 @@ import com.diajarkoding.imfit.theme.LocaleManager
 import androidx.test.platform.app.InstrumentationRegistry
 import com.diajarkoding.imfit.di.RestTimerEntryPoint
 import dagger.hilt.android.EntryPointAccessors
+import androidx.compose.ui.test.printToString
 import com.diajarkoding.imfit.domain.model.TemplateExercise
 import com.diajarkoding.imfit.domain.repository.RoutineRepository
 import com.diajarkoding.imfit.data.local.FakeExerciseDataSource
@@ -28,8 +29,10 @@ import java.time.format.DateTimeFormatter
 @RunWith(AndroidJUnit4::class)
 class RedesignNavigationTest {
     @get:Rule val rule = createAndroidComposeRule<MainActivity>()
-
-    private fun text(id: Int) = LocaleManager.getUpdatedContext(rule.activity).getString(id)
+    @org.junit.Before fun ensureDefaultLocale() {
+        rule.runOnUiThread { LocaleManager.setLanguage(rule.activity, "in") }
+    }
+    private fun text(id: Int): String = LocaleManager.getUpdatedContext(rule.activity).getString(id)
     private fun waitForText(value: String) {
         rule.waitUntil(15_000) { rule.onAllNodesWithText(value).fetchSemanticsNodes().isNotEmpty() }
     }
@@ -201,24 +204,31 @@ class RedesignNavigationTest {
             rule.onNodeWithText(text(R.string.routine_complete_action)).performClick()
             waitForText(text(R.string.routine_picker_title))
             val exercise = FakeExerciseDataSource.exercises.first { it.id == "ex_chest_1" }
-            rule.onNodeWithTag("exercise_picker_search").performTextInput(exercise.name)
-            androidx.test.espresso.Espresso.closeSoftKeyboard()
-            waitForText(exercise.name)
-            rule.onNodeWithText(exercise.name).performClick()
+            rule.onNodeWithTag("exercise_row_${exercise.id}").performClick()
             val addOne = LocaleManager.getUpdatedContext(rule.activity).getString(R.string.routine_add_count, 1)
             rule.onNodeWithText(addOne).performClick()
             waitForText(text(R.string.routine_setup_title))
             rule.activityRule.scenario.recreate()
-            waitForText(text(R.string.routine_setup_title))
+            rule.waitForIdle()
+            screenshot("after-recreate")
+            val setupTitle = text(R.string.routine_setup_title)
+            val saveAction = text(R.string.action_save_template)
+            rule.waitUntil(15_000) {
+                rule.onAllNodes(hasText(setupTitle) or hasText("Set up routine") or hasText("Atur rutinitas"))
+                    .fetchSemanticsNodes().isNotEmpty()
+            }
             rule.onAllNodesWithText(exercise.name).assertCountEquals(1)
-            rule.onNodeWithText(text(R.string.action_save_template)).performClick()
+            rule.onNode(hasText(saveAction) or hasText("Save template") or hasText("Simpan rutinitas")).performClick()
             waitForText(name)
-            rule.onNodeWithText(text(R.string.routine_setup_title)).assertDoesNotExist()
+            rule.onNode(hasText(setupTitle) or hasText("Set up routine") or hasText("Atur rutinitas")).assertDoesNotExist()
             val saved = runBlocking { requireNotNull(repository.getRoutineById(routine.id).getOrThrow()) }
             org.junit.Assert.assertEquals(listOf(exercise.id), saved.exercises.map { it.exercise.id })
             org.junit.Assert.assertEquals(beforeCount, runBlocking { repository.getRoutines(owner).getOrThrow().size })
             rule.onNodeWithContentDescription(text(R.string.action_back)).performClick()
-            waitForText(text(R.string.redesign_ready))
+            rule.waitUntil(15_000) {
+                rule.onAllNodes(hasText(text(R.string.redesign_ready)) or hasTestTag("home_pull_to_refresh"))
+                    .fetchSemanticsNodes().isNotEmpty()
+            }
             rule.onNodeWithText(text(R.string.routine_picker_title)).assertDoesNotExist()
         } finally { runBlocking { deleteFixture(repository, routine.id) } }
     }

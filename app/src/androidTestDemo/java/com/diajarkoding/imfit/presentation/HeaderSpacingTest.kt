@@ -54,7 +54,12 @@ class HeaderSpacingTest {
                         "active", "active-loading" -> ActiveWorkoutScreenContent(
                             ActiveWorkoutState(session = if (current.page.endsWith("loading")) null
                                 else WorkoutSession("fixture", "fixture", "Synthetic Session", 0, emptyList())),
-                            SnackbarHostState(), {}, {}, {}, {}, {}, {}, { _, _, _, _ -> }, { _, _ -> }, {}, { _, _ -> })
+                            snackbarHostState = SnackbarHostState(),
+                            onCancelClick = {}, onPauseToggle = {}, onRestSettingsClick = {},
+                            onFinishClick = {}, onAddExercises = {}, onRemoveExercise = {},
+                            onSetMeasurementUpdate = { _, _, _ -> }, onStopwatchToggle = { _, _ -> },
+                            onSetComplete = { _, _ -> },
+                            onAddSet = {}, onRemoveSet = { _, _ -> })
                         "summary-loading", "summary-unavailable" -> WorkoutSummaryScreenContent(
                             if (current.page.endsWith("loading")) WorkoutSummaryPresentation.Loading
                             else WorkoutSummaryPresentation.Unavailable, {})

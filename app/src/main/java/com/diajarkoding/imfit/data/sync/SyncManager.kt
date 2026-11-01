@@ -574,8 +574,9 @@ class SyncManager @Inject constructor(
             totalSets = log.totalSets,
             totalReps = log.totalReps,
             inputDefaults = log.inputDefaults,
-            trackingType = log.trackingType,
-            modality = log.modality,
+            // Omitted mode is the historical weight/reps envelope on the server.
+            trackingType = log.trackingType.takeUnless { log.metricQuality == "LEGACY_UNVERIFIED" },
+            modality = log.modality.takeUnless { log.metricQuality == "LEGACY_UNVERIFIED" },
             totalDurationSeconds = log.totalDurationSeconds,
             totalDistanceMeters = log.totalDistanceMeters,
             additionalVolume = log.additionalVolume.toDouble()

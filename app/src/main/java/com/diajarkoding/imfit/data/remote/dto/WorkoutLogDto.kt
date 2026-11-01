@@ -158,10 +158,10 @@ fun ExerciseLogDto.toDomain(): ExerciseLog {
         ?.map { it.toDomain() }
         ?: emptyList()
 
-    val parsedTracking = trackingType?.let { runCatching { TrackingType.valueOf(it) }.getOrNull() }
-        ?: exercise.defaultTrackingType
-    val parsedModality = modality?.let { runCatching { ExerciseModality.valueOf(it) }.getOrNull() }
-        ?: exercise.modality
+    // History without typed metadata is the historical weight/reps contract.
+    // Never reinterpret old measurements using a mutable exercise catalog.
+    val parsedTracking = trackingType?.let(TrackingType::valueOf) ?: TrackingType.WEIGHT_REPS
+    val parsedModality = modality?.let(ExerciseModality::valueOf) ?: ExerciseModality.STRENGTH
 
     return ExerciseLog(
         exercise = exercise,

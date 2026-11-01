@@ -8,7 +8,8 @@ data class WorkoutSet(
     val durationSeconds: Int? = null,
     val distanceMeters: Int? = null,
     val additionalWeight: Float? = null,
-    val assistanceWeight: Float? = null
+    val assistanceWeight: Float? = null,
+    val executionStopwatch: ExecutionStopwatch? = null
 ) {
     val measurement: SetMeasurement
         get() = SetMeasurement(

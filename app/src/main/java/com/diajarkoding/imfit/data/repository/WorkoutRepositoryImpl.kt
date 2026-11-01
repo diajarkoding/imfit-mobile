@@ -28,6 +28,7 @@ import com.diajarkoding.imfit.domain.model.WorkoutSession
 import com.diajarkoding.imfit.domain.model.WorkoutSet
 import com.diajarkoding.imfit.domain.model.TrackingType
 import com.diajarkoding.imfit.domain.model.ExerciseModality
+import com.diajarkoding.imfit.domain.model.ExecutionStopwatch
 import com.diajarkoding.imfit.domain.model.WorkoutTemplate
 import com.diajarkoding.imfit.domain.model.validateActiveSessionEdit
 import com.diajarkoding.imfit.domain.repository.AuthRepository
@@ -311,6 +312,7 @@ class WorkoutRepositoryImpl @Inject constructor(
                 val totalDurationSeconds = session.exerciseLogs.sumOf { it.totalDurationSeconds }
                 val totalDistanceMeters = session.exerciseLogs.sumOf { it.totalDistanceMeters }
                 val additionalVolume = session.exerciseLogs.sumOf { it.additionalVolume.toDouble() }.toFloat()
+                val dataQuality = if (session.exerciseLogs.all { it.metricQuality == "VERIFIED" }) "VERIFIED" else "LEGACY_UNVERIFIED"
 
                 val workoutLogEntity = WorkoutLogEntity(
                     id = workoutLogId,
@@ -330,7 +332,7 @@ class WorkoutRepositoryImpl @Inject constructor(
                     totalDurationSeconds = totalDurationSeconds,
                     totalDistanceMeters = totalDistanceMeters,
                     additionalVolume = additionalVolume,
-                    dataQuality = "VERIFIED"
+                    dataQuality = dataQuality
                 )
                 val exerciseEntities = session.exerciseLogs.mapIndexed { index, exerciseLog ->
                     ExerciseLogEntity(
@@ -342,7 +344,7 @@ class WorkoutRepositoryImpl @Inject constructor(
                         orderIndex = index,
                         totalVolume = exerciseLog.totalVolume,
                         totalSets = exerciseLog.sets.size,
-                        totalReps = exerciseLog.sets.sumOf { it.reps },
+                        totalReps = exerciseLog.totalReps,
                         syncStatus = SyncStatus.PENDING_SYNC.name,
                         pendingOperation = PendingOperation.CREATE.name,
                         createdAt = now,
@@ -353,7 +355,7 @@ class WorkoutRepositoryImpl @Inject constructor(
                         totalDurationSeconds = exerciseLog.totalDurationSeconds,
                         totalDistanceMeters = exerciseLog.totalDistanceMeters,
                         additionalVolume = exerciseLog.additionalVolume,
-                        metricQuality = "VERIFIED"
+                        metricQuality = exerciseLog.metricQuality
                     )
                 }
                 val setEntities = session.exerciseLogs.flatMapIndexed { exerciseIndex, exerciseLog ->
@@ -398,7 +400,7 @@ class WorkoutRepositoryImpl @Inject constructor(
                     totalDurationSeconds = totalDurationSeconds,
                     totalDistanceMeters = totalDistanceMeters,
                     additionalVolume = additionalVolume,
-                    dataQuality = "VERIFIED"
+                    dataQuality = dataQuality
                 )
             } }
 
@@ -563,7 +565,13 @@ class WorkoutRepositoryImpl @Inject constructor(
             startTime = logEntity.startTime,
             endTime = logEntity.endTime,
             totalVolume = logEntity.totalVolume,
-            exerciseLogs = exerciseLogs
+            exerciseLogs = exerciseLogs,
+            totalSets = logEntity.totalSets,
+            totalReps = logEntity.totalReps,
+            totalDurationSeconds = logEntity.totalDurationSeconds,
+            totalDistanceMeters = logEntity.totalDistanceMeters,
+            additionalVolume = logEntity.additionalVolume,
+            dataQuality = logEntity.dataQuality
         )
     }
 
@@ -648,13 +656,16 @@ class WorkoutRepositoryImpl @Inject constructor(
             .mapNotNull { it.exercises }
             .distinctBy { it.id }
             .map { dto ->
+                val catalog = dto.toDomain()
                 ExerciseEntity(
                     id = dto.id,
                     name = dto.name,
                     description = dto.description,
                     muscleCategoryId = dto.muscleCategoryId,
                     imageUrl = dto.imageUrl,
-                    isActive = dto.isActive
+                    isActive = dto.isActive,
+                    defaultTrackingType = catalog.defaultTrackingType.name,
+                    modality = catalog.modality.name
                 )
             }
         if (catalogExercises.isNotEmpty() && isStillCurrentOwner(userId)) {
@@ -682,7 +693,11 @@ class WorkoutRepositoryImpl @Inject constructor(
             pendingOperation = null,
             deletedAt = remote.deletedAt?.let { parseRemoteTimestamp(it) },
             createdAt = createdAtMs,
-            updatedAt = updatedAtMs
+            updatedAt = updatedAtMs,
+            totalDurationSeconds = remote.totalDurationSeconds,
+            totalDistanceMeters = remote.totalDistanceMeters,
+            additionalVolume = remote.additionalVolume.toFloat(),
+            dataQuality = remote.dataQuality
         )
         val sortedExercises = remote.exerciseLogs.orEmpty()
             .sortedWith(compareBy({ it.orderIndex }, { it.id.orEmpty() }, { it.exerciseId }))
@@ -702,7 +717,13 @@ class WorkoutRepositoryImpl @Inject constructor(
                 totalReps = if (child.totalReps > 0) child.totalReps else sets.sumOf { it.reps },
                 syncStatus = SyncStatus.SYNCED.name,
                 pendingOperation = null,
-                inputDefaults = (child.inputDefaults as? JsonPrimitive)?.contentOrNull
+                inputDefaults = (child.inputDefaults as? JsonPrimitive)?.contentOrNull,
+                trackingType = child.trackingType ?: TrackingType.WEIGHT_REPS.name,
+                modality = child.modality ?: ExerciseModality.STRENGTH.name,
+                totalDurationSeconds = child.totalDurationSeconds,
+                totalDistanceMeters = child.totalDistanceMeters,
+                additionalVolume = child.additionalVolume.toFloat(),
+                metricQuality = child.metricQuality
             )
         }
         val setEntities = sortedExercises.flatMapIndexed { exerciseIndex, child ->
@@ -722,7 +743,11 @@ class WorkoutRepositoryImpl @Inject constructor(
                         reps = set.reps,
                         isCompleted = set.isCompleted,
                         syncStatus = SyncStatus.SYNCED.name,
-                        pendingOperation = null
+                        pendingOperation = null,
+                        durationSeconds = set.durationSeconds,
+                        distanceMeters = set.distanceMeters,
+                        additionalWeight = set.additionalWeight?.toFloat(),
+                        assistanceWeight = set.assistanceWeight?.toFloat()
                     )
                 }
         }
@@ -754,19 +779,23 @@ private data class SerializableSession(
     val currentExerciseIndex: Int = 0,
     val isPaused: Boolean = false,
     val totalPausedTimeMs: Long = 0,
-    val lastPauseTime: Long? = null
+    val lastPauseTime: Long? = null,
+    val schemaVersion: Int = 1
 ) {
-    fun toDomain(): WorkoutSession = WorkoutSession(
-        id = id,
-        templateId = templateId,
-        templateName = templateName,
-        startTime = startTime,
-        exerciseLogs = exerciseLogs.map { it.toDomain() },
-        currentExerciseIndex = currentExerciseIndex,
-        isPaused = isPaused,
-        totalPausedTimeMs = totalPausedTimeMs,
-        lastPauseTime = lastPauseTime
-    )
+    fun toDomain(): WorkoutSession {
+        require(schemaVersion in 1..2) { "Unsupported local session schema" }
+        return WorkoutSession(
+            id = id,
+            templateId = templateId,
+            templateName = templateName,
+            startTime = startTime,
+            exerciseLogs = exerciseLogs.map { it.toDomain() },
+            currentExerciseIndex = currentExerciseIndex,
+            isPaused = isPaused,
+            totalPausedTimeMs = totalPausedTimeMs,
+            lastPauseTime = lastPauseTime
+        )
+    }
 }
 
 @Serializable
@@ -774,13 +803,20 @@ private data class SerializableExerciseLog(
     val exercise: SerializableExercise,
     val sets: List<SerializableWorkoutSet>,
     val restSeconds: Int = 60,
-    val inputDefaults: ExerciseInputDefaults? = null
+    val inputDefaults: ExerciseInputDefaults? = null,
+    val trackingType: TrackingType? = null,
+    val modality: ExerciseModality? = null,
+    val metricQuality: String? = null
 ) {
     fun toDomain(): ExerciseLog = ExerciseLog(
         exercise = exercise.toDomain(),
         sets = sets.map { it.toDomain() },
         restSeconds = restSeconds,
-        inputDefaults = inputDefaults
+        inputDefaults = inputDefaults,
+        // An absent mode is the historical weight/reps contract, never today's catalog.
+        trackingType = trackingType ?: TrackingType.WEIGHT_REPS,
+        modality = modality ?: ExerciseModality.STRENGTH,
+        metricQuality = if (trackingType == null) "LEGACY_UNVERIFIED" else metricQuality ?: "LEGACY_UNVERIFIED"
     )
 }
 
@@ -790,7 +826,11 @@ private data class SerializableExercise(
     val name: String,
     val muscleCategory: String,
     val description: String,
-    val imageUrl: String? = null
+    val imageUrl: String? = null,
+    val isActive: Boolean = true,
+    val defaultTrackingType: TrackingType? = null,
+    val modality: ExerciseModality? = null,
+    val allowedTrackingTypes: List<TrackingType>? = null
 ) {
     fun toDomain(): Exercise = Exercise(
         id = id,
@@ -801,7 +841,11 @@ private data class SerializableExercise(
             MuscleCategory.CHEST 
         },
         description = description,
-        imageUrl = imageUrl
+        imageUrl = imageUrl,
+        isActive = isActive,
+        defaultTrackingType = defaultTrackingType ?: TrackingType.WEIGHT_REPS,
+        modality = modality ?: ExerciseModality.STRENGTH,
+        allowedTrackingTypes = allowedTrackingTypes ?: listOf(defaultTrackingType ?: TrackingType.WEIGHT_REPS)
     )
 }
 
@@ -810,13 +854,23 @@ private data class SerializableWorkoutSet(
     val setNumber: Int,
     val weight: Float = 0f,
     val reps: Int = 0,
-    val isCompleted: Boolean = false
+    val isCompleted: Boolean = false,
+    val durationSeconds: Int? = null,
+    val distanceMeters: Int? = null,
+    val additionalWeight: Float? = null,
+    val assistanceWeight: Float? = null,
+    val executionStopwatch: ExecutionStopwatch? = null
 ) {
     fun toDomain(): WorkoutSet = WorkoutSet(
         setNumber = setNumber,
         weight = weight,
         reps = reps,
-        isCompleted = isCompleted
+        isCompleted = isCompleted,
+        durationSeconds = durationSeconds,
+        distanceMeters = distanceMeters,
+        additionalWeight = additionalWeight,
+        assistanceWeight = assistanceWeight,
+        executionStopwatch = executionStopwatch
     )
 }
 
@@ -829,14 +883,18 @@ private fun WorkoutSession.toSerializable() = SerializableSession(
     currentExerciseIndex = currentExerciseIndex,
     isPaused = isPaused,
     totalPausedTimeMs = totalPausedTimeMs,
-    lastPauseTime = lastPauseTime
+    lastPauseTime = lastPauseTime,
+    schemaVersion = 2
 )
 
 private fun ExerciseLog.toSerializable() = SerializableExerciseLog(
     exercise = exercise.toSerializable(),
     sets = sets.map { it.toSerializable() },
     restSeconds = restSeconds,
-    inputDefaults = inputDefaults
+    inputDefaults = inputDefaults,
+    trackingType = trackingType,
+    modality = modality,
+    metricQuality = metricQuality
 )
 
 private fun Exercise.toSerializable() = SerializableExercise(
@@ -844,12 +902,21 @@ private fun Exercise.toSerializable() = SerializableExercise(
     name = name,
     muscleCategory = muscleCategory.name,
     description = description,
-    imageUrl = imageUrl
+    imageUrl = imageUrl,
+    isActive = isActive,
+    defaultTrackingType = defaultTrackingType,
+    modality = modality,
+    allowedTrackingTypes = allowedTrackingTypes
 )
 
 private fun WorkoutSet.toSerializable() = SerializableWorkoutSet(
     setNumber = setNumber,
     weight = weight,
     reps = reps,
-    isCompleted = isCompleted
+    isCompleted = isCompleted,
+    durationSeconds = durationSeconds,
+    distanceMeters = distanceMeters,
+    additionalWeight = additionalWeight,
+    assistanceWeight = assistanceWeight,
+    executionStopwatch = executionStopwatch
 )

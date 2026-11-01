@@ -1,10 +1,30 @@
 -- IMFIT Phase 2: Comprehensive Test Matrix (B2-01 through B2-20)
 -- Run via: psql -X -v ON_ERROR_STOP=1 -f supabase/tests/phase2_test_matrix.sql
 
+-- Execute only against a disposable database as a fixture-capable administrator.
+-- RPCs run with the real authenticated role; all fixtures are rolled back.
+BEGIN;
+SET LOCAL TIME ZONE 'UTC';
+SELECT set_config('imfit.test.user1', gen_random_uuid()::text, true),
+       set_config('imfit.test.user2', gen_random_uuid()::text, true);
+INSERT INTO auth.users (id, email, raw_user_meta_data)
+SELECT current_setting('imfit.test.user1')::uuid, 'phase2-owner@example.invalid', '{"name":"Phase2 Owner"}'::jsonb
+UNION ALL
+SELECT current_setting('imfit.test.user2')::uuid, 'phase2-other@example.invalid', '{"name":"Phase2 Other"}'::jsonb;
+CREATE TEMP TABLE phase2_original_workout_quality ON COMMIT DROP AS
+SELECT id, data_quality, to_jsonb(w) AS snapshot FROM public.workout_logs w;
+CREATE TEMP TABLE phase2_original_exercise_quality ON COMMIT DROP AS
+SELECT id, metric_quality, to_jsonb(e) AS snapshot FROM public.exercise_logs e;
+CREATE TEMP TABLE phase2_original_sets ON COMMIT DROP AS
+SELECT id, to_jsonb(s) AS snapshot FROM public.workout_sets s;
+CREATE TEMP TABLE phase2_original_receipts ON COMMIT DROP AS
+SELECT workout_id, to_jsonb(r) AS snapshot FROM imfit_private.local_workout_receipts r;
+SET LOCAL ROLE authenticated;
+
 DO $test_matrix$
 DECLARE
-  v_user1 uuid := '179eb489-4852-4d79-9dbe-2d271662b9ad'::uuid;
-  v_user2 uuid := 'dcc9dbf0-0108-4482-ab8f-046f5762ddbf'::uuid;
+  v_user1 uuid := current_setting('imfit.test.user1')::uuid;
+  v_user2 uuid := current_setting('imfit.test.user2')::uuid;
   v_req uuid;
   v_tmpl uuid;
   v_sess uuid;
@@ -14,10 +34,13 @@ DECLARE
   v_prog jsonb;
   v_prefill jsonb;
   v_pass boolean;
-  v_now timestamptz := clock_timestamp();
+  v_now timestamptz := date_trunc('day', clock_timestamp()) + interval '12 hours';
   v_eid uuid;
   v_sid uuid;
 BEGIN
+  IF current_user <> 'authenticated' THEN
+    RAISE EXCEPTION 'Matrix must exercise the authenticated database role';
+  END IF;
   -- Setup session user context to user1
   PERFORM set_config('request.jwt.claim.sub', v_user1::text, true);
   PERFORM set_config('request.jwt.claims', json_build_object('sub', v_user1::text, 'role', 'authenticated')::text, true);
@@ -332,7 +355,9 @@ BEGIN
     v_count1 integer;
     v_count2 integer;
   BEGIN
-    SELECT count(*) INTO v_count1 FROM public.workout_logs WHERE id = v_wkt;
+    SELECT count(*) INTO v_count1
+    FROM jsonb_array_elements(public.get_workout_sync_page(NULL, 50)->'items') item
+    WHERE (item#>>'{workout,id}')::uuid = v_wkt;
     v_res2 := public.persist_local_workout_aggregate(
       jsonb_build_object(
         'id', v_wkt, 'user_id', v_user1, 'template_id', v_tmpl, 'template_name', 'Mixed Offline Workout',
@@ -358,13 +383,16 @@ BEGIN
                            'duration_seconds', 60)
       )
     );
-    SELECT count(*) INTO v_count2 FROM public.workout_logs WHERE id = v_wkt;
+    SELECT count(*) INTO v_count2
+    FROM jsonb_array_elements(public.get_workout_sync_page(NULL, 50)->'items') item
+    WHERE (item#>>'{workout,id}')::uuid = v_wkt;
     IF v_count1 <> v_count2 OR v_count2 <> 1 THEN
       RAISE EXCEPTION 'B2-14 FAILED: duplicate workout created on retry';
     END IF;
-    IF v_res->>'workout_id' <> v_res2->>'workout_id' THEN
+    IF v_res IS DISTINCT FROM v_res2 THEN
       RAISE EXCEPTION 'B2-14 FAILED: receipt mismatch on retry';
     END IF;
+    PERFORM set_config('imfit.test.retry_workout', v_wkt::text, true);
     RAISE NOTICE 'B2-14 PASS: Retry with identical payload returned same receipt without duplication';
   END;
 
@@ -429,16 +457,7 @@ BEGIN
   END IF;
   RAISE NOTICE 'B2-18 PASS: Progress summary reflects separated modality metrics';
 
-  ------------------------------------------------------------------------------
-  -- B2-19: Existing LEGACY_UNVERIFIED history does not turn into VERIFIED
-  ------------------------------------------------------------------------------
-  IF EXISTS (
-    SELECT 1 FROM public.workout_logs
-    WHERE created_at < '2026-10-31'::timestamptz AND data_quality <> 'LEGACY_UNVERIFIED'
-  ) THEN
-    RAISE EXCEPTION 'B2-19 FAILED: historic workout log was marked VERIFIED';
-  END IF;
-  RAISE NOTICE 'B2-19 PASS: Existing historic records remain LEGACY_UNVERIFIED';
+  -- B2-19 runs after RESET ROLE below: authenticated has no raw-history SELECT.
 
   ------------------------------------------------------------------------------
   -- B2-20: Legacy client backward compatibility (get_workout_sync_page, catalog)
@@ -455,7 +474,56 @@ BEGIN
   RAISE NOTICE 'B2-20 PASS: Catalog and sync pages return backward-compatible extended contracts';
 
   RAISE NOTICE '========================================================';
-  RAISE NOTICE 'ALL 20 PHASE 2 TEST SCENARIOS (B2-01 TO B2-20) PASSED!';
+  RAISE NOTICE 'Authenticated RPC scenarios complete; checking historical quality as fixture administrator';
   RAISE NOTICE '========================================================';
 END;
 $test_matrix$;
+
+RESET ROLE;
+DO $historical_quality$
+BEGIN
+  IF (SELECT count(*) FROM public.workout_logs
+      WHERE id = current_setting('imfit.test.retry_workout')::uuid) <> 1
+    OR (SELECT count(*) FROM public.exercise_logs
+        WHERE workout_log_id = current_setting('imfit.test.retry_workout')::uuid) <> 2
+    OR (SELECT count(*) FROM public.workout_sets
+        WHERE workout_log_id = current_setting('imfit.test.retry_workout')::uuid) <> 2 THEN
+    RAISE EXCEPTION 'B2-14 FAILED: privileged raw-row retry parity mismatch';
+  END IF;
+  RAISE NOTICE 'B2-14 PASS: Privileged inspection confirms 1 workout, 2 exercises, 2 sets after retry';
+  IF EXISTS (
+    SELECT 1 FROM phase2_original_workout_quality old
+    LEFT JOIN public.workout_logs current USING (id)
+    WHERE current.id IS NULL OR current.data_quality IS DISTINCT FROM old.data_quality
+  ) OR EXISTS (
+    SELECT 1 FROM phase2_original_exercise_quality old
+    LEFT JOIN public.exercise_logs current USING (id)
+    WHERE current.id IS NULL OR current.metric_quality IS DISTINCT FROM old.metric_quality
+  ) THEN
+    RAISE EXCEPTION 'B2-19 FAILED: pre-existing historical quality changed';
+  END IF;
+  RAISE NOTICE 'B2-19 PASS: All pre-existing workout/exercise quality markers unchanged';
+  IF EXISTS (
+    SELECT 1 FROM phase2_original_workout_quality old
+    LEFT JOIN public.workout_logs current USING (id)
+    WHERE to_jsonb(current) IS DISTINCT FROM old.snapshot
+  ) OR EXISTS (
+    SELECT 1 FROM phase2_original_exercise_quality old
+    LEFT JOIN public.exercise_logs current USING (id)
+    WHERE to_jsonb(current) IS DISTINCT FROM old.snapshot
+  ) OR EXISTS (
+    SELECT 1 FROM phase2_original_sets old
+    LEFT JOIN public.workout_sets current USING (id)
+    WHERE to_jsonb(current) IS DISTINCT FROM old.snapshot
+  ) OR EXISTS (
+    SELECT 1 FROM phase2_original_receipts old
+    LEFT JOIN imfit_private.local_workout_receipts current USING (workout_id)
+    WHERE to_jsonb(current) IS DISTINCT FROM old.snapshot
+  ) THEN
+    RAISE EXCEPTION 'B2-19 FAILED: pre-existing history or receipts changed';
+  END IF;
+  RAISE NOTICE 'B2-19 PASS: All pre-existing history rows and receipts unchanged';
+  RAISE NOTICE 'ALL 20 PHASE 2 TEST SCENARIOS (B2-01 TO B2-20) PASSED';
+END;
+$historical_quality$;
+ROLLBACK;

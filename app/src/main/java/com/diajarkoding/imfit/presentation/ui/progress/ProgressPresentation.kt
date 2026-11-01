@@ -1,5 +1,6 @@
 package com.diajarkoding.imfit.presentation.ui.progress
 
+import com.diajarkoding.imfit.domain.model.ExerciseModality
 import com.diajarkoding.imfit.domain.model.WorkoutLog
 import java.time.Instant
 import java.time.YearMonth
@@ -10,7 +11,13 @@ data class ProgressMetrics(
     val monthlyVolume: Double,
     val monthlyMinutes: Int,
     val monthlyWorkouts: Int,
-    val monthlyCompletedSets: Int
+    val monthlyCompletedSets: Int,
+    val monthlyHoldDurationSeconds: Int = 0,
+    val monthlyCardioDurationSeconds: Int = 0,
+    val monthlyCardioDistanceMeters: Int = 0,
+    val monthlyAdditionalVolume: Double = 0.0,
+    val monthlyRepetitions: Int = 0,
+    val monthlyUnverifiedWorkouts: Int = 0
 )
 
 /** Presentation-only windows; persisted duration semantics are deliberately unchanged. */
@@ -24,8 +31,36 @@ internal fun progressMetrics(
         val sessionStart = Instant.ofEpochMilli(log.startTime)
         !sessionStart.isBefore(start) && sessionStart.isBefore(end) && !sessionStart.isAfter(now)
     }
-    return ProgressMetrics(month, monthly.sumOf { it.totalVolume.toDouble() }, monthly.sumOf { it.durationMinutes }, monthly.size,
-        monthly.sumOf { log -> log.exerciseLogs.sumOf { exercise -> exercise.sets.count { it.isCompleted } } })
+    // Quality belongs to each measurement: a mixed legacy session can contain verified typed children.
+    val exercises = monthly.flatMap { it.exerciseLogs }.filter { it.metricQuality == "VERIFIED" }
+    val holdDuration = exercises.filter { it.modality == ExerciseModality.ISOMETRIC }.sumOf { it.totalDurationSeconds }
+    val cardio = exercises.filter { it.modality == ExerciseModality.CARDIO || it.modality == ExerciseModality.CONDITIONING }
+    val cardioDuration = cardio.sumOf { it.totalDurationSeconds }
+    val cardioDistance = cardio.sumOf { it.totalDistanceMeters }
+    val volume = monthly.sumOf { log ->
+        if (log.dataQuality == "VERIFIED" && log.exerciseLogs.all { it.metricQuality == "VERIFIED" }) log.totalVolume.toDouble()
+        else log.exerciseLogs.filter { it.metricQuality == "VERIFIED" }.sumOf { it.totalVolume.toDouble() }
+    }
+    val addVol = monthly.sumOf { log ->
+        if (log.dataQuality == "VERIFIED" && log.exerciseLogs.all { it.metricQuality == "VERIFIED" }) log.additionalVolume.toDouble()
+        else log.exerciseLogs.filter { it.metricQuality == "VERIFIED" }.sumOf { it.additionalVolume.toDouble() }
+    }
+
+    return ProgressMetrics(
+        month = month,
+        monthlyVolume = volume,
+        monthlyMinutes = monthly.sumOf { it.durationMinutes },
+        monthlyWorkouts = monthly.size,
+        monthlyCompletedSets = monthly.sumOf { log -> log.exerciseLogs.sumOf { exercise -> exercise.sets.count { it.isCompleted } } },
+        monthlyHoldDurationSeconds = holdDuration,
+        monthlyCardioDurationSeconds = cardioDuration,
+        monthlyCardioDistanceMeters = cardioDistance,
+        monthlyAdditionalVolume = addVol,
+        monthlyRepetitions = exercises.sumOf { it.totalReps },
+        monthlyUnverifiedWorkouts = monthly.count { log ->
+            log.dataQuality != "VERIFIED" || log.exerciseLogs.any { it.metricQuality != "VERIFIED" }
+        }
+    )
 }
 
 /** Monday-first grid, padded to complete weeks, with no fabricated adjacent dates. */

@@ -252,7 +252,8 @@ class ActiveWorkoutScreenTest {
                             onFinishClick = { finishClicks++ },
                             onAddExercises = {},
                             onRemoveExercise = {},
-                            onSetUpdate = { _, _, _, _ -> },
+                            onSetMeasurementUpdate = { _, _, _ -> },
+                            onStopwatchToggle = { _, _ -> },
                             onSetComplete = { _, _ -> },
                             onAddSet = {},
                             onRemoveSet = { _, _ -> }

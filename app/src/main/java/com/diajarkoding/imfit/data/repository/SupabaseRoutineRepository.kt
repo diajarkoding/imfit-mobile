@@ -2,8 +2,8 @@ package com.diajarkoding.imfit.data.repository
 
 import com.diajarkoding.imfit.domain.model.MuscleCategory
 import com.diajarkoding.imfit.domain.model.TemplateExercise
+import com.diajarkoding.imfit.domain.model.TrackingType
 import com.diajarkoding.imfit.domain.model.WorkoutTemplate
-import com.diajarkoding.imfit.domain.model.supportsRepetitions
 import com.diajarkoding.imfit.domain.repository.ExerciseCatalogRepository
 import com.diajarkoding.imfit.domain.repository.ExerciseHydrationResult
 import com.diajarkoding.imfit.domain.repository.RoutineError
@@ -63,47 +63,37 @@ class SupabaseRoutineRepository @Inject constructor(
     override suspend fun getRoutines(userId: String): Result<List<WorkoutTemplate>> = result {
         checkOwner(userId)
         val generation = mutationGeneration.get()
-        val routines = mutableListOf<WorkoutTemplate>()
-        val cursors = mutableSetOf<String>()
         var cursor: String? = null
+        val items = mutableListOf<Summary>()
         do {
             val page = supabaseClient.postgrest.rpc("get_template_page", buildJsonObject {
-                cursor?.let { put("p_cursor", it) }; put("p_limit", 50)
+                cursor?.let { put("p_cursor", it) }
+                put("p_limit", 15)
             }).decodeAs<TemplatePage>()
-            for (summary in page.data) {
-                val primaryMuscle = summary.primaryCategoryId?.let { catId: Int ->
-                    MuscleCategory.entries.getOrNull(catId - 1)
-                }
-                val cached = synchronized(snapshots) { snapshots[summary.id] }
-                if (cached != null && cached.revision == summary.revision && cached.exercises.isNotEmpty()) {
-                    routines += cached.copy(
-                        name = summary.name.ifBlank { cached.name },
-                        explicitPrimaryCategory = primaryMuscle,
-                        exerciseCountOverride = summary.exerciseCount
-                    )
-                } else {
-                    val template = WorkoutTemplate(
-                        id = summary.id,
-                        userId = userId,
-                        name = summary.name,
-                        exercises = emptyList(),
-                        revision = summary.revision,
-                        explicitPrimaryCategory = primaryMuscle,
-                        exerciseCountOverride = summary.exerciseCount
-                    )
-                    remember(template)
-                    routines += template
-                }
-            }
-            checkOwner(userId)
-            cursor = if (page.pageInfo.hasMore) {
-                page.pageInfo.nextCursor?.takeIf { it.isNotBlank() && cursors.add(it) }
-                    ?: throw RoutineError.Server("Invalid routine continuation")
-            } else null
+            items.addAll(page.data)
+            cursor = if (page.pageInfo.hasMore) page.pageInfo.nextCursor else null
         } while (cursor != null)
-        if (generation != mutationGeneration.get()) throw RoutineError.Server("Routine changed while list was loading; refresh")
-        routines.forEach(::remember)
-        synchronized(snapshots) { snapshots.keys.retainAll(routines.map { it.id }.toSet()) }
+
+        val routines = items.map { summary ->
+            val cached = getCachedRoutine(userId, summary.id)
+            if (cached != null && cached.revision == summary.revision && (cached.exercises.isNotEmpty() || summary.exerciseCount == 0)) {
+                cached
+            } else {
+                WorkoutTemplate(
+                    id = summary.id,
+                    userId = userId,
+                    name = summary.name,
+                    exercises = emptyList(),
+                    createdAt = System.currentTimeMillis(),
+                    revision = summary.revision,
+                    explicitPrimaryCategory = summary.primaryCategoryId?.let { id ->
+                        MuscleCategory.entries.getOrNull(id - 1)
+                    },
+                    exerciseCountOverride = summary.exerciseCount
+                )
+            }
+        }
+        routines.forEach { if (it.exercises.isNotEmpty()) remember(it) }
         routines
     }
 
@@ -128,15 +118,24 @@ class SupabaseRoutineRepository @Inject constructor(
         }
         checkOwner(userId)
         return WorkoutTemplate(detail.id, userId, detail.name, children.map { child ->
-            TemplateExercise(exercises[child.exerciseId] ?: throw RoutineError.MissingExercises(listOf(child.exerciseId)),
-                child.sets, child.reps, child.restSeconds)
+            val ex = exercises[child.exerciseId] ?: throw RoutineError.MissingExercises(listOf(child.exerciseId))
+            val parsedTracking = child.trackingType?.let { runCatching { TrackingType.valueOf(it) }.getOrNull() }
+                ?: ex.defaultTrackingType
+            TemplateExercise(
+                exercise = ex,
+                sets = child.sets,
+                reps = child.reps,
+                restSeconds = child.restSeconds,
+                trackingType = parsedTracking,
+                targetDurationSeconds = child.targetDurationSeconds,
+                targetDistanceMeters = child.targetDistanceMeters
+            )
         }, revision = detail.revision)
     }
 
     override suspend fun createRoutine(userId: String, name: String, requestId: String): Result<WorkoutTemplate> = result {
         checkOwner(userId)
         validate(name, emptyList())
-        // The resource identity is part of the replay payload, not a fresh UUID per attempt.
         val id = UUID.nameUUIDFromBytes("routine:$userId:$requestId".toByteArray(Charsets.UTF_8)).toString()
         val receipt = mutate(userId, id, name.trim(), emptyList(), null, requestId, emptyList(), false)
         remember(WorkoutTemplate(receipt.templateId, userId, name.trim(), emptyList(), revision = receipt.revision))
@@ -166,9 +165,16 @@ class SupabaseRoutineRepository @Inject constructor(
     }
 
     private fun validate(name: String, exercises: List<TemplateExercise>) {
-        if (name.trim().length !in 2..100 || exercises.size > 100 || exercises.map { it.id }.distinct().size != exercises.size ||
-            exercises.any { it.sets !in 1..20 || it.reps !in 1..100 || it.restSeconds !in 0..600 || !it.exercise.isActive || !it.exercise.supportsRepetitions }) {
+        if (name.trim().length !in 2..100 || exercises.size > 100 || exercises.map { it.id }.distinct().size != exercises.size) {
             throw RoutineError.ValidationError("Invalid routine name or prescription")
+        }
+        for (item in exercises) {
+            if (!item.exercise.isActive || !item.target.isValidFor(item.trackingType)) {
+                throw RoutineError.ValidationError("Invalid routine name or prescription")
+            }
+            if (item.trackingType !in item.exercise.allowedTrackingTypes) {
+                throw RoutineError.ValidationError("Tracking type not allowed for exercise: ${item.name}")
+            }
         }
     }
 
@@ -177,40 +183,46 @@ class SupabaseRoutineRepository @Inject constructor(
         requestId: String, removedIds: List<String>, deleted: Boolean
     ): Receipt {
         val response = supabaseClient.postgrest.rpc("save_template_revision", buildJsonObject {
-            put("p_request_id", requestId); put("p_template_id", id)
+            put("p_request_id", requestId)
+            put("p_template_id", id)
             put("p_expected_revision", revision?.let(::JsonPrimitive) ?: JsonNull)
             put("p_name", name)
             put("p_exercises", buildJsonArray {
                 exercises.forEachIndexed { index, child -> add(buildJsonObject {
-                    put("exercise_id", child.id); put("order_index", index); put("sets", child.sets)
-                    put("reps", child.reps); put("rest_seconds", child.restSeconds)
+                    put("exercise_id", child.id)
+                    put("order_index", index)
+                    put("sets", child.sets)
+                    put("reps", child.reps?.let(::JsonPrimitive) ?: JsonNull)
+                    put("rest_seconds", child.restSeconds)
+                    put("tracking_type", child.trackingType.name)
+                    child.targetDurationSeconds?.let { put("target_duration_seconds", it) }
+                    child.targetDistanceMeters?.let { put("target_distance_meters", it) }
                 }) }
             })
             put("p_removed_exercise_ids", buildJsonArray { removedIds.forEach { add(JsonPrimitive(it)) } })
-            put("p_is_deleted", deleted); put("p_owner_id", userId)
+            put("p_is_deleted", deleted)
+            put("p_owner_id", userId)
         }).decodeAs<Receipt>()
         checkOwner(userId)
         if (response.requestId != requestId || response.templateId != id) throw RoutineError.Server("Mismatched routine receipt")
         mutationGeneration.incrementAndGet()
         return response
     }
-
     private suspend fun <T> result(block: suspend () -> T): Result<T> = try { Result.success(block()) }
     catch (e: CancellationException) { throw e }
     catch (e: Exception) { Result.failure(mapError(e)) }
 
+
     private fun mapError(e: Exception): Exception {
         if (e is RoutineError) return e
-        if (e is RestException) return when {
-            e.error.contains("WORKOUT_ACTIVE") || e.error.contains("SESSION_REVIEW") -> RoutineError.ActiveSessionConflict()
-            e.error.contains("REVISION_CONFLICT") -> RoutineError.RevisionConflict()
-            e.statusCode == 404 -> RoutineError.NotFound()
-            e.statusCode == 401 || e.statusCode == 403 -> RoutineError.Unauthorized()
-            e.statusCode == 400 -> RoutineError.ValidationError(e.error)
-            else -> RoutineError.Server(e.error, e)
-        }
-        return if (e is IOException || e is HttpRequestException) RoutineError.Network("Connection failed; retry the same operation", e)
-        else RoutineError.Server("Routine response could not be processed", e)
+        val message = e.message ?: return RoutineError.Network("Network error", e)
+        return if (message.contains("REVISION_CONFLICT", ignoreCase = true)) RoutineError.RevisionConflict()
+        else if (message.contains("RESOURCE_NOT_FOUND", ignoreCase = true)) RoutineError.NotFound()
+        else if (message.contains("VALIDATION", ignoreCase = true)) RoutineError.ValidationError(message)
+        else if (message.contains("42501") || message.contains("Unauthorized", ignoreCase = true)) RoutineError.Unauthorized()
+        else if (e is RestException) RoutineError.Server(message, e)
+        else if (e is HttpRequestException || e is IOException) RoutineError.Network(message, e)
+        else RoutineError.Server("Routine response could not be processed: $message", e)
     }
 
     @Serializable private data class TemplatePage(val data: List<Summary>, @SerialName("page_info") val pageInfo: PageInfo)
@@ -224,7 +236,15 @@ class SupabaseRoutineRepository @Inject constructor(
     )
     @Serializable private data class PageInfo(@SerialName("has_more") val hasMore: Boolean, @SerialName("next_cursor") val nextCursor: String? = null)
     @Serializable private data class TemplateDetail(val id: String, val name: String, val revision: Long, val exercises: List<Child>)
-    @Serializable private data class Child(@SerialName("exercise_id") val exerciseId: String, @SerialName("order_index") val orderIndex: Int,
-        val sets: Int, val reps: Int, @SerialName("rest_seconds") val restSeconds: Int)
+    @Serializable private data class Child(
+        @SerialName("exercise_id") val exerciseId: String,
+        @SerialName("order_index") val orderIndex: Int,
+        val sets: Int,
+        val reps: Int? = null,
+        @SerialName("rest_seconds") val restSeconds: Int,
+        @SerialName("tracking_type") val trackingType: String? = null,
+        @SerialName("target_duration_seconds") val targetDurationSeconds: Int? = null,
+        @SerialName("target_distance_meters") val targetDistanceMeters: Int? = null
+    )
     @Serializable private data class Receipt(@SerialName("request_id") val requestId: String, @SerialName("template_id") val templateId: String, val revision: Long)
 }

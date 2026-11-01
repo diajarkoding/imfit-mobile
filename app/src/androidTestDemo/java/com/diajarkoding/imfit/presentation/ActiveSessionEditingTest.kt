@@ -46,6 +46,8 @@ class ActiveSessionEditingTest {
             routines.saveRoutine(created.id, name, listOf(TemplateExercise(first)), created.revision).getOrThrow()
         }
         try {
+            // Home's routine snapshot is refreshed explicitly after this out-of-UI fixture write.
+            rule.onNodeWithTag("home_pull_to_refresh").performTouchInput { swipeDown() }
             rule.onNode(hasScrollToNodeAction()).performScrollToNode(hasText(name))
             rule.onNodeWithText(name).performClick()
             waitForText(text(R.string.action_start_workout))
@@ -55,9 +57,11 @@ class ActiveSessionEditingTest {
             rule.onNodeWithContentDescription(text(R.string.active_session_remove_exercise, first.name)).assertExists()
             rule.onNode(hasScrollToNodeAction()).performScrollToNode(hasText(text(R.string.active_session_add_exercises)))
             rule.onNodeWithText(text(R.string.active_session_add_exercises)).performClick()
-            rule.onNode(hasSetTextAction()).performTextInput(added.name)
-            waitForText(added.name)
-            rule.onNode(hasText(added.name) and hasClickAction() and !hasSetTextAction()).performClick()
+            rule.onNodeWithTag("exercise_picker_search").performTextInput(added.name)
+            androidx.test.espresso.Espresso.closeSoftKeyboard()
+            val addedItem = hasText(added.name) and hasClickAction() and !hasSetTextAction()
+            rule.waitUntil(15_000) { rule.onAllNodes(addedItem).fetchSemanticsNodes().size == 1 }
+            rule.onNode(addedItem).performClick()
             val addOne = text(R.string.routine_add_count, 1)
             rule.onNodeWithText(addOne).performClick()
             rule.waitUntil(15_000) { runBlocking { repository.getActiveSession()?.exerciseLogs?.any { it.exercise.id == added.id } == true } }

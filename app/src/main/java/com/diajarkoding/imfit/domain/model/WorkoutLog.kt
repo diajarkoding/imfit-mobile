@@ -8,7 +8,13 @@ data class WorkoutLog(
     val startTime: Long,
     val endTime: Long,
     val totalVolume: Float,
-    val exerciseLogs: List<ExerciseLog>
+    val exerciseLogs: List<ExerciseLog>,
+    val totalSets: Int = exerciseLogs.sumOf { it.completedSets },
+    val totalReps: Int = exerciseLogs.sumOf { it.totalReps },
+    val totalDurationSeconds: Int = exerciseLogs.sumOf { it.totalDurationSeconds },
+    val totalDistanceMeters: Int = exerciseLogs.sumOf { it.totalDistanceMeters },
+    val additionalVolume: Float = exerciseLogs.sumOf { it.additionalVolume.toDouble() }.toFloat(),
+    val dataQuality: String = "VERIFIED"
 ) {
     val durationMinutes: Int
         get() = ((endTime - startTime) / 60000).toInt()

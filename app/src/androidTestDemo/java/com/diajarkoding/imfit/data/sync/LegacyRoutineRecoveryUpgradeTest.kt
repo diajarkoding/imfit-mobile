@@ -40,7 +40,7 @@ class LegacyRoutineRecoveryUpgradeTest {
                     arrayOf(id, "exercise-$index", 2, 4, 12, 90, "SYNC_FAILED", "UPDATE", 33L, 44L))
             }
         }
-        migrations.runMigrationsAndValidate(name, 7, true, IMFITDatabase.MIGRATION_6_7).close()
+        migrations.runMigrationsAndValidate(name, 8, true, IMFITDatabase.MIGRATION_6_7, IMFITDatabase.MIGRATION_7_8).close()
         val db = Room.databaseBuilder(context, IMFITDatabase::class.java, name).build()
         try {
             val recovery = RoomLegacyRoutineRecovery(db)

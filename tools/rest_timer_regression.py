@@ -52,6 +52,168 @@ def summarize(text):
     return results
 
 
+def run_execution_stopwatch(args, adb, capture, metadata):
+    """Exercise real Room/auth across two verified process deaths and an opt-in reboot."""
+    original_wifi = capture("wifi-before.txt", ["shell", "settings", "get", "global", "wifi_on"]).stdout.strip()
+    original_data = capture("data-before.txt", ["shell", "settings", "get", "global", "mobile_data"]).stdout.strip()
+    original_user = capture("current-user-before.txt", ["shell", "am", "get-current-user"]).stdout.strip()
+    metadata["recoveryKind"] = "execution-stopwatch"
+    metadata["rebootRequested"] = args.reboot_stopwatch
+    metadata["phases"] = []
+    test_class = args.class_name.split("#")[0]
+
+    def process_rows(label):
+        return [line.split() for line in
+                capture(label + ".txt", ["shell", "ps", "-A", "-o", "USER,PID,NAME"]).stdout.splitlines()]
+
+    def alive(pid, label):
+        return any(len(row) == 3 and row[0].startswith("u" + args.user + "_") and
+                   row[1:] == [pid, args.package] for row in process_rows(label))
+
+    def wait_dead(pid, label, timeout):
+        deadline = time.monotonic() + timeout
+        attempt = 0
+        while alive(pid, label + "-" + str(attempt)):
+            if time.monotonic() >= deadline:
+                return False
+            attempt += 1
+            threading.Event().wait(0.05)
+        return True
+
+    def end_process(fixture, label):
+        pid = fixture["pid"]
+        assert pid.isdigit() and int(fixture["user"]) == int(args.user), "Fixture process/user mismatch"
+        assert alive(pid, label + "-identity"), "Prepared PID no longer belongs to the isolated app"
+        capture(label + "-exits-before.txt", ["shell", "dumpsys", "activity", "exit-info", args.package])
+        # Framework background kill is preferred; an instrumented process may be ineligible.
+        result = capture(label + "-am-kill.txt", ["shell", "am", "kill", "--user", args.user, args.package])
+        assert result.returncode == 0, "Framework am kill command failed"
+        death_kind = "framework_am_kill"
+        if not wait_dead(pid, label + "-framework", 2):
+            assert alive(pid, label + "-sigkill-identity"), "PID changed before abrupt kill"
+            result = capture(label + "-sigkill.txt", ["shell", "su", "0", "kill", "-9", pid])
+            assert result.returncode == 0, "PID-verified abrupt SIGKILL failed"
+            death_kind = "abrupt_SIGKILL"
+        assert wait_dead(pid, label + "-ended", 10), "Prepared process survived termination"
+        block = ""
+        exit_deadline = time.monotonic() + 5
+        while time.monotonic() < exit_deadline:
+            exits = capture(label + "-exits-after.txt", ["shell", "dumpsys", "activity", "exit-info", args.package]).stdout
+            block = next((part for part in exits.split("ApplicationExitInfo #")
+                          if re.search(r"\bpid=" + pid + r"\b", part)), "")
+            if block:
+                break
+            threading.Event().wait(0.2)
+        assert block, "Missing process exit evidence"
+        if death_kind == "abrupt_SIGKILL":
+            assert "reason=2 (SIGNALED)" in block and "status=9" in block, "Missing abrupt SIGKILL evidence"
+        return dict(kind=death_kind, pid=pid, user=args.user, sessionId=fixture["sessionId"])
+
+    def instrument(method, label, phase=None, reboot=False):
+        event = threading.Event()
+        fixture = {}
+        log = subprocess.Popen(adb + ["logcat", "-T", "1", "-b", "main", "-b", "system", "-b", "crash",
+                                      "-v", "threadtime", "IMFITExecutionTest:I", "AndroidRuntime:E", "*:S"],
+                               stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True)
+
+        def read_events():
+            with (args.output / (label + "-logcat.txt")).open("w") as output:
+                for line in log.stdout:
+                    output.write(line)
+                    output.flush()
+                    fields = dict(FIELDS.findall(line))
+                    if fields.get("event") == "execution_fixture" and fields.get("phase") == phase:
+                        fixture.update(fields)
+                        event.set()
+
+        reader = threading.Thread(target=read_events, daemon=True)
+        reader.start()
+        command = adb + ["shell", "am", "instrument", "--user", args.user, "-w", "-r", "-e", "class",
+                         test_class + "#" + method, "-e", "allowSyntheticSession", "true",
+                         "-e", "androidUser", args.user,
+                         args.package + ".test/androidx.test.runner.AndroidJUnitRunner"]
+        process = subprocess.Popen(command, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True)
+        deadline = time.monotonic() + 180
+        death = None
+        try:
+            while True:
+                if phase and event.is_set() and death is None:
+                    if reboot:
+                        assert alive(fixture["pid"], label + "-reboot-identity"), "Reboot fixture PID mismatch"
+                        assert int(fixture["user"]) == int(args.user)
+                        result = capture(label + "-reboot.txt", ["reboot"])
+                        assert result.returncode == 0, "Emulator reboot request failed"
+                        death = dict(kind="actual_reboot", pid=fixture["pid"], boot=fixture["boot"],
+                                     user=args.user, sessionId=fixture["sessionId"])
+                    else:
+                        death = end_process(fixture, label)
+                try:
+                    output = process.communicate(timeout=0.2)[0]
+                    break
+                except subprocess.TimeoutExpired:
+                    if time.monotonic() >= deadline:
+                        raise subprocess.TimeoutExpired(command, 180)
+            (args.output / (label + "-instrumentation.txt")).write_text(output)
+            if phase:
+                assert event.is_set() and death is not None, "Fixture never reached its durable recovery checkpoint"
+                metadata["phases"].append(dict(method=method, prepared=fixture, death=death))
+            else:
+                assert process.returncode == 0 and re.search(r"OK \(\d+ tests?\)", output), output
+                metadata["phases"].append(dict(method=method, status="PASS"))
+        finally:
+            if process.poll() is None:
+                process.kill()  # Host adb client only; not an app force-stop or recovery assertion.
+                process.communicate(timeout=10)
+            log.terminate()
+            log.wait(timeout=10)
+            reader.join(timeout=10)
+
+    try:
+        capture("wifi-disable.txt", ["shell", "svc", "wifi", "disable"])
+        capture("data-disable.txt", ["shell", "svc", "data", "disable"])
+        instrument("prepareExecutionStopwatchFixture", "running", "running_prepared")
+        instrument("verifyRunningExecutionStopwatchAndPauseFixture", "paused", "paused_prepared")
+        if args.reboot_stopwatch:
+            instrument("verifyPausedExecutionStopwatchAndPrepareRebootFixture", "reboot", "reboot_prepared", reboot=True)
+            subprocess.run(adb + ["wait-for-device"], check=True, timeout=180)
+            deadline = time.monotonic() + 180
+            while capture("boot-completed.txt", ["shell", "getprop", "sys.boot_completed"]).stdout.strip() != "1":
+                assert time.monotonic() < deadline, "Reboot did not complete"
+                threading.Event().wait(0.2)
+            assert capture("wifi-after-boot.txt", ["shell", "settings", "get", "global", "wifi_on"]).stdout.strip() != "1"
+            assert capture("data-after-boot.txt", ["shell", "settings", "get", "global", "mobile_data"]).stdout.strip() != "1"
+            capture("test-user-start.txt", ["shell", "am", "start-user", "-w", args.user])
+            capture("test-user-switch.txt", ["shell", "am", "switch-user", args.user])
+            deadline = time.monotonic() + 30
+            while "true" not in capture("test-user-unlocked.txt",
+                                       ["shell", "cmd", "user", "is-user-unlocked", args.user]).stdout:
+                assert time.monotonic() < deadline, "Isolated test user did not unlock after reboot"
+                threading.Event().wait(0.2)
+            instrument("verifyRebootExecutionStopwatchAndFinishFixture", "reboot-verification")
+        else:
+            instrument("verifyPausedExecutionStopwatchAndFinishFixture", "paused-verification")
+        metadata["status"] = "PASS"
+    except Exception as exc:
+        metadata["status"] = "FAIL"
+        metadata["reason"] = type(exc).__name__ + ": " + str(exc)
+    finally:
+        try:
+            instrument("cleanExecutionStopwatchFixture", "cleanup")
+        except Exception as exc:
+            metadata["status"] = "FAIL"
+            metadata["cleanupError"] = str(exc)
+            # Failure containment only, never counted as either recovery process-death gate.
+            capture("cleanup-containment-force-stop.txt", ["shell", "am", "force-stop", "--user", args.user, args.package])
+        if original_user.isdigit():
+            capture("current-user-restored.txt", ["shell", "am", "switch-user", original_user])
+        capture("wifi-restored.txt", ["shell", "svc", "wifi", "enable" if original_wifi == "1" else "disable"])
+        capture("data-restored.txt", ["shell", "svc", "data", "enable" if original_data == "1" else "disable"])
+        metadata["finishedUtc"] = datetime.now(timezone.utc).isoformat()
+        (args.output / "metadata.json").write_text(json.dumps(metadata, indent=2))
+    if metadata.get("status") != "PASS":
+        raise SystemExit(1)
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--serial", default="emulator-5554")
@@ -63,6 +225,8 @@ def main():
     parser.add_argument("--offline", action="store_true", help="Disable emulator networking temporarily for synthetic production fixtures")
     parser.add_argument("--user", default="0", help="Use an isolated Android user for production fixtures")
     parser.add_argument("--cold-process", action="store_true", help="Hold preparation instrumentation, SIGKILL its exact PID using emulator su, observe the alarm, verify persistence")
+    parser.add_argument("--execution-stopwatch", action="store_true", help="Run real Room stopwatch recovery across two verified process deaths")
+    parser.add_argument("--reboot-stopwatch", action="store_true", help="Explicitly reboot the disposable emulator during stopwatch recovery; requires parent approval")
     args = parser.parse_args()
     args.output.mkdir(parents=True, exist_ok=True)
     if args.analyze:
@@ -84,9 +248,17 @@ def main():
                 "testClass": args.class_name, "package": args.package, "user": args.user}
     if args.package == "com.diajarkoding.imfit" and not args.offline:
         parser.error("Production fixtures require --offline and refuse real accounts.")
-    if args.package == "com.diajarkoding.imfit" and args.user == "0":
-        parser.error("Production fixtures require an isolated non-owner Android user.")
+    if args.package == "com.diajarkoding.imfit" and (
+            not args.user.isdigit() or int(args.user) in (0, 10)):
+        parser.error("Production fixtures require an isolated Android user other than 0 or 10.")
+    if args.reboot_stopwatch and not args.execution_stopwatch:
+        parser.error("--reboot-stopwatch requires --execution-stopwatch")
+    if args.execution_stopwatch and (args.package != "com.diajarkoding.imfit" or args.cold_process):
+        parser.error("Stopwatch recovery requires production/offline isolation and is separate from --cold-process")
     (args.output / "metadata.json").write_text(json.dumps(metadata, indent=2))
+    if args.execution_stopwatch:
+        run_execution_stopwatch(args, adb, capture, metadata)
+        return
     capture("alarms-before.txt", ["shell", "dumpsys", "alarm"])
     capture("services-before.txt", ["shell", "dumpsys", "activity", "services", args.package])
     capture("deviceidle-before.txt", ["shell", "dumpsys", "deviceidle"])

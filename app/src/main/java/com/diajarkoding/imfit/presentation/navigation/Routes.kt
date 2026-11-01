@@ -4,6 +4,10 @@ import androidx.navigation3.runtime.NavKey
 import com.diajarkoding.imfit.domain.model.RoutineFlowContext
 import kotlinx.serialization.Serializable
 
+import androidx.savedstate.serialization.SavedStateConfiguration
+import kotlinx.serialization.modules.SerializersModule
+import kotlinx.serialization.modules.polymorphic
+import kotlinx.serialization.modules.subclass
 @Serializable
 data object Splash : NavKey
 
@@ -59,3 +63,28 @@ data class YearlyCalendar(val year: Int, val month: Int) : NavKey
 
 @Serializable
 data object Profile : NavKey
+
+val navKeySerializersModule = SerializersModule {
+    polymorphic(NavKey::class) {
+        subclass(Splash::class)
+        subclass(Login::class)
+        subclass(Register::class)
+        subclass(RegisterConfirmation::class)
+        subclass(Main::class)
+        subclass(WorkoutDetail::class)
+        subclass(EditWorkout::class)
+        subclass(SetupRoutine::class)
+        subclass(ExerciseList::class)
+        subclass(ExerciseSelection::class)
+        subclass(ActiveExerciseSelection::class)
+        subclass(ActiveWorkout::class)
+        subclass(WorkoutSummary::class)
+        subclass(WorkoutHistory::class)
+        subclass(YearlyCalendar::class)
+        subclass(Profile::class)
+    }
+}
+
+val navSavedStateConfig = SavedStateConfiguration {
+    serializersModule = navKeySerializersModule
+}

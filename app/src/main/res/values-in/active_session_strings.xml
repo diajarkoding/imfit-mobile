@@ -42,4 +42,5 @@
     <string name="rest_timer_unit_minutes">Menit</string>
     <string name="rest_timer_unit_seconds">Detik</string>
     <string name="rest_timer_minus_30">−30 detik</string>
+    <string name="execution_stopwatch_review">Stopwatch dijeda setelah perangkat dimulai ulang atau jam tidak dapat diverifikasi. Tinjau durasi tersimpan, lalu lanjutkan atau edit manual.</string>
 </resources>

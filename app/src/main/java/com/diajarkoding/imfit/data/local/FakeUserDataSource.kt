@@ -15,10 +15,10 @@ object FakeUserDataSource {
         )
     )
 
-    private val _userProfileState = MutableStateFlow(UserProfileState.unauthenticated())
+    private val _userProfileState = MutableStateFlow(UserProfileState.fromDirectUser(registeredUsers.first().user))
     val userProfileState: StateFlow<UserProfileState> = _userProfileState.asStateFlow()
 
-    private var currentUser: User? = null
+    private var currentUser: User? = registeredUsers.first().user
         set(value) {
             field = value
             _userProfileState.value = UserProfileState.fromDirectUser(value)

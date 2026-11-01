@@ -43,6 +43,7 @@ import androidx.compose.ui.unit.sp
 import com.diajarkoding.imfit.R
 import com.diajarkoding.imfit.domain.model.ExerciseLog
 import com.diajarkoding.imfit.domain.model.WorkoutLog
+import com.diajarkoding.imfit.domain.model.TrackingType
 import com.diajarkoding.imfit.presentation.components.common.CalendarMonth
 import com.diajarkoding.imfit.presentation.components.common.CheckCircle
 import com.diajarkoding.imfit.presentation.components.common.FitnessCenter
@@ -484,13 +485,24 @@ internal fun WorkoutHistorySessionCard(
             Column {
                 HorizontalDivider(color = colors.border)
                 Spacer(modifier = Modifier.height(12.dp))
-                val volumeValue = formatVolume(workoutLog.totalVolume, locale)
+                val volumeValue = if (workoutLog.totalVolume > 0f) {
+                    formatVolume(workoutLog.totalVolume, locale)
+                } else if (workoutLog.totalDurationSeconds > 0) {
+                    "${workoutLog.totalDurationSeconds / 60}m ${workoutLog.totalDurationSeconds % 60}s"
+                } else {
+                    "${workoutLog.totalReps} reps"
+                }
                 val exercisesValue = "${workoutLog.exerciseLogs.size}"
                 val setsValue = "${workoutLog.exerciseLogs.sumOf { it.completedSets }}"
-                val volumeLabel = stringResource(R.string.workout_history_metric_volume)
+                val volumeLabel = if (workoutLog.totalVolume > 0f) {
+                    stringResource(R.string.workout_history_metric_volume)
+                } else if (workoutLog.totalDurationSeconds > 0) {
+                    "Durasi Aktif"
+                } else {
+                    "Total Reps"
+                }
                 val exercisesLabel = stringResource(R.string.workout_history_metric_exercises)
                 val setsLabel = stringResource(R.string.workout_history_metric_sets)
-
                 if (stacked) {
                     Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
                         SessionMetricRow(volumeLabel, volumeValue)
@@ -625,8 +637,15 @@ internal fun WorkoutHistoryExerciseRow(
                     fontWeight = FontWeight.Medium
                 )
             }
+            val exerciseMetricText = when (exerciseLog.trackingType) {
+                TrackingType.WEIGHT_REPS -> formatVolume(exerciseLog.totalVolume, locale)
+                TrackingType.BODYWEIGHT_REPS -> if (exerciseLog.additionalVolume > 0f) "+${formatVolume(exerciseLog.additionalVolume, locale)}" else "${exerciseLog.totalReps} reps"
+                TrackingType.ASSISTED_REPS, TrackingType.REPS_ONLY -> "${exerciseLog.totalReps} reps"
+                TrackingType.DURATION -> "${exerciseLog.totalDurationSeconds}s"
+                TrackingType.DISTANCE_DURATION -> "${String.format(locale, "%.2f km", exerciseLog.totalDistanceMeters / 1000f)} · ${exerciseLog.totalDurationSeconds}s"
+            }
             Text(
-                text = formatVolume(exerciseLog.totalVolume, locale),
+                text = exerciseMetricText,
                 color = colors.muted,
                 style = MaterialTheme.typography.labelSmall
             )

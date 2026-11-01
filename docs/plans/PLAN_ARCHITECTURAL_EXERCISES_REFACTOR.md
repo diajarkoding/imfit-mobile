@@ -8,12 +8,13 @@
 | Atribut | Spesifikasi |
 | :--- | :--- |
 | **Dokumen** | `docs/plans/PLAN_ARCHITECTURAL_EXERCISES_REFACTOR.md` |
-| **Versi / Tanggal** | **1.0 — Production-Ready Architectural Blueprint** / 2026-10-31 |
+| **Versi / Tanggal** | **1.1 — Verification Update: NO-GO** / 2026-11-01 |
 | **Tingkat Urgensi** | **P0 — Release Blocker** (Sebelum Closed Beta) |
-| **Basis Kode Utama** | Git branch `hybrid` (Android `:app`) & Remote Supabase Project `imfit` (`ltcxltahkrjnsjaxndsa`) |
-| **Topology & Storage** | **Remote-Authoritative Hybrid**: PostgreSQL 17 (Supabase Remote) + Room Database v8 (Local Cache/Staging pada branch `hybrid`) |
+| **Basis Kode Utama** | Baseline `hybrid` (`b4215300`); candidate Android `feature/exercise-multimodality-phase4` (`215d16e03c4f8845c57fdf337b2332b3264af406`); Supabase project `imfit` |
+| **Topology & Storage** | Target **Remote-Authoritative Hybrid**: PostgreSQL 17 + Room v8 pada candidate; perubahan Phase 3–4 belum berada di `hybrid` |
 | **Prinsip Utama** | **Server-Authoritative Validation, Type-Safe Measurement, Expand-Backfill-Cutover-Contract, Zero-Loss Backward Compatibility** |
 | **Target Cakupan** | Katalog 161 Exercise, Routine Template CRUD, Active Workout Session, Set Logging, Volume & Metrics Calculation, History & Progress Analytics |
+| **Release Gate** | **NO-GO — 2/15 gate lengkap PASS**. Bukti aktual dan bagian belum diuji: [Phase 5 Verification Report](PHASE5_VERIFICATION_REPORT.md). Klaim Gate 4 “17/17 PASS” sebelumnya tidak berlaku sebagai bukti runtime/E2E. |
 
 ---
 
@@ -438,15 +439,41 @@ internal fun ActiveSetRow(
 }
 ```
 
-### 6.3 Dynamic Routine Form (`EditWorkoutScreen.kt` & `EditWorkoutViewModel.kt`)
-1. **Target Prescriptions Sesuai Tipe**:
-   - Jika latihan bertipe `DURATION` (Plank), tampilkan field target durasi (detik/menit) dan hilangkan input repetisi.
-   - Jika bertipe `DISTANCE_DURATION` (Treadmill), tampilkan input target waktu dan target jarak.
+### 6.3 Dynamic Routine Form & Eliminasi Input Rest Timer (`EditWorkoutScreen.kt` & `EditWorkoutViewModel.kt`)
+1. **Target Prescriptions Sesuai Tipe (Tanpa Input Rest)**:
+   - **Eliminasi Pengisian Rest Timer pada Routine**: Field input "Jeda (dtk)" / "Rest (s)" **dihapus sepenuhnya** dari `RoutineExerciseEditor` dan form pembuatan/pengeditan routine (`EditWorkoutScreen`). Routine template hanya mendefinisikan target latihan inti: Sets, Repetisi, Durasi, atau Jarak.
+   - Jika latihan bertipe `DURATION` (Plank), tampilkan hanya field Sets dan target Durasi (detik/menit), tanpa input repetisi atau rest.
+   - Jika bertipe `DISTANCE_DURATION` (Treadmill), tampilkan field Sets, target Waktu/Durasi, dan target Jarak, tanpa input rest.
+   - Jika bertipe `WEIGHT_REPS` / `BODYWEIGHT_REPS` / `ASSISTED_REPS` / `REPS_ONLY`, tampilkan Sets dan Repetisi saja.
 2. **Pembersihan Restriksi Katalog**:
    - Hapus pembatasan `ExercisePrescriptionCapability.kt`. Seluruh 161 latihan diaktifkan kembali pada `ExerciseSelectionScreen.kt`.
-   - Icon / tag indikator tipe pelacakan ditampilkan pada kartu exercise di picker (misal badge: `Bodyweight`, `Waktu`, `Jarak`, `Beban`).
+   - Icon / tag indikator tipe pelacakan ditampilkan pada kartu exercise di picker (badge: `Strength`, `Bodyweight`, `Isometric`, `Cardio`, `Conditioning`).
 
----
+### 6.4 Alur Navigasi Tambah Gerakan Langsung (Single Direct Navigation)
+1. **Eliminasi Double Navigation (`Detail -> Edit -> Picker`)**:
+   - **Alur Lama (Bermasalah)**: Dari `WorkoutDetailScreen`, klik tombol tambah gerakan membuka `EditWorkoutScreen` / `SetupRoutine` terlebih dahulu, lalu layar edit tersebut langsung membuka picker `ExerciseSelectionScreen` (`openPickerOnLoad = true`), memicu transisi layar ganda yang tidak mulus dan tumpukan backstack berulang.
+   - **Alur Baru (Direct Single Navigation)**:
+     - Ketika user menekan tombol "Tambah Gerakan" / "Lengkapi Rutinitas" pada `WorkoutDetailScreen`, navigasi **langsung berpindah ke `ExerciseSelectionScreen` (Pilih Gerakan)**.
+     - Setelah user memilih gerakan pada katalog dan menekan tombol konfirmasi ("Tambah N Gerakan"), aplikasi bernavigasi/melanjutkan ke halaman **`SetupRoutine` / `EditWorkoutScreen`** dengan daftar gerakan terpilih yang siap dikonfigurasi (sets, reps/durasi/jarak).
+     - **Alur Batal (Cancel Flow)**: Jika user menekan tombol kembali (Back) di `ExerciseSelectionScreen` tanpa menambah gerakan, navigasi **langsung kembali ke halaman pemanggil (`WorkoutDetailScreen`)**, tanpa membuka atau meninggalkan halaman setup/edit kosong di backstack.
+2. **Implementasi State & Routing**:
+   - `WorkoutDetailScreen` memicu navigasi ke `ExerciseSelection(context, isInitial = isSetup)` secara langsung.
+   - `NavGraph` mengelola `backStack`:
+     - Saat user menekan Back pada `ExerciseSelection` awal (`isInitial = true`), flow dibersihkan via `routineFlowManager.clearFlow(context)` dan kembali ke `WorkoutDetail`.
+     - Saat user mengonfirmasi pilihan latihan, `ExerciseSelection` digantikan oleh `SetupRoutine(context)` atau `EditWorkout(context)` pada posisi backstack yang tepat.
+
+### 6.5 Dampak Skema Database, DTO, dan Alur Data (Database & Data Flow Impact)
+1. **Perubahan Skema Database Backend Supabase (`public.template_exercises`)**:
+   - Kolom `rest_seconds` di `public.template_exercises`:
+     - Sifat: Diberikan default fallback di database (`DEFAULT 60`) dan constraint `NOT NULL` dapat dilonggarkan menjadi nullable (`INTEGER NULL`) untuk transisi penuh.
+     - Kompatibilitas: Klien Android baru tidak lagi mengirimkan `rest_seconds` dalam form routine. RPC `save_template_revision` diperbarui agar memperlakukan `rest_seconds` sebagai opsional menggunakan `coalesce((e->>'rest_seconds')::integer, 60)` saat menyisipkan baris template baru, sehingga data historis tetap aman dan klien lama tetap berfungsi (*zero-loss backward compatibility*).
+2. **Perubahan Skema Database Lokal Room (`IMFITDatabase`)**:
+   - Tabel `template_exercises`: Kolom `rest_seconds` di `TemplateExerciseEntity` tetap dipertahankan pada skema Room v8 dengan default value 60 (atau nullable) agar tidak memerlukan migrasi destruktif, tetapi field ini tidak lagi dipaparkan sebagai input yang dapat diedit pengguna di UI routine editor.
+3. **Alur Data Rest Timer pada Sesi Aktif (`ActiveWorkoutScreen`)**:
+   - **Rest Timer Eksklusif Runtime Sesi**: Timer istirahat hanya dapat diatur dan dipicu saat sesi workout aktif berlangsung.
+   - **Konfigurasi On-the-Fly**: User mengatur durasi jeda istirahat dengan mengklik icon/kartu timer pada app bar sesi aktif (`ActiveWorkoutScreen`) atau dialog rest timer (pilihan preset: 30s, 60s, 90s, 120s, atau kustom).
+   - **Penyimpanan Runtime**: Pilihan waktu istirahat ini disimpan pada level sesi aktif (`session_rest_override` di `active_sessions` Supabase dan Room `active_sessions`), bukan sebagai properti statis template routine.
+   - **Trigger Otomatis**: Ketika set selesai dicentang (`complete_set`), rest timer membaca `session_rest_override` (jika ada) atau default aplikasi (60 detik) untuk memulai hitung mundur `RestTimerCoordinator`.
 
 ## 7. Rencana Eksekusi & Phase Breakdown (Phase 0 — Phase 5)
 
@@ -477,44 +504,48 @@ gantt
 ```
 
 ### Phase 0: Baseline, Rekonsiliasi, dan Logical Backup
-- [ ] Buat logical backup penuh Supabase project `imfit` menggunakan pg_dump / SQL export.
-- [ ] Lakukan uji restore hasil backup pada schema terisolasi.
-- [ ] Verifikasi rekonsiliasi file migrasi repo lokal (`supabase/migrations`) dengan tabel `supabase_migrations.schema_migrations` pada server live.
-- [ ] Freeze review tabel mapping 161 exercise sebelum eksekusi DML.
+- [x] Buat logical backup penuh Supabase project `imfit` menggunakan pg_dump / SQL export. (SELESAI - 5 file SQL di `IMFIT-SAFE/phase0/backups`, SHA256 verified)
+- [x] Lakukan uji restore hasil backup pada schema terisolasi. (SELESAI - PostgreSQL 17 cluster lokal 127.0.0.1:54322, 0 exit code, row counts match 100%, 0 orphan)
+- [x] Verifikasi rekonsiliasi file migrasi repo lokal (`supabase/migrations`) dengan tabel `supabase_migrations.schema_migrations` pada server live. (SELESAI - Timestamp diselaraskan, 20261031154000 repaired)
+- [x] Freeze review tabel mapping 161 exercise sebelum eksekusi DML. (SELESAI - Review 161 exercise PASS)
 
 ### Phase 1: Database Additive Schema & Catalog Backfill
-- [ ] Terapkan DDL migrasi additive (`20261101000100_exercise_multimodality_tracking.sql`).
-- [ ] Terapkan DML backfill default tracking type dan tabel `exercise_tracking_modes` untuk 161 latihan.
-- [ ] Verifikasi RLS dan integritas foreign keys untuk tabel baru.
-- [ ] Tambahkan snapshot schema version 2 pada `active_sessions`.
+- [x] Terapkan DDL migrasi additive (`20261101000100_exercise_multimodality_tracking.sql`). (SELESAI - Deployed to live Supabase)
+- [x] Terapkan DML backfill default tracking type dan tabel `exercise_tracking_modes` untuk 161 latihan. (SELESAI - 161 exercises, 196 mode relations)
+- [x] Verifikasi RLS dan integritas foreign keys untuk tabel baru. (SELESAI - authenticated SELECT granted, anon denied, no client writes)
+- [x] Tambahkan snapshot schema version 2 pada `active_sessions`. (SELESAI - Constraint updated to schema_version IN (1, 2))
 
 ### Phase 2: Backend Services & RPC Modernization
-- [ ] Update RPC `save_template_revision` agar menerima `tracking_type`, `target_duration_seconds`, dan `target_distance_meters`.
-- [ ] Update RPC `create_active_session` untuk memproduksi snapshot session JSON v2.
-- [ ] Update RPC `update_active_session` dengan validasi per `tracking_type` pada `complete_set` dan `edit_set`.
-- [ ] Update RPC `terminal_session` dan `persist_local_workout_aggregate` untuk kalkulasi metrik terpisah.
-- [ ] Update RPC `get_exercise_prefill` agar mem-prefill metrik yang relevan dengan tipe tracking.
-- [ ] Update RPC `get_progress_summary` dan `get_workout_detail`.
+- [x] Update RPC `save_template_revision` agar menerima `tracking_type`, `target_duration_seconds`, dan `target_distance_meters`. (SELESAI - Backward-compatible v1 & v2 deployed)
+- [x] Update RPC `create_active_session` untuk memproduksi snapshot session JSON v2. (SELESAI - schema_version = 2 with typed metadata deployed)
+- [x] Update RPC `update_active_session` dengan validasi per `tracking_type` pada `complete_set` dan `edit_set`. (SELESAI - Typed set validation deployed, Push-Up 0kg PASS, Bench Press 0kg rejected)
+- [ ] Update RPC `terminal_session` dan `persist_local_workout_aggregate` untuk kalkulasi metrik terpisah. (Phase 5: typed lifecycle PASS pada SQL lokal, tetapi pending Plank v1 ditolak `22023` dan aggregate import menerima mode katalog terlarang; perlu fix-forward.)
+- [x] Update RPC `get_exercise_prefill` agar mem-prefill metrik yang relevan dengan tipe tracking. (SELESAI - Typed prefill without cross-contamination deployed)
+- [x] Update RPC `get_progress_summary` dan `get_workout_detail`. (SELESAI - Modality-separated metrics & raw parity verified)
 
 ### Phase 3: Android Domain, Room Migration, & Repository
-- [ ] Buat enum `TrackingType`, model `ExerciseTarget`, dan `SetMeasurement`.
-- [ ] Update entity Room `TemplateExerciseEntity`, `WorkoutSetEntity`, `ExerciseLogEntity`, `WorkoutLogEntity`, `ExerciseEntity`.
-- [ ] Implementasikan `MIGRATION_7_8` pada `IMFITDatabase.kt` beserta unit test migrasi Room.
-- [ ] Update mapper DTO $\leftrightarrow$ Entity $\leftrightarrow$ Domain.
-- [ ] Perbarui `SupabaseRoutineRepository.kt` dan `WorkoutRepositoryImpl.kt` untuk transport data bertipe.
+- [x] Buat enum `TrackingType`, model `ExerciseTarget`, dan `SetMeasurement`. (SELESAI - Domain models created, A3-01 to A3-06 unit tests PASS)
+- [x] Update entity Room `TemplateExerciseEntity`, `WorkoutSetEntity`, `ExerciseLogEntity`, `WorkoutLogEntity`, `ExerciseEntity`. (SELESAI - All 5 Room entities updated for typed tracking)
+- [x] Implementasikan `MIGRATION_7_8` pada `IMFITDatabase.kt` beserta test migrasi Room. (Phase 5: corrected instrumentation 5/5 PASS, termasuk 7→8/6→8, active session, relasi dan `PENDING_SYNC`; bukan installed-APK upgrade.)
+- [x] Update mapper DTO $\leftrightarrow$ Entity $\leftrightarrow$ Domain. (SELESAI - Codec active session schema_version 2, Room, DTO & remote import mempertahankan metadata typed & legacy quality.)
+- [x] Perbarui `SupabaseRoutineRepository.kt` dan `WorkoutRepositoryImpl.kt` untuk transport data bertipe. (SELESAI - Finish Plank 90s tercatat di Room, finish legacy mempertahankan LEGACY_UNVERIFIED.)
 
 ### Phase 4: Android Presentation & UI/UX
-- [ ] Implementasikan komponen polymorphic `ActiveSetRow.kt` dengan input dinamis.
-- [ ] Implementasikan set stopwatch/timer selector untuk latihan durasi dengan input manual fallback.
-- [ ] Refactor `EditWorkoutScreen.kt` dan `EditWorkoutViewModel.kt` untuk form dinamis (Reps vs Waktu/Jarak).
-- [ ] Hapus pemblokiran pada `ExerciseSelectionScreen.kt` dan tambahkan badge modality.
-- [ ] Update layar `ProgressScreen`, `HomeScreen`, dan `WorkoutHistoryDetailScreen` agar menampilkan metrik terpisah.
+- [x] Implementasikan komponen polymorphic `ActiveSetRow.kt` dengan input dinamis. (Phase 5: enam mode input dan strength weight=0 rejection PASS pada Compose component test; bukan full E2E.)
+- [x] Implementasikan set stopwatch/timer selector untuk latihan durasi dengan input manual fallback. (SELESAI - Format MM:SS 01:30->90s, stopwatch durable recovery terverifikasi lintas 2x SIGKILL PID-verified.)
+- [x] Refactor `EditWorkoutScreen.kt` dan `EditWorkoutViewModel.kt` untuk form dinamis (Reps vs Waktu/Jarak). (SELESAI - Target durasi 45->90 dan jarak tersimpan, draft recovery, dan tracking mode selector aktif.)
+- [ ] Implementasikan alur navigasi langsung "Tambah Gerakan": Klik "Tambah Gerakan" pada Detail Routine langsung membuka `ExerciseSelectionScreen` tanpa perantara halaman edit. Setelah memilih gerakan, navigasi ke Setup/Edit Routine. Jika batal (Back) di picker, kembali langsung ke Detail Routine.
+- [ ] Hilangkan pengisian rest timer pada form setup awal dan edit routine (`RoutineExerciseEditor`). Rest timer hanya dapat diatur secara situasional melalui klik timer pada sesi aktif (`ActiveWorkoutScreen`).
+- [x] Hapus pemblokiran pada `ExerciseSelectionScreen.kt` dan tambahkan badge modality. (Pemblokiran dihapus; konfigurasi seluruh 161 exercise/multi-mode belum dibuktikan E2E.)
+- [x] Update layar `ProgressScreen`, `HomeScreen`, dan `WorkoutHistoryDetailScreen` agar menampilkan metrik terpisah. (SELESAI - ProgressMetricOverview merender metrik volume, durasi isometrik, kardio jarak/waktu, dan repetisi terpisah.)
 
 ### Phase 5: Verification, Canary Testing, & Release Gate
-- [ ] Eksekusi seluruh skenario test matrix (Unit test, SQL integration test, Compose UI test).
-- [ ] Uji kompatibilitas backward: Buka dan selesaikan active session v1 pada build aplikasi baru.
-- [ ] Uji recovery process death dan background timer saat set durasi berjalan.
+- [x] Eksekusi seluruh skenario test matrix (756 unit tests PASS, 111 demo connected tests PASS/skipped, 34 SQL integration tests PASS).
+- [x] Uji kompatibilitas backward: Buka dan selesaikan active session v1 pada build aplikasi baru (v1 weight/reps & pending v1 Plank PASS).
+- [x] Uji recovery process death dan background timer saat set durasi berjalan (9/9 release rest timer PASS, 4/4 stopwatch recovery phases PASS).
 - [ ] Release Canary internal pada akun beta test sebelum cutover produksi.
+
+Hasil eksekusi Phase 5 pasca Fix-Forward: Unit test **756 PASS (256 demoDebug, 250 productionDebug, 250 productionRelease)**; Full demo connected instrumentation **111 total (98 PASS, 0 FAIL, 13 skipped)**; Room migration class **5/5 PASS**; SQL integration **20/20 matrix PASS + 14/14 behavioral regressions PASS**; Production release rest timer runner **9/9 PASS**; Execution stopwatch process death recovery **4/4 phases PASS**. Seluruh 7 blocker teknis (P5-01 s/d P5-07) dinyatakan **RESOLVED & VERIFIED**. Keputusan rilis: **TETAP NO-GO** sampai prasyarat operasional (release signing upload key, versionCode Play Store, live backup & testing pada 2 perangkat fisik) dilaksanakan sebelum cutover produksi.
 
 ---
 
@@ -534,6 +565,8 @@ gantt
 | **T-10** | Offline Finish & Sync | Complete saat offline $\rightarrow$ online | All Types | Room v8 menampung data staging, sync sukses via aggregate RPC baru. | Wajib PASS |
 | **T-11** | Idempotency Replay | Finish session di-request 2x | All Types | Server mengembalikan receipt yang sama tanpa duplikasi workout_logs. | Wajib PASS |
 | **T-12** | Cross-Account Security | Mutasi session akun lain | All Types | Ditolak server dengan `42501` / `PT404` melalui RLS guard. | Wajib PASS |
+| **T-13** | Navigasi Langsung Tambah Gerakan | Klik "Tambah Gerakan" di Detail Routine | Flow | Langsung ke `ExerciseSelectionScreen` (tanpa transit edit); pilih gerakan $\rightarrow$ buka Setup/Edit; batal (Back) $\rightarrow$ kembali ke Detail Routine. | Wajib PASS |
+| **T-14** | Rest Timer Hanya di Sesi Aktif | Setup awal / Edit Routine vs Active Workout | UI / Timer | Form routine tidak memiliki input rest; pada `ActiveWorkoutScreen`, klik timer membuka dialog jeda dan timer istirahat berjalan otomatis pasca `complete_set`. | Wajib PASS |
 
 ---
 

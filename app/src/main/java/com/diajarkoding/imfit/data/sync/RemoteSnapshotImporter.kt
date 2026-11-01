@@ -37,8 +37,15 @@ internal class RemoteSnapshotImporter(private val database: IMFITDatabase) {
             val withProvenance = exercises.map { exercise ->
                 val old = existingExercises.find { it.id == exercise.id }
                 fun performance(rows: List<WorkoutSetEntity>) = rows.filter { it.exerciseLogId == exercise.id }
-                    .sortedBy { it.setNumber }.map { listOf(it.setNumber, it.weight, it.reps, it.isCompleted) }
-                exercise.copy(inputDefaults = old?.inputDefaults?.takeIf { performance(existingSets) == performance(sets) })
+                    .sortedBy { it.setNumber }.map {
+                        listOf(
+                            it.setNumber, it.weight, it.reps, it.isCompleted,
+                            it.durationSeconds, it.distanceMeters, it.additionalWeight, it.assistanceWeight
+                        )
+                    }
+                exercise.copy(inputDefaults = old?.inputDefaults?.takeIf {
+                    old.trackingType == exercise.trackingType && performance(existingSets) == performance(sets)
+                })
             }
             database.workoutSetDao().deleteSetsByWorkoutLog(parent.id)
             database.exerciseLogDao().deleteExerciseLogsByWorkout(parent.id)

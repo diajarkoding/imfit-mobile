@@ -18,6 +18,10 @@ import com.diajarkoding.imfit.MainActivity
 import com.diajarkoding.imfit.core.notification.NotificationChannels
 import com.diajarkoding.imfit.core.service.WorkoutService
 import com.diajarkoding.imfit.data.local.entity.ActiveSessionEntity
+import com.diajarkoding.imfit.data.local.entity.ExerciseLogEntity
+import com.diajarkoding.imfit.data.local.entity.WorkoutLogEntity
+import com.diajarkoding.imfit.data.local.entity.WorkoutSetEntity
+import com.diajarkoding.imfit.domain.model.*
 import com.diajarkoding.imfit.di.LocalSessionEntryPoint
 import com.diajarkoding.imfit.di.RestTimerEntryPoint
 import dagger.hilt.android.EntryPointAccessors
@@ -40,7 +44,7 @@ class RestTimerProductionReleaseTest {
     private val device get() = UiDevice.getInstance(instrumentation)
 
     private fun shell(command: String): String {
-        val user = InstrumentationRegistry.getArguments().getString("androidUser") ?: "0"
+        val user = requireNotNull(InstrumentationRegistry.getArguments().getString("androidUser"))
         check(android.os.Process.myUid() / 100_000 == user.toInt()) { "Instrumentation user mismatch" }
         val scoped = command.replace("pm grant ", "pm grant --user $user ")
             .replace("appops get ", "appops get --user $user ")
@@ -54,6 +58,26 @@ class RestTimerProductionReleaseTest {
         withTimeout(timeoutMs) { while (!condition()) delay(50) }
     }
 
+    private suspend fun requireIsolatedOfflineFixture() {
+        assertFalse("Must test minified productionRelease, not debug", BuildConfig.DEBUG)
+        val arguments = InstrumentationRegistry.getArguments()
+        check(arguments.getString("allowSyntheticSession") == "true")
+        val user = requireNotNull(arguments.getString("androidUser")).toInt()
+        check(user != 0 && user != 10 && android.os.Process.myUid() / 100_000 == user) {
+            "Production fixtures require an isolated Android user other than 0 or 10"
+        }
+        check(Build.FINGERPRINT.contains("generic") || Build.MODEL.contains("sdk_gphone")) { "Emulator only" }
+        awaitCondition { context.getSystemService(ConnectivityManager::class.java).activeNetwork == null }
+    }
+
+    private fun syntheticSession() = UserSession(
+        accessToken = "offline-synthetic-not-a-server-token",
+        refreshToken = "offline-synthetic-not-a-refresh-token",
+        expiresIn = 86_400,
+        tokenType = "bearer",
+        user = UserInfo(aud = "authenticated", id = OWNER, email = "rest-regression@example.invalid")
+    )
+
     private fun snapshot(scenario: String, phase: String, state: RestTimerState) {
         Log.i("IMFITRestTest", "event=test_snapshot scenario=$scenario phase=$phase " +
             "restInstanceId=${RestTimerCorrelation.instanceId(state.timerId)} generation=${state.generation} " +
@@ -63,10 +87,7 @@ class RestTimerProductionReleaseTest {
     private suspend fun scenario(name: String, screenOff: Boolean = false, doze: Boolean = false,
         exact: Boolean = true, cancel: Boolean = false, receiverOnly: Boolean = false,
         brokenRendering: Boolean = false) {
-        assertFalse("Must test minified productionRelease, not debug", BuildConfig.DEBUG)
-        check(InstrumentationRegistry.getArguments().getString("allowSyntheticSession") == "true")
-        check(Build.FINGERPRINT.contains("generic") || Build.MODEL.contains("sdk_gphone")) { "Emulator only" }
-        awaitCondition { context.getSystemService(ConnectivityManager::class.java).activeNetwork == null }
+        requireIsolatedOfflineFixture()
         val local = EntryPointAccessors.fromApplication(context, LocalSessionEntryPoint::class.java)
         val auth = local.supabase().auth
         withTimeout(10_000) { auth.awaitInitialization() }
@@ -74,9 +95,7 @@ class RestTimerProductionReleaseTest {
         val dao = local.database().activeSessionDao()
         check(dao.getAnyActiveSession()?.userId.let { it == null || it == OWNER }) { "Refusing an existing workout" }
         auth.stopAutoRefreshForCurrentSession()
-        auth.importSession(UserSession(accessToken = "offline-synthetic-not-a-server-token",
-            refreshToken = "offline-synthetic-not-a-refresh-token", expiresIn = 86_400, tokenType = "bearer",
-            user = UserInfo(aud = "authenticated", id = OWNER, email = "rest-regression@example.invalid")), autoRefresh = false)
+        auth.importSession(syntheticSession(), autoRefresh = false)
         val ports = EntryPointAccessors.fromApplication(context, RestTimerEntryPoint::class.java)
         val timer = ports.timer()
         val runtime = ports.runtime()
@@ -162,6 +181,15 @@ class RestTimerProductionReleaseTest {
         }
     }
 
+    @Test fun desugaredAuthSessionMatchesTargetClasspath() = runBlocking {
+        requireIsolatedOfflineFixture()
+        // Do not call java.time directly here: that would retain the missing L8 API in
+        // test dex and hide whether app-owned UserSession dependencies can link.
+        val session = syntheticSession()
+        assertEquals(86_400L, session.expiresIn)
+        assertEquals(OWNER, session.user?.id)
+    }
+
     @Test fun backgroundExactProductionRelease() = runBlocking { scenario("background-exact") }
     @Test fun screenOffExactProductionRelease() = runBlocking { scenario("screen-off", screenOff = true) }
     @Test fun forcedDozeExactProductionRelease() = runBlocking { scenario("doze", screenOff = true, doze = true) }
@@ -174,10 +202,7 @@ class RestTimerProductionReleaseTest {
 
     /** Two-phase host test: deliberately leaves ONLY synthetic local state for a real cold receiver. */
     @Test fun prepareColdProcessFixture() = runBlocking<Unit> {
-        assertFalse(BuildConfig.DEBUG)
-        check(InstrumentationRegistry.getArguments().getString("allowSyntheticSession") == "true")
-        check(Build.MODEL.contains("sdk_gphone"))
-        awaitCondition { context.getSystemService(ConnectivityManager::class.java).activeNetwork == null }
+        requireIsolatedOfflineFixture()
         val local = EntryPointAccessors.fromApplication(context, LocalSessionEntryPoint::class.java)
         val auth = local.supabase().auth
         withTimeout(10_000) { auth.awaitInitialization() }
@@ -185,8 +210,7 @@ class RestTimerProductionReleaseTest {
         val dao = local.database().activeSessionDao()
         check(dao.getAnyActiveSession()?.userId.let { it == null || it == OWNER })
         auth.stopAutoRefreshForCurrentSession()
-        auth.importSession(UserSession("offline-synthetic-not-a-server-token", "offline-synthetic-not-a-refresh-token",
-            expiresIn = 86_400, tokenType = "bearer", user = UserInfo(aud = "authenticated", id = OWNER)), autoRefresh = false)
+        auth.importSession(syntheticSession(), autoRefresh = false)
         val sessionId = UUID.randomUUID().toString()
         val started = System.currentTimeMillis()
         dao.deleteSession(OWNER)
@@ -212,7 +236,7 @@ class RestTimerProductionReleaseTest {
     }
 
     @Test fun verifyAndCleanColdProcessFixture() = runBlocking {
-        check(InstrumentationRegistry.getArguments().getString("allowSyntheticSession") == "true")
+        requireIsolatedOfflineFixture()
         val local = EntryPointAccessors.fromApplication(context, LocalSessionEntryPoint::class.java)
         withTimeout(10_000) { local.supabase().auth.awaitInitialization() }
         check(local.supabase().auth.currentUserOrNull()?.id == OWNER)
@@ -235,5 +259,283 @@ class RestTimerProductionReleaseTest {
         }
     }
 
-    companion object { private const val OWNER = "00000000-0000-4000-8000-000000000034" }
+    private val executionPrefs
+        get() = context.getSharedPreferences("execution_stopwatch_regression", Context.MODE_PRIVATE)
+
+    private fun currentBootIdentity(): Int =
+        Settings.Global.getInt(context.contentResolver, Settings.Global.BOOT_COUNT)
+
+    private suspend fun executionLocal(): LocalSessionEntryPoint {
+        requireIsolatedOfflineFixture()
+        val local = EntryPointAccessors.fromApplication(context, LocalSessionEntryPoint::class.java)
+        withTimeout(10_000) { local.supabase().auth.awaitInitialization() }
+        check(local.supabase().auth.currentUserOrNull()?.id == OWNER)
+        return local
+    }
+
+    private fun WorkoutSession.timedSet(): WorkoutSet =
+        exerciseLogs.single { it.exercise.id == EXECUTION_DURATION }.sets.first()
+
+    private fun executionSnapshot(phase: String, session: WorkoutSession) {
+        val stopwatch = requireNotNull(session.timedSet().executionStopwatch)
+        Log.i("IMFITExecutionTest", "event=execution_fixture phase=$phase sessionId=${session.id} " +
+            "pid=${android.os.Process.myPid()} user=${android.os.Process.myUid() / 100_000} " +
+            "boot=${currentBootIdentity()} now=${SystemClock.elapsedRealtime()} " +
+            "elapsedMs=${stopwatch.elapsedMs} anchorElapsedMs=${stopwatch.anchorElapsedMs} " +
+            "running=${stopwatch.isRunning} recoveryRequired=${stopwatch.recoveryRequired}")
+    }
+
+    private suspend fun assertExecutionFixture(local: LocalSessionEntryPoint): WorkoutSession {
+        val session = requireNotNull(local.workouts().getActiveSession())
+        assertEquals(executionPrefs.getString("session_id", null), session.id)
+        assertNotNull(local.database().activeSessionDao().getSessionById(session.id))
+        assertEquals(listOf(TrackingType.DURATION, TrackingType.DISTANCE_DURATION, TrackingType.WEIGHT_REPS),
+            session.exerciseLogs.map { it.trackingType })
+        val distance = session.exerciseLogs.single { it.exercise.id == EXECUTION_DISTANCE }.sets.single()
+        assertEquals(45, distance.durationSeconds)
+        assertEquals(750, distance.distanceMeters)
+        val legacy = session.exerciseLogs.single { it.exercise.id == EXECUTION_LEGACY }
+        assertEquals("LEGACY_UNVERIFIED", legacy.metricQuality)
+        assertEquals(20f, legacy.sets.single().weight)
+        assertEquals(8, legacy.sets.single().reps)
+        assertLegacyExecutionRowsUnchanged(local)
+        return session
+    }
+
+    private suspend fun assertLegacyExecutionRowsUnchanged(local: LocalSessionEntryPoint) {
+        val id = requireNotNull(executionPrefs.getString("legacy_id", null))
+        val database = local.database()
+        assertEquals(executionPrefs.getString("legacy_parent", null),
+            requireNotNull(database.workoutLogDao().getWorkoutLogById(id)).toString())
+        assertEquals(executionPrefs.getString("legacy_exercises", null),
+            database.exerciseLogDao().getExerciseLogsByWorkoutLogId(id).toString())
+        assertEquals(executionPrefs.getString("legacy_sets", null),
+            database.workoutSetDao().getSetsByWorkoutLogId(id).toString())
+    }
+
+    @Test fun prepareExecutionStopwatchFixture() = runBlocking<Unit> {
+        requireIsolatedOfflineFixture()
+        val local = EntryPointAccessors.fromApplication(context, LocalSessionEntryPoint::class.java)
+        val auth = local.supabase().auth
+        withTimeout(10_000) { auth.awaitInitialization() }
+        check(auth.currentUserOrNull()?.id.let { it == null || it == OWNER })
+        check(local.database().activeSessionDao().getAnyActiveSession() == null) { "Refusing an existing workout" }
+        check(local.database().workoutLogDao().getWorkoutLogsByUserList(OWNER).isEmpty())
+        check(!executionPrefs.contains("session_id")) { "Clean the previous isolated fixture first" }
+        auth.stopAutoRefreshForCurrentSession()
+        auth.importSession(syntheticSession(), autoRefresh = false)
+        val duration = Exercise(EXECUTION_DURATION, "Offline stopwatch", MuscleCategory.CORE, "",
+            defaultTrackingType = TrackingType.DURATION, modality = ExerciseModality.ISOMETRIC,
+            allowedTrackingTypes = listOf(TrackingType.DURATION))
+        val distance = Exercise(EXECUTION_DISTANCE, "Offline distance", MuscleCategory.CARDIO, "",
+            defaultTrackingType = TrackingType.DISTANCE_DURATION, modality = ExerciseModality.CARDIO,
+            allowedTrackingTypes = listOf(TrackingType.DISTANCE_DURATION))
+        val legacy = Exercise(EXECUTION_LEGACY, "Offline legacy", MuscleCategory.CHEST, "")
+        val session = local.workouts().startWorkout(WorkoutTemplate(UUID.randomUUID().toString(), OWNER,
+            "Offline execution recovery", listOf(
+                TemplateExercise(duration, sets = 2, reps = null, targetDurationSeconds = 30),
+                TemplateExercise(distance, sets = 1, reps = null, targetDurationSeconds = 45, targetDistanceMeters = 750),
+                TemplateExercise(legacy, sets = 1, reps = 8)
+            )))
+        val legacyId = UUID.randomUUID().toString()
+        check(executionPrefs.edit().putString("session_id", session.id).putString("legacy_id", legacyId).commit())
+        val database = local.database()
+        val parent = WorkoutLogEntity(legacyId, OWNER, null, "Untouched legacy fixture", 1, 1, 2, 70f,
+            totalSets = 1, totalReps = 7, syncStatus = "SYNCED", dataQuality = "LEGACY_UNVERIFIED")
+        val exerciseRow = ExerciseLogEntity(UUID.randomUUID().toString(), legacyId, EXECUTION_LEGACY,
+            "Original legacy snapshot", MuscleCategory.CHEST.name, 0, 70f, 1, 7, syncStatus = "SYNCED")
+        val setRow = WorkoutSetEntity(UUID.randomUUID().toString(), exerciseRow.id, legacyId,
+            EXECUTION_LEGACY, 1, 10f, 7, true, syncStatus = "SYNCED")
+        database.workoutLogDao().insertWorkoutLog(parent)
+        database.exerciseLogDao().insertExerciseLogs(listOf(exerciseRow))
+        database.workoutSetDao().insertWorkoutSets(listOf(setRow))
+        check(executionPrefs.edit().putString("legacy_parent", parent.toString())
+            .putString("legacy_exercises", listOf(exerciseRow).toString())
+            .putString("legacy_sets", listOf(setRow).toString()).commit())
+        val boot = currentBootIdentity()
+        val started = requireNotNull(local.workouts().mutateActiveSession(session.id) { current ->
+            current.copy(exerciseLogs = current.exerciseLogs.map { log ->
+                when (log.exercise.id) {
+                    EXECUTION_DURATION -> log.copy(sets = log.sets.mapIndexed { index, set ->
+                        if (index == 0) set.copy(durationSeconds = 0).toggleExecutionStopwatch(SystemClock.elapsedRealtime(), boot)
+                        else set
+                    })
+                    EXECUTION_LEGACY -> log.copy(metricQuality = "LEGACY_UNVERIFIED",
+                        sets = log.sets.map { it.copy(weight = 20f, reps = 8, isCompleted = true) })
+                    else -> log
+                }
+            })
+        })
+        awaitCondition { requireNotNull(started.timedSet().executionStopwatch)
+            .elapsedMillis(SystemClock.elapsedRealtime(), boot) >= 1_100 }
+        val checkpointAt = SystemClock.elapsedRealtime()
+        val checkpointed = requireNotNull(local.workouts().mutateActiveSession(session.id) { current ->
+            current.copy(exerciseLogs = current.exerciseLogs.map { log ->
+                if (log.exercise.id != EXECUTION_DURATION) log else log.copy(sets = log.sets.mapIndexed { index, set ->
+                    if (index == 0) set.checkpointExecutionStopwatch(checkpointAt, boot) else set
+                })
+            })
+        })
+        val stopwatch = requireNotNull(checkpointed.timedSet().executionStopwatch)
+        check(executionPrefs.edit().putInt("previous_pid", android.os.Process.myPid()).putInt("boot", boot)
+            .putLong("checkpoint_elapsed", stopwatch.elapsedMs).putLong("checkpoint_anchor", checkpointAt).commit())
+        assertExecutionFixture(local)
+        executionSnapshot("running_prepared", checkpointed)
+        awaitCancellation()
+    }
+
+    @Test fun verifyRunningExecutionStopwatchAndPauseFixture() = runBlocking<Unit> {
+        val local = executionLocal()
+        assertNotEquals(executionPrefs.getInt("previous_pid", -1), android.os.Process.myPid())
+        val session = assertExecutionFixture(local)
+        val stopwatch = requireNotNull(session.timedSet().executionStopwatch)
+        val boot = currentBootIdentity()
+        assertEquals(executionPrefs.getInt("boot", -1), boot)
+        assertTrue(stopwatch.isRunning)
+        assertEquals(executionPrefs.getLong("checkpoint_anchor", -1), stopwatch.anchorElapsedMs)
+        assertEquals(executionPrefs.getLong("checkpoint_elapsed", -1), stopwatch.elapsedMs)
+        assertTrue("Same-boot process death must retain elapsed time after the durable checkpoint",
+            stopwatch.elapsedMillis(SystemClock.elapsedRealtime(), boot) > stopwatch.elapsedMs)
+        val paused = requireNotNull(local.workouts().mutateActiveSession(session.id) { current ->
+            current.copy(exerciseLogs = current.exerciseLogs.map { log ->
+                if (log.exercise.id != EXECUTION_DURATION) log else log.copy(sets = log.sets.mapIndexed { index, set ->
+                    if (index == 0) set.freezeExecutionStopwatch(SystemClock.elapsedRealtime(), boot)
+                    else set.copy(durationSeconds = 90, executionStopwatch = null)
+                })
+            })
+        })
+        val pausedClock = requireNotNull(paused.timedSet().executionStopwatch)
+        assertFalse(pausedClock.isRunning)
+        check(executionPrefs.edit().putInt("previous_pid", android.os.Process.myPid())
+            .putLong("paused_elapsed", pausedClock.elapsedMs).commit())
+        executionSnapshot("paused_prepared", paused)
+        awaitCancellation()
+    }
+
+    private suspend fun assertPausedExecutionFixture(local: LocalSessionEntryPoint): WorkoutSession {
+        assertNotEquals(executionPrefs.getInt("previous_pid", -1), android.os.Process.myPid())
+        val session = assertExecutionFixture(local)
+        val stopwatch = requireNotNull(session.timedSet().executionStopwatch)
+        assertFalse(stopwatch.isRunning)
+        assertEquals(executionPrefs.getLong("paused_elapsed", -1), stopwatch.elapsedMs)
+        assertEquals(stopwatch.elapsedMs, stopwatch.elapsedMillis(SystemClock.elapsedRealtime(), currentBootIdentity()))
+        val manual = session.exerciseLogs.first().sets[1]
+        assertEquals(90, manual.durationSeconds)
+        assertNull(manual.executionStopwatch)
+        return session
+    }
+
+    @Test fun verifyPausedExecutionStopwatchAndFinishFixture() = runBlocking {
+        val local = executionLocal()
+        finishExecutionFixture(local, assertPausedExecutionFixture(local))
+    }
+
+    @Test fun verifyPausedExecutionStopwatchAndPrepareRebootFixture() = runBlocking<Unit> {
+        val local = executionLocal()
+        val session = assertPausedExecutionFixture(local)
+        val boot = currentBootIdentity()
+        val resumed = requireNotNull(local.workouts().mutateActiveSession(session.id) { current ->
+            current.copy(exerciseLogs = current.exerciseLogs.map { log ->
+                if (log.exercise.id != EXECUTION_DURATION) log else log.copy(sets = log.sets.mapIndexed { index, set ->
+                    if (index == 0) set.toggleExecutionStopwatch(SystemClock.elapsedRealtime(), boot) else set
+                })
+            })
+        })
+        val resumedClock = requireNotNull(resumed.timedSet().executionStopwatch)
+        awaitCondition { resumedClock.elapsedMillis(SystemClock.elapsedRealtime(), boot) >= resumedClock.elapsedMs + 1_100 }
+        val checkpointed = requireNotNull(local.workouts().mutateActiveSession(session.id) { current ->
+            current.copy(exerciseLogs = current.exerciseLogs.map { log ->
+                if (log.exercise.id != EXECUTION_DURATION) log else log.copy(sets = log.sets.mapIndexed { index, set ->
+                    if (index == 0) set.checkpointExecutionStopwatch(SystemClock.elapsedRealtime(), boot) else set
+                })
+            })
+        })
+        check(executionPrefs.edit().putInt("boot", boot).putLong("reboot_elapsed",
+            requireNotNull(checkpointed.timedSet().executionStopwatch).elapsedMs).commit())
+        executionSnapshot("reboot_prepared", checkpointed)
+        awaitCancellation()
+    }
+
+    @Test fun verifyRebootExecutionStopwatchAndFinishFixture() = runBlocking {
+        val local = executionLocal()
+        val session = assertExecutionFixture(local)
+        val boot = currentBootIdentity()
+        assertNotEquals("This gate requires an actual reboot, not a new process", executionPrefs.getInt("boot", -1), boot)
+        val durable = executionPrefs.getLong("reboot_elapsed", -1)
+        val rawClock = requireNotNull(session.timedSet().executionStopwatch)
+        assertEquals(durable, rawClock.elapsedMs)
+        assertEquals(durable, rawClock.elapsedMillis(SystemClock.elapsedRealtime(), boot))
+        val recovered = requireNotNull(local.workouts().mutateActiveSession(session.id) { current ->
+            current.copy(exerciseLogs = current.exerciseLogs.map { log ->
+                if (log.exercise.id != EXECUTION_DURATION) log else log.copy(sets = log.sets.mapIndexed { index, set ->
+                    if (index == 0) set.checkpointExecutionStopwatch(SystemClock.elapsedRealtime(), boot) else set
+                })
+            })
+        })
+        val recoveredClock = requireNotNull(recovered.timedSet().executionStopwatch)
+        assertFalse(recoveredClock.isRunning)
+        assertTrue(recoveredClock.recoveryRequired)
+        assertEquals(durable, recoveredClock.elapsedMs)
+        assertEquals((durable / 1000).toInt(), recovered.timedSet().durationSeconds)
+        assertEquals(90, recovered.exerciseLogs.first().sets[1].durationSeconds)
+        executionSnapshot("reboot_verified", recovered)
+        finishExecutionFixture(local, recovered)
+    }
+
+    private suspend fun finishExecutionFixture(local: LocalSessionEntryPoint, session: WorkoutSession) {
+        val completed = requireNotNull(local.workouts().mutateActiveSession(session.id) { current ->
+            current.copy(exerciseLogs = current.exerciseLogs.map { log ->
+                log.copy(sets = log.sets.map { it.copy(isCompleted = true) })
+            })
+        })
+        val first = requireNotNull(local.workouts().finishWorkout()) // Local Room commit; never calls SyncRunner/RPC.
+        assertEquals(session.id, first.id)
+        val database = local.database()
+        val beforeParent = database.workoutLogDao().getWorkoutLogById(session.id)
+        val beforeExercises = database.exerciseLogDao().getExerciseLogsByWorkoutLogId(session.id)
+        val beforeSets = database.workoutSetDao().getSetsByWorkoutLogId(session.id)
+        assertNull(local.workouts().finishWorkout())
+        assertEquals(beforeParent, database.workoutLogDao().getWorkoutLogById(session.id))
+        assertEquals(beforeExercises, database.exerciseLogDao().getExerciseLogsByWorkoutLogId(session.id))
+        assertEquals(beforeSets, database.workoutSetDao().getSetsByWorkoutLogId(session.id))
+        assertEquals(setOf(session.id, executionPrefs.getString("legacy_id", null)),
+            database.workoutLogDao().getWorkoutLogsByUserList(OWNER).map { it.id }.toSet())
+        assertNull(database.activeSessionDao().getSessionById(session.id))
+        val history = requireNotNull(local.workouts().getWorkoutLogById(session.id))
+        assertEquals(completed.exerciseLogs.map { it.trackingType }, history.exerciseLogs.map { it.trackingType })
+        assertEquals(completed.exerciseLogs.map { log -> log.sets.map { it.measurement } },
+            history.exerciseLogs.map { log -> log.sets.map { it.measurement } })
+        assertEquals("LEGACY_UNVERIFIED", history.dataQuality)
+        assertEquals("LEGACY_UNVERIFIED", history.exerciseLogs.last().metricQuality)
+        assertLegacyExecutionRowsUnchanged(local)
+        Log.i("IMFITExecutionTest", "event=execution_fixture phase=finished sessionId=${session.id} " +
+            "pid=${android.os.Process.myPid()} user=${android.os.Process.myUid() / 100_000} " +
+            "historyRows=1 exerciseRows=${beforeExercises.size} setRows=${beforeSets.size}")
+    }
+
+    @Test fun cleanExecutionStopwatchFixture() = runBlocking {
+        requireIsolatedOfflineFixture()
+        if (!executionPrefs.contains("session_id")) return@runBlocking
+        val local = executionLocal()
+        val sessionId = requireNotNull(executionPrefs.getString("session_id", null))
+        val current = local.database().activeSessionDao().getAnyActiveSession()
+        check(current == null || current.id == sessionId && current.userId == OWNER)
+        if (current != null) local.workouts().cancelWorkout()
+        for (id in listOfNotNull(sessionId, executionPrefs.getString("legacy_id", null))) {
+            val row = local.database().workoutLogDao().getWorkoutLogById(id) ?: continue
+            check(row.userId == OWNER)
+            local.database().workoutSetDao().deleteSetsByWorkoutLog(id)
+            local.database().exerciseLogDao().deleteExerciseLogsByWorkout(id)
+            local.database().workoutLogDao().deleteWorkoutLog(row)
+        }
+        local.supabase().auth.clearSession()
+        check(executionPrefs.edit().clear().commit())
+    }
+
+    companion object {
+        private const val OWNER = "00000000-0000-4000-8000-000000000034"
+        private const val EXECUTION_DURATION = "phase5-offline-duration"
+        private const val EXECUTION_DISTANCE = "phase5-offline-distance"
+        private const val EXECUTION_LEGACY = "phase5-offline-legacy"
+    }
 }

@@ -234,7 +234,7 @@ object FakeWorkoutDataSource {
             ExerciseLog(
                 exercise = templateExercise.exercise,
                 sets = (1..templateExercise.sets).map { setNum ->
-                    WorkoutSet(setNumber = setNum, reps = templateExercise.reps)
+                    WorkoutSet(setNumber = setNum, reps = templateExercise.reps ?: 0)
                 },
                 restSeconds = templateExercise.restSeconds
             )

@@ -30,11 +30,10 @@ import androidx.compose.ui.platform.LocalFocusManager
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.diajarkoding.imfit.R
-import com.diajarkoding.imfit.domain.model.ExercisePrescriptionCapability
 import com.diajarkoding.imfit.domain.model.RoutineSelectionResult
-import com.diajarkoding.imfit.domain.model.prescriptionCapability
 import com.diajarkoding.imfit.domain.model.RoutineFormMode
 import com.diajarkoding.imfit.domain.model.TemplateExercise
+import com.diajarkoding.imfit.domain.model.TrackingType
 import com.diajarkoding.imfit.presentation.components.common.*
 import com.diajarkoding.imfit.theme.IMFITColors
 import com.diajarkoding.imfit.theme.IMFITSpacing
@@ -108,13 +107,14 @@ fun EditWorkoutScreen(
     }
 
     EditWorkoutContent(
-        state = state,
+        state = state.copy(mode = mode),
         onBack = requestBack,
         onName = viewModel::updateWorkoutName,
         onRemove = viewModel::removeExercise,
         onMoveUp = viewModel::moveExerciseUp,
         onMoveDown = viewModel::moveExerciseDown,
         onRawConfig = viewModel::updateRawConfig,
+        onTrackingMode = viewModel::changeTrackingMode,
         onSave = viewModel::saveChanges,
         onRetryLoad = viewModel::loadWorkout,
         onAdd = { onAddExercises(workoutId, state.exercises.map { it.id }, state.workoutName) }
@@ -129,7 +129,8 @@ internal fun EditWorkoutContent(
     onRemove: (Int) -> Unit = {},
     onMoveUp: (Int) -> Unit = {},
     onMoveDown: (Int) -> Unit = {},
-    onRawConfig: (String, String, String, String) -> Unit = { _, _, _, _ -> },
+    onRawConfig: (String, RawExerciseConfig) -> Unit = { _, _ -> },
+    onTrackingMode: (String, TrackingType) -> Unit = { _, _ -> },
     onSave: () -> Unit = {},
     onRetryLoad: () -> Unit = {},
     onAdd: () -> Unit = {}
@@ -211,8 +212,12 @@ internal fun EditWorkoutContent(
                         canMoveUp = index > 0,
                         canMoveDown = index < state.exercises.size - 1,
                         rawConfig = state.rawConfigs[exercise.id] ?: RawExerciseConfig(
-                            exercise.sets.toString(), exercise.reps.toString(), exercise.restSeconds.toString()),
-                        onRawConfig = { sets, reps, rest -> onRawConfig(exercise.id, sets, reps, rest) }
+                            sets = exercise.sets.toString(), reps = exercise.reps?.toString().orEmpty(),
+                            rest = exercise.restSeconds.toString(), trackingType = exercise.trackingType,
+                            durationSeconds = exercise.targetDurationSeconds?.toString().orEmpty(),
+                            distanceMeters = exercise.targetDistanceMeters?.toString().orEmpty()),
+                        onRawConfig = { onRawConfig(exercise.id, it) },
+                        onTrackingMode = { onTrackingMode(exercise.id, it) }
                     )
                 }
                 item(key = "routine_add_exercise_button") {
@@ -248,10 +253,10 @@ internal fun RoutineExerciseEditor(
     canMoveUp: Boolean = false,
     canMoveDown: Boolean = false,
     rawConfig: RawExerciseConfig,
-    onRawConfig: (String, String, String) -> Unit
+    onRawConfig: (RawExerciseConfig) -> Unit,
+    onTrackingMode: (TrackingType) -> Unit
 ) {
     val c = IMFITColors.training
-    val supported = exercise.exercise.prescriptionCapability == ExercisePrescriptionCapability.REPS_LOAD
     val configEnabled = enabled && exercise.exercise.isActive
     val sets = rawConfig.sets
     val reps = rawConfig.reps
@@ -285,35 +290,63 @@ internal fun RoutineExerciseEditor(
                     Icon(Symbols.Default.Close, stringResource(R.string.routine_remove_named, exercise.name), tint = c.muted, modifier = Modifier.size(20.dp))
                 }
             }
-            if (supported) {
-                val fields: @Composable (Modifier) -> Unit = { modifier ->
-                    RoutineConfigNumber(stringResource(R.string.workout_label_sets), sets, { onRawConfig(it, reps, rest) }, configEnabled, 1, modifier)
-                    RoutineConfigNumber(stringResource(R.string.workout_label_reps), reps, { onRawConfig(sets, it, rest) }, configEnabled, 1, modifier)
-                    RoutineConfigNumber(stringResource(R.string.workout_label_rest_short), rest, { onRawConfig(sets, reps, it) }, configEnabled, 0, modifier)
+            if (exercise.exercise.allowedTrackingTypes.size > 1) {
+                Text(stringResource(R.string.routine_tracking_mode), color = c.muted,
+                    style = MaterialTheme.typography.bodySmall)
+                Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                    exercise.exercise.allowedTrackingTypes.forEach { trackingType ->
+                        FilterChip(
+                            selected = rawConfig.trackingType == trackingType,
+                            onClick = { onTrackingMode(trackingType) },
+                            enabled = configEnabled,
+                            label = { Text(stringResource(trackingType.routineLabelRes())) }
+                        )
+                    }
                 }
-                if (LocalDensity.current.fontScale > 1.4f) Column(verticalArrangement = Arrangement.spacedBy(12.dp)) { fields(Modifier.fillMaxWidth()) }
-                else Row(horizontalArrangement = Arrangement.spacedBy(14.dp)) { fields(Modifier.weight(1f)) }
-                if (!valid) RoutineFailure(stringResource(R.string.routine_config_invalid))
             }
+            val fields: @Composable (Modifier) -> Unit = { modifier ->
+                RoutineConfigNumber(stringResource(R.string.workout_label_sets), sets,
+                    { onRawConfig(rawConfig.copy(sets = it)) }, configEnabled, 1, modifier)
+                when (rawConfig.trackingType) {
+                    TrackingType.WEIGHT_REPS, TrackingType.BODYWEIGHT_REPS,
+                    TrackingType.ASSISTED_REPS, TrackingType.REPS_ONLY ->
+                        RoutineConfigNumber(stringResource(R.string.workout_label_reps), reps,
+                            { onRawConfig(rawConfig.copy(reps = it)) }, configEnabled, 1, modifier)
+                    TrackingType.DURATION ->
+                        RoutineConfigNumber(stringResource(R.string.routine_duration_seconds), rawConfig.durationSeconds,
+                            { onRawConfig(rawConfig.copy(durationSeconds = it)) }, configEnabled, 1, modifier)
+                    TrackingType.DISTANCE_DURATION -> {
+                        RoutineConfigNumber(stringResource(R.string.routine_distance_meters), rawConfig.distanceMeters,
+                            { onRawConfig(rawConfig.copy(distanceMeters = it)) }, configEnabled, 1, modifier, optional = true)
+                        RoutineConfigNumber(stringResource(R.string.routine_duration_seconds), rawConfig.durationSeconds,
+                            { onRawConfig(rawConfig.copy(durationSeconds = it)) }, configEnabled, 1, modifier)
+                    }
+                }
+                RoutineConfigNumber(stringResource(R.string.workout_label_rest_short), rest,
+                    { onRawConfig(rawConfig.copy(rest = it)) }, configEnabled, 0, modifier)
+            }
+            if (LocalDensity.current.fontScale > 1.4f) Column(verticalArrangement = Arrangement.spacedBy(12.dp)) { fields(Modifier.fillMaxWidth()) }
+            else Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) { fields(Modifier.weight(1f)) }
+            if (!valid) RoutineFailure(stringResource(R.string.routine_config_invalid))
             if (!exercise.exercise.isActive) RoutineFailure(stringResource(R.string.routine_exercise_unavailable))
-
-            if (!supported) {
-                Text(
-                    stringResource(R.string.routine_duration_unsupported),
-                    color = c.primary,
-                    style = MaterialTheme.typography.bodySmall
-                )
-            } else {
-                Text(stringResource(R.string.routine_config_hint), color = c.muted, style = MaterialTheme.typography.bodySmall)
-            }
+            Text(stringResource(R.string.routine_config_hint), color = c.muted, style = MaterialTheme.typography.bodySmall)
         }
     }
 }
 
+private fun TrackingType.routineLabelRes(): Int = when (this) {
+    TrackingType.WEIGHT_REPS -> R.string.routine_tracking_weight_reps
+    TrackingType.BODYWEIGHT_REPS -> R.string.routine_tracking_bodyweight_reps
+    TrackingType.ASSISTED_REPS -> R.string.routine_tracking_assisted_reps
+    TrackingType.REPS_ONLY -> R.string.routine_tracking_reps_only
+    TrackingType.DURATION -> R.string.routine_tracking_duration
+    TrackingType.DISTANCE_DURATION -> R.string.routine_tracking_distance_duration
+}
+
 @Composable
-private fun RoutineConfigNumber(label: String, value: String, onChange: (String) -> Unit, enabled: Boolean, min: Int, modifier: Modifier) {
+private fun RoutineConfigNumber(label: String, value: String, onChange: (String) -> Unit, enabled: Boolean, min: Int, modifier: Modifier, optional: Boolean = false) {
     val c = IMFITColors.training
-    val invalid = value.toIntOrNull()?.let { it < min } ?: true
+    val invalid = !(optional && value.isBlank()) && (value.toIntOrNull()?.let { it < min } ?: true)
     val interaction = remember { MutableInteractionSource() }
     val focused by interaction.collectIsFocusedAsState()
     val errorText = stringResource(R.string.routine_config_invalid)

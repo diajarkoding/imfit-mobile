@@ -156,7 +156,7 @@ class ExerciseSelectionViewModel(
                         is ExerciseHydrationResult.Error -> throw result.cause
                     }.associateBy { it.id }
                     val ordered = ids.map { hydrated[it] ?: error("Selected exercise is missing") }
-                    check(ordered.all { it.isActive && it.prescriptionCapability == ExercisePrescriptionCapability.REPS_LOAD })
+                    check(ordered.all { it.isActive })
                     if (!owns(token, owner)) return@launch
                     _state.update { it.copy(selectedExercises = ordered) }
                     restoredSelectionIds = emptyList()
@@ -276,8 +276,7 @@ class ExerciseSelectionViewModel(
     fun toggleExercise(exercise: Exercise) {
         scope.launch {
             val owner = ownerId ?: return@launch
-            if (!owns(generation, owner) || _state.value.isLoading || exercise.id in exclusions || !exercise.isActive ||
-                exercise.prescriptionCapability != ExercisePrescriptionCapability.REPS_LOAD) return@launch
+            if (!owns(generation, owner) || _state.value.isLoading || exercise.id in exclusions || !exercise.isActive) return@launch
             _state.update { it.toggled(exercise) }
             persist()
         }

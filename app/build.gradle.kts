@@ -1,6 +1,8 @@
 import java.io.FileInputStream
 import java.util.Properties
 import org.jetbrains.kotlin.gradle.dsl.JvmTarget
+import com.android.build.api.variant.HostTestBuilder
+import com.android.build.gradle.internal.tasks.L8DexDesugarLibTask
 
 plugins {
     alias(libs.plugins.android.application)
@@ -94,6 +96,26 @@ android {
     // Explicit opt-in: exercise the real minified production APK, not a debug substitute.
     testBuildType = providers.gradleProperty("restTestBuildType").orElse("debug").get()
     sourceSets.getByName("androidTest").assets.srcDir("$projectDir/schemas")
+}
+
+androidComponents {
+    beforeVariants(selector().withBuildType("release")) { variant ->
+        // AGP 9.1 defaults host tests to testBuildType only. Release gates must compile and
+        // run their own release sources even when instrumentation still targets debug.
+        variant.hostTests[HostTestBuilder.UNIT_TEST_TYPE]?.enable = true
+    }
+}
+
+if (providers.gradleProperty("restTestBuildType").orNull == "release") {
+    tasks.withType<L8DexDesugarLibTask>().configureEach {
+        if (name == "l8DexDesugarLibProductionReleaseAndroidTest") {
+            // This APK shadows the app's j$ classes. AGP's test L8 traces only test dex,
+            // missing APIs used by app-owned Supabase/kotlinx.datetime bytecode. Its runtime
+            // must be a complete, name-stable superset, not a separately shrunk subset.
+            // AGP 9.1 has no public L8 keep-rules DSL; limit this hook to the opt-in harness.
+            keepRulesConfigurations.add("-keep class j$.** { *; }")
+        }
+    }
 }
 
 dependencies {

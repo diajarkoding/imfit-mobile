@@ -25,7 +25,9 @@ class WorkoutInteractionTest {
         rule.setContent {
             WorkoutTestEnvironment(width = 320, fontScale = 1.3f) {
                 ActiveSetRow(set.value, "Bench", true, true, false,
-                    onUpdate = { weight, reps -> set.value = set.value.copy(weight = weight, reps = reps) },
+                    onMeasurementUpdate = { measurement -> set.value = set.value.copy(
+                        weight = measurement.weight ?: 0f, reps = measurement.reps ?: 0) },
+                    onStopwatchToggle = {},
                     onComplete = { completed++ }, onDelete = {})
             }
         }
@@ -47,7 +49,7 @@ class WorkoutInteractionTest {
         rule.setContent {
             WorkoutTestEnvironment(indonesian = false) {
                 ActiveSetRow(WorkoutSet(4, 60f, 10), "Bench", enabled.value, true, paused.value,
-                    onUpdate = { _, _ -> }, onComplete = {}, onDelete = {})
+                    onMeasurementUpdate = {}, onStopwatchToggle = {}, onComplete = {}, onDelete = {})
             }
         }
         rule.onNodeWithContentDescription("Complete Bench, set 4").assertIsNotEnabled()

@@ -42,5 +42,17 @@ data class ExerciseLogEntity(
     val updatedAt: Long = System.currentTimeMillis(),
     // Prescription provenance is persisted with the completed-workout snapshot.
     @ColumnInfo(name = "input_defaults")
-    val inputDefaults: String? = null
+    val inputDefaults: String? = null,
+    @ColumnInfo(name = "tracking_type")
+    val trackingType: String = "WEIGHT_REPS",
+    @ColumnInfo(name = "modality")
+    val modality: String = "STRENGTH",
+    @ColumnInfo(name = "total_duration_seconds")
+    val totalDurationSeconds: Int = 0,
+    @ColumnInfo(name = "total_distance_meters")
+    val totalDistanceMeters: Int = 0,
+    @ColumnInfo(name = "additional_volume")
+    val additionalVolume: Float = 0f,
+    @ColumnInfo(name = "metric_quality")
+    val metricQuality: String = "LEGACY_UNVERIFIED"
 )

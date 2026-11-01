@@ -26,9 +26,28 @@ import kotlinx.serialization.json.Json
 import java.util.UUID
 import javax.inject.Inject
 
-data class RawExerciseConfig(val sets: String, val reps: String, val rest: String) {
-    val isValid: Boolean get() = sets.toIntOrNull() in 1..20 &&
-        reps.toIntOrNull() in 1..100 && rest.toIntOrNull() in 0..600
+data class RawExerciseConfig(
+    val sets: String,
+    val reps: String = "",
+    val rest: String = "60",
+    val trackingType: TrackingType = TrackingType.WEIGHT_REPS,
+    val durationSeconds: String = "",
+    val distanceMeters: String = ""
+) {
+    val isValid: Boolean get() {
+        val setsNum = sets.toIntOrNull() ?: return false
+        val restNum = rest.toIntOrNull() ?: return false
+        if (setsNum !in 1..20 || restNum !in 0..600) return false
+        return when (trackingType) {
+            TrackingType.WEIGHT_REPS,
+            TrackingType.BODYWEIGHT_REPS,
+            TrackingType.ASSISTED_REPS,
+            TrackingType.REPS_ONLY -> (reps.toIntOrNull() ?: 0) in 1..100
+            TrackingType.DURATION -> (durationSeconds.toIntOrNull() ?: 0) in 1..86400
+            TrackingType.DISTANCE_DURATION -> (durationSeconds.toIntOrNull() ?: 0) in 1..86400 &&
+                (distanceMeters.isBlank() || (distanceMeters.toIntOrNull() ?: 0) in 1..1000000)
+        }
+    }
 }
 
 data class EditWorkoutState(
@@ -54,16 +73,30 @@ data class EditWorkoutState(
 )
 
 @Serializable
-private data class DraftRow(val id: String, val sets: String, val reps: String, val rest: String)
+private data class DraftRow(
+    val id: String,
+    val sets: String,
+    val reps: String,
+    val rest: String,
+    val trackingType: String? = null,
+    val durationSeconds: String? = null,
+    val distanceMeters: String? = null
+)
 
 @Serializable
 private data class CommandExercise(
     val id: String, val name: String, val category: String,
-    val active: Boolean, val sets: Int, val reps: Int, val rest: Int
+    val active: Boolean, val sets: Int, val reps: Int?, val rest: Int,
+    val trackingType: String? = null,
+    val targetDurationSeconds: Int? = null,
+    val targetDistanceMeters: Int? = null
 ) {
     fun template() = TemplateExercise(
         Exercise(id, name, MuscleCategory.valueOf(category), "", null, active),
-        sets = sets, reps = reps, restSeconds = rest
+        sets = sets, reps = reps, restSeconds = rest,
+        trackingType = trackingType?.let { runCatching { TrackingType.valueOf(it) }.getOrNull() } ?: TrackingType.WEIGHT_REPS,
+        targetDurationSeconds = targetDurationSeconds,
+        targetDistanceMeters = targetDistanceMeters
     )
 }
 
@@ -117,7 +150,7 @@ class EditWorkoutViewModel(
             invalidateAccount()
             return
         }
-        durable = restored ?: DurableRoutineDraft(workoutId, ownerId, mode.name, flowId, name = initialName)
+        durable = restored ?: DurableRoutineDraft(workoutId, ownerId, mode.name, flowId, name = initialName, loaded = (mode == RoutineFormMode.SETUP))
         persist()
         _state.value = EditWorkoutState(workoutName = durable?.name.orEmpty(), mode = mode, flowId = flowId)
         accountJob = scope.launch {
@@ -164,7 +197,21 @@ class EditWorkoutViewModel(
                 } else if (draft.loaded) {
                     val exercises = hydrate(draft.rows.map { it.id })
                     if (!ownsDraft()) return@launch
-                    publishDraft(exercises)
+                    if (draft.dirty) {
+                        // A dirty restored draft already owns its baseline (name, revision,
+                        // membership). Re-reading the routine would silently rebase the
+                        // user's unpersisted edits across process recreation.
+                        publishDraft(exercises)
+                    } else {
+                        val routine = routineRepository.getRoutineById(draft.routineId).getOrNull()
+                        val routineName = if (draft.name.isBlank()) routine?.name ?: draft.name else draft.name
+                        val revision = draft.revision ?: routine?.revision
+                        if (routineName != draft.name || revision != draft.revision) {
+                            durable = draft.copy(name = routineName, revision = revision)
+                            persist()
+                        }
+                        publishDraft(exercises)
+                    }
                 } else {
                     val routine = routineRepository.getRoutineById(draft.routineId).getOrThrow()
                         ?: throw RoutineError.NotFound()
@@ -200,17 +247,41 @@ class EditWorkoutViewModel(
         val draft = durable ?: return
         val byId = exercises.associateBy { it.id }
         val templates = draft.rows.map { row ->
-            TemplateExercise(byId.getValue(row.id), sets = row.sets.toIntOrNull() ?: 0,
-                reps = row.reps.toIntOrNull() ?: 0, restSeconds = row.rest.toIntOrNull() ?: 0)
+            val ex = byId.getValue(row.id)
+            val parsedTracking = row.trackingType?.let { runCatching { TrackingType.valueOf(it) }.getOrNull() }
+                ?: ex.defaultTrackingType
+            TemplateExercise(
+                exercise = ex,
+                sets = row.sets.toIntOrNull() ?: 3,
+                reps = row.reps.toIntOrNull(),
+                restSeconds = row.rest.toIntOrNull() ?: 60,
+                trackingType = parsedTracking,
+                targetDurationSeconds = row.durationSeconds?.toIntOrNull(),
+                targetDistanceMeters = row.distanceMeters?.toIntOrNull()
+            )
         }
-        val raw = draft.rows.associate { it.id to RawExerciseConfig(it.sets, it.reps, it.rest) }
+        val raw = draft.rows.associate { row ->
+            val ex = byId.getValue(row.id)
+            val parsedTracking = row.trackingType?.let { runCatching { TrackingType.valueOf(it) }.getOrNull() }
+                ?: ex.defaultTrackingType
+            row.id to RawExerciseConfig(
+                sets = row.sets,
+                reps = row.reps,
+                rest = row.rest,
+                trackingType = parsedTracking,
+                durationSeconds = row.durationSeconds ?: "",
+                distanceMeters = row.distanceMeters ?: ""
+            )
+        }
         _state.value = _state.value.copy(workoutName = draft.name, exercises = templates, rawConfigs = raw,
             baseRevision = draft.revision, hasLoaded = true, isLoading = false, isDirty = draft.dirty,
             hasPendingSave = draft.command != null,
-            invalidConfigIds = templates.filter { !raw.getValue(it.id).isValid || !it.exercise.supportsRoutinePrescription() }.map { it.id }.toSet(),
+            invalidConfigIds = templates.filter {
+                val config = raw.getValue(it.id)
+                !config.isValid || !it.exercise.supportsRoutinePrescription() || config.trackingType !in it.exercise.allowedTrackingTypes
+            }.map { it.id }.toSet(),
             errorRes = null)
     }
-
     private fun canEdit() = _state.value.let {
         it.hasLoaded && !it.isLoading && !it.isSaving && !it.hasPendingSave &&
             !it.isSaved && !it.accountInvalid && durable?.committed == false
@@ -228,9 +299,29 @@ class EditWorkoutViewModel(
         _state.value = _state.value.copy(nameErrorRes = null)
     }
 
-    fun updateRawConfig(id: String, sets: String, reps: String, rest: String) {
-        if (_state.value.exercises.find { it.id == id }?.exercise?.supportsRoutinePrescription() != true) return
-        mutate { it.copy(rows = it.rows.map { row -> if (row.id == id) DraftRow(id, sets, reps, rest) else row }) }
+    fun updateRawConfig(id: String, config: RawExerciseConfig) {
+        val exercise = _state.value.exercises.find { it.id == id }?.exercise ?: return
+        if (!exercise.supportsRoutinePrescription() || config.trackingType !in exercise.allowedTrackingTypes) return
+        mutate { draft -> draft.copy(rows = draft.rows.map { row ->
+            if (row.id == id) DraftRow(id, config.sets, config.reps, config.rest,
+                config.trackingType.name, config.durationSeconds, config.distanceMeters) else row
+        }) }
+    }
+
+    fun changeTrackingMode(id: String, mode: TrackingType) {
+        val exercise = _state.value.exercises.find { it.id == id }?.exercise ?: return
+        if (mode !in exercise.allowedTrackingTypes) return
+        val current = _state.value.rawConfigs[id] ?: return
+        if (mode == current.trackingType) return
+        val repetitions = mode in listOf(TrackingType.WEIGHT_REPS, TrackingType.BODYWEIGHT_REPS,
+            TrackingType.ASSISTED_REPS, TrackingType.REPS_ONLY)
+        val duration = mode == TrackingType.DURATION || mode == TrackingType.DISTANCE_DURATION
+        updateRawConfig(id, current.copy(
+            trackingType = mode,
+            reps = if (repetitions) current.reps else "",
+            durationSeconds = if (duration) current.durationSeconds else "",
+            distanceMeters = if (mode == TrackingType.DISTANCE_DURATION) current.distanceMeters else ""
+        ))
     }
 
     fun removeExercise(index: Int) = mutate { draft ->
@@ -255,8 +346,12 @@ class EditWorkoutViewModel(
         if (!canEdit()) return false
         val existing = draft.rows.map { it.id }.toSet()
         val additions = result.selectedExercises.distinctBy { it.id }.filterNot { it.id in existing }
-        durable = draft.copy(rows = draft.rows + additions.map {
-            if (it.supportsRoutinePrescription()) DraftRow(it.id, "3", "10", "60") else DraftRow(it.id, "", "", "")
+        durable = draft.copy(loaded = true, rows = draft.rows + additions.map {
+            if (it.supportsRoutinePrescription()) {
+                val mode = it.defaultTrackingType
+                val reps = if (mode == TrackingType.DURATION || mode == TrackingType.DISTANCE_DURATION) "" else "10"
+                DraftRow(it.id, "3", reps, "60", mode.name, "", "")
+            } else DraftRow(it.id, "", "", "")
         }, dirty = draft.dirty || additions.isNotEmpty(), acceptedResults = draft.acceptedResults + result.resultId)
         persist()
         publishDraft(_state.value.exercises.map { it.exercise } + additions)
@@ -274,7 +369,8 @@ class EditWorkoutViewModel(
         }
         val command = draft.command ?: SaveCommand(UUID.randomUUID().toString(), draft.name.trim(),
             state.exercises.map { row -> CommandExercise(row.id, row.name, row.exercise.muscleCategory.name,
-                row.exercise.isActive, row.sets, row.reps, row.restSeconds) },
+                row.exercise.isActive, row.sets, row.reps, row.restSeconds, row.trackingType.name,
+                row.targetDurationSeconds, row.targetDistanceMeters) },
             draft.revision, draft.baselineIds)
         durable = draft.copy(command = command)
         persist() // Save the immutable command BEFORE dispatch, including its request identity.
@@ -317,8 +413,16 @@ class EditWorkoutViewModel(
 
     fun dismissErrorDialog() { _state.value = _state.value.copy(showErrorDialog = false) }
 
-    private fun TemplateExercise.row() = DraftRow(id, sets.toString(), reps.toString(), restSeconds.toString())
-    private fun Exercise.supportsRoutinePrescription() = isActive && prescriptionCapability == ExercisePrescriptionCapability.REPS_LOAD
+    private fun TemplateExercise.row() = DraftRow(
+        id = id,
+        sets = sets.toString(),
+        reps = reps?.toString() ?: "",
+        rest = restSeconds.toString(),
+        trackingType = trackingType.name,
+        durationSeconds = targetDurationSeconds?.toString() ?: "",
+        distanceMeters = targetDistanceMeters?.toString() ?: ""
+    )
+    private fun Exercise.supportsRoutinePrescription() = isActive
 
     companion object { const val DRAFT_KEY = "routine_editor_durable_draft" }
 }

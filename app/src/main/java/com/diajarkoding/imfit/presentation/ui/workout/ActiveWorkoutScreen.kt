@@ -18,6 +18,7 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
+import com.diajarkoding.imfit.domain.model.SetMeasurement
 import androidx.compose.material3.SnackbarResult
 import androidx.compose.material3.Text
 import androidx.compose.material3.MaterialTheme
@@ -278,9 +279,10 @@ fun ActiveWorkoutScreen(
             }
         },
         onRemoveExercise = { exerciseId -> viewModel.removeExercise(exerciseId) },
-        onSetUpdate = { exerciseIndex, setIndex, weight, reps ->
-            viewModel.updateSet(exerciseIndex, setIndex, weight, reps)
+        onSetMeasurementUpdate = { exerciseIndex, setIndex, measurement ->
+            viewModel.updateSetMeasurement(exerciseIndex, setIndex, measurement)
         },
+        onStopwatchToggle = viewModel::toggleSetStopwatch,
         onSetComplete = { exerciseIndex, setIndex ->
             viewModel.completeSet(exerciseIndex, setIndex)
         },
@@ -299,7 +301,8 @@ internal fun ActiveWorkoutScreenContent(
     onFinishClick: () -> Unit,
     onAddExercises: () -> Unit,
     onRemoveExercise: (exerciseId: String) -> Unit,
-    onSetUpdate: (exerciseIndex: Int, setIndex: Int, weight: Float, reps: Int) -> Unit,
+    onSetMeasurementUpdate: (exerciseIndex: Int, setIndex: Int, measurement: SetMeasurement) -> Unit,
+    onStopwatchToggle: (exerciseIndex: Int, setIndex: Int) -> Unit,
     onSetComplete: (exerciseIndex: Int, setIndex: Int) -> Unit,
     onAddSet: (exerciseIndex: Int) -> Unit,
     onRemoveSet: (exerciseIndex: Int, setIndex: Int) -> Unit,
@@ -422,9 +425,10 @@ internal fun ActiveWorkoutScreenContent(
                                     mutationEnabled = actionsEnabled,
                                     isPaused = state.isPaused,
                                     onRemoveExercise = { onRemoveExercise(exerciseLog.exercise.id) },
-                                    onSetUpdate = { setIndex, weight, reps ->
-                                        onSetUpdate(exerciseIndex, setIndex, weight, reps)
+                                    onSetMeasurementUpdate = { setIndex, measurement ->
+                                        onSetMeasurementUpdate(exerciseIndex, setIndex, measurement)
                                     },
+                                    onStopwatchToggle = { setIndex -> onStopwatchToggle(exerciseIndex, setIndex) },
                                     onSetComplete = { setIndex ->
                                         onSetComplete(exerciseIndex, setIndex)
                                     },
@@ -498,7 +502,8 @@ private fun ActiveWorkoutScreenPreview() {
             onFinishClick = {},
             onAddExercises = {},
             onRemoveExercise = {},
-            onSetUpdate = { _, _, _, _ -> },
+            onSetMeasurementUpdate = { _, _, _ -> },
+            onStopwatchToggle = { _, _ -> },
             onSetComplete = { _, _ -> },
             onAddSet = {},
             onRemoveSet = { _, _ -> }

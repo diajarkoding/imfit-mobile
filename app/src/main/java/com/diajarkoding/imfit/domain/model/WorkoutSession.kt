@@ -14,11 +14,23 @@ data class WorkoutSession(
     val totalVolume: Float
         get() = exerciseLogs.sumOf { it.totalVolume.toDouble() }.toFloat()
 
+    val additionalVolume: Float
+        get() = exerciseLogs.sumOf { it.additionalVolume.toDouble() }.toFloat()
+
     val totalCompletedSets: Int
         get() = exerciseLogs.sumOf { it.completedSets }
 
     val totalSets: Int
         get() = exerciseLogs.sumOf { it.sets.size }
+
+    val totalReps: Int
+        get() = exerciseLogs.sumOf { it.totalReps }
+
+    val totalDurationSeconds: Int
+        get() = exerciseLogs.sumOf { it.totalDurationSeconds }
+
+    val totalDistanceMeters: Int
+        get() = exerciseLogs.sumOf { it.totalDistanceMeters }
 
     val currentExercise: ExerciseLog?
         get() = exerciseLogs.getOrNull(currentExerciseIndex)
@@ -46,4 +58,3 @@ data class WorkoutSession(
     fun getRestSecondsForExercise(exerciseIndex: Int): Int =
         exerciseLogs.getOrNull(exerciseIndex)?.restSeconds ?: 60
 }
-

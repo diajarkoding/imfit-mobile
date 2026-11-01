@@ -4,3 +4,6 @@
 # minified production app APK remains the only shrinking-sensitive artifact under test.
 -dontshrink
 -dontoptimize
+# Core-library desugaring is packaged by a separate L8 task, not by these R8 rules.
+# build.gradle.kts retains the full j$ runtime in this opt-in harness so it cannot shadow
+# application-owned APIs with a test-only partial runtime.

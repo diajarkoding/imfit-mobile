@@ -42,4 +42,5 @@
     <string name="rest_timer_unit_minutes">Minutes</string>
     <string name="rest_timer_unit_seconds">Seconds</string>
     <string name="rest_timer_minus_30">−30 seconds</string>
+    <string name="execution_stopwatch_review">Stopwatch paused after a device restart or an unverified clock. Review the saved duration, then resume or edit it manually.</string>
 </resources>

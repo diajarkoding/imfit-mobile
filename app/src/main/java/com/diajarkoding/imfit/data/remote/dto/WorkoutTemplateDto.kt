@@ -1,6 +1,7 @@
 package com.diajarkoding.imfit.data.remote.dto
 
 import com.diajarkoding.imfit.domain.model.TemplateExercise
+import com.diajarkoding.imfit.domain.model.TrackingType
 import com.diajarkoding.imfit.domain.model.WorkoutTemplate
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
@@ -34,11 +35,17 @@ data class TemplateExerciseDto(
     @SerialName("order_index")
     val orderIndex: Int = 0,
     val sets: Int = 3,
-    val reps: Int = 10,
+    val reps: Int? = 10,
     @SerialName("rest_seconds")
     val restSeconds: Int = 60,
     val notes: String? = null,
-    val exercises: ExerciseDto? = null
+    val exercises: ExerciseDto? = null,
+    @SerialName("tracking_type")
+    val trackingType: String? = null,
+    @SerialName("target_duration_seconds")
+    val targetDurationSeconds: Int? = null,
+    @SerialName("target_distance_meters")
+    val targetDistanceMeters: Int? = null
 )
 
 fun WorkoutTemplateDto.toDomain(): WorkoutTemplate {
@@ -57,11 +64,16 @@ fun WorkoutTemplateDto.toDomain(): WorkoutTemplate {
 
 fun TemplateExerciseDto.toDomain(): TemplateExercise? {
     val exercise = exercises?.toDomain() ?: return null
+    val parsedTrackingType = trackingType?.let { runCatching { TrackingType.valueOf(it) }.getOrNull() }
+        ?: exercise.defaultTrackingType
     return TemplateExercise(
         exercise = exercise,
         sets = sets,
         reps = reps,
-        restSeconds = restSeconds
+        restSeconds = restSeconds,
+        trackingType = parsedTrackingType,
+        targetDurationSeconds = targetDurationSeconds,
+        targetDistanceMeters = targetDistanceMeters
     )
 }
 
@@ -72,7 +84,10 @@ fun TemplateExercise.toDto(templateId: String, orderIndex: Int): TemplateExercis
         orderIndex = orderIndex,
         sets = sets,
         reps = reps,
-        restSeconds = restSeconds
+        restSeconds = restSeconds,
+        trackingType = trackingType.name,
+        targetDurationSeconds = targetDurationSeconds,
+        targetDistanceMeters = targetDistanceMeters
     )
 }
 
@@ -81,11 +96,6 @@ internal fun parseRemoteTimestamp(timestamp: String?, fallbackMs: Long = 0L): Lo
     return try {
         java.time.OffsetDateTime.parse(timestamp).toInstant().toEpochMilli()
     } catch (e: Exception) {
-        try {
-            java.time.LocalDate.parse(timestamp).atStartOfDay(java.time.ZoneOffset.UTC)
-                .toInstant().toEpochMilli()
-        } catch (e2: Exception) {
-            fallbackMs
-        }
+        fallbackMs
     }
 }

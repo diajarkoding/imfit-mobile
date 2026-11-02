@@ -7,7 +7,9 @@ data class TemplateExercise(
     val restSeconds: Int = 60,
     val trackingType: TrackingType = exercise.defaultTrackingType,
     val targetDurationSeconds: Int? = null,
-    val targetDistanceMeters: Int? = null
+    val targetDistanceMeters: Int? = null,
+    // Only a restored pre-cutover immutable command may replay this obsolete wire field.
+    val legacyRestSeconds: Int? = null
 ) {
     val id: String get() = exercise.id
     val name: String get() = exercise.name

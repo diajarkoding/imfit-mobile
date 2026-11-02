@@ -14,7 +14,8 @@ import org.junit.Test
 class RoutineRefactorFlowTest {
     private val bench = Exercise("ex_chest_1", "Bench", MuscleCategory.CHEST, "Press")
     private val row = Exercise("ex_back_3", "Row", MuscleCategory.BACK, "Pull")
-    private val plank = Exercise("ex_core_1", "Renamed static exercise", MuscleCategory.CORE, "Hold")
+    private val plank = Exercise("ex_core_1", "Renamed static exercise", MuscleCategory.CORE, "Hold",
+        defaultTrackingType = TrackingType.DURATION, modality = ExerciseModality.ISOMETRIC)
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Unconfined)
     private val context = RoutineFlowContext("flow", "routine", "owner", RoutineFormMode.EDIT)
     private val auth = EditorAuth()
@@ -35,13 +36,13 @@ class RoutineRefactorFlowTest {
         val handle = SavedStateHandle()
         val original = editor(handle)
         original.updateWorkoutName("My raw draft")
-        original.updateRawConfig(bench.id, RawExerciseConfig("", "-1.5", "99999999999999"))
+        original.updateRawConfig(bench.id, RawExerciseConfig("", "-1.5"))
         original.moveExerciseDown(0)
         val restored = editor(recreate(handle))
         assertEquals(1, repository.reads)
         assertEquals(listOf(row.id, bench.id), catalog.requests.last())
         assertEquals(listOf(row.id, bench.id), restored.state.value.exercises.map { it.id })
-        assertEquals(RawExerciseConfig("", "-1.5", "99999999999999"), restored.state.value.rawConfigs[bench.id])
+        assertEquals(RawExerciseConfig("", "-1.5"), restored.state.value.rawConfigs[bench.id])
         assertEquals("My raw draft", restored.state.value.workoutName)
         assertEquals(7L, restored.state.value.baseRevision)
         assertTrue(restored.state.value.isDirty)
@@ -56,10 +57,10 @@ class RoutineRefactorFlowTest {
 
     @Test fun reorderNeverReplacesRawInputsWithLastValidPrescription() {
         val vm = editor()
-        vm.updateRawConfig(bench.id, RawExerciseConfig("0", "", "-3"))
+        vm.updateRawConfig(bench.id, RawExerciseConfig("0", ""))
         vm.moveExerciseDown(0)
         vm.moveExerciseUp(1)
-        assertEquals(RawExerciseConfig("0", "", "-3"), vm.state.value.rawConfigs[bench.id])
+        assertEquals(RawExerciseConfig("0", ""), vm.state.value.rawConfigs[bench.id])
         assertTrue(bench.id in vm.state.value.invalidConfigIds)
         assertTrue(repository.commands.isEmpty())
     }
@@ -71,7 +72,7 @@ class RoutineRefactorFlowTest {
         val vm = editor(handle, ctx)
         val result = RoutineSelectionResult(ctx, "selection-1", listOf(row, bench))
         assertTrue(vm.acceptSelection(result))
-        vm.updateRawConfig(row.id, RawExerciseConfig("", "12", "60"))
+        vm.updateRawConfig(row.id, RawExerciseConfig("", "12"))
         vm.removeExercise(1)
         val restored = editor(recreate(handle), ctx)
         assertTrue(restored.acceptSelection(result))
@@ -88,13 +89,13 @@ class RoutineRefactorFlowTest {
         val vm = editor(handle)
         vm.updateWorkoutName("Immutable command")
         vm.removeExercise(0)
-        vm.updateRawConfig(row.id, RawExerciseConfig("5", "9", "30"))
+        vm.updateRawConfig(row.id, RawExerciseConfig("5", "9"))
         vm.saveChanges()
         val first = repository.commands.single()
         assertTrue(vm.state.value.hasPendingSave)
         vm.dismissErrorDialog()
         vm.updateWorkoutName("Must not change")
-        vm.updateRawConfig(row.id, RawExerciseConfig("99", "99", "99"))
+        vm.updateRawConfig(row.id, RawExerciseConfig("99", "99"))
         vm.removeExercise(0)
         assertEquals("Immutable command", vm.state.value.workoutName)
         assertEquals(1, vm.state.value.exercises.size)
@@ -212,7 +213,9 @@ class RoutineRefactorFlowTest {
     }
 
     @Test fun durationAndDistanceRawDraftsSaveAndReopenWithoutLosingEditedTargets() {
-        val run = Exercise("ex_cardio_1", "Run", MuscleCategory.CARDIO, "")
+        val run = Exercise("ex_cardio_1", "Run", MuscleCategory.CARDIO, "",
+            defaultTrackingType = TrackingType.DISTANCE_DURATION, modality = ExerciseModality.CARDIO,
+            allowedTrackingTypes = listOf(TrackingType.DISTANCE_DURATION, TrackingType.DURATION))
         catalog.available = listOf(plank, run)
         repository.routine = repository.routine.copy(exercises = listOf(
             TemplateExercise(plank, reps = null, targetDurationSeconds = 45),
@@ -239,7 +242,9 @@ class RoutineRefactorFlowTest {
     }
 
     @Test fun modeSwitchClearsOnlyIrrelevantFieldsAndPreservesInvalidRawRecovery() {
-        val run = Exercise("ex_cardio_1", "Run", MuscleCategory.CARDIO, "")
+        val run = Exercise("ex_cardio_1", "Run", MuscleCategory.CARDIO, "",
+            defaultTrackingType = TrackingType.DISTANCE_DURATION, modality = ExerciseModality.CARDIO,
+            allowedTrackingTypes = listOf(TrackingType.DISTANCE_DURATION, TrackingType.DURATION))
         catalog.available = listOf(run)
         repository.routine = repository.routine.copy(exercises = listOf(
             TemplateExercise(run, reps = null, targetDurationSeconds = 600, targetDistanceMeters = 1000)))
@@ -259,7 +264,6 @@ class RoutineRefactorFlowTest {
         assertEquals("bad duration", raw.durationSeconds)
         assertEquals("", raw.distanceMeters)
         assertEquals("", raw.reps)
-        assertEquals("60", raw.rest)
         assertEquals(TrackingType.DURATION, raw.trackingType)
         restored.changeTrackingMode(run.id, TrackingType.WEIGHT_REPS)
         assertEquals(raw, restored.state.value.rawConfigs.getValue(run.id))
@@ -275,7 +279,9 @@ class RoutineRefactorFlowTest {
     }
 
     @Test fun repetitionToDurationSwitchDoesNotResurrectStaleRepetitions() {
-        val conditioning = Exercise("ex_cardio_5", "Conditioning", MuscleCategory.CARDIO, "")
+        val conditioning = Exercise("ex_cardio_5", "Conditioning", MuscleCategory.CARDIO, "",
+            defaultTrackingType = TrackingType.REPS_ONLY, modality = ExerciseModality.CONDITIONING,
+            allowedTrackingTypes = listOf(TrackingType.REPS_ONLY, TrackingType.DURATION))
         catalog.available = listOf(conditioning)
         repository.routine = repository.routine.copy(exercises = listOf(TemplateExercise(conditioning, reps = 12)))
         val vm = editor()
@@ -297,16 +303,18 @@ class RoutineRefactorFlowTest {
     }
 
     @Test fun switchingBetweenRepetitionModesPreservesRawPrescription() {
-        val pushUp = Exercise("ex_chest_4", "Push up", MuscleCategory.CHEST, "")
+        val pushUp = Exercise("ex_chest_4", "Push up", MuscleCategory.CHEST, "",
+            defaultTrackingType = TrackingType.BODYWEIGHT_REPS, modality = ExerciseModality.CALISTHENICS,
+            allowedTrackingTypes = listOf(TrackingType.BODYWEIGHT_REPS, TrackingType.REPS_ONLY))
         catalog.available = listOf(pushUp)
         repository.routine = repository.routine.copy(exercises = listOf(TemplateExercise(pushUp, reps = 12)))
         val vm = editor()
-        vm.updateRawConfig(pushUp.id, vm.state.value.rawConfigs.getValue(pushUp.id).copy(sets = "", reps = "-1.5", rest = "90"))
+        vm.updateRawConfig(pushUp.id, vm.state.value.rawConfigs.getValue(pushUp.id).copy(sets = "", reps = "-1.5"))
         vm.changeTrackingMode(pushUp.id, TrackingType.REPS_ONLY)
-        assertEquals(RawExerciseConfig("", "-1.5", "90", TrackingType.REPS_ONLY),
+        assertEquals(RawExerciseConfig("", "-1.5", TrackingType.REPS_ONLY),
             vm.state.value.rawConfigs.getValue(pushUp.id))
         vm.changeTrackingMode(pushUp.id, TrackingType.BODYWEIGHT_REPS)
-        assertEquals(RawExerciseConfig("", "-1.5", "90", TrackingType.BODYWEIGHT_REPS),
+        assertEquals(RawExerciseConfig("", "-1.5", TrackingType.BODYWEIGHT_REPS),
             vm.state.value.rawConfigs.getValue(pushUp.id))
     }
 }

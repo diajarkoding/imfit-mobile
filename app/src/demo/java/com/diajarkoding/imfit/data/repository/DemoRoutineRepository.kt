@@ -3,7 +3,6 @@ package com.diajarkoding.imfit.data.repository
 import com.diajarkoding.imfit.data.local.FakeWorkoutDataSource
 import com.diajarkoding.imfit.domain.model.TemplateExercise
 import com.diajarkoding.imfit.domain.model.WorkoutTemplate
-import com.diajarkoding.imfit.domain.model.supportsRepetitions
 import com.diajarkoding.imfit.domain.repository.RoutineError
 import com.diajarkoding.imfit.domain.repository.RoutineRepository
 import kotlinx.coroutines.sync.Mutex
@@ -47,7 +46,8 @@ class DemoRoutineRepository @Inject constructor() : RoutineRepository {
         }
         if (command.name.length !in 2..100 || command.exercises.size > 100 ||
             command.exercises.map { it.id }.distinct().size != command.exercises.size ||
-            command.exercises.any { !it.exercise.isActive || !it.target.isValidFor(it.trackingType) }) {
+            command.exercises.any { !it.exercise.isActive || !it.target.isValidFor(it.trackingType) ||
+                it.trackingType !in it.exercise.allowedTrackingTypes }) {
             return Result.failure(RoutineError.ValidationError("Invalid routine name or prescription"))
         }
         val existing = routines[command.id]

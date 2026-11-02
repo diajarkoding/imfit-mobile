@@ -64,7 +64,7 @@ fun WorkoutTemplateDto.toDomain(): WorkoutTemplate {
 
 fun TemplateExerciseDto.toDomain(): TemplateExercise? {
     val exercise = exercises?.toDomain() ?: return null
-    val parsedTrackingType = trackingType?.let { runCatching { TrackingType.valueOf(it) }.getOrNull() }
+    val parsedTrackingType = trackingType?.let(TrackingType::valueOf)
         ?: exercise.defaultTrackingType
     return TemplateExercise(
         exercise = exercise,

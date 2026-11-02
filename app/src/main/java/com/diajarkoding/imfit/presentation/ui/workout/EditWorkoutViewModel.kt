@@ -19,6 +19,7 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.collect
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
+import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.encodeToString
 import kotlinx.serialization.decodeFromString
@@ -29,15 +30,13 @@ import javax.inject.Inject
 data class RawExerciseConfig(
     val sets: String,
     val reps: String = "",
-    val rest: String = "60",
     val trackingType: TrackingType = TrackingType.WEIGHT_REPS,
     val durationSeconds: String = "",
     val distanceMeters: String = ""
 ) {
     val isValid: Boolean get() {
         val setsNum = sets.toIntOrNull() ?: return false
-        val restNum = rest.toIntOrNull() ?: return false
-        if (setsNum !in 1..20 || restNum !in 0..600) return false
+        if (setsNum !in 1..20) return false
         return when (trackingType) {
             TrackingType.WEIGHT_REPS,
             TrackingType.BODYWEIGHT_REPS,
@@ -77,7 +76,6 @@ private data class DraftRow(
     val id: String,
     val sets: String,
     val reps: String,
-    val rest: String,
     val trackingType: String? = null,
     val durationSeconds: String? = null,
     val distanceMeters: String? = null
@@ -86,17 +84,25 @@ private data class DraftRow(
 @Serializable
 private data class CommandExercise(
     val id: String, val name: String, val category: String,
-    val active: Boolean, val sets: Int, val reps: Int?, val rest: Int,
+    val active: Boolean, val sets: Int, val reps: Int?,
     val trackingType: String? = null,
     val targetDurationSeconds: Int? = null,
-    val targetDistanceMeters: Int? = null
+    val targetDistanceMeters: Int? = null,
+    @SerialName("rest") val legacyRest: Int? = null,
+    val modality: ExerciseModality? = null,
+    val defaultTrackingType: TrackingType? = null,
+    val allowedTrackingTypes: List<TrackingType>? = null
 ) {
     fun template() = TemplateExercise(
-        Exercise(id, name, MuscleCategory.valueOf(category), "", null, active),
-        sets = sets, reps = reps, restSeconds = rest,
-        trackingType = trackingType?.let { runCatching { TrackingType.valueOf(it) }.getOrNull() } ?: TrackingType.WEIGHT_REPS,
+        Exercise(id, name, MuscleCategory.valueOf(category), "", null, active,
+            defaultTrackingType = defaultTrackingType ?: trackingType?.let(TrackingType::valueOf) ?: TrackingType.WEIGHT_REPS,
+            modality = modality ?: ExerciseModality.STRENGTH,
+            allowedTrackingTypes = allowedTrackingTypes ?: listOf(trackingType?.let(TrackingType::valueOf) ?: TrackingType.WEIGHT_REPS)),
+        sets = sets, reps = reps, restSeconds = legacyRest ?: 60,
+        trackingType = trackingType?.let(TrackingType::valueOf) ?: TrackingType.WEIGHT_REPS,
         targetDurationSeconds = targetDurationSeconds,
-        targetDistanceMeters = targetDistanceMeters
+        targetDistanceMeters = targetDistanceMeters,
+        legacyRestSeconds = legacyRest
     )
 }
 
@@ -132,8 +138,9 @@ class EditWorkoutViewModel(
     ) : this(routineRepository, exerciseCatalogRepository, authRepository, savedStateHandle, null)
 
     private val scope get() = overrideScope ?: viewModelScope
+    private val draftJson = Json { ignoreUnknownKeys = true }
     private var durable = savedStateHandle.get<String>(DRAFT_KEY)?.let {
-        Json.decodeFromString<DurableRoutineDraft>(it)
+        draftJson.decodeFromString<DurableRoutineDraft>(it)
     }
     private var initialized = false
     private var loadJob: Job? = null
@@ -162,7 +169,7 @@ class EditWorkoutViewModel(
     }
 
     private fun persist() {
-        durable?.let { savedStateHandle[DRAFT_KEY] = Json.encodeToString(it) }
+        durable?.let { savedStateHandle[DRAFT_KEY] = draftJson.encodeToString(it) }
     }
 
     private fun invalidateAccount() {
@@ -248,13 +255,12 @@ class EditWorkoutViewModel(
         val byId = exercises.associateBy { it.id }
         val templates = draft.rows.map { row ->
             val ex = byId.getValue(row.id)
-            val parsedTracking = row.trackingType?.let { runCatching { TrackingType.valueOf(it) }.getOrNull() }
+            val parsedTracking = row.trackingType?.let(TrackingType::valueOf)
                 ?: ex.defaultTrackingType
             TemplateExercise(
                 exercise = ex,
                 sets = row.sets.toIntOrNull() ?: 3,
                 reps = row.reps.toIntOrNull(),
-                restSeconds = row.rest.toIntOrNull() ?: 60,
                 trackingType = parsedTracking,
                 targetDurationSeconds = row.durationSeconds?.toIntOrNull(),
                 targetDistanceMeters = row.distanceMeters?.toIntOrNull()
@@ -262,12 +268,11 @@ class EditWorkoutViewModel(
         }
         val raw = draft.rows.associate { row ->
             val ex = byId.getValue(row.id)
-            val parsedTracking = row.trackingType?.let { runCatching { TrackingType.valueOf(it) }.getOrNull() }
+            val parsedTracking = row.trackingType?.let(TrackingType::valueOf)
                 ?: ex.defaultTrackingType
             row.id to RawExerciseConfig(
                 sets = row.sets,
                 reps = row.reps,
-                rest = row.rest,
                 trackingType = parsedTracking,
                 durationSeconds = row.durationSeconds ?: "",
                 distanceMeters = row.distanceMeters ?: ""
@@ -303,7 +308,7 @@ class EditWorkoutViewModel(
         val exercise = _state.value.exercises.find { it.id == id }?.exercise ?: return
         if (!exercise.supportsRoutinePrescription() || config.trackingType !in exercise.allowedTrackingTypes) return
         mutate { draft -> draft.copy(rows = draft.rows.map { row ->
-            if (row.id == id) DraftRow(id, config.sets, config.reps, config.rest,
+            if (row.id == id) DraftRow(id, config.sets, config.reps,
                 config.trackingType.name, config.durationSeconds, config.distanceMeters) else row
         }) }
     }
@@ -350,8 +355,8 @@ class EditWorkoutViewModel(
             if (it.supportsRoutinePrescription()) {
                 val mode = it.defaultTrackingType
                 val reps = if (mode == TrackingType.DURATION || mode == TrackingType.DISTANCE_DURATION) "" else "10"
-                DraftRow(it.id, "3", reps, "60", mode.name, "", "")
-            } else DraftRow(it.id, "", "", "")
+                DraftRow(it.id, "3", reps, mode.name, "", "")
+            } else DraftRow(it.id, "", "")
         }, dirty = draft.dirty || additions.isNotEmpty(), acceptedResults = draft.acceptedResults + result.resultId)
         persist()
         publishDraft(_state.value.exercises.map { it.exercise } + additions)
@@ -368,9 +373,13 @@ class EditWorkoutViewModel(
             return
         }
         val command = draft.command ?: SaveCommand(UUID.randomUUID().toString(), draft.name.trim(),
-            state.exercises.map { row -> CommandExercise(row.id, row.name, row.exercise.muscleCategory.name,
-                row.exercise.isActive, row.sets, row.reps, row.restSeconds, row.trackingType.name,
-                row.targetDurationSeconds, row.targetDistanceMeters) },
+            state.exercises.map { row -> CommandExercise(
+                id = row.id, name = row.name, category = row.exercise.muscleCategory.name,
+                active = row.exercise.isActive, sets = row.sets, reps = row.reps,
+                trackingType = row.trackingType.name,
+                targetDurationSeconds = row.targetDurationSeconds, targetDistanceMeters = row.targetDistanceMeters,
+                modality = row.exercise.modality, defaultTrackingType = row.exercise.defaultTrackingType,
+                allowedTrackingTypes = row.exercise.allowedTrackingTypes) },
             draft.revision, draft.baselineIds)
         durable = draft.copy(command = command)
         persist() // Save the immutable command BEFORE dispatch, including its request identity.
@@ -417,7 +426,6 @@ class EditWorkoutViewModel(
         id = id,
         sets = sets.toString(),
         reps = reps?.toString() ?: "",
-        rest = restSeconds.toString(),
         trackingType = trackingType.name,
         durationSeconds = targetDurationSeconds?.toString() ?: "",
         distanceMeters = targetDistanceMeters?.toString() ?: ""

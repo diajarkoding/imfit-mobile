@@ -119,7 +119,7 @@ class SupabaseRoutineRepository @Inject constructor(
         checkOwner(userId)
         return WorkoutTemplate(detail.id, userId, detail.name, children.map { child ->
             val ex = exercises[child.exerciseId] ?: throw RoutineError.MissingExercises(listOf(child.exerciseId))
-            val parsedTracking = child.trackingType?.let { runCatching { TrackingType.valueOf(it) }.getOrNull() }
+            val parsedTracking = child.trackingType?.let(TrackingType::valueOf)
                 ?: ex.defaultTrackingType
             TemplateExercise(
                 exercise = ex,
@@ -193,7 +193,7 @@ class SupabaseRoutineRepository @Inject constructor(
                     put("order_index", index)
                     put("sets", child.sets)
                     put("reps", child.reps?.let(::JsonPrimitive) ?: JsonNull)
-                    put("rest_seconds", child.restSeconds)
+                    child.legacyRestSeconds?.let { put("rest_seconds", it) }
                     put("tracking_type", child.trackingType.name)
                     child.targetDurationSeconds?.let { put("target_duration_seconds", it) }
                     child.targetDistanceMeters?.let { put("target_distance_meters", it) }

@@ -6,8 +6,6 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.diajarkoding.imfit.R
 import com.diajarkoding.imfit.domain.model.Exercise
-import com.diajarkoding.imfit.domain.model.ExercisePrescriptionCapability
-import com.diajarkoding.imfit.domain.model.prescriptionCapability
 import com.diajarkoding.imfit.domain.repository.AuthRepository
 import com.diajarkoding.imfit.domain.repository.ExerciseCatalogRepository
 import com.diajarkoding.imfit.domain.repository.ExerciseHydrationResult

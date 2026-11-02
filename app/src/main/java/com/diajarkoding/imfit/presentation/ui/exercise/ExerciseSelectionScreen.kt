@@ -28,9 +28,6 @@ import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.diajarkoding.imfit.R
 import com.diajarkoding.imfit.domain.model.Exercise
-import com.diajarkoding.imfit.domain.model.ExerciseModality
-import com.diajarkoding.imfit.domain.model.ExercisePrescriptionCapability
-import com.diajarkoding.imfit.domain.model.prescriptionCapability
 import com.diajarkoding.imfit.presentation.components.common.*
 import com.diajarkoding.imfit.theme.IMFITColors
 import com.diajarkoding.imfit.theme.IMFITOpacity
@@ -328,13 +325,7 @@ internal fun ExercisePickerRow(exercise: Exercise, selected: Boolean, enabled: B
                     color = if (selected) c.onPrimaryContainer else c.muted,
                     style = MaterialTheme.typography.bodySmall
                 )
-                val modalityLabel = when (exercise.modality) {
-                    ExerciseModality.STRENGTH -> "Strength"
-                    ExerciseModality.CALISTHENICS -> "Bodyweight"
-                    ExerciseModality.ISOMETRIC -> "Isometric"
-                    ExerciseModality.CARDIO -> "Cardio"
-                    ExerciseModality.CONDITIONING -> "Conditioning"
-                }
+                val modalityLabel = stringResource(exercise.modality.labelRes())
                 Surface(
                     shape = RoundedCornerShape(4.dp),
                     color = c.raised,
@@ -346,6 +337,10 @@ internal fun ExercisePickerRow(exercise: Exercise, selected: Boolean, enabled: B
                         style = MaterialTheme.typography.labelSmall,
                         modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
                     )
+                }
+                if (exercise.allowedTrackingTypes.size > 1) {
+                    Text(exercise.allowedTrackingTypes.map { stringResource(it.trackingLabelRes()) }.joinToString(" · "),
+                        color = c.muted, style = MaterialTheme.typography.bodySmall)
                 }
             }
             Checkbox(

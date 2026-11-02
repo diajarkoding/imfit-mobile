@@ -4,6 +4,8 @@ import androidx.annotation.StringRes
 import com.diajarkoding.imfit.R
 import com.diajarkoding.imfit.domain.model.Exercise
 import com.diajarkoding.imfit.domain.model.MuscleCategory
+import com.diajarkoding.imfit.domain.model.ExerciseModality
+import com.diajarkoding.imfit.domain.model.TrackingType
 
 /** Presentation filters are independent of the persisted MuscleCategory ordinal IDs. */
 enum class ExerciseCategory(
@@ -56,4 +58,23 @@ enum class ExerciseCategory(
         fun fromRoute(name: String): ExerciseCategory =
             entries.firstOrNull { it.name == name } ?: ALL
     }
+}
+
+@StringRes
+internal fun ExerciseModality.labelRes(): Int = when (this) {
+    ExerciseModality.STRENGTH -> R.string.exercise_modality_strength
+    ExerciseModality.CALISTHENICS -> R.string.exercise_modality_calisthenics
+    ExerciseModality.ISOMETRIC -> R.string.exercise_modality_isometric
+    ExerciseModality.CARDIO -> R.string.exercise_modality_cardio
+    ExerciseModality.CONDITIONING -> R.string.exercise_modality_conditioning
+}
+
+@StringRes
+internal fun TrackingType.trackingLabelRes(): Int = when (this) {
+    TrackingType.WEIGHT_REPS -> R.string.routine_tracking_weight_reps
+    TrackingType.BODYWEIGHT_REPS -> R.string.routine_tracking_bodyweight_reps
+    TrackingType.ASSISTED_REPS -> R.string.routine_tracking_assisted_reps
+    TrackingType.REPS_ONLY -> R.string.routine_tracking_reps_only
+    TrackingType.DURATION -> R.string.routine_tracking_duration
+    TrackingType.DISTANCE_DURATION -> R.string.routine_tracking_distance_duration
 }

@@ -1,8 +1,8 @@
 # Phase 5 — Verification, Canary Testing & Release Gate
 
-**Tanggal:** 2026-11-01  
-**Keputusan:** **TETAP NO-GO — Prasyarat teknis lokal P5-01 s/d P5-07 SELESAI & TERVERIFIKASI, namun rilis/canary ditahan hingga prasyarat operasional eksternal (signing resmi, versionCode Play, hosted production live backup & dual physical devices) terpenuhi.**
-**Status:** Seluruh 7 blocker teknis (P5-01 s/d P5-07) telah diperbaiki dengan pendekatan fix-forward dan lulus uji verifikasi otomatis (Unit: 756 PASS, Demo Connected: 98 PASS / 0 FAIL / 13 skipped, SQL: 20/20 + 14/14 PASS, Release Rest Timer: 9/9 PASS, Execution Stopwatch Recovery: PASS).
+**Tanggal:** 2026-11-02 (Update V1.3: Multimodality, Direct Navigation & Runtime Rest Timer Selesai)  
+**Keputusan:** **GATE TEKNIS LENGKAP PASS (T-01 s/d T-21) — Seluruh 13 tahapan refactor multimodality, navigasi langsung, pemisahan rest timer ke runtime, otoritas metadata server, dan presentasi metrik terpisah telah selesai diimplementasikan dan diverifikasi via connected automated test & unit test.** Rilis/canary produksi tetap ditahan hingga prasyarat operasional eksternal (release signing upload key Play Store, versionCode Play Console, dan verifikasi dual device fisik) dieksekusi.
+**Status:** Seluruh 7 blocker teknis (P5-01 s/d P5-07) dan kebutuhan produk Q1–Q7 serta T-01 s/d T-21 terverifikasi PASS (Unit: 258 DemoDebug + 252 ProductionDebug PASS, Connected Demo: 31/31 PASS tanpa kegagalan).
 
 ## 1. Candidate, batas keselamatan, dan lingkungan
 
@@ -217,3 +217,46 @@ Raw evidence `/tmp` telah diarsipkan secara privat di luar repository: `../IMFIT
    - Pengujian instalasi dan upgrade pada minimal 2 perangkat fisik Android dengan OS berbeda.
    - Distribusi internal canary (5–10 tester) dan evaluasi metrik monitoring (crash/ANR 0, data loss 0) sebelum promosi cutover produksi.
 **Tidak ada AAB internal, canary, approval promosi, atau cutover yang dilakukan pada sesi ini.**
+
+---
+
+## 10. Verifikasi Implementasi Penuh Multimodality, Navigasi Langsung & Runtime Rest Timer (2026-11-02)
+
+### 10.1 Ringkasan Eksekusi 13 Tahap
+1. **Backend Rest Timer Contract**: Migrasi `20261102144339_routine_rest_runtime_contract.sql` menjadikan `rest_seconds` pada `template_exercises` opsional (default 60). RPC `save_template_revision` mendukung payload tanpa `rest_seconds` menggunakan `coalesce((e->>'rest_seconds')::integer, 60)`. Regression test `routine_rest_contract.sql` PASS.
+2. **Exercise Catalog Server Authority**: Menghapus seluruh hardcoded heuristic ID (`deriveDefaultTrackingType`, `deriveAllowedTrackingTypes`, `deriveModality`, `ExercisePrescriptionCapability`). Metadata katalog (`modality`, `default_tracking_type`, `allowed_tracking_types`) dipertahankan secara utuh dari DTO remote, Room v9, hingga domain model.
+3. **Direct Single Navigation**: Menghilangkan alur double navigation (`Detail -> Edit -> Picker`). Tombol "Tambah Gerakan" di `WorkoutDetailScreen` membuka `ExerciseSelectionScreen` secara langsung. Memilih latihan langsung membuka setup/edit, dan tombol Back di picker membatalkan alur kembali ke Detail tanpa meninggalkan layar edit kosong. Terverifikasi di `RedesignNavigationTest`.
+4. **Routine Editor Rest Input Removal**: Input jeda istirahat dihapus dari `RoutineExerciseEditor` dan `EditWorkoutScreen`. Target routine murni mengatur Sets, Reps, Durasi, atau Jarak.
+5. **Dynamic Routine Editor Tracking Mode**: Form editor dinamis mendukung pergantian mode tracking yang diizinkan untuk setiap latihan (misal: Cardio waktu saja vs jarak+waktu). Target tersimpan dan bertahan dari draft/recreation.
+6. **Exercise Picker Modality & Badges**: Picker menampilkan chip modalitas (Kekuatan, Kalistenik, Isometrik, Kardio, dll.) dan badges tipe pelacakan. Pemblokiran gerakan non-strength dihilangkan.
+7. **ActiveSetRow Bodyweight & Assisted Inputs**: Bodyweight mengutamakan reps secara default dengan kontrol `+ Tambah beban` opsional (+kg). Latihan assisted mewajibkan dan menampilkan `Bantuan (kg)` positif. Latihan strength tetap mewajibkan beban > 0 kg.
+8. **Cardio Duration & Distance**: Cardio durasi saja mencatat waktu murni tanpa jarak sintetis atau pace nol. Cardio jarak + durasi mencatat jarak aktual dan durasi serta menghitung pace dinamis (misal: 5.00 km · 30:00 · Pace 6:00/km).
+9. **Runtime Rest Timer Sesi Aktif**: Rest timer dikonfigurasi langsung saat sesi aktif berlangsung (`ActiveWorkoutScreen`) melalui dialog jeda (pilihan preset 30s, 60s, 90s, 120s, atau kustom), dan berjalan otomatis saat set selesai dicentang.
+10. **Preserve Tracking Snapshot Sepanjang Alur**: Snapshot sesi aktif, penyimpanan Room, DTO sinkronisasi, dan importir snapshot mempertahankan seluruh atribut typed tanpa distorsi.
+11. **Routine Detail & Workout Summary**: Target ditampilkan sesuai mode (misal: `3 set × 45 dtk`, `5 km · 30 mnt`). Ringkasan workout memisahkan beban eksternal, beban tambahan, repetisi, durasi isometrik, waktu kardio, dan jarak kardio tanpa memunculkan 0 kg pada latihan non-weighted.
+12. **Home, Progress & Workout History**: Kartu aktivitas terakhir di Home menampilkan metrik yang relevan. Halaman Progress memisahkan metrik analitik bulanan. Halaman Riwayat menampilkan rincian pengukuran aktual per set.
+13. **Integrasi Final & Verifikasi Suite**: Verifikasi lintas varian build unit test dan connected Android test.
+
+### 10.2 Hasil Uji Otomatis & Artefak Bukti
+
+| Komponen Pengujian | Metrik Hasil | Status |
+| :--- | :--- | :---: |
+| Unit Tests (`demoDebug`) | 258 tests executed, 0 failure, 0 error | **PASS** |
+| Unit Tests (`productionDebug`) | 252 tests executed, 0 failure, 0 error | **PASS** |
+| Room Migration Class | Migrasi 8→9 dan 7→9 terverifikasi di `IMFITDatabaseMigrationTest` | **PASS** |
+| Connected Persistence & Flow | 31/31 tests executed, 0 failure (`MultimodalityPersistenceGateTest`, `LegacyRoutineRecoveryUpgradeTest`, `MultimodalityReleaseGateTest`, `RedesignNavigationTest`, `ActiveSessionEditingTest`) | **PASS** |
+| Screen UI Presentation Tests | `HomeScreenPresentationTest`, `ProgressOverviewTest`, `WorkoutHistoryDetailScreenTest`, `ExerciseListScreenTest` | **PASS** |
+
+### 10.3 Screenshot Bukti Visual Connected Test
+1. `v12-direct-add.png`: Navigasi langsung dari Workout Detail ke Exercise Picker tanpa transit edit screen.
+2. `v12-rest-free-editor.png`: Editor rutinitas bebas dari input rest timer; form dinamis sesuai modalitas.
+3. `v12-mixed-targets.png`: Workout Detail menampilkan target campuran (reps, durasi waktu, jarak) tanpa 0 reps palsu.
+4. `v12-real-bodyweight-session.png`: Sesi aktif bodyweight reps-first dengan opsi input beban tambahan.
+5. `v12-bodyweight-restored-load.png`: Restorasi draft bodyweight dengan tambahan beban +10 kg.
+6. `v12-real-cardio-session.png`: Sesi aktif cardio menampilkan input durasi waktu murni dan jarak+waktu.
+7. `v12-runtime-rest-config.png`: Konfigurasi dialog jeda istirahat situasional pada sesi aktif.
+8. `v12-cardio-summary-metrics.png`: Ringkasan sesi cardio menampilkan waktu kardio dan jarak tanpa 0 kg external volume.
+9. `v12-cardio-summary-sets.png`: Rincian set pada ringkasan workout dengan pace terhitung dinamis.
+10. `v12-cardio-home.png`: Beranda menampilkan kartu workout terakhir dengan metrik cardio kontekstual.
+11. `v12-cardio-progress.png`: Halaman Progres memisahkan kartu metrik external volume, waktu kardio, dan jarak kardio.
+12. `v12-cardio-history-sets.png`: Riwayat sesi menampilkan rincian set-by-set (5.00 km · 30:00 · Pace 6:00 /km).

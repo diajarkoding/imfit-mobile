@@ -6,6 +6,8 @@ import androidx.lifecycle.viewModelScope
 import com.diajarkoding.imfit.domain.model.AuthSessionState
 import com.diajarkoding.imfit.domain.model.Exercise
 import com.diajarkoding.imfit.domain.model.MuscleCategory
+import com.diajarkoding.imfit.domain.model.ExerciseModality
+import com.diajarkoding.imfit.domain.model.TrackingType
 import com.diajarkoding.imfit.domain.model.RoutineFlowContext
 import com.diajarkoding.imfit.domain.model.RoutineFlowState
 import com.diajarkoding.imfit.domain.model.RoutineFormMode
@@ -196,14 +198,20 @@ private data class SavedExercise(
     val name: String,
     val category: String,
     val description: String = "",
-    val isActive: Boolean
+    val isActive: Boolean,
+    val imageUrl: String? = null,
+    val defaultTrackingType: TrackingType = TrackingType.WEIGHT_REPS,
+    val modality: ExerciseModality = ExerciseModality.STRENGTH,
+    val allowedTrackingTypes: List<TrackingType> = listOf(defaultTrackingType)
 ) {
-    fun toExercise() = Exercise(id, name, MuscleCategory.valueOf(category), description, null, isActive)
+    fun toExercise() = Exercise(id, name, MuscleCategory.valueOf(category), description, imageUrl, isActive,
+        defaultTrackingType, modality, allowedTrackingTypes)
 
     companion object {
         fun from(exercise: Exercise) = SavedExercise(
             exercise.id, exercise.name, exercise.muscleCategory.name,
-            exercise.description, exercise.isActive
+            exercise.description, exercise.isActive, exercise.imageUrl,
+            exercise.defaultTrackingType, exercise.modality, exercise.allowedTrackingTypes
         )
     }
 }

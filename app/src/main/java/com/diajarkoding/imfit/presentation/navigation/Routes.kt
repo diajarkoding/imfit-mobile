@@ -27,7 +27,7 @@ data object Main : NavKey
 data class WorkoutDetail(val workoutId: String, val refreshId: String = "") : NavKey
 
 @Serializable
-data class EditWorkout(val context: RoutineFlowContext, val openPicker: Boolean = false) : NavKey
+data class EditWorkout(val context: RoutineFlowContext) : NavKey
 
 @Serializable
 data class SetupRoutine(val context: RoutineFlowContext, val routineName: String = "") : NavKey

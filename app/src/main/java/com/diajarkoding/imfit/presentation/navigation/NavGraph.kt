@@ -188,15 +188,16 @@ fun NavGraph(
                     workoutId = key.workoutId,
                     refreshId = key.refreshId,
                     onNavigateBack = { backStack.removeLastOrNull() },
-                    onNavigateToExerciseSelection = { routineId, routineName, isSetup ->
+                    onNavigateToExerciseSelection = { routineId, routineName, isSetup, excludedIds ->
                         scope.launch {
+                            if (backStack.lastOrNull() != key) return@launch
                             val mode = if (isSetup) RoutineFormMode.SETUP else RoutineFormMode.EDIT
                             val context = routineFlowManager.startFlow(routineId, mode) ?: return@launch
-                            if (isSetup) {
-                                backStack.add(ExerciseSelection(context, routineName = routineName, isInitial = true))
-                            } else {
-                                backStack.add(EditWorkout(context, openPicker = true))
+                            if (backStack.lastOrNull() != key) {
+                                routineFlowManager.clearFlow(context)
+                                return@launch
                             }
+                            backStack.add(ExerciseSelection(context, excludedIds, routineName, isInitial = true))
                         }
                     },
                     onStartWorkout = { templateId -> backStack.add(ActiveWorkout(templateId)) },
@@ -216,7 +217,6 @@ fun NavGraph(
                     mode = key.context.mode,
                     flowId = key.context.flowId,
                     ownerId = key.context.ownerId,
-                    openPickerOnLoad = key.openPicker,
                     onNavigateBack = {
                         scope.launch {
                             if (!routineFlowManager.isCurrent(key.context)) return@launch
@@ -300,7 +300,10 @@ fun NavGraph(
                             if (backStack.lastOrNull() != key) return@launch
                             if (!routineFlowManager.updateSelection(key.context, selectedExercises)) return@launch
                             if (key.isInitial) {
-                                backStack[backStack.lastIndex] = SetupRoutine(key.context, key.routineName.orEmpty())
+                                backStack[backStack.lastIndex] = when (key.context.mode) {
+                                    RoutineFormMode.SETUP -> SetupRoutine(key.context, key.routineName.orEmpty())
+                                    RoutineFormMode.EDIT -> EditWorkout(key.context)
+                                }
                             } else {
                                 backStack.removeLastOrNull()
                             }

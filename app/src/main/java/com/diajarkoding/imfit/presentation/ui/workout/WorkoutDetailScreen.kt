@@ -27,7 +27,7 @@ import androidx.compose.ui.platform.testTag
 @Composable
 fun WorkoutDetailScreen(
     workoutId: String, onNavigateBack: () -> Unit,
-    onNavigateToExerciseSelection: (String, String, Boolean) -> Unit, onStartWorkout: (String) -> Unit,
+    onNavigateToExerciseSelection: (String, String, Boolean, List<String>) -> Unit, onStartWorkout: (String) -> Unit,
     onNavigateToEdit: (String) -> Unit = {}, viewModel: WorkoutDetailViewModel = hiltViewModel(),
     refreshId: String = ""
 ) {
@@ -58,7 +58,9 @@ fun WorkoutDetailScreen(
     WorkoutDetailContent(state, viewModel.estimatedDuration,
         onBack = onNavigateBack, onEdit = { onNavigateToEdit(workoutId) },
         onDelete = { viewModel.clearDeleteError(); deleteDialog = true },
-        onAdd = { onNavigateToExerciseSelection(workoutId, state.workout?.name.orEmpty(), state.workout?.exercises?.isEmpty() == true) }, onRetry = viewModel::loadWorkout,
+        onAdd = { onNavigateToExerciseSelection(workoutId, state.workout?.name.orEmpty(),
+            state.workout?.exercises?.isEmpty() == true, state.workout?.exercises.orEmpty().map { it.id }) },
+        onRetry = viewModel::loadWorkout,
         onStart = startRequest.start, startPending = startRequest.pending)
 }
 
@@ -166,7 +168,17 @@ internal fun RoutineExerciseRow(exercise: TemplateExercise) {
             MuscleCategoryArtwork(categoryArtAsset(exercise.muscleCategory), Modifier.size(48.dp, 56.dp).background(c.raised, RoutineControlShape))
             Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
                 Text(exercise.name, color = c.text, style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.SemiBold)
-                Text(stringResource(R.string.routine_prescription, stringResource(exercise.muscleCategory.stringResourceId), exercise.sets, exercise.reps ?: 0, exercise.restSeconds),
+                val target = when (exercise.trackingType) {
+                    TrackingType.WEIGHT_REPS, TrackingType.BODYWEIGHT_REPS, TrackingType.ASSISTED_REPS, TrackingType.REPS_ONLY ->
+                        stringResource(R.string.routine_target_reps, exercise.sets, exercise.reps?.toString() ?: "—")
+                    TrackingType.DURATION ->
+                        stringResource(R.string.routine_target_duration, exercise.sets, exercise.targetDurationSeconds?.toString() ?: "—")
+                    TrackingType.DISTANCE_DURATION -> if (exercise.targetDistanceMeters != null) {
+                        stringResource(R.string.routine_target_distance_duration, exercise.sets,
+                            exercise.targetDurationSeconds?.toString() ?: "—", exercise.targetDistanceMeters.toString())
+                    } else stringResource(R.string.routine_target_duration, exercise.sets, exercise.targetDurationSeconds?.toString() ?: "—")
+                }
+                Text(stringResource(R.string.routine_prescription, stringResource(exercise.muscleCategory.stringResourceId), target),
                     color = c.muted, style = MaterialTheme.typography.bodySmall)
             }
         }

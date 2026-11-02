@@ -6,6 +6,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.diajarkoding.imfit.R
 import com.diajarkoding.imfit.domain.model.WorkoutTemplate
+import com.diajarkoding.imfit.domain.model.TrackingType
 import com.diajarkoding.imfit.domain.repository.AuthRepository
 import com.diajarkoding.imfit.domain.repository.RoutineError
 import com.diajarkoding.imfit.domain.repository.RoutineRepository
@@ -192,5 +193,15 @@ class WorkoutDetailViewModel @Inject constructor(
         else -> fallback
     }
 
-    val estimatedDuration: Int get() = (_state.value.workout?.exerciseCount ?: 0) * 8
+    val estimatedDuration: Int
+        get() {
+            val seconds = _state.value.workout?.exercises.orEmpty().sumOf { exercise ->
+                when (exercise.trackingType) {
+                    TrackingType.DURATION, TrackingType.DISTANCE_DURATION ->
+                        (exercise.targetDurationSeconds ?: 0).toLong() * exercise.sets
+                    else -> 8L * 60 // Retain the existing estimate where execution time is unspecified.
+                }
+            }
+            return ((seconds + 59) / 60).coerceAtMost(Int.MAX_VALUE.toLong()).toInt()
+        }
 }

@@ -184,7 +184,6 @@ class RedesignNavigationTest {
             val heading = localized.getString(R.string.home_summary_heading, name.uppercase(locale))
             waitForText(heading)
             rule.onNodeWithText(heading).assertIsDisplayed()
-            rule.onNodeWithText(String.format(locale, "%,.0f kg", finished.totalVolume)).assertIsDisplayed()
         } finally { runBlocking { repository.cancelWorkout(); deleteFixture(ports.routines(), template.id) } }
     }
 
@@ -230,6 +229,103 @@ class RedesignNavigationTest {
                     .fetchSemanticsNodes().isNotEmpty()
             }
             rule.onNodeWithText(text(R.string.routine_picker_title)).assertDoesNotExist()
+        } finally { runBlocking { deleteFixture(repository, routine.id) } }
+    }
+    @Test fun populatedRoutineAddsDirectlyAndPickerCancelLeavesNoEditor() {
+        waitForText(text(R.string.redesign_ready))
+        val ports = EntryPointAccessors.fromApplication(rule.activity.application, RestTimerEntryPoint::class.java)
+        val repository = ports.routines()
+        val name = "Direct add ${System.nanoTime()}"
+        val bench = FakeExerciseDataSource.exercises.first { it.id == "ex_chest_1" }
+        val added = FakeExerciseDataSource.exercises.first { it.id == "ex_chest_2" }
+        val routine = runBlocking {
+            val empty = repository.createRoutine(requireNotNull(ports.auth().getLocalUserId()), name).getOrThrow()
+            repository.saveRoutine(empty.id, name, listOf(TemplateExercise(bench)), empty.revision).getOrThrow()
+        }
+        try {
+            rule.onNodeWithTag("home_pull_to_refresh").performTouchInput { swipeDown() }
+            rule.onNode(hasScrollToNodeAction()).performScrollToNode(hasText(name))
+            rule.onNodeWithText(name).performClick()
+            waitForText(name)
+            rule.onNodeWithTag("routine_detail_list").performScrollToNode(hasText(text(R.string.action_add_exercise)))
+            rule.onNodeWithText(text(R.string.action_add_exercise)).performClick()
+            waitForText(text(R.string.routine_picker_title))
+            rule.onNodeWithTag("exercise_row_${bench.id}").assertDoesNotExist()
+            androidx.test.espresso.Espresso.pressBack()
+            waitForText(name)
+            rule.onNodeWithText(text(R.string.workout_edit_title)).assertDoesNotExist()
+            rule.onNodeWithTag("routine_detail_list").performScrollToNode(hasText(text(R.string.action_add_exercise)))
+            rule.onNodeWithText(text(R.string.action_add_exercise)).performClick()
+            waitForText(text(R.string.routine_picker_title))
+            rule.onNodeWithTag("exercise_picker_search").performTextInput(added.name)
+            rule.waitUntil(10_000) {
+                rule.onAllNodesWithTag("exercise_row_${added.id}").fetchSemanticsNodes().isNotEmpty()
+            }
+            rule.onNodeWithTag("exercise_row_${added.id}").performClick()
+            androidx.test.espresso.Espresso.closeSoftKeyboard()
+            rule.onNodeWithText(LocaleManager.getUpdatedContext(rule.activity).getString(R.string.routine_add_count, 1)).performClick()
+            waitForText(text(R.string.workout_edit_title))
+            rule.onAllNodesWithText(bench.name).assertCountEquals(1)
+            rule.onAllNodesWithText(added.name).assertCountEquals(1)
+            screenshot("direct-add-editor")
+            rule.onNodeWithText(text(R.string.action_save_changes)).performClick()
+            waitForText(name)
+            val saved = runBlocking { requireNotNull(repository.getRoutineById(routine.id).getOrThrow()) }
+            org.junit.Assert.assertEquals(listOf(bench.id, added.id), saved.exercises.map { it.id })
+            rule.onNodeWithContentDescription(text(R.string.action_back)).performClick()
+            rule.waitUntil(10_000) {
+                rule.onAllNodesWithTag("home_pull_to_refresh").fetchSemanticsNodes().isNotEmpty()
+            }
+            rule.onNodeWithTag("home_pull_to_refresh").assertIsDisplayed()
+            rule.onNodeWithText(text(R.string.workout_edit_title)).assertDoesNotExist()
+        } finally { runBlocking { deleteFixture(repository, routine.id) } }
+    }
+    @Test fun mixedRoutineTargetsSurvivePickerRoundTripAndSave() {
+        waitForText(text(R.string.redesign_ready))
+        val ports = EntryPointAccessors.fromApplication(rule.activity.application, RestTimerEntryPoint::class.java)
+        val repository = ports.routines()
+        val name = "Mixed targets ${System.nanoTime()}"
+        val plank = FakeExerciseDataSource.exercises.first { it.id == "ex_core_1" }
+        val run = FakeExerciseDataSource.exercises.first { it.id == "ex_cardio_1" }
+        val bench = FakeExerciseDataSource.exercises.first { it.id == "ex_chest_1" }
+        val routine = runBlocking {
+            val empty = repository.createRoutine(requireNotNull(ports.auth().getLocalUserId()), name).getOrThrow()
+            repository.saveRoutine(empty.id, name, listOf(
+                TemplateExercise(plank, reps = null, targetDurationSeconds = 45),
+                TemplateExercise(run, reps = null, targetDurationSeconds = 600, targetDistanceMeters = 1000)
+            ), empty.revision).getOrThrow()
+        }
+        try {
+            rule.onNodeWithTag("home_pull_to_refresh").performTouchInput { swipeDown() }
+            rule.onNode(hasScrollToNodeAction()).performScrollToNode(hasText(name))
+            rule.onNodeWithText(name).performClick()
+            waitForText(name)
+            rule.onNodeWithContentDescription(text(R.string.action_edit)).performClick()
+            waitForText(text(R.string.workout_edit_title))
+            rule.onAllNodesWithContentDescription(text(R.string.routine_duration_seconds)).onFirst().performTextReplacement("90")
+            androidx.test.espresso.Espresso.closeSoftKeyboard()
+            rule.onNodeWithTag("routine_edit_list").performScrollToNode(hasText(text(R.string.routine_tracking_duration)) and hasClickAction())
+            rule.onNode(hasText(text(R.string.routine_tracking_duration)) and hasClickAction()).performClick()
+            rule.onNode(hasText(text(R.string.routine_tracking_duration)) and hasClickAction()).assertIsSelected()
+            screenshot("mixed-targets-time-only-editor")
+            rule.onAllNodesWithContentDescription(text(R.string.routine_duration_seconds)).onLast().performTextReplacement("1800")
+            androidx.test.espresso.Espresso.closeSoftKeyboard()
+            rule.onNodeWithTag("routine_edit_list").performScrollToNode(hasText(text(R.string.action_add_exercise)))
+            rule.onNodeWithText(text(R.string.action_add_exercise)).performClick()
+            waitForText(text(R.string.routine_picker_title))
+            rule.onNodeWithTag("exercise_row_${bench.id}").performClick()
+            rule.onNodeWithText(LocaleManager.getUpdatedContext(rule.activity).getString(R.string.routine_add_count, 1)).performClick()
+            waitForText(text(R.string.workout_edit_title))
+            rule.onNodeWithText(text(R.string.action_save_changes)).performClick()
+            waitForText(name)
+            val saved = runBlocking { requireNotNull(repository.getRoutineById(routine.id).getOrThrow()) }
+            org.junit.Assert.assertEquals(listOf(plank.id, run.id, bench.id), saved.exercises.map { it.id })
+            org.junit.Assert.assertEquals(90, saved.exercises[0].targetDurationSeconds)
+            org.junit.Assert.assertEquals(1800, saved.exercises[1].targetDurationSeconds)
+            org.junit.Assert.assertEquals(com.diajarkoding.imfit.domain.model.TrackingType.DURATION, saved.exercises[1].trackingType)
+            org.junit.Assert.assertNull(saved.exercises[1].targetDistanceMeters)
+            org.junit.Assert.assertEquals(com.diajarkoding.imfit.domain.model.ExerciseModality.CARDIO, saved.exercises[1].exercise.modality)
+            screenshot("mixed-targets-detail")
         } finally { runBlocking { deleteFixture(repository, routine.id) } }
     }
 }

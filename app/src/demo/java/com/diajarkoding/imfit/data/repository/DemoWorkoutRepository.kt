@@ -1,8 +1,7 @@
 package com.diajarkoding.imfit.data.repository
 
 import com.diajarkoding.imfit.data.local.FakeWorkoutDataSource
-import com.diajarkoding.imfit.data.local.FakeUserDataSource
-import com.diajarkoding.imfit.domain.model.ExerciseLog
+import com.diajarkoding.imfit.domain.model.SetMeasurement
 import com.diajarkoding.imfit.domain.model.HomeRemoteReadResult
 import com.diajarkoding.imfit.domain.model.ExerciseInputDefaults
 import com.diajarkoding.imfit.domain.model.inputDefaults
@@ -48,7 +47,12 @@ class DemoWorkoutRepository @Inject constructor(
                 val config = template.exercises.first { it.id == log.exercise.id }.inputDefaults()
                 val previous = getPrefillForExercise(log.exercise.id, template.userId, config)
                 log.copy(inputDefaults = config, sets = log.sets.map { set ->
-                    previous[set.setNumber]?.let { set.copy(weight = it.first, reps = it.second, isCompleted = false) } ?: set
+                    previous[set.setNumber]?.let { measurement ->
+                        set.copy(weight = measurement.weight ?: 0f, reps = measurement.reps ?: 0,
+                            durationSeconds = measurement.durationSeconds, distanceMeters = measurement.distanceMeters,
+                            additionalWeight = measurement.additionalWeight, assistanceWeight = measurement.assistanceWeight,
+                            isCompleted = false)
+                    } ?: set
                 })
             })
             FakeWorkoutDataSource.updateActiveSession(prefilled)
@@ -114,6 +118,7 @@ class DemoWorkoutRepository @Inject constructor(
     }
 
     override suspend fun updateSessionRestOverride(seconds: Int) {
+        require(seconds in 1..86_399) { "Rest duration must be between 1 second and 23:59:59" }
         sessionRestOverride = seconds
     }
 
@@ -128,32 +133,14 @@ class DemoWorkoutRepository @Inject constructor(
     override suspend fun getLastWorkoutLog(userId: String): WorkoutLog? =
         FakeWorkoutDataSource.getLastWorkoutLog(userId)
 
-    override suspend fun getLastExerciseLog(exerciseId: String): ExerciseLog? =
-        FakeUserDataSource.getCurrentUser()
-            ?.let { FakeWorkoutDataSource.getWorkoutLogs(it.id) }
-            .orEmpty()
-            .asSequence()
-            .flatMap { it.exerciseLogs.asSequence() }
-            .firstOrNull { it.exercise.id == exerciseId }
-
-    override suspend fun getLastWeightsForExercise(
-        exerciseId: String,
-        userId: String
-    ): Map<Int, Float> = FakeWorkoutDataSource.getWorkoutLogs(userId)
-        .asSequence()
-        .flatMap { it.exerciseLogs.asSequence() }
-        .firstOrNull { it.exercise.id == exerciseId }
-        ?.sets
-        ?.associate { it.setNumber to it.weight }
-        .orEmpty()
 
     override suspend fun getPrefillForExercise(exerciseId: String, userId: String,
-        defaults: ExerciseInputDefaults): Map<Int, Pair<Float, Int>> {
+        defaults: ExerciseInputDefaults): Map<Int, SetMeasurement> {
         val log = FakeWorkoutDataSource.getWorkoutLogs(userId).sortedByDescending { it.endTime }
             .asSequence().mapNotNull { workout -> workout.exerciseLogs.firstOrNull {
                 it.exercise.id == exerciseId && it.sets.any { set -> set.isCompleted }
             } }.firstOrNull() ?: return emptyMap()
-        if (log.inputDefaults != defaults) return emptyMap()
-        return log.sets.filter { it.isCompleted }.associate { it.setNumber to (it.weight to it.reps) }
+        if (log.inputDefaults != defaults || log.trackingType.name != defaults.trackingType || log.metricQuality != "VERIFIED") return emptyMap()
+        return log.sets.filter { it.isCompleted }.associate { it.setNumber to it.measurement }
     }
 }

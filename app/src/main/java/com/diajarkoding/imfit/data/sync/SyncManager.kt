@@ -7,7 +7,8 @@ import com.diajarkoding.imfit.data.local.dao.ExerciseDao
 import com.diajarkoding.imfit.data.local.dao.ExerciseLogDao
 import com.diajarkoding.imfit.data.local.dao.WorkoutLogDao
 import com.diajarkoding.imfit.data.local.dao.WorkoutSetDao
-import com.diajarkoding.imfit.data.local.entity.ExerciseEntity
+import com.diajarkoding.imfit.data.remote.dto.ExerciseDto
+import com.diajarkoding.imfit.data.remote.dto.toEntity
 import com.diajarkoding.imfit.data.local.entity.WorkoutLogEntity
 import com.diajarkoding.imfit.data.local.database.IMFITDatabase
 import com.diajarkoding.imfit.data.local.sync.SyncStatus
@@ -16,6 +17,7 @@ import io.github.jan.supabase.SupabaseClient
 import io.github.jan.supabase.auth.auth
 import io.github.jan.supabase.postgrest.postgrest
 import io.github.jan.supabase.postgrest.query.Order
+import io.github.jan.supabase.postgrest.query.Columns
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.CancellationException
@@ -355,24 +357,16 @@ class SyncManager @Inject constructor(
      */
     private suspend fun pullExercises(userId: String) {
         try {
-            val remoteExercises = pages { from, to -> supabaseClient.postgrest.from("exercises").select {
-                order("id", Order.ASCENDING); range(from, to)
-            }.decodeList<RemoteExerciseDto>() }
+            val remoteExercises = pages { from, to ->
+                supabaseClient.postgrest.from("exercises")
+                    .select(Columns.raw("*, exercise_tracking_modes(tracking_type)")) {
+                        order("id", Order.ASCENDING); range(from, to)
+                    }.decodeList<ExerciseDto>()
+            }
 
             Log.d(TAG, "Pulled ${remoteExercises.size} exercises from server")
 
-            val entities = remoteExercises.map { remote ->
-                ExerciseEntity(
-                    id = remote.id,
-                    name = remote.name,
-                    description = remote.description ?: "",
-                    muscleCategoryId = remote.muscleCategoryId,
-                    imageUrl = remote.imageUrl,
-                    isActive = remote.isActive ?: true,
-                    defaultTrackingType = remote.defaultTrackingType ?: "WEIGHT_REPS",
-                    modality = remote.modality ?: "STRENGTH"
-                )
-            }
+            val entities = remoteExercises.map(ExerciseDto::toEntity)
             requireCurrentUser(userId)
             database.withTransaction {
                 val remoteIds = entities.map { it.id }.toSet()
@@ -712,22 +706,6 @@ private data class RemoteWorkoutAggregateDto(
     val sets: List<RemoteWorkoutSetDto>,
 )
 
-@Serializable
-private data class RemoteExerciseDto(
-    val id: String,
-    val name: String,
-    val description: String? = null,
-    @SerialName("image_url")
-    val imageUrl: String? = null,
-    @SerialName("muscle_category_id")
-    val muscleCategoryId: Int,
-    @SerialName("is_active")
-    val isActive: Boolean? = true,
-    @SerialName("default_tracking_type")
-    val defaultTrackingType: String? = null,
-    @SerialName("modality")
-    val modality: String? = null
-)
 
 @Serializable
 private data class RemoteTemplateDto(

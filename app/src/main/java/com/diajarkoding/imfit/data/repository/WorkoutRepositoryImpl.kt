@@ -5,7 +5,6 @@ import androidx.room.withTransaction
 import com.diajarkoding.imfit.data.local.dao.ActiveSessionDao
 import com.diajarkoding.imfit.data.local.database.IMFITDatabase
 import com.diajarkoding.imfit.data.local.entity.ActiveSessionEntity
-import com.diajarkoding.imfit.data.local.entity.ExerciseEntity
 import com.diajarkoding.imfit.data.local.entity.ExerciseLogEntity
 import com.diajarkoding.imfit.data.local.entity.WorkoutLogEntity
 import com.diajarkoding.imfit.data.local.entity.WorkoutSetEntity
@@ -28,6 +27,7 @@ import com.diajarkoding.imfit.domain.model.WorkoutSession
 import com.diajarkoding.imfit.domain.model.WorkoutSet
 import com.diajarkoding.imfit.domain.model.TrackingType
 import com.diajarkoding.imfit.domain.model.ExerciseModality
+import com.diajarkoding.imfit.domain.model.SetMeasurement
 import com.diajarkoding.imfit.domain.model.ExecutionStopwatch
 import com.diajarkoding.imfit.domain.model.WorkoutTemplate
 import com.diajarkoding.imfit.domain.model.validateActiveSessionEdit
@@ -62,7 +62,6 @@ class WorkoutRepositoryImpl @Inject constructor(
     private val authRepository: AuthRepository,
     private val exerciseLogDao: com.diajarkoding.imfit.data.local.dao.ExerciseLogDao,
     private val workoutSetDao: com.diajarkoding.imfit.data.local.dao.WorkoutSetDao,
-    private val exerciseDao: com.diajarkoding.imfit.data.local.dao.ExerciseDao,
     private val workoutLogDao: com.diajarkoding.imfit.data.local.dao.WorkoutLogDao,
     private val activeSessionDao: ActiveSessionDao,
     private val database: IMFITDatabase,
@@ -71,28 +70,6 @@ class WorkoutRepositoryImpl @Inject constructor(
     private val remoteDataSource: WorkoutRemoteDataSource? = null
 ) : WorkoutRepository {
 
-    constructor(
-        authRepository: AuthRepository,
-        exerciseLogDao: com.diajarkoding.imfit.data.local.dao.ExerciseLogDao,
-        workoutSetDao: com.diajarkoding.imfit.data.local.dao.WorkoutSetDao,
-        exerciseDao: com.diajarkoding.imfit.data.local.dao.ExerciseDao,
-        workoutLogDao: com.diajarkoding.imfit.data.local.dao.WorkoutLogDao,
-        activeSessionDao: ActiveSessionDao,
-        database: IMFITDatabase,
-        syncScheduler: SyncScheduler,
-        timerCleanup: com.diajarkoding.imfit.core.timer.TimerSessionCleanup? = null
-    ) : this(
-        authRepository = authRepository,
-        exerciseLogDao = exerciseLogDao,
-        workoutSetDao = workoutSetDao,
-        exerciseDao = exerciseDao,
-        workoutLogDao = workoutLogDao,
-        activeSessionDao = activeSessionDao,
-        database = database,
-        syncScheduler = syncScheduler,
-        timerCleanup = timerCleanup,
-        remoteDataSource = null
-    )
 
     private var activeSession: WorkoutSession? = null
     private var activeSessionUserId: String? = null
@@ -180,14 +157,16 @@ class WorkoutRepositoryImpl @Inject constructor(
                 sets = (1..templateExercise.sets).map { setNumber ->
                     WorkoutSet(
                         setNumber = setNumber,
-                        weight = previous[setNumber]?.first ?: 0f,
-                        reps = previous[setNumber]?.second ?: (templateExercise.reps ?: 0),
-                        durationSeconds = templateExercise.targetDurationSeconds,
-                        distanceMeters = templateExercise.targetDistanceMeters,
+                        weight = previous[setNumber]?.weight ?: 0f,
+                        reps = previous[setNumber]?.reps ?: (templateExercise.reps ?: 0),
+                        durationSeconds = previous[setNumber]?.durationSeconds ?: templateExercise.targetDurationSeconds,
+                        distanceMeters = previous[setNumber]?.distanceMeters ?: templateExercise.targetDistanceMeters,
+                        additionalWeight = previous[setNumber]?.additionalWeight,
+                        assistanceWeight = previous[setNumber]?.assistanceWeight,
                         isCompleted = false
                     )
                 },
-                restSeconds = templateExercise.restSeconds,
+                restSeconds = 60,
                 inputDefaults = defaults,
                 trackingType = templateExercise.trackingType,
                 modality = templateExercise.exercise.modality
@@ -449,10 +428,11 @@ class WorkoutRepositoryImpl @Inject constructor(
     }
 
     override suspend fun updateSessionRestOverride(seconds: Int) {
+        require(seconds in 1..86_399) { "Rest duration must be between 1 second and 23:59:59" }
         withContext(Dispatchers.IO) { sessionMutex.withLock {
-            val userId = authRepository.getLocalUserId() ?: return@withLock
+            val userId = checkNotNull(authRepository.getLocalUserId()) { "Authentication required" }
             database.withTransaction {
-                val entity = activeSessionDao.getActiveSession(userId)?.takeUnless { it.id in terminalSessions } ?: return@withTransaction
+                val entity = checkNotNull(activeSessionDao.getActiveSession(userId)?.takeUnless { it.id in terminalSessions }) { "Active session required" }
                 activeSessionDao.updateSession(entity.copy(sessionRestOverride = seconds, updatedAt = System.currentTimeMillis()))
             }
         } }
@@ -511,26 +491,19 @@ class WorkoutRepositoryImpl @Inject constructor(
         val exerciseLogEntities = exerciseLogDao.getExerciseLogsByWorkoutLogId(logEntity.id)
         
         val exerciseLogs = exerciseLogEntities.map { exerciseLogEntity ->
-            val exerciseEntity = exerciseDao.getExerciseById(exerciseLogEntity.exerciseId)
             val setEntities = workoutSetDao.getSetsForExercise(logEntity.id, exerciseLogEntity.exerciseId)
             
             val muscleCategory = MuscleCategory.entries.firstOrNull { it.name == exerciseLogEntity.muscleCategory }
-                ?: exerciseEntity?.let { MuscleCategory.entries.getOrNull(it.muscleCategoryId - 1) }
                 ?: MuscleCategory.CHEST
             
-            val parsedTracking = runCatching { TrackingType.valueOf(exerciseLogEntity.trackingType) }.getOrNull()
-                ?: exerciseEntity?.let { runCatching { TrackingType.valueOf(it.defaultTrackingType) }.getOrNull() }
-                ?: TrackingType.WEIGHT_REPS
-            val parsedModality = runCatching { ExerciseModality.valueOf(exerciseLogEntity.modality) }.getOrNull()
-                ?: exerciseEntity?.let { runCatching { ExerciseModality.valueOf(it.modality) }.getOrNull() }
-                ?: ExerciseModality.STRENGTH
+            val parsedTracking = TrackingType.valueOf(exerciseLogEntity.trackingType)
+            val parsedModality = ExerciseModality.valueOf(exerciseLogEntity.modality)
 
             val exercise = Exercise(
                 id = exerciseLogEntity.exerciseId,
                 name = exerciseLogEntity.exerciseName,
                 muscleCategory = muscleCategory,
-                description = exerciseEntity?.description ?: "",
-                imageUrl = exerciseEntity?.imageUrl,
+                description = "",
                 defaultTrackingType = parsedTracking,
                 modality = parsedModality
             )
@@ -575,56 +548,19 @@ class WorkoutRepositoryImpl @Inject constructor(
         )
     }
 
-    override suspend fun getLastExerciseLog(exerciseId: String): ExerciseLog? {
-        val userId = authRepository.getLocalUserId() ?: return null
-        val logEntity = exerciseLogDao.getLastExerciseLog(exerciseId, userId) ?: return null
-        val exerciseEntity = exerciseDao.getExerciseById(exerciseId) ?: return null
-        val setEntities = workoutSetDao.getSetsForExercise(logEntity.workoutLogId, exerciseId)
-        val category = MuscleCategory.entries.getOrNull(exerciseEntity.muscleCategoryId - 1)
-            ?: MuscleCategory.CHEST
-        return ExerciseLog(
-            exercise = Exercise(
-                id = exerciseEntity.id,
-                name = exerciseEntity.name,
-                muscleCategory = category,
-                description = exerciseEntity.description,
-                imageUrl = exerciseEntity.imageUrl
-            ),
-            sets = setEntities.map { entity ->
-                WorkoutSet(entity.setNumber, entity.weight, entity.reps, entity.isCompleted)
-            },
-            restSeconds = 60
-        )
-    }
-
-    /**
-     * Gets a map of set_number to (weight, reps) from the last completed workout for an exercise.
-     * Uses local Room database for efficient per-set performance lookup.
-     */
-    override suspend fun getLastPerformanceForExercise(
-        exerciseId: String,
-        userId: String
-    ): Map<Int, Pair<Float, Int>> {
-        return try {
-            val lastSets = workoutSetDao.getLastWorkoutSetsForExercise(exerciseId, userId)
-            lastSets.associate { it.setNumber to (it.weight to it.reps) }
-        } catch (e: Exception) {
-            Log.e("WorkoutRepository", "Error getting last performance for exercise: ${e.message}", e)
-            emptyMap()
-        }
-    }
-
-    override suspend fun getLastWeightsForExercise(exerciseId: String, userId: String): Map<Int, Float> {
-        return getLastPerformanceForExercise(exerciseId, userId).mapValues { it.value.first }
-    }
 
     override suspend fun getPrefillForExercise(exerciseId: String, userId: String,
-        defaults: ExerciseInputDefaults): Map<Int, Pair<Float, Int>> = database.withTransaction {
+        defaults: ExerciseInputDefaults): Map<Int, SetMeasurement> = database.withTransaction {
+        if (authRepository.getLocalUserId() != userId) return@withTransaction emptyMap()
         val sets = workoutSetDao.getLastWorkoutSetsForExercise(exerciseId, userId)
         val first = sets.firstOrNull() ?: return@withTransaction emptyMap()
         val log = exerciseLogDao.getExerciseLog(first.workoutLogId, exerciseId) ?: return@withTransaction emptyMap()
-        if (log.inputDefaults != defaults.key) return@withTransaction emptyMap()
-        sets.associate { it.setNumber to (it.weight to it.reps) }
+        if (log.inputDefaults != defaults.key || log.trackingType != defaults.trackingType ||
+            log.metricQuality != "VERIFIED") return@withTransaction emptyMap()
+        sets.filter { it.isCompleted }.associate { set ->
+            set.setNumber to SetMeasurement(set.weight, set.reps, set.durationSeconds,
+                set.distanceMeters, set.additionalWeight, set.assistanceWeight)
+        }
     }
 
     private suspend fun ensureActiveOwner(expectedUserId: String) {
@@ -652,25 +588,6 @@ class WorkoutRepositoryImpl @Inject constructor(
     }
 
     private suspend fun importRemoteWorkoutLogSnapshot(userId: String, remote: WorkoutLogDto) {
-        val catalogExercises = remote.exerciseLogs.orEmpty()
-            .mapNotNull { it.exercises }
-            .distinctBy { it.id }
-            .map { dto ->
-                val catalog = dto.toDomain()
-                ExerciseEntity(
-                    id = dto.id,
-                    name = dto.name,
-                    description = dto.description,
-                    muscleCategoryId = dto.muscleCategoryId,
-                    imageUrl = dto.imageUrl,
-                    isActive = dto.isActive,
-                    defaultTrackingType = catalog.defaultTrackingType.name,
-                    modality = catalog.modality.name
-                )
-            }
-        if (catalogExercises.isNotEmpty() && isStillCurrentOwner(userId)) {
-            exerciseDao.insertExercises(catalogExercises)
-        }
 
         val startMs = parseRemoteTimestamp(remote.startTime, fallbackMs = System.currentTimeMillis())
         val endMs = parseRemoteTimestamp(remote.endTime, fallbackMs = startMs)

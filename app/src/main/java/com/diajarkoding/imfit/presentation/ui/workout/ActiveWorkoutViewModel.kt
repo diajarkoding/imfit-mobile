@@ -237,24 +237,26 @@ class ActiveWorkoutViewModel @Inject constructor(
      * This value will be used for ALL exercises during this session.
      */
     fun setSessionRestOverride(seconds: Int) {
+        val sessionId = _state.value.session?.id ?: return
         viewModelScope.launch {
-            _state.update { it.copy(sessionRestOverride = seconds) }
-            workoutRepository.updateSessionRestOverride(seconds)
+            try {
+                workoutRepository.updateSessionRestOverride(seconds)
+                if (_state.value.session?.id == sessionId) {
+                    _state.update { it.copy(sessionRestOverride = seconds) }
+                }
+            } catch (e: CancellationException) { throw e }
+            catch (e: Exception) {
+                android.util.Log.e("ActiveWorkoutVM", "Rest configuration save failed", e)
+                _state.update { it.copy(mutationErrorRes = R.string.error_session_save) }
+            }
         }
-        android.util.Log.d("ActiveWorkoutVM", "Set session rest override: $seconds seconds")
     }
     
     /**
      * Gets the current rest time configuration.
-     * Returns session override if set, otherwise returns the default from first exercise.
+     * Returns the session override, otherwise the runtime default of 60 seconds.
      */
-    fun getCurrentRestTime(): Int {
-        val override = _state.value.sessionRestOverride
-        if (override != null) return override
-        
-        // Return first exercise's rest time as default display value
-        return _state.value.session?.exerciseLogs?.firstOrNull()?.restSeconds ?: 60
-    }
+    fun getCurrentRestTime(): Int = _state.value.sessionRestOverride ?: 60
 
     private fun publishSession(session: WorkoutSession) {
         sessionRevision++
@@ -276,7 +278,6 @@ class ActiveWorkoutViewModel @Inject constructor(
         }
     }
 
-    fun updateRestTimer(exerciseIndex: Int, seconds: Int) = editExercise(exerciseIndex) { it.copy(restSeconds = seconds) }
 
     fun updateSetMeasurement(exerciseIndex: Int, setIndex: Int, measurement: SetMeasurement) = editExercise(exerciseIndex) { log ->
         log.copy(sets = log.sets.mapIndexed { index, set ->
@@ -284,10 +285,10 @@ class ActiveWorkoutViewModel @Inject constructor(
                 set.copy(
                     weight = measurement.weight ?: set.weight,
                     reps = measurement.reps ?: set.reps,
-                    durationSeconds = measurement.durationSeconds ?: set.durationSeconds,
-                    distanceMeters = measurement.distanceMeters ?: set.distanceMeters,
-                    additionalWeight = measurement.additionalWeight ?: set.additionalWeight,
-                    assistanceWeight = measurement.assistanceWeight ?: set.assistanceWeight,
+                    durationSeconds = measurement.durationSeconds,
+                    distanceMeters = measurement.distanceMeters,
+                    additionalWeight = measurement.additionalWeight,
+                    assistanceWeight = measurement.assistanceWeight,
                     executionStopwatch = if (measurement.durationSeconds != set.durationSeconds) null else set.executionStopwatch
                 )
             } else set
@@ -343,7 +344,7 @@ class ActiveWorkoutViewModel @Inject constructor(
                 } ?: return@launch
                 publishSession(updated)
                 val set = completed ?: return@launch
-                val restSeconds = _state.value.sessionRestOverride ?: updated.exerciseLogs.first { it.exercise.id == exercise.exercise.id }.restSeconds
+                val restSeconds = getCurrentRestTime()
                 val userId = authRepository.getLocalUserId() ?: return@launch
                 timer.start(RestTimerState(timerId = "", userId = userId, workoutId = session.id, templateId = session.templateId,
                     exerciseId = exercise.exercise.id, setId = "${session.id}:${exercise.exercise.id}:${set.setNumber}",
@@ -405,10 +406,12 @@ class ActiveWorkoutViewModel @Inject constructor(
                             val last = lastPerf[setNumber]
                             WorkoutSet(
                                 setNumber = setNumber,
-                                weight = last?.first ?: 0f,
-                                reps = last?.second ?: (config.reps ?: 0),
-                                durationSeconds = config.targetDurationSeconds,
-                                distanceMeters = config.targetDistanceMeters,
+                                weight = last?.weight ?: 0f,
+                                reps = last?.reps ?: (config.reps ?: 0),
+                                durationSeconds = last?.durationSeconds ?: config.targetDurationSeconds,
+                                distanceMeters = last?.distanceMeters ?: config.targetDistanceMeters,
+                                additionalWeight = last?.additionalWeight,
+                                assistanceWeight = last?.assistanceWeight,
                                 isCompleted = false
                             )
                         },

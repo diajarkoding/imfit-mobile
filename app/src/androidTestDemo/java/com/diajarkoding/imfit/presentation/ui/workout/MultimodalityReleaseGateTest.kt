@@ -8,10 +8,7 @@ import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.ui.test.*
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
-import com.diajarkoding.imfit.domain.model.Exercise
-import com.diajarkoding.imfit.domain.model.MuscleCategory
 import com.diajarkoding.imfit.domain.model.SetMeasurement
-import com.diajarkoding.imfit.domain.model.TemplateExercise
 import com.diajarkoding.imfit.domain.model.TrackingType
 import com.diajarkoding.imfit.domain.model.WorkoutSet
 import com.diajarkoding.imfit.domain.model.checkpointExecutionStopwatch
@@ -71,7 +68,7 @@ class MultimodalityReleaseGateTest {
         val inputs = listOf(
             TrackingType.WEIGHT_REPS to listOf("Exercise, set 1, weight in kg" to "40", "Exercise, set 1, reps" to "10"),
             TrackingType.BODYWEIGHT_REPS to listOf("Exercise, set 1, reps" to "15"),
-            TrackingType.ASSISTED_REPS to listOf("-kg bantuan mesin" to "20", "Exercise, set 1, reps" to "8"),
+            TrackingType.ASSISTED_REPS to listOf("Assistance (kg)" to "25", "Exercise, set 1, reps" to "10"),
             TrackingType.REPS_ONLY to listOf("Exercise, set 1, reps" to "30"),
             TrackingType.DURATION to listOf("Durasi dalam detik" to "45"),
             TrackingType.DISTANCE_DURATION to listOf("Jarak dalam meter" to "5000", "Durasi dalam detik" to "1800")
@@ -85,6 +82,35 @@ class MultimodalityReleaseGateTest {
             rule.runOnIdle { assertTrue("Completion must commit for $type", set.value.isCompleted) }
             captureWorkoutEvidence("phase5-${type.name}")
         }
+    }
+
+    @Test fun bodyweightOffersOptionalLoadWithoutBlockingRepetitions() {
+        mode.value = TrackingType.BODYWEIGHT_REPS
+        showSet()
+        rule.onNodeWithContentDescription("Additional load (+kg)").assertDoesNotExist()
+        rule.onNodeWithContentDescription("Exercise, set 1, reps").performTextReplacement("15")
+        rule.onNodeWithContentDescription("Complete Exercise, set 1").assertIsEnabled()
+        rule.onNodeWithText("Add load").performClick()
+        rule.onNodeWithContentDescription("Additional load (+kg)").performTextReplacement("10")
+        rule.onNodeWithContentDescription("Complete Exercise, set 1").performClick()
+        rule.runOnIdle {
+            val log = com.diajarkoding.imfit.domain.model.ExerciseLog(
+                com.diajarkoding.imfit.domain.model.Exercise("bodyweight", "Exercise", com.diajarkoding.imfit.domain.model.MuscleCategory.BACK, ""),
+                listOf(set.value), trackingType = TrackingType.BODYWEIGHT_REPS)
+            assertEquals(150f, log.additionalVolume)
+            assertEquals(0f, log.totalVolume)
+        }
+        captureWorkoutEvidence("v12-bodyweight-added-load")
+    }
+
+    @Test fun persistedAdditionalLoadIsVisibleWithoutExpandingControl() {
+        mode.value = TrackingType.BODYWEIGHT_REPS
+        set.value = WorkoutSet(1, reps = 8, additionalWeight = 10f)
+        showSet()
+        rule.onNodeWithContentDescription("Additional load (+kg)").assertTextEquals("10")
+        rule.onNodeWithText("Add load").assertDoesNotExist()
+        rule.onNodeWithContentDescription("Complete Exercise, set 1").assertIsEnabled()
+        captureWorkoutEvidence("v12-bodyweight-restored-load")
     }
 
     @Test fun zeroExternalWeightCannotCompleteStrengthSet() {
@@ -135,54 +161,7 @@ class MultimodalityReleaseGateTest {
         rule.onNodeWithContentDescription("Durasi dalam detik").assertTextEquals(finalSeconds.toString())
     }
 
-    @Test fun routineDurationEditChangesTheTargetShownToTheUser() {
-        val config = mutableStateOf(RawExerciseConfig("3", rest = "60",
-            trackingType = TrackingType.DURATION, durationSeconds = "45"))
-        val exercise = TemplateExercise(Exercise("ex_core_1", "Plank", MuscleCategory.CORE, ""),
-            trackingType = TrackingType.DURATION, reps = null, targetDurationSeconds = 45)
-        rule.setContent {
-            WorkoutTestEnvironment(indonesian = false) {
-                RoutineExerciseEditor(exercise, true, {}, rawConfig = config.value,
-                    onRawConfig = { config.value = it }, onTrackingMode = {})
-            }
-        }
-        rule.onNodeWithContentDescription("Duration (s)").performTextReplacement("90")
-        captureWorkoutEvidence("phase5-routine-duration-edit")
-        rule.onNodeWithContentDescription("Duration (s)").assertTextEquals("90")
-    }
 
-    @Test fun routineDistanceAndDurationFieldsDeliverTheirActualRawValues() {
-        val config = mutableStateOf(RawExerciseConfig("3", rest = "60",
-            trackingType = TrackingType.DISTANCE_DURATION, durationSeconds = "600", distanceMeters = "1000"))
-        val exercise = TemplateExercise(Exercise("ex_cardio_1", "Run", MuscleCategory.CARDIO, ""),
-            reps = null, targetDurationSeconds = 600, targetDistanceMeters = 1000)
-        var selectedMode: TrackingType? = null
-        rule.setContent {
-            WorkoutTestEnvironment(indonesian = false) {
-                RoutineExerciseEditor(exercise, true, {}, rawConfig = config.value,
-                    onRawConfig = { config.value = it }, onTrackingMode = {
-                        selectedMode = it
-                        config.value = config.value.copy(trackingType = it, distanceMeters = "")
-                    })
-            }
-        }
-        rule.onNodeWithContentDescription("Distance (m, optional)").performTextReplacement("5000")
-        rule.onNodeWithContentDescription("Duration (s)").performTextReplacement("1800")
-        rule.onNodeWithContentDescription("Distance (m, optional)").assertTextEquals("5000")
-        rule.onNodeWithContentDescription("Duration (s)").assertTextEquals("1800")
-        rule.runOnIdle {
-            assertEquals("5000", config.value.distanceMeters)
-            assertEquals("1800", config.value.durationSeconds)
-            assertEquals("3", config.value.sets)
-            assertEquals("60", config.value.rest)
-        }
-        rule.onNodeWithText("Duration").performClick()
-        rule.runOnIdle { assertEquals(TrackingType.DURATION, selectedMode) }
-        rule.onNodeWithText("Duration").assertIsSelected()
-        rule.onNodeWithContentDescription("Distance (m, optional)").assertDoesNotExist()
-        rule.onNodeWithContentDescription("Duration (s)").assertTextEquals("1800")
-        rule.onNodeWithText("External weight and reps").assertDoesNotExist()
-    }
 
     private fun WorkoutSet.withMeasurement(m: SetMeasurement) = copy(
         weight = m.weight ?: 0f, reps = m.reps ?: 0,

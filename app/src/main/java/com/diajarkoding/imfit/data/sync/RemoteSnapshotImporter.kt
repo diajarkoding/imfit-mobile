@@ -43,7 +43,7 @@ internal class RemoteSnapshotImporter(private val database: IMFITDatabase) {
                             it.durationSeconds, it.distanceMeters, it.additionalWeight, it.assistanceWeight
                         )
                     }
-                exercise.copy(inputDefaults = old?.inputDefaults?.takeIf {
+                exercise.copy(inputDefaults = exercise.inputDefaults ?: old?.inputDefaults?.takeIf {
                     old.trackingType == exercise.trackingType && performance(existingSets) == performance(sets)
                 })
             }

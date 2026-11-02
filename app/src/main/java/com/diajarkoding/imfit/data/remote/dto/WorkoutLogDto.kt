@@ -139,20 +139,19 @@ fun WorkoutLogDto.toDomain(): WorkoutLog {
 }
 
 fun ExerciseLogDto.toDomain(): ExerciseLog {
-    val exercise = exercises?.toDomain() ?: run {
-        val category = try {
+    val parsedTracking = trackingType?.let(TrackingType::valueOf) ?: TrackingType.WEIGHT_REPS
+    val parsedModality = modality?.let(ExerciseModality::valueOf) ?: ExerciseModality.STRENGTH
+    val exercise = com.diajarkoding.imfit.domain.model.Exercise(
+        id = exerciseId,
+        name = exerciseName,
+        muscleCategory = runCatching {
             com.diajarkoding.imfit.domain.model.MuscleCategory.valueOf(muscleCategory.uppercase())
-        } catch (e: Exception) {
-            com.diajarkoding.imfit.domain.model.MuscleCategory.CHEST
-        }
-        com.diajarkoding.imfit.domain.model.Exercise(
-            id = exerciseId,
-            name = exerciseName,
-            muscleCategory = category,
-            description = "",
-            imageUrl = null
-        )
-    }
+        }.getOrDefault(com.diajarkoding.imfit.domain.model.MuscleCategory.CHEST),
+        description = "",
+        defaultTrackingType = parsedTracking,
+        modality = parsedModality,
+        allowedTrackingTypes = listOf(parsedTracking)
+    )
     val sortedSets = workoutSets
         ?.sortedWith(compareBy<WorkoutSetDto> { it.setNumber }.thenBy { it.id.orEmpty() })
         ?.map { it.toDomain() }
@@ -160,8 +159,6 @@ fun ExerciseLogDto.toDomain(): ExerciseLog {
 
     // History without typed metadata is the historical weight/reps contract.
     // Never reinterpret old measurements using a mutable exercise catalog.
-    val parsedTracking = trackingType?.let(TrackingType::valueOf) ?: TrackingType.WEIGHT_REPS
-    val parsedModality = modality?.let(ExerciseModality::valueOf) ?: ExerciseModality.STRENGTH
 
     return ExerciseLog(
         exercise = exercise,

@@ -23,4 +23,11 @@ data class WorkoutSet(
 
     val volume: Float
         get() = if (isCompleted) weight * reps else 0f
+
+    val paceSecondsPerKilometer: Double?
+        get() {
+            val seconds = durationSeconds?.takeIf { it > 0 } ?: return null
+            val meters = distanceMeters?.takeIf { it > 0 } ?: return null
+            return seconds.toDouble() * 1000.0 / meters
+        }
 }

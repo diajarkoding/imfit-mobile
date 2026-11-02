@@ -9,9 +9,8 @@ import com.diajarkoding.imfit.data.local.database.IMFITDatabase
 import com.diajarkoding.imfit.data.remote.ImfitAggregateRemoteDataSource
 import com.diajarkoding.imfit.data.sync.SyncRunResult
 import com.diajarkoding.imfit.di.LocalSessionEntryPoint
-import com.diajarkoding.imfit.domain.model.ExercisePrescriptionCapability
+import com.diajarkoding.imfit.domain.model.TrackingType
 import com.diajarkoding.imfit.domain.model.TemplateExercise
-import com.diajarkoding.imfit.domain.model.prescriptionCapability
 import com.diajarkoding.imfit.domain.repository.ExerciseHydrationResult
 import dagger.hilt.android.EntryPointAccessors
 import io.github.jan.supabase.auth.auth
@@ -63,9 +62,9 @@ class AuthenticatedWorkspaceIntegrationTest {
             }
             val catalog = ports.catalog()
             val firstPage = catalog.fetchCatalogPage(limit = 10).getOrThrow()
-            val exercise = firstPage.exercises.first { it.prescriptionCapability == ExercisePrescriptionCapability.REPS_LOAD }
+            val exercise = firstPage.exercises.first { it.defaultTrackingType == TrackingType.WEIGHT_REPS }
             val secondExercise = firstPage.exercises.first {
-                it.id != exercise.id && it.prescriptionCapability == ExercisePrescriptionCapability.REPS_LOAD
+                it.id != exercise.id && it.defaultTrackingType == TrackingType.WEIGHT_REPS
             }
             val hydrated = catalog.getExercisesByIds(listOf(secondExercise.id, exercise.id))
             check(hydrated is ExerciseHydrationResult.Success)

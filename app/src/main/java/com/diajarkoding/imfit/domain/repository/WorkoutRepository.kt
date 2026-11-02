@@ -1,6 +1,6 @@
 package com.diajarkoding.imfit.domain.repository
 
-import com.diajarkoding.imfit.domain.model.ExerciseLog
+import com.diajarkoding.imfit.domain.model.SetMeasurement
 import com.diajarkoding.imfit.domain.model.HomeRemoteReadResult
 import com.diajarkoding.imfit.domain.model.WorkoutLog
 import com.diajarkoding.imfit.domain.model.WorkoutSession
@@ -37,15 +37,8 @@ interface WorkoutRepository {
     suspend fun getWorkoutLogById(logId: String): WorkoutLog?
     fun observeWorkoutLog(logId: String): Flow<WorkoutLog?> = flow { emit(getWorkoutLogById(logId)) }
     suspend fun getLastWorkoutLog(userId: String): WorkoutLog?
-    suspend fun getLastExerciseLog(exerciseId: String): ExerciseLog?
     
-    // Last Known Performance operations
-    suspend fun getLastWeightsForExercise(exerciseId: String, userId: String): Map<Int, Float>
     /** Unknown provenance or changed targets means defaults, not guessed history. */
     suspend fun getPrefillForExercise(exerciseId: String, userId: String,
-        defaults: com.diajarkoding.imfit.domain.model.ExerciseInputDefaults): Map<Int, Pair<Float, Int>> = emptyMap()
-    suspend fun getLastPerformanceForExercise(
-        exerciseId: String,
-        userId: String
-    ): Map<Int, Pair<Float, Int>> = getLastWeightsForExercise(exerciseId, userId).mapValues { it.value to 0 }
+        defaults: com.diajarkoding.imfit.domain.model.ExerciseInputDefaults): Map<Int, SetMeasurement> = emptyMap()
 }

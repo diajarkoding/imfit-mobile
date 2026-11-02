@@ -1,7 +1,6 @@
 package com.diajarkoding.imfit.presentation.ui.workout
 
 import com.diajarkoding.imfit.domain.model.WorkoutSession
-import com.diajarkoding.imfit.domain.model.supportsRepetitions
 import com.diajarkoding.imfit.domain.repository.AuthRepository
 import com.diajarkoding.imfit.domain.repository.RoutineError
 import com.diajarkoding.imfit.domain.repository.RoutineRepository
@@ -40,7 +39,7 @@ internal class RoutineSessionStarter(
             throw RoutineError.ValidationError("Routine must contain at least one exercise.")
         }
         if (routine.revision < 0 || routine.exercises.any {
-                !it.exercise.isActive || !it.target.isValidFor(it.trackingType)
+                !it.exercise.isActive || !it.target.isValidFor(it.trackingType) || it.trackingType !in it.exercise.allowedTrackingTypes
             }) throw RoutineError.ValidationError("Routine contains an unsupported or invalid prescription.")
         requireOwner(ownerId)
         // A session may have appeared while the remote read was in flight. Never replace it.

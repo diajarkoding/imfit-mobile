@@ -5,6 +5,8 @@ import com.diajarkoding.imfit.domain.model.Exercise
 import com.diajarkoding.imfit.domain.model.ExerciseLog
 import com.diajarkoding.imfit.domain.model.MuscleCategory
 import com.diajarkoding.imfit.domain.model.TemplateExercise
+import com.diajarkoding.imfit.domain.model.ExerciseModality
+import com.diajarkoding.imfit.domain.model.TrackingType
 import com.diajarkoding.imfit.domain.model.WorkoutSession
 import com.diajarkoding.imfit.domain.model.WorkoutSet
 import com.diajarkoding.imfit.domain.model.WorkoutTemplate
@@ -101,7 +103,8 @@ class RoutineSessionCutoverTest {
     }
 
     @Test fun durationOnlyLegacyRoutineCannotStartAsSyntheticRepetitions() = runBlocking {
-        val plank = Exercise("ex_core_1", "Renamed exercise", MuscleCategory.CORE, "")
+        val plank = Exercise("ex_core_1", "Renamed exercise", MuscleCategory.CORE, "",
+            defaultTrackingType = TrackingType.DURATION, modality = ExerciseModality.ISOMETRIC)
         val legacy = routine.copy(exercises = listOf(TemplateExercise(plank, reps = 45)))
         val fixture = Fixture(legacy)
         assertTrue(runCatching { fixture.starter.start(routine.id, null) }.exceptionOrNull() is RoutineError.ValidationError)

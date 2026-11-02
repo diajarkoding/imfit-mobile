@@ -133,13 +133,17 @@ internal fun WorkoutSummaryScreenContent(
                             WorkoutSummaryOutcome(templateName = log.templateName)
                         }
 
-                        // 2. Metrics (Duration and Volume)
+                        // Actual measurements remain separate from total session duration.
                         item(key = "metrics") {
                             WorkoutSummaryMetrics(
                                 formattedDuration = formatSummaryDuration(log.durationMinutes, locale),
-                                formattedVolume = formatSummaryVolume(log.totalVolume, locale),
+                                exerciseLogs = log.exerciseLogs,
+                                locale = locale,
                                 stacked = stacked
                             )
+                            if (log.dataQuality != "VERIFIED" || log.exerciseLogs.any { it.metricQuality != "VERIFIED" }) {
+                                Text(stringResource(R.string.measurement_legacy_notice), color = colors.muted, style = MaterialTheme.typography.bodySmall)
+                            }
                         }
 
                         // 3. Exercise Breakdown Sub-header

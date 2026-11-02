@@ -43,7 +43,7 @@ class MultimodalityPersistenceGateTest {
     @After fun tearDown() { db.close() }
 
     private fun repository() = WorkoutRepositoryImpl(auth, db.exerciseLogDao(), db.workoutSetDao(),
-        db.exerciseDao(), db.workoutLogDao(), db.activeSessionDao(), db, scheduler)
+        db.workoutLogDao(), db.activeSessionDao(), db, scheduler)
 
     @Test fun sixModeMeasurementsAndSnapshotModesSurviveColdRepositoryRead() = runBlocking {
         val types = TrackingType.entries
@@ -68,6 +68,9 @@ class MultimodalityPersistenceGateTest {
             }))
         })
         repo.updateActiveSession(expected)
+        db.exerciseDao().insertExercises(exercises.map { row ->
+            com.diajarkoding.imfit.data.local.entity.ExerciseEntity(row.id, "Changed catalog", 1, "")
+        })
         val restored = requireNotNull(repository().getActiveSessionForTimer())
         assertEquals(session.id, restored.id)
         val mismatches = expected.exerciseLogs.zip(restored.exerciseLogs).mapNotNull { (before, after) ->
@@ -76,11 +79,21 @@ class MultimodalityPersistenceGateTest {
         }
         assertEquals("Room recovery must preserve every typed measurement and frozen mode", emptyList<String>(), mismatches)
         assertEquals(expected.exerciseLogs.map { it.exercise }, restored.exerciseLogs.map { it.exercise })
+        val finished = requireNotNull(repository().finishWorkout())
+        val history = requireNotNull(repository().getWorkoutLogById(finished.id))
+        assertEquals(expected.exerciseLogs.map { it.trackingType }, history.exerciseLogs.map { it.trackingType })
+        assertEquals(expected.exerciseLogs.map { it.sets }, history.exerciseLogs.map { it.sets })
+        val next = repository().startWorkout(WorkoutTemplate("gate-template", user.id, "Mixed", exercises))
+        assertEquals(expected.exerciseLogs.map { it.sets.single().measurement },
+            next.exerciseLogs.map { it.sets.single().measurement })
+        assertTrue(next.exerciseLogs.all { !it.sets.single().isCompleted })
+        val changedMode = exercises.first().inputDefaults().copy(trackingType = TrackingType.DURATION.name)
+        assertTrue(repository().getPrefillForExercise(exercises.first().id, user.id, changedMode).isEmpty())
     }
 
     @Test fun durationFinishPersistsActualTimeInsteadOfDroppingItBeforeHistoryCommit() = runBlocking {
         val repo = repository()
-        val plank = Exercise("ex_core_1", "Plank", MuscleCategory.CORE, "")
+        val plank = Exercise("ex_core_1", "Plank", MuscleCategory.CORE, "", defaultTrackingType = TrackingType.DURATION)
         val session = repo.startWorkout(WorkoutTemplate("plank-template", user.id, "Plank",
             listOf(TemplateExercise(plank, sets = 1, reps = null, targetDurationSeconds = 45))))
         repo.updateActiveSession(session.copy(exerciseLogs = session.exerciseLogs.map {
@@ -116,7 +129,7 @@ class MultimodalityPersistenceGateTest {
 
     @Test fun persistedStopwatchAnchorSurvivesRepositoryRestartAndFreezesSafelyAfterReboot() = runBlocking {
         val repo = repository()
-        val plank = Exercise("ex_core_1", "Plank", MuscleCategory.CORE, "")
+        val plank = Exercise("ex_core_1", "Plank", MuscleCategory.CORE, "", defaultTrackingType = TrackingType.DURATION)
         val session = repo.startWorkout(WorkoutTemplate("timer-template", user.id, "Plank",
             listOf(TemplateExercise(plank, sets = 1, reps = null, targetDurationSeconds = 45))))
         repo.updateActiveSession(session.copy(exerciseLogs = session.exerciseLogs.map { log ->
@@ -163,7 +176,7 @@ class MultimodalityPersistenceGateTest {
                         id = "assist-set", setNumber = 1, reps = 8, isCompleted = true, assistanceWeight = 20.0)))
             ))
         val repo = WorkoutRepositoryImpl(auth, db.exerciseLogDao(), db.workoutSetDao(),
-            db.exerciseDao(), db.workoutLogDao(), db.activeSessionDao(), db, scheduler,
+            db.workoutLogDao(), db.activeSessionDao(), db, scheduler,
             remoteDataSource = object : com.diajarkoding.imfit.data.remote.WorkoutRemoteDataSource {
                 override suspend fun fetchLatestCompletedWorkoutLog(userId: String) = remote
             })
@@ -180,6 +193,20 @@ class MultimodalityPersistenceGateTest {
         assertEquals(10f, logs.getValue("ex_chest_4").sets.single().additionalWeight)
         assertEquals(20f, logs.getValue("ex_back_17").sets.single().assistanceWeight)
         assertTrue(history.exerciseLogs.all { it.metricQuality == "VERIFIED" })
+    }
+
+    @Test fun runtimeRestOverrideSurvivesColdReadWithoutRewritingRoutineTargets() = runBlocking {
+        val repo = repository()
+        val exercise = Exercise("rest-fixture", "Press", MuscleCategory.CHEST, "")
+        val template = WorkoutTemplate("rest-template", user.id, "Runtime rest",
+            listOf(TemplateExercise(exercise, restSeconds = 120)))
+        val session = repo.startWorkout(template)
+        repo.updateSessionRestOverride(90)
+        val cold = repository()
+        assertEquals(90, cold.getSessionRestOverride())
+        assertEquals(session.id, cold.getActiveSessionForTimer()?.id)
+        assertEquals(60, cold.getActiveSessionForTimer()?.exerciseLogs?.single()?.restSeconds)
+        assertEquals(120, template.exercises.single().restSeconds)
     }
 
     private suspend fun seedLegacySession() {

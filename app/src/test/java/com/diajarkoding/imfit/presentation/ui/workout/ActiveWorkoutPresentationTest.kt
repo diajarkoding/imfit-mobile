@@ -2,6 +2,12 @@ package com.diajarkoding.imfit.presentation.ui.workout
 
 import com.diajarkoding.imfit.R
 import com.diajarkoding.imfit.domain.model.WorkoutLog
+import com.diajarkoding.imfit.domain.model.Exercise
+import com.diajarkoding.imfit.domain.model.ExerciseLog
+import com.diajarkoding.imfit.domain.model.ExerciseModality
+import com.diajarkoding.imfit.domain.model.MuscleCategory
+import com.diajarkoding.imfit.domain.model.TrackingType
+import com.diajarkoding.imfit.domain.model.WorkoutSet
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -60,14 +66,6 @@ class ActiveWorkoutPresentationTest {
         assertEquals("00:00:00", formatElapsedTime(-10))
     }
 
-    @Test
-    fun formatVolumeFormatsWithLocaleGrouping() {
-        val idLocale = Locale("in", "ID")
-        val enLocale = Locale.US
-        assertEquals("2.520 kg", formatVolume(2520f, idLocale))
-        assertEquals("2,520 kg", formatVolume(2520f, enLocale))
-        assertEquals("0 kg", formatVolume(0f, idLocale))
-    }
 
     @Test
     fun workoutSummaryPresentationStates() {
@@ -99,5 +97,20 @@ class ActiveWorkoutPresentationTest {
 
         assertEquals("1 jam 15 mnt", formatSummaryDuration(75, idLocale))
         assertEquals("1h 15m", formatSummaryDuration(75, enLocale))
+    }
+    @Test fun typedMetricsSeparateLoadAndTimedModalitiesWithoutPromotingLegacyQuality() {
+        fun log(type: TrackingType, modality: ExerciseModality, set: WorkoutSet, quality: String = "VERIFIED") =
+            ExerciseLog(Exercise(type.name + modality.name, "Movement", MuscleCategory.CORE, "",
+                defaultTrackingType = type, modality = modality), listOf(set), metricQuality = quality)
+        val logs = listOf(
+            log(TrackingType.WEIGHT_REPS, ExerciseModality.STRENGTH, WorkoutSet(1, 40f, 10, true), "LEGACY_UNVERIFIED"),
+            log(TrackingType.BODYWEIGHT_REPS, ExerciseModality.CALISTHENICS, WorkoutSet(1, reps = 8, additionalWeight = 10f, isCompleted = true)),
+            log(TrackingType.DURATION, ExerciseModality.CALISTHENICS, WorkoutSet(1, durationSeconds = 90, isCompleted = true)),
+            log(TrackingType.DURATION, ExerciseModality.ISOMETRIC, WorkoutSet(1, durationSeconds = 45, isCompleted = true)),
+            log(TrackingType.DISTANCE_DURATION, ExerciseModality.CARDIO, WorkoutSet(1, durationSeconds = 1800, distanceMeters = 5000, isCompleted = true)),
+            log(TrackingType.DURATION, ExerciseModality.CARDIO, WorkoutSet(1, durationSeconds = 999, isCompleted = false))
+        )
+        assertEquals(WorkoutMeasurements(400.0, 80.0, 18, 45, 1800, 90, 5000), workoutMeasurements(logs))
+        assertEquals(WorkoutMeasurements(0.0, 80.0, 8, 45, 1800, 90, 5000), workoutMeasurements(logs, verifiedOnly = true))
     }
 }

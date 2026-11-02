@@ -71,6 +71,7 @@ internal fun ActiveSetRow(
     var assistanceWeightText by rememberSaveable(set.assistanceWeight, locale) {
         mutableStateOf(if ((set.assistanceWeight ?: 0f) > 0f) formatSetWeight(set.assistanceWeight ?: 0f, locale) else "")
     }
+    var additionalWeightExpanded by rememberSaveable(exerciseName, set.setNumber) { mutableStateOf(false) }
     var durationText by rememberSaveable(exerciseName, set.setNumber) {
         mutableStateOf(set.durationSeconds?.takeIf { it > 0 }?.toString() ?: "")
     }
@@ -149,21 +150,9 @@ internal fun ActiveSetRow(
             }
 
             TrackingType.BODYWEIGHT_REPS -> {
-                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.Bottom) {
                     Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                        if (compact) Text("+kg (opsional)", color = colors.muted, style = MaterialTheme.typography.labelSmall)
-                        SetNumberInput(additionalWeightText, { raw ->
-                            if (raw.matches(Regex("\\d*([.,]\\d*)?"))) {
-                                val value = raw.replace(',', '.').toFloatOrNull() ?: 0f
-                                if (value.isFinite()) {
-                                    additionalWeightText = raw
-                                    onMeasurementUpdate(set.measurement.copy(additionalWeight = value))
-                                }
-                            }
-                        }, "+kg beban tambahan", editable, set.isCompleted, KeyboardType.Decimal)
-                    }
-                    Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                        if (compact) Text(stringResource(R.string.active_session_column_reps), color = colors.muted, style = MaterialTheme.typography.labelSmall)
+                        Text(stringResource(R.string.active_session_column_reps), color = colors.muted, style = MaterialTheme.typography.labelSmall)
                         SetNumberInput(repsText, { raw ->
                             if (raw.all(Char::isDigit) && (raw.isEmpty() || raw.toIntOrNull() != null)) {
                                 repsText = raw
@@ -171,13 +160,31 @@ internal fun ActiveSetRow(
                             }
                         }, stringResource(R.string.active_session_reps_input, exerciseName, set.setNumber), editable, set.isCompleted, KeyboardType.Number)
                     }
+                    if (additionalWeightExpanded || set.additionalWeight != null) {
+                        Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                            Text(stringResource(R.string.active_set_additional_weight), color = colors.muted, style = MaterialTheme.typography.labelSmall)
+                            SetNumberInput(additionalWeightText, { raw ->
+                                if (raw.matches(Regex("\\d*([.,]\\d*)?"))) {
+                                    val value = raw.replace(',', '.').toFloatOrNull()
+                                    if (value == null || value.isFinite()) {
+                                        additionalWeightText = raw
+                                        onMeasurementUpdate(set.measurement.copy(additionalWeight = value))
+                                    }
+                                }
+                            }, stringResource(R.string.active_set_additional_weight), editable, set.isCompleted, KeyboardType.Decimal)
+                        }
+                    } else if (editable) {
+                        TextButton(onClick = { additionalWeightExpanded = true }, modifier = Modifier.weight(1f)) {
+                            Text(stringResource(R.string.active_set_add_load))
+                        }
+                    }
                 }
             }
 
             TrackingType.ASSISTED_REPS -> {
                 Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                        if (compact) Text("-kg bantuan", color = colors.muted, style = MaterialTheme.typography.labelSmall)
+                        if (compact) Text(stringResource(R.string.active_set_assistance_weight), color = colors.muted, style = MaterialTheme.typography.labelSmall)
                         SetNumberInput(assistanceWeightText, { raw ->
                             if (raw.matches(Regex("\\d*([.,]\\d*)?"))) {
                                 val value = raw.replace(',', '.').toFloatOrNull() ?: 0f
@@ -186,7 +193,7 @@ internal fun ActiveSetRow(
                                     onMeasurementUpdate(set.measurement.copy(assistanceWeight = value))
                                 }
                             }
-                        }, "-kg bantuan mesin", editable, set.isCompleted, KeyboardType.Decimal)
+                        }, stringResource(R.string.active_set_assistance_weight), editable, set.isCompleted, KeyboardType.Decimal)
                     }
                     Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
                         if (compact) Text(stringResource(R.string.active_session_column_reps), color = colors.muted, style = MaterialTheme.typography.labelSmall)
@@ -241,7 +248,7 @@ internal fun ActiveSetRow(
                         SetNumberInput(distanceText, { raw ->
                             if (raw.all(Char::isDigit) && (raw.isEmpty() || raw.toIntOrNull() != null)) {
                                 distanceText = raw
-                                onMeasurementUpdate(set.measurement.copy(distanceMeters = raw.toIntOrNull() ?: 0))
+                                onMeasurementUpdate(set.measurement.copy(distanceMeters = raw.toIntOrNull()?.takeIf { it > 0 }))
                             }
                         }, "Jarak dalam meter", editable, set.isCompleted, KeyboardType.Number)
                     }
@@ -256,6 +263,10 @@ internal fun ActiveSetRow(
                         if (compact) Text("Durasi (detik)", color = colors.muted, style = MaterialTheme.typography.labelSmall)
                         SetNumberInput(displayedDuration, updateDuration,
                             "Durasi dalam detik", editable && !isStopwatchRunning, set.isCompleted, KeyboardType.Text)
+                        set.paceSecondsPerKilometer?.let { pace ->
+                            Text(stringResource(R.string.active_set_pace, formatPace(pace, locale)),
+                                color = colors.muted, style = MaterialTheme.typography.labelSmall)
+                        }
                     }
                 }
             }

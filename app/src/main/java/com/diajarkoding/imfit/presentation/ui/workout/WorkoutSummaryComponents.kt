@@ -38,6 +38,7 @@ import androidx.compose.ui.unit.sp
 import com.diajarkoding.imfit.R
 import com.diajarkoding.imfit.domain.model.ExerciseLog
 import com.diajarkoding.imfit.domain.model.TrackingType
+import com.diajarkoding.imfit.domain.model.WorkoutSet
 import com.diajarkoding.imfit.presentation.components.common.CheckCircle
 import com.diajarkoding.imfit.presentation.components.common.FitnessCenter
 import com.diajarkoding.imfit.presentation.components.common.RoutineButton
@@ -119,58 +120,14 @@ internal fun WorkoutSummaryOutcome(
 @Composable
 internal fun WorkoutSummaryMetrics(
     formattedDuration: String,
-    formattedVolume: String,
+    exerciseLogs: List<ExerciseLog>,
+    locale: Locale,
     stacked: Boolean,
     modifier: Modifier = Modifier
 ) {
-    val colors = IMFITColors.training
-    Column(
-        modifier = modifier
-            .fillMaxWidth()
-            .testTag("workout_summary_metrics"),
-        verticalArrangement = Arrangement.spacedBy(8.dp)
-    ) {
-        if (stacked) {
-            Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                SummaryMetricCard(
-                    icon = Symbols.Filled.Timer,
-                    caption = stringResource(R.string.label_duration),
-                    value = formattedDuration
-                )
-                SummaryMetricCard(
-                    icon = Symbols.Filled.FitnessCenter,
-                    caption = stringResource(R.string.label_volume),
-                    value = formattedVolume
-                )
-            }
-        } else {
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(12.dp)
-            ) {
-                Box(Modifier.weight(1f)) {
-                    SummaryMetricCard(
-                        icon = Symbols.Filled.Timer,
-                        caption = stringResource(R.string.label_duration),
-                        value = formattedDuration
-                    )
-                }
-                Box(Modifier.weight(1f)) {
-                    SummaryMetricCard(
-                        icon = Symbols.Filled.FitnessCenter,
-                        caption = stringResource(R.string.label_volume),
-                        value = formattedVolume
-                    )
-                }
-            }
-        }
-
-        Text(
-            text = stringResource(R.string.summary_volume_meaning),
-            color = colors.muted,
-            style = MaterialTheme.typography.bodySmall,
-            modifier = Modifier.padding(horizontal = 4.dp)
-        )
+    Column(modifier.fillMaxWidth().testTag("workout_summary_metrics"), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        SummaryMetricCard(Symbols.Filled.Timer, stringResource(R.string.label_duration), formattedDuration)
+        WorkoutMeasurementMetrics(exerciseLogs, locale, stacked)
     }
 }
 
@@ -278,7 +235,7 @@ internal fun WorkoutSummaryExerciseCard(
                     TrackingType.BODYWEIGHT_REPS -> if (exerciseLog.additionalVolume > 0f) "+${formatSummaryVolume(exerciseLog.additionalVolume, locale)}" else "${exerciseLog.totalReps} reps"
                     TrackingType.ASSISTED_REPS, TrackingType.REPS_ONLY -> "${exerciseLog.totalReps} reps"
                     TrackingType.DURATION -> "${exerciseLog.totalDurationSeconds}s"
-                    TrackingType.DISTANCE_DURATION -> "${String.format(locale, "%.2f km", exerciseLog.totalDistanceMeters / 1000f)} · ${exerciseLog.totalDurationSeconds}s"
+                    TrackingType.DISTANCE_DURATION -> if (exerciseLog.totalDistanceMeters > 0) "${String.format(locale, "%.2f km", exerciseLog.totalDistanceMeters / 1000f)} · ${exerciseLog.totalDurationSeconds}s" else "${exerciseLog.totalDurationSeconds}s"
                 }
                 Text(
                     text = headerMetricText,
@@ -311,24 +268,7 @@ internal fun WorkoutSummaryExerciseCard(
                                 fontSize = 13.sp,
                                 modifier = Modifier.weight(1f)
                             )
-                            val setText = when (exerciseLog.trackingType) {
-                                TrackingType.WEIGHT_REPS -> stringResource(R.string.summary_set_details_formatted, formatSetWeight(set.weight, locale), set.reps)
-                                TrackingType.BODYWEIGHT_REPS -> if ((set.additionalWeight ?: 0f) > 0f) {
-                                    "+${formatSetWeight(set.additionalWeight ?: 0f, locale)} kg × ${set.reps} reps"
-                                } else {
-                                    "${set.reps} reps"
-                                }
-                                TrackingType.ASSISTED_REPS -> "${set.reps} reps · bantuan ${formatSetWeight(set.assistanceWeight ?: 0f, locale)} kg"
-                                TrackingType.REPS_ONLY -> "${set.reps} reps"
-                                TrackingType.DURATION -> "${set.durationSeconds ?: 0} detik"
-                                TrackingType.DISTANCE_DURATION -> {
-                                    val km = (set.distanceMeters ?: 0) / 1000f
-                                    val sec = set.durationSeconds ?: 0
-                                    val mm = sec / 60
-                                    val ss = sec % 60
-                                    "${String.format(locale, "%.2f km", km)} · ${String.format(Locale.US, "%02d:%02d", mm, ss)}"
-                                }
-                            }
+                            val setText = workoutSetMeasurementText(exerciseLog.trackingType, set, locale)
                             Text(
                                 text = setText,
                                 color = colors.text,
@@ -451,6 +391,29 @@ internal fun WorkoutSummaryUnavailableState(
                 text = stringResource(R.string.summary_back_to_home),
                 onClick = onNavigateToHome
             )
+        }
+    }
+}
+
+@Composable
+internal fun workoutSetMeasurementText(type: TrackingType, set: WorkoutSet, locale: Locale): String = when (type) {
+    TrackingType.WEIGHT_REPS -> stringResource(R.string.summary_set_details_formatted, formatSetWeight(set.weight, locale), set.reps)
+    TrackingType.BODYWEIGHT_REPS -> if ((set.additionalWeight ?: 0f) > 0f) {
+        "+${formatSetWeight(set.additionalWeight ?: 0f, locale)} kg × ${set.reps} reps"
+    } else "${set.reps} reps"
+    TrackingType.ASSISTED_REPS -> "${set.reps} reps · ${stringResource(R.string.active_set_assistance_weight)} ${set.assistanceWeight?.let { formatSetWeight(it, locale) } ?: "—"}"
+    TrackingType.REPS_ONLY -> "${set.reps} reps"
+    TrackingType.DURATION -> set.durationSeconds?.takeIf { it > 0 }?.let { "$it s" } ?: "—"
+    TrackingType.DISTANCE_DURATION -> {
+        val pace = set.paceSecondsPerKilometer?.let { stringResource(R.string.active_set_pace, formatPace(it, locale)) }
+        buildString {
+            set.distanceMeters?.takeIf { it > 0 }?.let { append(String.format(locale, "%.2f km", it / 1000.0)) }
+            set.durationSeconds?.takeIf { it > 0 }?.let {
+                if (isNotEmpty()) append(" · ")
+                append(String.format(locale, "%d:%02d", it / 60, it % 60))
+            }
+            if (pace != null) { if (isNotEmpty()) append(" · "); append(pace) }
+            if (isEmpty()) append("—")
         }
     }
 }

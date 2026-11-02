@@ -58,7 +58,6 @@ class WorkoutRepositoryRoomFirstTest {
             authRepository = FakeAuthRepository(user),
             exerciseLogDao = database.exerciseLogDao(),
             workoutSetDao = database.workoutSetDao(),
-            exerciseDao = database.exerciseDao(),
             workoutLogDao = database.workoutLogDao(),
             activeSessionDao = database.activeSessionDao(),
             database = database,
@@ -144,7 +143,7 @@ class WorkoutRepositoryRoomFirstTest {
         }) }
         repository.finishWorkout()
         repository = WorkoutRepositoryImpl(FakeAuthRepository(user), database.exerciseLogDao(), database.workoutSetDao(),
-            database.exerciseDao(), database.workoutLogDao(),
+            database.workoutLogDao(),
             database.activeSessionDao(), database, scheduler)
         val renamed = repository.startWorkout(template.copy(name = "Renamed"))
         assertEquals(41f, renamed.exerciseLogs.first().sets.first().weight)
@@ -258,7 +257,6 @@ class WorkoutRepositoryRoomFirstTest {
             authRepository = FakeAuthRepository(user),
             exerciseLogDao = database.exerciseLogDao(),
             workoutSetDao = database.workoutSetDao(),
-            exerciseDao = database.exerciseDao(),
             workoutLogDao = database.workoutLogDao(),
             activeSessionDao = database.activeSessionDao(),
             database = database,

@@ -10,6 +10,7 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -33,6 +34,7 @@ import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
+import androidx.compose.material3.FilterChip
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
@@ -41,6 +43,7 @@ import androidx.compose.material3.Switch
 import androidx.compose.material3.SwitchDefaults
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.remember
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
@@ -90,7 +93,11 @@ import com.diajarkoding.imfit.presentation.components.common.Symbols
 import com.diajarkoding.imfit.presentation.components.common.Timer
 import com.diajarkoding.imfit.theme.IMFITColors
 import kotlinx.coroutines.launch
+
 import java.util.Locale
+import java.text.NumberFormat
+
+private val restTimerPresets = listOf(30, 60, 90, 120)
 
 @Composable
 internal fun ActiveWorkoutTopBar(
@@ -175,59 +182,44 @@ internal fun ActiveWorkoutTopBar(
 internal fun ActiveSessionOverview(
     completedSets: Int,
     totalSets: Int,
-    volume: Float,
+    exerciseLogs: List<ExerciseLog>,
     locale: Locale,
     stacked: Boolean,
     modifier: Modifier = Modifier
 ) {
-    val colors = IMFITColors.training
-    Column(
-        modifier = modifier
-            .fillMaxWidth()
-            .testTag("active_session_overview"),
-        verticalArrangement = Arrangement.spacedBy(8.dp)
-    ) {
-        if (stacked) {
-            Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                ActiveMetricCard(
-                    icon = Symbols.Filled.CheckCircle,
-                    caption = stringResource(R.string.active_session_sets_completed),
-                    value = "$completedSets / $totalSets"
-                )
-                ActiveMetricCard(
-                    icon = Symbols.Filled.FitnessCenter,
-                    caption = stringResource(R.string.label_volume),
-                    value = formatVolume(volume, locale)
-                )
-            }
-        } else {
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(12.dp)
-            ) {
-                Box(Modifier.weight(1f)) {
-                    ActiveMetricCard(
-                        icon = Symbols.Filled.CheckCircle,
-                        caption = stringResource(R.string.active_session_sets_completed),
-                        value = "$completedSets / $totalSets"
-                    )
-                }
-                Box(Modifier.weight(1f)) {
-                    ActiveMetricCard(
-                        icon = Symbols.Filled.FitnessCenter,
-                        caption = stringResource(R.string.label_volume),
-                        value = formatVolume(volume, locale)
-                    )
-                }
-            }
-        }
+    Column(modifier.fillMaxWidth().testTag("active_session_overview"), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        ActiveMetricCard(Symbols.Filled.CheckCircle, stringResource(R.string.active_session_sets_completed), "$completedSets / $totalSets")
+        WorkoutMeasurementMetrics(exerciseLogs, locale, stacked)
+    }
+}
 
-        Text(
-            text = stringResource(R.string.active_session_volume_meaning),
-            color = colors.muted,
-            style = MaterialTheme.typography.bodySmall,
-            modifier = Modifier.padding(horizontal = 4.dp)
-        )
+@Composable
+internal fun WorkoutMeasurementMetrics(exerciseLogs: List<ExerciseLog>, locale: Locale, stacked: Boolean) {
+    val metrics = remember(exerciseLogs) { workoutMeasurements(exerciseLogs) }
+    val number = remember(locale) { NumberFormat.getNumberInstance(locale).apply { maximumFractionDigits = 2 } }
+    FlowRow(maxItemsInEachRow = if (stacked) 1 else 2,
+        horizontalArrangement = Arrangement.spacedBy(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        if (metrics.externalVolume > 0) ActiveMetricCard(Symbols.Filled.FitnessCenter,
+            stringResource(R.string.measurement_external_volume),
+            stringResource(R.string.progress_volume_unit, number.format(metrics.externalVolume)), Modifier.weight(1f))
+        if (metrics.additionalVolume > 0) ActiveMetricCard(Symbols.Filled.FitnessCenter,
+            stringResource(R.string.progress_additional_volume),
+            stringResource(R.string.progress_volume_unit, number.format(metrics.additionalVolume)), Modifier.weight(1f))
+        if (metrics.repetitions > 0) ActiveMetricCard(Symbols.Filled.FitnessCenter,
+            stringResource(R.string.progress_repetitions),
+            stringResource(R.string.progress_repetitions_unit, number.format(metrics.repetitions)), Modifier.weight(1f))
+        if (metrics.holdSeconds > 0) ActiveMetricCard(Symbols.Filled.Timer,
+            stringResource(R.string.progress_hold_duration),
+            stringResource(R.string.progress_seconds_unit, number.format(metrics.holdSeconds)), Modifier.weight(1f))
+        if (metrics.cardioSeconds > 0) ActiveMetricCard(Symbols.Filled.Timer,
+            stringResource(R.string.progress_cardio_duration),
+            stringResource(R.string.progress_seconds_unit, number.format(metrics.cardioSeconds)), Modifier.weight(1f))
+        if (metrics.otherDurationSeconds > 0) ActiveMetricCard(Symbols.Filled.Timer,
+            stringResource(R.string.measurement_other_duration),
+            stringResource(R.string.progress_seconds_unit, number.format(metrics.otherDurationSeconds)), Modifier.weight(1f))
+        if (metrics.distanceMeters > 0) ActiveMetricCard(Symbols.Filled.Timer,
+            stringResource(R.string.measurement_distance),
+            stringResource(R.string.progress_meters_unit, number.format(metrics.distanceMeters)), Modifier.weight(1f))
     }
 }
 
@@ -436,12 +428,11 @@ internal fun ActiveExerciseCard(
                         Text(text = stringResource(R.string.active_session_column_reps), color = colors.muted, style = MaterialTheme.typography.labelSmall, textAlign = TextAlign.Center, modifier = Modifier.weight(1f))
                     }
                     TrackingType.BODYWEIGHT_REPS -> {
-                        Text(text = "+KG", color = colors.muted, style = MaterialTheme.typography.labelSmall, textAlign = TextAlign.Center, modifier = Modifier.weight(1f))
-                        Spacer(Modifier.width(8.dp))
-                        Text(text = stringResource(R.string.active_session_column_reps), color = colors.muted, style = MaterialTheme.typography.labelSmall, textAlign = TextAlign.Center, modifier = Modifier.weight(1f))
+                        Text(text = stringResource(R.string.routine_tracking_bodyweight_reps), color = colors.muted,
+                            style = MaterialTheme.typography.labelSmall, textAlign = TextAlign.Center, modifier = Modifier.weight(1f))
                     }
                     TrackingType.ASSISTED_REPS -> {
-                        Text(text = "-KG", color = colors.muted, style = MaterialTheme.typography.labelSmall, textAlign = TextAlign.Center, modifier = Modifier.weight(1f))
+                        Text(text = stringResource(R.string.active_set_assistance_weight), color = colors.muted, style = MaterialTheme.typography.labelSmall, textAlign = TextAlign.Center, modifier = Modifier.weight(1f))
                         Spacer(Modifier.width(8.dp))
                         Text(text = stringResource(R.string.active_session_column_reps), color = colors.muted, style = MaterialTheme.typography.labelSmall, textAlign = TextAlign.Center, modifier = Modifier.weight(1f))
                     }
@@ -741,6 +732,21 @@ internal fun RestTimerConfigDialog(
                     style = MaterialTheme.typography.bodySmall
                 )
 
+                FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    restTimerPresets.forEach { preset ->
+                        FilterChip(
+                            selected = hours * 3600 + minutes * 60 + seconds == preset,
+                            onClick = {
+                                hours = 0
+                                minutes = preset / 60
+                                seconds = preset % 60
+                            },
+                            modifier = Modifier.testTag("rest_preset_$preset"),
+                            label = { Text(stringResource(R.string.rest_timer_preset_seconds, preset)) }
+                        )
+                    }
+                }
+
                 Text(
                     text = stringResource(R.string.rest_duration_label),
                     color = colors.text,
@@ -933,6 +939,10 @@ private fun WheelPickerColumn(
     val coroutineScope = rememberCoroutineScope()
     val listState = rememberLazyListState(initialFirstVisibleItemIndex = value)
     val flingBehavior = rememberSnapFlingBehavior(lazyListState = listState)
+
+    LaunchedEffect(value) {
+        if (listState.firstVisibleItemIndex != value) listState.scrollToItem(value)
+    }
 
     LaunchedEffect(listState.isScrollInProgress) {
         if (!listState.isScrollInProgress) {

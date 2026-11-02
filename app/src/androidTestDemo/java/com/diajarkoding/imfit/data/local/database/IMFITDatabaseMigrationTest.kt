@@ -122,6 +122,19 @@ class IMFITDatabaseMigrationTest {
                 assertEquals(90, it.getInt(6))
             }
         }
+        migrations.runMigrationsAndValidate(databaseName, 9, true, IMFITDatabase.MIGRATION_8_9).use { db ->
+            db.query("SELECT sync_status, pending_operation, total_reps FROM workout_logs WHERE id = 'pending'").use {
+                assertTrue(it.moveToFirst())
+                assertEquals("PENDING_SYNC", it.getString(0))
+                assertEquals("CREATE", it.getString(1))
+                assertEquals(8, it.getInt(2))
+            }
+            db.query("SELECT session_data_json, session_rest_override FROM active_sessions WHERE id = 'active-v1'").use {
+                assertTrue(it.moveToFirst())
+                assertTrue(it.getString(0).contains("active-v1"))
+                assertEquals(90, it.getInt(1))
+            }
+        }
     }
 
     @Test fun fullRoomSchemaSixToEightChainedMigrationPasses() {

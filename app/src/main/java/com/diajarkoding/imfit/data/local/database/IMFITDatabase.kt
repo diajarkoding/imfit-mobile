@@ -34,7 +34,7 @@ import com.diajarkoding.imfit.data.local.entity.WorkoutTemplateEntity
         WorkoutSetEntity::class,
         ActiveSessionEntity::class
     ],
-    version = 8,
+    version = 9,
     exportSchema = true
 )
 @TypeConverters(Converters::class)
@@ -123,6 +123,13 @@ abstract class IMFITDatabase : RoomDatabase() {
                 // exercises
                 database.execSQL("ALTER TABLE `exercises` ADD COLUMN `default_tracking_type` TEXT NOT NULL DEFAULT 'WEIGHT_REPS'")
                 database.execSQL("ALTER TABLE `exercises` ADD COLUMN `modality` TEXT NOT NULL DEFAULT 'STRENGTH'")
+            }
+        }
+
+        val MIGRATION_8_9 = object : Migration(8, 9) {
+            override fun migrate(database: SupportSQLiteDatabase) {
+                // Old cache lacks authoritative allowed modes; refresh before offering these rows.
+                database.execSQL("ALTER TABLE `exercises` ADD COLUMN `allowed_tracking_types` TEXT NOT NULL DEFAULT ''")
             }
         }
 

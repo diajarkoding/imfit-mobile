@@ -23,5 +23,7 @@ data class ExerciseEntity(
     @ColumnInfo(name = "default_tracking_type")
     val defaultTrackingType: String = "WEIGHT_REPS",
     @ColumnInfo(name = "modality")
-    val modality: String = "STRENGTH"
+    val modality: String = "STRENGTH",
+    @ColumnInfo(name = "allowed_tracking_types", defaultValue = "''")
+    val allowedTrackingTypes: List<String> = listOf(defaultTrackingType)
 )

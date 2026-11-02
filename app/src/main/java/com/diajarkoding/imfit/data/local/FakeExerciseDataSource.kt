@@ -2,6 +2,8 @@ package com.diajarkoding.imfit.data.local
 
 import com.diajarkoding.imfit.domain.model.Exercise
 import com.diajarkoding.imfit.domain.model.MuscleCategory
+import com.diajarkoding.imfit.domain.model.ExerciseModality
+import com.diajarkoding.imfit.domain.model.TrackingType
 
 object FakeExerciseDataSource {
 
@@ -28,6 +30,8 @@ object FakeExerciseDataSource {
             id = "ex_chest_4",
             name = "Push-Ups",
             muscleCategory = MuscleCategory.CHEST,
+            defaultTrackingType = TrackingType.BODYWEIGHT_REPS, modality = ExerciseModality.CALISTHENICS,
+            allowedTrackingTypes = listOf(TrackingType.BODYWEIGHT_REPS, TrackingType.REPS_ONLY),
             description = "Standard push-up position, lower body until chest nearly touches floor, push back up."
         ),
         Exercise(
@@ -47,6 +51,8 @@ object FakeExerciseDataSource {
             id = "ex_back_2",
             name = "Pull-Ups",
             muscleCategory = MuscleCategory.BACK,
+            defaultTrackingType = TrackingType.BODYWEIGHT_REPS, modality = ExerciseModality.CALISTHENICS,
+            allowedTrackingTypes = listOf(TrackingType.BODYWEIGHT_REPS, TrackingType.REPS_ONLY),
             description = "Hang from bar with overhand grip, pull body up until chin clears bar."
         ),
         Exercise(
@@ -158,6 +164,8 @@ object FakeExerciseDataSource {
             id = "ex_triceps_5",
             name = "Tricep Dips",
             muscleCategory = MuscleCategory.TRICEPS,
+            defaultTrackingType = TrackingType.BODYWEIGHT_REPS, modality = ExerciseModality.CALISTHENICS,
+            allowedTrackingTypes = listOf(TrackingType.BODYWEIGHT_REPS, TrackingType.REPS_ONLY),
             description = "Support body on parallel bars, lower by bending elbows, push back up."
         ),
 
@@ -195,12 +203,16 @@ object FakeExerciseDataSource {
             id = "ex_legs_6",
             name = "Calf Raises",
             muscleCategory = MuscleCategory.LEGS,
+            defaultTrackingType = TrackingType.BODYWEIGHT_REPS, modality = ExerciseModality.CALISTHENICS,
+            allowedTrackingTypes = listOf(TrackingType.BODYWEIGHT_REPS, TrackingType.REPS_ONLY),
             description = "Stand on edge of platform, raise heels as high as possible, lower and repeat."
         ),
         Exercise(
             id = "ex_legs_7",
             name = "Lunges",
             muscleCategory = MuscleCategory.LEGS,
+            defaultTrackingType = TrackingType.BODYWEIGHT_REPS, modality = ExerciseModality.CALISTHENICS,
+            allowedTrackingTypes = listOf(TrackingType.BODYWEIGHT_REPS, TrackingType.REPS_ONLY),
             description = "Step forward, lower back knee toward floor, push back to starting position."
         ),
 
@@ -208,24 +220,31 @@ object FakeExerciseDataSource {
             id = "ex_core_1",
             name = "Plank",
             muscleCategory = MuscleCategory.CORE,
+            defaultTrackingType = TrackingType.DURATION, modality = ExerciseModality.ISOMETRIC,
             description = "Hold push-up position on forearms, keep body straight, engage core."
         ),
         Exercise(
             id = "ex_core_2",
             name = "Crunches",
             muscleCategory = MuscleCategory.CORE,
+            defaultTrackingType = TrackingType.BODYWEIGHT_REPS, modality = ExerciseModality.CALISTHENICS,
+            allowedTrackingTypes = listOf(TrackingType.BODYWEIGHT_REPS, TrackingType.REPS_ONLY, TrackingType.DURATION),
             description = "Lie on back, knees bent, curl shoulders toward hips by contracting abs."
         ),
         Exercise(
             id = "ex_core_3",
             name = "Russian Twist",
             muscleCategory = MuscleCategory.CORE,
+            defaultTrackingType = TrackingType.BODYWEIGHT_REPS, modality = ExerciseModality.CALISTHENICS,
+            allowedTrackingTypes = listOf(TrackingType.BODYWEIGHT_REPS, TrackingType.REPS_ONLY, TrackingType.DURATION),
             description = "Sit with knees bent, lean back slightly, rotate torso side to side."
         ),
         Exercise(
             id = "ex_core_4",
             name = "Leg Raises",
             muscleCategory = MuscleCategory.CORE,
+            defaultTrackingType = TrackingType.BODYWEIGHT_REPS, modality = ExerciseModality.CALISTHENICS,
+            allowedTrackingTypes = listOf(TrackingType.BODYWEIGHT_REPS, TrackingType.REPS_ONLY, TrackingType.DURATION),
             description = "Lie on back, raise legs to vertical position, lower slowly without touching floor."
         ),
         Exercise(
@@ -239,30 +258,40 @@ object FakeExerciseDataSource {
             id = "ex_cardio_1",
             name = "Treadmill Running",
             muscleCategory = MuscleCategory.CARDIO,
+            defaultTrackingType = TrackingType.DISTANCE_DURATION, modality = ExerciseModality.CARDIO,
+            allowedTrackingTypes = listOf(TrackingType.DISTANCE_DURATION, TrackingType.DURATION),
             description = "Run on treadmill at desired speed and incline for cardiovascular conditioning."
         ),
         Exercise(
             id = "ex_cardio_2",
             name = "Stationary Bike",
             muscleCategory = MuscleCategory.CARDIO,
+            defaultTrackingType = TrackingType.DISTANCE_DURATION, modality = ExerciseModality.CARDIO,
+            allowedTrackingTypes = listOf(TrackingType.DISTANCE_DURATION, TrackingType.DURATION),
             description = "Cycle on stationary bike at moderate to high intensity."
         ),
         Exercise(
             id = "ex_cardio_3",
             name = "Rowing Machine",
             muscleCategory = MuscleCategory.CARDIO,
+            defaultTrackingType = TrackingType.DISTANCE_DURATION, modality = ExerciseModality.CARDIO,
+            allowedTrackingTypes = listOf(TrackingType.DISTANCE_DURATION, TrackingType.DURATION),
             description = "Full body cardio exercise using rowing motion for endurance training."
         ),
         Exercise(
             id = "ex_cardio_4",
             name = "Jump Rope",
             muscleCategory = MuscleCategory.CARDIO,
+            defaultTrackingType = TrackingType.REPS_ONLY, modality = ExerciseModality.CARDIO,
+            allowedTrackingTypes = listOf(TrackingType.REPS_ONLY, TrackingType.DURATION),
             description = "Skip rope continuously for cardiovascular and coordination training."
         ),
         Exercise(
             id = "ex_cardio_5",
             name = "Burpees",
             muscleCategory = MuscleCategory.CARDIO,
+            defaultTrackingType = TrackingType.REPS_ONLY, modality = ExerciseModality.CONDITIONING,
+            allowedTrackingTypes = listOf(TrackingType.REPS_ONLY, TrackingType.DURATION),
             description = "Full body exercise: squat, jump back to plank, push-up, jump forward, jump up."
         )
     )

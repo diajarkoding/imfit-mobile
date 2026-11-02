@@ -264,4 +264,12 @@ class DomainTrackingTypeTest {
         assertEquals(3000, workoutLog.totalDistanceMeters)
         assertEquals("VERIFIED", workoutLog.dataQuality)
     }
+    @Test fun paceRequiresActualPositiveDistanceAndDuration() {
+        assertEquals(360.0, WorkoutSet(1, durationSeconds = 1800, distanceMeters = 5000).paceSecondsPerKilometer!!, 0.001)
+        assertEquals(360.0, WorkoutSet(1, durationSeconds = 90, distanceMeters = 250).paceSecondsPerKilometer!!, 0.001)
+        assertNull(WorkoutSet(1, durationSeconds = 1800).paceSecondsPerKilometer)
+        assertNull(WorkoutSet(1, durationSeconds = 1800, distanceMeters = 0).paceSecondsPerKilometer)
+        assertNull(WorkoutSet(1, durationSeconds = 0, distanceMeters = 5000).paceSecondsPerKilometer)
+        assertNull(WorkoutSet(1, durationSeconds = -1, distanceMeters = 5000).paceSecondsPerKilometer)
+    }
 }

@@ -7,6 +7,8 @@ import com.diajarkoding.imfit.data.sync.SyncRunner
 import com.diajarkoding.imfit.data.sync.SyncRunResult
 import com.diajarkoding.imfit.domain.model.Exercise
 import com.diajarkoding.imfit.domain.model.MuscleCategory
+import com.diajarkoding.imfit.domain.model.ExerciseModality
+import com.diajarkoding.imfit.domain.model.TrackingType
 import com.diajarkoding.imfit.domain.repository.ExerciseRepository
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.flow.distinctUntilChanged
@@ -26,7 +28,7 @@ class ExerciseRepositoryImpl @Inject constructor(
     private var lastRefreshTimestamp: Long? = null
 
     override fun observeExercises() = exerciseDao.getAllActiveExercises()
-        .map { records -> records.map(ExerciseEntity::toExercise).distinctBy { it.id } }.distinctUntilChanged()
+        .map { records -> records.mapNotNull(ExerciseEntity::toExercise).distinctBy { it.id } }.distinctUntilChanged()
 
     override suspend fun refreshExercises(force: Boolean): Boolean = refreshMutex.withLock {
         val now = SystemClock.elapsedRealtime()
@@ -39,13 +41,21 @@ class ExerciseRepositoryImpl @Inject constructor(
         catch (_: Exception) { false } // Keep observable cached data; never substitute synthetic records.
     }
 
-    override suspend fun getAllExercises() = exerciseDao.getAllActiveExercisesList().map(ExerciseEntity::toExercise)
+    override suspend fun getAllExercises() = exerciseDao.getAllActiveExercisesList().mapNotNull(ExerciseEntity::toExercise)
     override suspend fun getExercisesByCategory(category: MuscleCategory) =
-        exerciseDao.getExercisesByCategoryList(category.ordinal + 1).map(ExerciseEntity::toExercise)
+        exerciseDao.getExercisesByCategoryList(category.ordinal + 1).mapNotNull(ExerciseEntity::toExercise)
     override suspend fun getExerciseById(id: String) = exerciseDao.getExerciseById(id)?.toExercise()
     override suspend fun searchExercises(query: String) = if (query.isBlank()) getAllExercises()
-        else exerciseDao.searchExercisesList(query).map(ExerciseEntity::toExercise)
+        else exerciseDao.searchExercisesList(query).mapNotNull(ExerciseEntity::toExercise)
 }
 
-private fun ExerciseEntity.toExercise() = Exercise(id, name,
-    MuscleCategory.entries.getOrNull(muscleCategoryId - 1) ?: MuscleCategory.CHEST, description, imageUrl)
+private fun ExerciseEntity.toExercise(): Exercise? = takeIf { allowedTrackingTypes.isNotEmpty() }?.let {
+    Exercise(
+        id = id, name = name,
+        muscleCategory = MuscleCategory.entries.getOrNull(muscleCategoryId - 1) ?: MuscleCategory.CHEST,
+        description = description, imageUrl = imageUrl, isActive = isActive,
+        defaultTrackingType = TrackingType.valueOf(defaultTrackingType),
+        modality = ExerciseModality.valueOf(modality),
+        allowedTrackingTypes = allowedTrackingTypes.map(TrackingType::valueOf)
+    )
+}

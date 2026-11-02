@@ -1,5 +1,6 @@
 package com.diajarkoding.imfit.data.remote.dto
 
+import com.diajarkoding.imfit.data.local.entity.ExerciseEntity
 import com.diajarkoding.imfit.domain.model.Exercise
 import com.diajarkoding.imfit.domain.model.ExerciseModality
 import com.diajarkoding.imfit.domain.model.MuscleCategory
@@ -29,19 +30,29 @@ data class ExerciseDto(
     @SerialName("modality")
     val modality: String? = null,
     @SerialName("allowed_modes")
-    val allowedModes: List<String>? = null
+    val allowedModes: List<String>? = null,
+    @SerialName("exercise_tracking_modes")
+    val trackingModes: List<ExerciseTrackingModeDto>? = null
+)
+
+@Serializable
+data class ExerciseTrackingModeDto(
+    @SerialName("tracking_type") val trackingType: String
 )
 
 fun ExerciseDto.toDomain(): Exercise {
     val category = muscleCategory?.toDomain()
         ?: MuscleCategory.entries.getOrNull(muscleCategoryId - 1)
         ?: MuscleCategory.CHEST
-    val parsedDefaultTracking = defaultTrackingType?.let { runCatching { TrackingType.valueOf(it) }.getOrNull() }
-        ?: TrackingType.WEIGHT_REPS
-    val parsedModality = modality?.let { runCatching { ExerciseModality.valueOf(it) }.getOrNull() }
-        ?: ExerciseModality.STRENGTH
-    val parsedAllowedModes = allowedModes?.mapNotNull { runCatching { TrackingType.valueOf(it) }.getOrNull() }
-        ?.takeIf { it.isNotEmpty() } ?: listOf(parsedDefaultTracking)
+    val parsedDefaultTracking = TrackingType.valueOf(requireNotNull(defaultTrackingType) {
+        "Exercise $id has no server default tracking mode"
+    })
+    val parsedModality = ExerciseModality.valueOf(requireNotNull(modality) {
+        "Exercise $id has no server modality"
+    })
+    val parsedAllowedModes = requireNotNull(allowedModes ?: trackingModes?.map { it.trackingType }) {
+        "Exercise $id has no server allowed tracking modes"
+    }.map(TrackingType::valueOf)
 
     return Exercise(
         id = id,
@@ -53,5 +64,16 @@ fun ExerciseDto.toDomain(): Exercise {
         defaultTrackingType = parsedDefaultTracking,
         modality = parsedModality,
         allowedTrackingTypes = parsedAllowedModes
+    )
+}
+
+fun ExerciseDto.toEntity(): ExerciseEntity {
+    val exercise = toDomain()
+    return ExerciseEntity(
+        id = id, name = name, muscleCategoryId = muscleCategoryId,
+        description = description, imageUrl = imageUrl, isActive = isActive,
+        defaultTrackingType = exercise.defaultTrackingType.name,
+        modality = exercise.modality.name,
+        allowedTrackingTypes = exercise.allowedTrackingTypes.map { it.name }
     )
 }

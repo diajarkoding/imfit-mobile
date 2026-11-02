@@ -125,7 +125,6 @@ class WorkoutHistoryPresentationTest {
 
         assertEquals(2, totals.sessionCount)
         assertEquals(65, totals.durationMinutes)
-        assertEquals(4800f, totals.totalVolume, 0.01f)
         assertEquals(5, totals.totalExercises)
         assertEquals(15, totals.completedSets)
     }
@@ -135,22 +134,10 @@ class WorkoutHistoryPresentationTest {
         val totals = calculateWorkoutHistoryTotals(emptyList())
         assertEquals(0, totals.sessionCount)
         assertEquals(0, totals.durationMinutes)
-        assertEquals(0f, totals.totalVolume, 0.001f)
         assertEquals(0, totals.totalExercises)
         assertEquals(0, totals.completedSets)
     }
 
-    @Test
-    fun volumeFormattingIndonesianUsesDot() {
-        val formatted = formatVolume(4800f, Locale.forLanguageTag("id-ID"))
-        assertEquals("4.800 kg", formatted)
-    }
-
-    @Test
-    fun volumeFormattingEnglishUsesComma() {
-        val formatted = formatVolume(4800f, Locale.ENGLISH)
-        assertEquals("4,800 kg", formatted)
-    }
 
     @Test
     fun dateHeaderFormattingIndonesian() {

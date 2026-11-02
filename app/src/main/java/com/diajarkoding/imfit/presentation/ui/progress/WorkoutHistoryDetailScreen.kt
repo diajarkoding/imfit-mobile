@@ -143,7 +143,6 @@ internal fun WorkoutHistoryDetailScreenContent(
                             val totals = calculateWorkoutHistoryTotals(presentation.workouts)
                             WorkoutHistoryDailyTotals(
                                 totals = totals,
-                                locale = locale,
                                 stacked = stacked
                             )
                         }

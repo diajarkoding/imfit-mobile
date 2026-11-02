@@ -94,16 +94,16 @@ class ProgressPresentationTest {
         val exercises = listOf(
             ExerciseLog(Exercise("ex_chest_1", "Bench", MuscleCategory.CHEST, ""),
                 listOf(WorkoutSet(1, weight = 50f, reps = 10, isCompleted = true))),
-            ExerciseLog(Exercise("ex_chest_4", "Push up", MuscleCategory.CHEST, ""),
+            ExerciseLog(Exercise("ex_chest_4", "Push up", MuscleCategory.CHEST, "", defaultTrackingType = TrackingType.BODYWEIGHT_REPS, modality = ExerciseModality.CALISTHENICS),
                 listOf(WorkoutSet(1, reps = 20, additionalWeight = 5f, isCompleted = true))),
-            ExerciseLog(Exercise("ex_back_17", "Assisted", MuscleCategory.BACK, ""),
+            ExerciseLog(Exercise("ex_back_17", "Assisted", MuscleCategory.BACK, "", defaultTrackingType = TrackingType.ASSISTED_REPS, modality = ExerciseModality.CALISTHENICS),
                 listOf(WorkoutSet(1, reps = 8, assistanceWeight = 20f, isCompleted = true))),
-            ExerciseLog(Exercise("ex_cardio_5", "Conditioning", MuscleCategory.CARDIO, ""),
+            ExerciseLog(Exercise("ex_cardio_5", "Conditioning", MuscleCategory.CARDIO, "", defaultTrackingType = TrackingType.REPS_ONLY, modality = ExerciseModality.CONDITIONING),
                 listOf(WorkoutSet(1, reps = 30, isCompleted = true))),
-            ExerciseLog(Exercise("ex_core_1", "Plank", MuscleCategory.CORE, ""),
+            ExerciseLog(Exercise("ex_core_1", "Plank", MuscleCategory.CORE, "", defaultTrackingType = TrackingType.DURATION, modality = ExerciseModality.ISOMETRIC),
                 listOf(WorkoutSet(1, durationSeconds = 90, isCompleted = true),
                     WorkoutSet(2, durationSeconds = 900, isCompleted = false))),
-            ExerciseLog(Exercise("ex_cardio_1", "Run", MuscleCategory.CARDIO, ""),
+            ExerciseLog(Exercise("ex_cardio_1", "Run", MuscleCategory.CARDIO, "", defaultTrackingType = TrackingType.DISTANCE_DURATION, modality = ExerciseModality.CARDIO),
                 listOf(WorkoutSet(1, durationSeconds = 600, distanceMeters = 2000, isCompleted = true))))
         val session = log(start).copy(exerciseLogs = exercises, totalVolume = 500f,
             additionalVolume = 100f)
@@ -120,7 +120,7 @@ class ProgressPresentationTest {
 
     @Test fun bodyweightRepetitionsDoNotInventExternalLoadOrBodyMassVolume() {
         val start = Instant.parse("2026-10-13T08:00:00Z")
-        val exercise = ExerciseLog(Exercise("ex_chest_4", "Push up", MuscleCategory.CHEST, ""),
+        val exercise = ExerciseLog(Exercise("ex_chest_4", "Push up", MuscleCategory.CHEST, "", defaultTrackingType = TrackingType.BODYWEIGHT_REPS, modality = ExerciseModality.CALISTHENICS),
             listOf(WorkoutSet(1, reps = 15, isCompleted = true)))
         val result = progressMetrics(listOf(log(start).copy(totalVolume = 0f, exerciseLogs = listOf(exercise))),
             start.plusSeconds(3600), ZoneOffset.UTC)
@@ -159,11 +159,11 @@ class ProgressPresentationTest {
             metricQuality = "LEGACY_UNVERIFIED")
         val strength = ExerciseLog(Exercise("ex_chest_1", "Verified bench", MuscleCategory.CHEST, ""),
             listOf(WorkoutSet(1, weight = 40f, reps = 5, isCompleted = true)))
-        val bodyweight = ExerciseLog(Exercise("ex_chest_4", "Push up", MuscleCategory.CHEST, ""),
+        val bodyweight = ExerciseLog(Exercise("ex_chest_4", "Push up", MuscleCategory.CHEST, "", defaultTrackingType = TrackingType.BODYWEIGHT_REPS, modality = ExerciseModality.CALISTHENICS),
             listOf(WorkoutSet(1, reps = 10, additionalWeight = 5f, isCompleted = true)))
-        val cardio = ExerciseLog(Exercise("ex_cardio_1", "Run", MuscleCategory.CARDIO, ""),
+        val cardio = ExerciseLog(Exercise("ex_cardio_1", "Run", MuscleCategory.CARDIO, "", defaultTrackingType = TrackingType.DISTANCE_DURATION, modality = ExerciseModality.CARDIO),
             listOf(WorkoutSet(1, durationSeconds = 600, distanceMeters = 2000, isCompleted = true)))
-        val hold = ExerciseLog(Exercise("ex_core_1", "Plank", MuscleCategory.CORE, ""),
+        val hold = ExerciseLog(Exercise("ex_core_1", "Plank", MuscleCategory.CORE, "", defaultTrackingType = TrackingType.DURATION, modality = ExerciseModality.ISOMETRIC),
             listOf(WorkoutSet(1, durationSeconds = 30, isCompleted = true)))
         val session = log(start).copy(dataQuality = "LEGACY_UNVERIFIED",
             totalVolume = 999999f, additionalVolume = 999999f,

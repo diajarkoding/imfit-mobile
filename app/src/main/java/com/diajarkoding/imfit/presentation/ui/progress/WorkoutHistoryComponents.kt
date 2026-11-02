@@ -7,6 +7,7 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -49,6 +50,9 @@ import com.diajarkoding.imfit.presentation.components.common.CheckCircle
 import com.diajarkoding.imfit.presentation.components.common.FitnessCenter
 import com.diajarkoding.imfit.presentation.components.common.Symbols
 import com.diajarkoding.imfit.presentation.components.common.Timer
+import com.diajarkoding.imfit.presentation.ui.workout.WorkoutMeasurementMetrics
+import com.diajarkoding.imfit.presentation.ui.workout.workoutSetMeasurementText
+import com.diajarkoding.imfit.presentation.ui.workout.formatSummaryVolume
 import com.diajarkoding.imfit.theme.IMFITColors
 import com.diajarkoding.imfit.theme.IMFITSpacing
 import com.diajarkoding.imfit.theme.IMFITTypography
@@ -167,7 +171,6 @@ internal fun WorkoutHistoryUpdateFailureBanner(
 @Composable
 internal fun WorkoutHistoryDailyTotals(
     totals: WorkoutHistoryTotals,
-    locale: Locale,
     stacked: Boolean,
     modifier: Modifier = Modifier
 ) {
@@ -221,8 +224,6 @@ internal fun WorkoutHistoryDailyTotals(
 
         val durationLabel = stringResource(R.string.workout_history_metric_duration)
         val durationValue = stringResource(R.string.workout_history_duration_minutes_format, totals.durationMinutes)
-        val volumeLabel = stringResource(R.string.workout_history_metric_volume)
-        val volumeValue = formatVolume(totals.totalVolume, locale)
         val exercisesLabel = stringResource(R.string.workout_history_metric_exercises)
         val exercisesValue = "${totals.totalExercises}"
         val setsLabel = stringResource(R.string.workout_history_metric_sets)
@@ -230,43 +231,17 @@ internal fun WorkoutHistoryDailyTotals(
 
         if (stacked) {
             DailyMetricCardStacked(icon = Symbols.Default.Timer, label = durationLabel, value = durationValue)
-            DailyMetricCardStacked(icon = Symbols.Default.FitnessCenter, label = volumeLabel, value = volumeValue)
             DailyMetricCardStacked(painter = painterResource(R.drawable.ic_fitness), label = exercisesLabel, value = exercisesValue)
             DailyMetricCardStacked(icon = Symbols.Default.CheckCircle, label = setsLabel, value = setsValue)
         } else {
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(12.dp)
-            ) {
-                DailyMetricCardStandard(
-                    modifier = Modifier.weight(1f),
-                    icon = Symbols.Default.Timer,
-                    label = durationLabel,
-                    value = durationValue
-                )
-                DailyMetricCardStandard(
-                    modifier = Modifier.weight(1f),
-                    icon = Symbols.Default.FitnessCenter,
-                    label = volumeLabel,
-                    value = volumeValue
-                )
-            }
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(12.dp)
-            ) {
-                DailyMetricCardStandard(
-                    modifier = Modifier.weight(1f),
-                    painter = painterResource(R.drawable.ic_fitness),
-                    label = exercisesLabel,
-                    value = exercisesValue
-                )
-                DailyMetricCardStandard(
-                    modifier = Modifier.weight(1f),
-                    icon = Symbols.Default.CheckCircle,
-                    label = setsLabel,
-                    value = setsValue
-                )
+            FlowRow(maxItemsInEachRow = 2, horizontalArrangement = Arrangement.spacedBy(12.dp),
+                verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                DailyMetricCardStandard(label = durationLabel, value = durationValue,
+                    icon = Symbols.Default.Timer, modifier = Modifier.weight(1f))
+                DailyMetricCardStandard(label = exercisesLabel, value = exercisesValue,
+                    painter = painterResource(R.drawable.ic_fitness), modifier = Modifier.weight(1f))
+                DailyMetricCardStandard(label = setsLabel, value = setsValue,
+                    icon = Symbols.Default.CheckCircle, modifier = Modifier.weight(1f))
             }
         }
     }
@@ -485,27 +460,12 @@ internal fun WorkoutHistorySessionCard(
             Column {
                 HorizontalDivider(color = colors.border)
                 Spacer(modifier = Modifier.height(12.dp))
-                val volumeValue = if (workoutLog.totalVolume > 0f) {
-                    formatVolume(workoutLog.totalVolume, locale)
-                } else if (workoutLog.totalDurationSeconds > 0) {
-                    "${workoutLog.totalDurationSeconds / 60}m ${workoutLog.totalDurationSeconds % 60}s"
-                } else {
-                    "${workoutLog.totalReps} reps"
-                }
                 val exercisesValue = "${workoutLog.exerciseLogs.size}"
                 val setsValue = "${workoutLog.exerciseLogs.sumOf { it.completedSets }}"
-                val volumeLabel = if (workoutLog.totalVolume > 0f) {
-                    stringResource(R.string.workout_history_metric_volume)
-                } else if (workoutLog.totalDurationSeconds > 0) {
-                    "Durasi Aktif"
-                } else {
-                    "Total Reps"
-                }
                 val exercisesLabel = stringResource(R.string.workout_history_metric_exercises)
                 val setsLabel = stringResource(R.string.workout_history_metric_sets)
                 if (stacked) {
                     Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                        SessionMetricRow(volumeLabel, volumeValue)
                         SessionMetricRow(exercisesLabel, exercisesValue)
                         SessionMetricRow(setsLabel, setsValue)
                     }
@@ -514,10 +474,13 @@ internal fun WorkoutHistorySessionCard(
                         modifier = Modifier.fillMaxWidth(),
                         horizontalArrangement = Arrangement.SpaceBetween
                     ) {
-                        SessionMetricColumn(Modifier.weight(1f), volumeLabel, volumeValue)
                         SessionMetricColumn(Modifier.weight(1f), exercisesLabel, exercisesValue)
                         SessionMetricColumn(Modifier.weight(1f), setsLabel, setsValue)
                     }
+                }
+                WorkoutMeasurementMetrics(workoutLog.exerciseLogs, locale, stacked)
+                if (workoutLog.dataQuality != "VERIFIED" || workoutLog.exerciseLogs.any { it.metricQuality != "VERIFIED" }) {
+                    Text(stringResource(R.string.measurement_legacy_notice), color = colors.muted, style = MaterialTheme.typography.bodySmall)
                 }
                 Spacer(modifier = Modifier.height(12.dp))
                 HorizontalDivider(color = colors.border)
@@ -638,17 +601,28 @@ internal fun WorkoutHistoryExerciseRow(
                 )
             }
             val exerciseMetricText = when (exerciseLog.trackingType) {
-                TrackingType.WEIGHT_REPS -> formatVolume(exerciseLog.totalVolume, locale)
-                TrackingType.BODYWEIGHT_REPS -> if (exerciseLog.additionalVolume > 0f) "+${formatVolume(exerciseLog.additionalVolume, locale)}" else "${exerciseLog.totalReps} reps"
+                TrackingType.WEIGHT_REPS -> formatSummaryVolume(exerciseLog.totalVolume, locale)
+                TrackingType.BODYWEIGHT_REPS -> if (exerciseLog.additionalVolume > 0f) "+${formatSummaryVolume(exerciseLog.additionalVolume, locale)}" else "${exerciseLog.totalReps} reps"
                 TrackingType.ASSISTED_REPS, TrackingType.REPS_ONLY -> "${exerciseLog.totalReps} reps"
                 TrackingType.DURATION -> "${exerciseLog.totalDurationSeconds}s"
-                TrackingType.DISTANCE_DURATION -> "${String.format(locale, "%.2f km", exerciseLog.totalDistanceMeters / 1000f)} · ${exerciseLog.totalDurationSeconds}s"
+                TrackingType.DISTANCE_DURATION -> if (exerciseLog.totalDistanceMeters > 0) "${String.format(locale, "%.2f km", exerciseLog.totalDistanceMeters / 1000f)} · ${exerciseLog.totalDurationSeconds}s" else "${exerciseLog.totalDurationSeconds}s"
             }
             Text(
                 text = exerciseMetricText,
                 color = colors.muted,
                 style = MaterialTheme.typography.labelSmall
             )
+        }
+        exerciseLog.sets.forEach { set ->
+            Row(Modifier.fillMaxWidth().testTag("history_set_${exerciseLog.exercise.id}_${set.setNumber}"),
+                horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                Text(stringResource(R.string.active_workout_set_number, set.setNumber), color = colors.muted,
+                    style = MaterialTheme.typography.bodySmall)
+                Text(workoutSetMeasurementText(exerciseLog.trackingType, set, locale), Modifier.weight(1f),
+                    color = colors.text, style = MaterialTheme.typography.bodySmall, textAlign = TextAlign.End)
+                Text(if (set.isCompleted) "✓" else "—", color = if (set.isCompleted) colors.success else colors.muted,
+                    style = MaterialTheme.typography.bodySmall)
+            }
         }
     }
 }

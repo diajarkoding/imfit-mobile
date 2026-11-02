@@ -17,7 +17,7 @@
         <item quantity="other">%1$d menit</item>
     </plurals>
     <plurals name="progress_overview_day_workouts">
-        <item quantity="other">%1$d sesi tercatat · %2$s · %3$s</item>
+        <item quantity="other">%1$d sesi tercatat · %2$s</item>
     </plurals>
     <string-array name="progress_overview_weekdays">
         <item>Sn</item><item>Sl</item><item>Rb</item><item>Km</item><item>Jm</item><item>Sb</item><item>Mg</item>

@@ -17,7 +17,8 @@ data class ProgressMetrics(
     val monthlyCardioDistanceMeters: Int = 0,
     val monthlyAdditionalVolume: Double = 0.0,
     val monthlyRepetitions: Int = 0,
-    val monthlyUnverifiedWorkouts: Int = 0
+    val monthlyUnverifiedWorkouts: Int = 0,
+    val monthlyOtherDurationSeconds: Int = 0
 )
 
 /** Presentation-only windows; persisted duration semantics are deliberately unchanged. */
@@ -37,6 +38,10 @@ internal fun progressMetrics(
     val cardio = exercises.filter { it.modality == ExerciseModality.CARDIO || it.modality == ExerciseModality.CONDITIONING }
     val cardioDuration = cardio.sumOf { it.totalDurationSeconds }
     val cardioDistance = cardio.sumOf { it.totalDistanceMeters }
+    val otherDuration = exercises.sumOf {
+        if (it.modality != ExerciseModality.ISOMETRIC && it.modality != ExerciseModality.CARDIO &&
+            it.modality != ExerciseModality.CONDITIONING) it.totalDurationSeconds else 0
+    }
     val volume = monthly.sumOf { log ->
         if (log.dataQuality == "VERIFIED" && log.exerciseLogs.all { it.metricQuality == "VERIFIED" }) log.totalVolume.toDouble()
         else log.exerciseLogs.filter { it.metricQuality == "VERIFIED" }.sumOf { it.totalVolume.toDouble() }
@@ -57,6 +62,7 @@ internal fun progressMetrics(
         monthlyCardioDistanceMeters = cardioDistance,
         monthlyAdditionalVolume = addVol,
         monthlyRepetitions = exercises.sumOf { it.totalReps },
+        monthlyOtherDurationSeconds = otherDuration,
         monthlyUnverifiedWorkouts = monthly.count { log ->
             log.dataQuality != "VERIFIED" || log.exerciseLogs.any { it.metricQuality != "VERIFIED" }
         }

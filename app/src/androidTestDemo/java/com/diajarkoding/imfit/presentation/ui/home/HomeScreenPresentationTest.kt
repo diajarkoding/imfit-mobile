@@ -235,8 +235,6 @@ private class FakeHomeUiWorkoutRepository(
     override suspend fun getWorkoutLogs(userId: String): List<WorkoutLog> = emptyList()
     override suspend fun getWorkoutLogById(logId: String): WorkoutLog? = null
     override suspend fun getLastWorkoutLog(userId: String): WorkoutLog? = null
-    override suspend fun getLastExerciseLog(exerciseId: String): ExerciseLog? = null
-    override suspend fun getLastWeightsForExercise(exerciseId: String, userId: String): Map<Int, Float> = emptyMap()
 }
 
 private class FakeHomeUiRoutineRepository(

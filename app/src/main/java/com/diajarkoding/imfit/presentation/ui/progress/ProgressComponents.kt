@@ -16,6 +16,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringArrayResource
 import androidx.compose.ui.res.stringResource
@@ -95,6 +96,9 @@ internal fun ProgressMetricOverview(metrics: ProgressMetrics) {
     if (metrics.monthlyCardioDistanceMeters > 0) cards += Triple(
         stringResource(R.string.progress_meters_unit, number.format(metrics.monthlyCardioDistanceMeters)),
         stringResource(R.string.progress_cardio_distance), Symbols.Default.LocalFireDepartment)
+    if (metrics.monthlyOtherDurationSeconds > 0) cards += Triple(
+        stringResource(R.string.progress_seconds_unit, number.format(metrics.monthlyOtherDurationSeconds)),
+        stringResource(R.string.measurement_other_duration), Symbols.Default.Timer)
     cards += Triple(
         pluralStringResource(R.plurals.progress_overview_minutes, metrics.monthlyMinutes, metrics.monthlyMinutes),
         stringResource(R.string.progress_overview_weekly_time), Symbols.Default.Timer)
@@ -235,18 +239,11 @@ internal fun ProgressSelectedDay(date: LocalDate, logs: List<WorkoutLog>, onHist
     val colors = IMFITColors.training
     val locale = LocalConfiguration.current.locales[0] ?: Locale.ROOT
     val duration = logs.sumOf { it.durationMinutes }
-    val verifiedVolume = logs.sumOf { log ->
-        if (log.dataQuality == "VERIFIED" && log.exerciseLogs.all { it.metricQuality == "VERIFIED" }) log.totalVolume.toDouble()
-        else log.exerciseLogs.filter { it.metricQuality == "VERIFIED" }.sumOf { it.totalVolume.toDouble() }
-    }
-    val volume = if (verifiedVolume > 0) stringResource(R.string.progress_volume_unit,
-        NumberFormat.getNumberInstance(locale).apply { maximumFractionDigits = 1 }.format(verifiedVolume))
-        else stringResource(R.string.progress_no_external_volume)
     val minutes = pluralStringResource(R.plurals.progress_overview_minutes, duration, duration)
     val description = if (logs.isEmpty()) stringResource(R.string.progress_overview_empty_day)
-        else pluralStringResource(R.plurals.progress_overview_day_workouts, logs.size, logs.size, minutes, volume)
+        else pluralStringResource(R.plurals.progress_overview_day_workouts, logs.size, logs.size, minutes)
     Row(
-        Modifier.fillMaxWidth().heightIn(min = IMFITProgress.selectedDayHeight)
+        Modifier.fillMaxWidth().heightIn(min = IMFITProgress.selectedDayHeight).testTag("progress_selected_day")
             .clip(RoundedCornerShape(IMFITCornerRadius.small))
             .then(if (logs.isNotEmpty()) Modifier.clickable(role = Role.Button, onClick = onHistory) else Modifier),
         verticalAlignment = Alignment.CenterVertically,

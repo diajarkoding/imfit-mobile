@@ -48,14 +48,16 @@ class HomeRemoteReadAndStateTest {
             muscleCategoryId = 6,
             name = "Squat",
             description = "Legs",
-            muscleCategory = MuscleCategoryDto(6, "LEGS", "Legs")
+            muscleCategory = MuscleCategoryDto(6, "LEGS", "Legs"),
+            defaultTrackingType = "WEIGHT_REPS", modality = "STRENGTH", allowedModes = listOf("WEIGHT_REPS")
         )
         val chestDto = ExerciseDto(
             id = "ex_bench",
             muscleCategoryId = 1,
             name = "Bench Press",
             description = "Chest",
-            muscleCategory = MuscleCategoryDto(1, "CHEST", "Chest")
+            muscleCategory = MuscleCategoryDto(1, "CHEST", "Chest"),
+            defaultTrackingType = "WEIGHT_REPS", modality = "STRENGTH", allowedModes = listOf("WEIGHT_REPS")
         )
 
         val templateDto = WorkoutTemplateDto(
@@ -447,6 +449,4 @@ private class ControllableWorkoutRepository(
     override suspend fun getWorkoutLogs(userId: String): List<WorkoutLog> = emptyList()
     override suspend fun getWorkoutLogById(logId: String): WorkoutLog? = null
     override suspend fun getLastWorkoutLog(userId: String): WorkoutLog? = null
-    override suspend fun getLastExerciseLog(exerciseId: String): ExerciseLog? = null
-    override suspend fun getLastWeightsForExercise(exerciseId: String, userId: String): Map<Int, Float> = emptyMap()
 }

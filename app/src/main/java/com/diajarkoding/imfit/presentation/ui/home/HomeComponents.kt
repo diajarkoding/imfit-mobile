@@ -34,6 +34,7 @@ import com.diajarkoding.imfit.R
 import com.diajarkoding.imfit.domain.model.WorkoutLog
 import com.diajarkoding.imfit.domain.model.WorkoutTemplate
 import com.diajarkoding.imfit.presentation.components.common.*
+import com.diajarkoding.imfit.presentation.ui.workout.WorkoutMeasurementMetrics
 import com.diajarkoding.imfit.theme.*
 import java.time.Instant
 import java.time.ZoneId
@@ -173,18 +174,6 @@ internal fun HomeLastWorkout(log: WorkoutLog?, modifier: Modifier = Modifier) {
         dash
     }
     val durationText = log?.formattedDuration ?: stringResource(R.string.workout_duration_zero)
-    val metricValueText = when {
-        log == null -> dash
-        log.totalVolume > 0f -> String.format(locale, "%,.0f kg", log.totalVolume)
-        log.totalDurationSeconds > 0 -> "${log.totalDurationSeconds / 60}m ${log.totalDurationSeconds % 60}s"
-        else -> "${log.totalReps} reps"
-    }
-    val metricLabelText = when {
-        log == null -> stringResource(R.string.home_total_volume)
-        log.totalVolume > 0f -> stringResource(R.string.home_total_volume)
-        log.totalDurationSeconds > 0 -> "Durasi Latihan"
-        else -> "Total Repetisi"
-    }
     Surface(
         modifier = modifier.fillMaxWidth().testTag("home_last_workout_card"),
         shape = IMFITShapes.CardSmall,
@@ -228,18 +217,13 @@ internal fun HomeLastWorkout(log: WorkoutLog?, modifier: Modifier = Modifier) {
                     R.drawable.msr_timer_filled,
                     Modifier.weight(1f)
                 )
-                Box(
-                    Modifier
-                        .width(IMFITComponentSizes.border)
-                        .height(IMFITComponentSizes.metricDivider)
-                        .background(colors.border)
-                )
-                HomeSummaryMetric(
-                    metricValueText,
-                    metricLabelText,
-                    R.drawable.ic_home_weight,
-                    Modifier.weight(1f)
-                )
+            }
+            if (log != null) {
+                WorkoutMeasurementMetrics(log.exerciseLogs, locale,
+                    stacked = LocalConfiguration.current.screenWidthDp <= 340 || LocalDensity.current.fontScale >= 1.25f)
+                if (log.dataQuality != "VERIFIED" || log.exerciseLogs.any { it.metricQuality != "VERIFIED" }) {
+                    Text(stringResource(R.string.measurement_legacy_notice), color = colors.muted, style = IMFITTypography.caption)
+                }
             }
         }
     }

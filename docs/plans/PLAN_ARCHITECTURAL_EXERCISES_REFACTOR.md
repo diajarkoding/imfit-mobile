@@ -1,649 +1,651 @@
 # PLAN ARCHITECTURAL EXERCISES REFACTOR
-**IMFIT Multi-Modality Exercise Tracking, Domain Model, & Server-Authoritative Engine**
 
----
+**IMFIT — Unifikasi input latihan, beban total, dan satu kontrak rutin/live tracking**
 
-## 0. Metadata & Kontrak Eksekusi
+## 0. Metadata, status, dan batas revisi
 
-| Atribut | Spesifikasi |
-| :--- | :--- |
-| **Versi / Tanggal** | **1.3 — Implementasi Penuh & Verifikasi Runtime Selesai** / 2026-11-02 |
-| **Tingkat Urgensi** | **P0 — Release Blocker** (Sebelum Closed Beta) |
-| **Basis Kode Utama** | Candidate Android `feature/exercise-multimodality-phase4` (`215d16e03c4f8845c57fdf337b2332b3264af406`); Supabase project `imfit` |
-| **Topology & Storage** | Target **Remote-Authoritative Hybrid**: PostgreSQL 17 + Room v9 |
-| **Prinsip Utama** | **Server-Authoritative Validation, Type-Safe Measurement, Expand-Backfill-Cutover-Contract, Zero-Loss Backward Compatibility** |
-| **Target Cakupan** | Katalog 161 Exercise, Routine Template CRUD, Active Workout Session, Set Logging, Volume & Metrics Calculation, History & Progress Analytics |
-| **Release Gate** | **GATE TEKNIS LENGKAP PASS (T-01 s/d T-21)**. Seluruh 21 skenario uji lulus otomatis dengan bukti runtime & screenshot connected emulator. Status rilis produksi menunggu prasyarat rilis operasional. |
-| **Otorisasi Revisi 1.3** | Implementasi menyeluruh 13 tahap (Backend, Catalog Authority, Direct Add, Routine Editor, Picker Modality, ActiveSetRow, Cardio, Runtime Rest Timer, Snapshot Data Flow, Summary, Home/Progress/History) dan verifikasi E2E selesai. |
+| Atribut | Kontrak |
+| --- | --- |
+| Versi / tanggal | **1.4 / 2026-11-05** |
+| Status | **Spesifikasi target siap menjadi acuan implementasi; belum diimplementasikan/diverifikasi pada aplikasi atau database.** |
+| Prioritas | Konsistensi data dan logging cepat; bukan penambahan mode atau fitur analytics. |
+| Ruang lingkup | Katalog → UI Detail → Setup Form → rutin → sesi aktif → penyimpanan lokal/remote → ringkasan, riwayat, dan progres. |
+| Basis yang diperiksa | Sumber Android `app/src/main`, model domain, Room **v9**, dan migrasi SQL dalam repository. Bukan inspeksi Supabase live. |
+| Target versi | Payload sesi **v3**, kontrak pengukuran **v3**, Room **v10**; ketiganya adalah target baru, bukan versi yang sudah tersedia. |
+| Otoritas | Server menentukan format katalog dan validasi; UI tidak memilih mode pencatatan. Snapshot mempertahankan makna data. |
+| Gate | Status pengujian v1.3 **tidak berlaku untuk v1.4**. Implementasi harus memenuhi acceptance §10 sebelum cutover. |
 
----
+Revisi ini menggantikan keputusan lama yang mempertahankan enam mode, selector **Waktu saja / Jarak + waktu**, bodyweight reps-first, serta pemisahan input beban tambahan/bantuan untuk data baru. Bukti dan hasil pengujian lama tetap historis: [Phase 5 Verification Report](PHASE5_VERIFICATION_REPORT.md). Angka kelulusan di laporan tersebut bukan bukti kontrak baru ini.
 
-## 1. Executive Summary & Ringkasan Keputusan Arsitektur
+**Changelog:** v1.4 menyatukan Strength/bodyweight, memakai dynamic set rows pada setup/edit, menyimpan target/rest per baris, dan membatasi metrik cardio menurut profil/capability exercise. Default jumlah baris hanya diterapkan saat pertama ditambahkan; routine existing tidak direset. Revisi hanya dokumentasi, tanpa perubahan kode, canvas, schema, atau eksekusi migrasi.
 
-Audit awal terhadap branch `hybrid` dan project Supabase `imfit` yang dicatat pada revisi sebelumnya menemukan asumsi tunggal beban eksternal (kg) $\times$ repetisi. Dampaknya mencakup penolakan bodyweight 0 kg serta penggunaan field repetisi yang keliru untuk latihan waktu/jarak. Bagian audit §2 adalah **baseline historis**, bukan pernyataan bahwa seluruh kode saat ini masih memakai model tersebut. Revisi 1.2 mencatat keputusan produk Q1–Q7; tidak menambah bukti runtime atau mengubah status release gate.
+**Penyempurnaan audit eksternal P-01–P-11:** aturan kategori/profil yang sudah konsisten dipertahankan; lifecycle baris, status completion, timer/recovery, picker, statistik dan sync diperjelas pada bagian terkait. Semua tambahan adalah kontrak target, bukan bukti implementasi. Estimasi routine yang memuat Strength masih memerlukan keputusan produk (§7.1); jangan menganggap angka heuristik existing sebagai durasi pasti.
 
-### Keputusan Kunci Arsitektur:
-1. **Ekspansi 6 Tipe Pelacakan Inti (*TrackingType*)**:
-   - `WEIGHT_REPS` (Beban eksternal + Repetisi)
-   - `BODYWEIGHT_REPS` (Repetisi bodyweight, opsional beban tambahan $+kg$)
-   - `ASSISTED_REPS` (Repetisi bodyweight dengan bantuan mesin $-kg$)
-   - `REPS_ONLY` (Repetisi murni tanpa variabel beban)
-   - `DURATION` (Durasi waktu isometrik / HIIT dalam detik)
-   - `DISTANCE_DURATION` (Jarak dalam meter + Durasi dalam detik)
-   *(Desain extensible untuk `WEIGHT_DURATION` dan `WEIGHT_DISTANCE` pada iterasi lanjutan)*.
-2. **Server-Authoritative Validation**: Validasi penuntasan set (*complete set*) dan finalisasi sesi dikendalikan mutlak oleh backend Supabase melalui RPC, bukan hanya filter checkbox di UI Android.
-3. **Pemisahan Semantik Metrik & Analytics**: Memecah metrik tunggal `total_volume` menjadi metrik terpisah: *External Load Volume* ($kg$), *Additional Load Volume* ($kg$), *Total Repetitions*, *Hold Duration* (detik), *Cardio Duration* (detik), dan *Cardio Distance* (meter).
-4. **Pola Migrasi Bertahap (*Expand $\rightarrow$ Backfill $\rightarrow$ Cutover $\rightarrow$ Contract*)**: Menjamin sesi aktif versi 1 (`schema_version = 1`) dan data riwayat lama tetap terbaca dan dapat diselesaikan tanpa merusak integritas sistem.
+**Penyelarasan mockup UI/UX:** enam frame existing pen.dev menjadi referensi visual target (§2.1). Pembaruan visual dan pemeriksaan lebar 360/412 dilaporkan user; identitas keenam node dibaca melalui MCP tanpa mutasi. Perubahan desain tidak berarti source Android, Room atau Supabase sudah memenuhi kontrak v1.4.
 
-### 1.1 Keputusan Produk yang Disetujui — Q1–Q7
+## 1. Keputusan arsitektur yang mengikat
 
-Persetujuan user pada 2026-11-02 berlaku untuk keputusan berikut, bukan persetujuan implementasi atau pernyataan bahwa seluruh desain telah selesai.
+| Dimensi | Keputusan target |
+| --- | --- |
+| Kategori Strength | **Strength** mencakup latihan alat dan bodyweight. Bodyweight adalah variasi gerakan, bukan kategori UI atau workflow pencatatan tersendiri. Metadata `CALISTHENICS` lama dipetakan ke Strength pada kontrak baru; snapshot historis tetap dibaca sesuai versi asal. |
+| Setup/edit Strength | Setiap baris horizontal: **Set → Beban (kg) → Reps → Rest (s)**. Tiga field input tetap sejajar; satu field domain `weightKg`, input langsung user, 0 kg sah. |
+| Setup/edit Cardio dan Isometric | Setiap baris horizontal: **Set → Durasi (HH:MM:SS) → Rest (s)**. Dua field input; tanpa beban/reps. |
+| Jumlah set | **Dihitung dari jumlah baris**, bukan field numerik manual. Semua jenis mendukung tambah/hapus baris, penomoran ulang, dan nilai independen. |
+| Active Session | Strength: **Set → Beban (kg) → Reps**. Cardio/Isometric: **Set → Durasi (HH:MM:SS)**. Metrik tambahan hanya jika didukung exercise, di bawah durasi dalam set yang sama. |
+| Rest | Target **per baris routine**, default 60 detik, rentang 0..600. Active menampilkan rest read-only per set dari target snapshot; timer/recovery memakai sumber yang sama. Bukan input/measurement hasil. |
+| Mode pencatatan | Tidak ada selector/toggle/pengganti. Server menurunkan format dari kategori: Strength → `WEIGHT_REPS`; Cardio/Isometric → `DURATION`. `CONDITIONING` yang sudah ada tetap metadata deskriptif dengan format yang ditetapkan katalog, bukan pilihan user baru. |
+| Profil cardio | `duration_only`, `distance_activity`, `equipment_metrics` adalah metadata internal kategori Cardio, bukan kategori utama atau pilihan mode baru. Seluruhnya memakai `DURATION`. |
+| Metrik cardio | Field ditentukan `supportedMetrics` per exercise, bukan kategori Cardio saja. Supported tetap opsional; unsupported tidak dirender/tidak diisi. |
+| Default baris baru | Strength/Isometric/cardio `duration_only`: 3; cardio `distance_activity`/`equipment_metrics`: 1. Berlaku saat pertama ditambahkan, tidak saat edit/recovery/perubahan metadata. |
+| Target vs hasil | Routine menyimpan daftar target per set beserta rest; sesi menyimpan hasil per set yang dapat berbeda. Perubahan hasil tidak otomatis mengedit routine. |
+| Kompatibilitas | Writer baru memakai dua format; reader/replay data lama tetap selama diperlukan. Tidak menghapus atau menafsir ulang data historis. |
 
-| Keputusan | Kontrak yang Disetujui |
-| :--- | :--- |
-| **Q1 — Tujuan utama** | Input, validasi, dan pencatatan mengikuti kebutuhan gerakan; bukan sekadar perubahan label/warna. Push-up tidak wajib kg, bench press mencatat kg dan reps, cardio mendukung waktu dan/atau jarak sesuai mode. |
-| **Q2 — Pemisahan konsep** | Karakter gerakan, cara pembebanan, dan metrik pencatatan tidak dipaksa menjadi satu klasifikasi. Pertahankan enam `TrackingType`; tiga istilah bodyweight/weighted/cardio bukan penggantinya. |
-| **Q3 — Cakupan konsisten** | Pilih gerakan → susun/edit rutinitas → detail rutinitas → sesi aktif → ringkasan → riwayat/progres harus memakai arti mode dan metrik yang sama. Ubah hanya bagian terdampak; bukan redesign seluruh layar. Katalog tetap read-only bagi user; membuat/mengedit definisi katalog tidak masuk scope. |
-| **Q4 — Pengelompokan UI** | Bodyweight, weighted, dan cardio membantu pencarian/pemahaman, bukan tiga kelompok eksklusif. Weighted/assisted pull-up tetap mempertahankan karakter bodyweight; plank tidak berubah menjadi cardio karena memakai waktu; conditioning berbeban tetap dapat mencatat kg. Isometric dan conditioning tidak boleh hilang maknanya. |
-| **Q5 — Otoritas mode** | Server menentukan default dan allowed modes; user memilih mode valid saat menyusun rutinitas. Pilihan disimpan pada rutinitas lalu disnapshot pada sesi. Perubahan katalog tidak diam-diam mengubah sesi berjalan atau arti riwayat. Android tidak mengklasifikasikan gerakan berdasarkan ID hardcoded. |
-| **Q6 — Cardio waktu saja** | Cardio berdurasi tanpa jarak tetap valid melalui `DURATION` bila diizinkan katalog. UI membedakan **Waktu saja** dan **Jarak + waktu**; jangan mengarang jarak atau memakai nol sebagai pengganti data tak diketahui. Pace hanya dihitung jika waktu dan jarak tersedia serta positif. |
-| **Q7 — Bodyweight bertahap** | Form bodyweight biasa mengutamakan reps; kontrol **Tambah beban** membuka input opsional `+kg`. Nilai tambahan yang sudah digunakan tetap terlihat. Assisted exercise langsung menampilkan **Bantuan (kg)** karena wajib. Berat badan pengguna bukan input beban angkatan. |
+### 1.1 Semantik satu field beban
 
-### 1.2 Batas Keputusan dan Status Bukti
+- `weightKg` adalah angka beban yang ingin dicatat user, bukan hasil kalkulasi aplikasi. Dumbbell 20 kg → user mengisi **20**; tidak otomatis digandakan menjadi 40 kg.
+- Pull-up dengan berat badan 70 kg dan plate 10 kg → user dapat mengisi **80** secara langsung. Tidak ada input komponen, penjumlahan otomatis, pengambilan berat badan profil, atau workflow bodyweight terpisah.
+- Nilai **0 kg diperbolehkan**. Kosong tetap `null` pada draft, bukan nol otomatis; nilai harus tersedia sebelum set Strength selesai.
+- Assisted tetap variasi Strength dengan satu angka beban yang dipilih user; tidak ada rumus wajib atau field bantuan baru. Rincian bantuan/additional weight historis tetap dipertahankan untuk pembacaan lama.
+- Nilai yang tersimpan tidak berubah ketika berat badan profil berubah. Angka ini bukan estimasi biomekanik atau ukuran kerja mekanik.
+- Volume hasil baru `Σ(weightKg × reps)` disebut **volume beban tercatat (kg·repetisi)**. Jangan menggabungkannya diam-diam dengan legacy external/additional volume yang memiliki konvensi berbeda.
 
-- **Dokumentasi saja**: revisi ini tidak menjalankan implementasi, migrasi, deployment, atau pengujian aplikasi/database. Seluruh pekerjaan tambahan akibat Q1–Q7 tetap berstatus belum diverifikasi.
-- **Desain lanjutan belum diputuskan**: susunan final filter/badge untuk kelompok yang tumpang tindih, lokasi kontrol pemilihan mode di luar editor rutinitas, aturan perubahan mode saat sesi sudah berjalan, dan prioritas metrik utama sesi campuran. Jangan menganggap detail tersebut disetujui lewat Q1–Q7; konfirmasi sebelum implementasi terkait.
-- **Bukti historis tidak dinaikkan statusnya**: metadata release gate, checklist Phase 2, dan ringkasan pasca-fix-forward Phase 5 memuat status yang belum selaras. Rekonsiliasi terhadap [Phase 5 Verification Report](PHASE5_VERIFICATION_REPORT.md) dan artefak eksekusi diperlukan sebelum mengubah checklist/gate. Revisi ini tidak memilih salah satu klaim sebagai hasil verifikasi baru; keputusan rilis tetap **NO-GO**.
+## 2. Baseline repository dan perbedaan target
 
-```
-+----------------------------------------------------------------------------------------------------+
-|                                    TARGET DATA FLOW ARSITEKTUR                                      |
-+----------------------------------------------------------------------------------------------------+
-|                                                                                                    |
-|  [Exercise Catalog]  -->  [Workout Template]  -->  [Active Session]  -->  [Workout History & Logs] |
-|  - default_tracking_type  - tracking_type          - snapshot v2          - external_load_volume   |
-|  - allowed_modes          - target_reps            - polymorphic sets     - additional_load_volume |
-|  - 161 exercises mapped   - target_duration        - server-authoritative - total_reps             |
-|                           - target_distance          CAS & validation     - total_duration_seconds |
-|                                                                           - total_distance_meters  |
-+----------------------------------------------------------------------------------------------------+
-```
+| Klaim yang diamati | Bukti repository | Status |
+| --- | --- | --- |
+| Domain masih memiliki enam enum `TrackingType`. | `app/src/main/java/com/diajarkoding/imfit/domain/model/TrackingType.kt:3-10` | Verified dari kode; bukan target v1.4. |
+| `SetMeasurement.isCompleteEligible` membedakan enam validasi; `DISTANCE_DURATION` mewajibkan jarak. | `app/src/main/java/com/diajarkoding/imfit/domain/model/SetMeasurement.kt:3-18` | Verified dari kode. |
+| Target belum menyimpan beban; memiliki reps, durasi, jarak, dan rest. | `app/src/main/java/com/diajarkoding/imfit/domain/model/ExerciseTarget.kt:3-20` | Verified dari kode. |
+| `WorkoutSet` menggunakan `weight`, `additionalWeight`, `assistanceWeight`; pace membutuhkan waktu/jarak positif. | `app/src/main/java/com/diajarkoding/imfit/domain/model/WorkoutSet.kt:3-32` | Verified dari kode. |
+| `TemplateExercise` memiliki `legacyRestSeconds` khusus replay immutable command lama. | `app/src/main/java/com/diajarkoding/imfit/domain/model/TemplateExercise.kt:3-26` | Verified dari kode. |
+| Database lokal saat ini v9, bukan v7/v8. | `app/src/main/java/com/diajarkoding/imfit/data/local/database/IMFITDatabase.kt:26-38` | Verified dari kode. |
+| Rest rutin merupakan metadata historis; RPC mempertahankan ownership, receipts, dan revision checks. | `supabase/migrations/20261102144339_routine_rest_runtime_contract.sql:1-68` | Verified dari SQL repository; deployment live tidak diperiksa. |
+| Metadata modality terpisah dari tracking. | `app/src/main/java/com/diajarkoding/imfit/domain/model/ExerciseModality.kt:3-9` | Verified dari kode. |
+| Android produksi memakai Room-first; start/mutasi/finish lokal, kemudian aggregate upload. | `app/src/production/java/com/diajarkoding/imfit/di/AppModule.kt:58`; `app/src/main/java/com/diajarkoding/imfit/data/repository/WorkoutRepositoryImpl.kt:147-173,248-368`; `app/src/main/java/com/diajarkoding/imfit/data/sync/SyncManager.kt:315-325` | Verified dari kode; tidak diganti menjadi remote-first. |
+| Override rest lokal saat ini terpisah dari routine dan menerima 1..86399. | `app/src/main/java/com/diajarkoding/imfit/data/repository/WorkoutRepositoryImpl.kt:430-446` | Verified dari kode; target baru harus membaca rest routine, bukan mempertahankan override sesi sebagai sumber default. |
+| `workout_sets.weight` dan `reps` lama NOT NULL dengan default 0; target durasi tidak cukup hanya menambah kolom baru. | `supabase/migrations/20260828130114_imfit_schema_baseline.sql:104-110` | Verified dari SQL repository; nullability perlu migrasi eksplisit. |
+| Selector mode dan ekspansi beban merupakan state/callback, bukan label saja. | `app/src/main/java/com/diajarkoding/imfit/presentation/ui/workout/EditWorkoutScreen.kt:240-320`; `app/src/main/java/com/diajarkoding/imfit/presentation/ui/workout/EditWorkoutViewModel.kt:307-329`; `app/src/main/java/com/diajarkoding/imfit/presentation/ui/workout/ActiveSetRow.kt:68-74,152-180` | Verified dari kode. |
+| Enam referensi UI/UX existing | `imfit-ui-ux/IMFIT.pen`: `eR0yE`, `njlmZ`, `Q1BGbI`, `MdoRQ`, `Of1nW`, `TXyaw`; pemetaan lengkap §2.1. | Identitas/nama node Verified melalui MCP read-only; revisi visual serta pemeriksaan lebar 360/412 adalah laporan user, bukan verifikasi runtime Android. |
+| Set completed existing dikunci untuk edit/hapus; belum ada undo completion pada ViewModel yang diperiksa. | `app/src/main/java/com/diajarkoding/imfit/presentation/ui/workout/ActiveWorkoutViewModel.kt:282-365` | Verified dari kode; transisi koreksi completed di §4.2.1 masih direncanakan. |
+| Timer menyimpan deadline monotonic, boot identity dan daftar set yang sudah memicu timer. | `app/src/main/java/com/diajarkoding/imfit/core/timer/RestTimerCoordinator.kt:23-55,129-136,190-217,251-278` | Verified dari kode; identitas timer existing masih dibentuk dari setNumber di `ActiveWorkoutViewModel.kt:349-352`. |
+| Picker memakai exclusions, selected IDs, flow/result identity dan deduplikasi saat accept. | `app/src/main/java/com/diajarkoding/imfit/presentation/ui/exercise/ExerciseSelectionViewModel.kt:74-104,274-289`; `app/src/main/java/com/diajarkoding/imfit/presentation/ui/workout/EditWorkoutViewModel.kt:345-363`; `app/src/main/java/com/diajarkoding/imfit/presentation/ui/workout/RoutineFlowManager.kt:92-113` | Verified dari kode; §4.3 mengunci interpretasi membership vs penambahan. |
+| Estimasi existing memakai durasi × set untuk tipe waktu dan 8 menit per exercise lainnya; tidak menjumlah rest. | `app/src/main/java/com/diajarkoding/imfit/presentation/ui/workout/WorkoutDetailViewModel.kt:196-205` | Verified dari kode; bukan formula final untuk array target v1.4. |
+| Waktu aktif sesi mengurangi pause, tetapi durasi history existing memakai end−start. | `app/src/main/java/com/diajarkoding/imfit/domain/model/WorkoutSession.kt:44-53`; `app/src/main/java/com/diajarkoding/imfit/domain/model/WorkoutLog.kt:19-20` | Verified dari kode; dua konsep tidak boleh diberi arti yang sama (§7.1). |
+| Finish lokal menyimpan hanya completed sets, memakai session ID sebagai workout ID, lalu menghapus active session dalam transaksi. | `app/src/main/java/com/diajarkoding/imfit/data/repository/WorkoutRepositoryImpl.kt:269-389` | Verified dari kode; target v3 harus mempertahankan stable set ID dan snapshot lengkap pada log yang dipersist. |
+| Upload mengakui parent/children hanya setelah RPC sukses dan parent tidak berubah; kegagalan mempertahankan data lokal. | `app/src/main/java/com/diajarkoding/imfit/data/sync/SyncManager.kt:293-349`; `app/src/main/java/com/diajarkoding/imfit/data/sync/SyncWorker.kt:17-23` | Verified dari kode; bukan hasil uji offline v3. |
+| Receipt server menggunakan workout ID dan menolak replay dengan payload berbeda. | `supabase/migrations/20261101000300_local_workout_legacy_provenance.sql:52-75` | Verified dari SQL repository; live DB tidak diperiksa. |
 
----
+**Keselarasan desain terkini:** gunakan ulang keenam mockup existing pada §2.1, termasuk state inline; tidak menambah layar/workflow baru. Laporan user memperbarui bukti desain sebelumnya: Jumping Jacks pada `TXyaw` kini durasi saja, Bike memakai subset indikator, dan rest tampil read-only per set. Catatan lama bahwa Jumping Jacks masih menampilkan kelima metrik tidak lagi berlaku. Contoh jumlah set pada Edit adalah data tersimpan yang dipertahankan, bukan perintah mereset default.
 
-## 2. Audit Ground Truth: Codebase `hybrid` & Live Supabase `imfit`
+Semua nama field, versi, batas baru, dan perubahan perilaku di §3–§10 adalah **kontrak usulan v1.4**, bukan klaim implementasi saat ini. Struktur skema aktual harus direkonsiliasi dengan server sebelum DDL; jangan menjalankan ulang migrasi v1.3 yang sudah tercatat.
 
-### 2.1 Live Supabase `imfit` (`ltcxltahkrjnsjaxndsa`)
-Pemeriksaan langsung pada skema database Supabase PostgreSQL 17 aktif menunjukkan:
-1. **`public.exercises` (161 baris)**:
-   - Kolom: `id`, `muscle_category_id`, `name`, `description`, `image_url`, `video_url`, `difficulty`, `equipment`, `is_active`, `created_at`, `updated_at`.
-   - **Celah**: Tidak ada kolom `measurement_type`, `default_tracking_type`, atau tabel relasi mode pelacakan yang didukung.
-2. **`public.template_exercises` (22 baris)**:
-   - Kolom: `id`, `template_id`, `exercise_id`, `order_index`, `sets` (1..20), `reps` (1..100, `NOT NULL DEFAULT 10`), `rest_seconds` (0..600).
-   - **Celah**: Tidak ada target durasi atau jarak. Repetisi terkunci `NOT NULL`.
-3. **`public.workout_sets` (113 baris: 106 completed, 7 uncompleted 0 kg)**:
-   - Kolom: `id`, `exercise_log_id`, `workout_log_id`, `exercise_id`, `set_number`, `weight`, `reps`, `is_completed`, `is_warmup`, `notes`.
-   - **Fakta**: Tidak ada completed set dengan `weight = 0`. Hal ini konsisten dengan adanya validasi positif yang menolak set 0 kg.
-4. **RPC Server-Side Validations**:
-   - `public.update_active_session`: Baris validasi `complete_set`:
-     ```sql
-     elsif v_type='complete_set' then
-       if (v_set->>'weight')::numeric<=0 or (v_set->>'reps')::integer<=0 then
-         perform imfit_private.fail('PT400','VALIDATION');
-       end if;
-       v_set:=jsonb_set(v_set,'{is_completed}','true');
-     ```
-   - `imfit_private.terminal_session`: Baris validasi finalisasi sesi:
-     ```sql
-     if v_sets=0 or exists(select 1 from jsonb_array_elements(v_row.session_data->'exercises') e,
-       lateral jsonb_array_elements(e->'sets') s where (s->>'is_completed')::boolean
-       and ((s->>'weight')::numeric<=0 or (s->>'reps')::integer<=0)) then
-       perform imfit_private.fail('PT400','VALIDATION');
-     end if;
-     ```
-   - `public.persist_local_workout_aggregate`: Mengharuskan relasi kaku:
-     `v_volume = sum(weight * reps)` dan `abs(v_volume - total_volume) <= 0.01`.
-   - `public.save_template_revision`: Menolak jika field `sets`, `reps`, `rest_seconds` tidak ada atau bernilai `<= 0`.
-   - `public.active_sessions`: Constraint `check (schema_version = 1)` mengunci schema JSON hanya pada versi 1.
+### 2.1 Referensi mockup pen.dev dan traceability UI → data
 
-### 2.2 Android Codebase pada Branch `hybrid`
-Pemeriksaan pada kode Android `:app` membuktikan:
-1. **Domain Model (`Exercise.kt`, `WorkoutSet.kt`, `TemplateExercise.kt`)**:
-   - `WorkoutSet.kt:9`: `val volume: Float get() = if (isCompleted) weight * reps else 0f`.
-   - `TemplateExercise.kt`: Hanya menampung `sets`, `reps`, `restSeconds`.
-   - `ExercisePrescriptionCapability.kt`: Memuat hardcoded set ID yang memblokir plank dan kardio (`durationDistanceExerciseIds` = `ex_core_1`, `ex_core_9`, `ex_cardio_1` s/d `ex_cardio_9`).
-2. **UI Layer (`ActiveSetRow.kt:108`)**:
-   - Checkbox terkunci:
-     ```kotlin
-     enabled = editable && !isPaused && set.weight > 0f && set.reps > 0
-     ```
-   - Input hanya menyediakan dua kolom: KG dan Reps.
-3. **Session ViewModel (`ActiveWorkoutViewModel.kt:277`)**:
-   - Method `completeSet` menyaring:
-     ```kotlin
-     if (set.setNumber == setNumber && !set.isCompleted && set.weight > 0 && set.reps > 0)
-     ```
-4. **Routine Editor (`EditWorkoutViewModel.kt:30-31`, `SupabaseRoutineRepository.kt:170`)**:
-   - Validasi ketat `sets in 1..20 && reps in 1..100 && rest in 0..600`.
-   - Gerakan non-reps diblokir dari pemilihan di `ExerciseSelectionScreen.kt:279` dengan string `R.string.routine_duration_unsupported`.
-5. **Local Database (`IMFITDatabase.kt` v7)**:
-   - Entity `TemplateExerciseEntity`, `WorkoutSetEntity`, `ExerciseLogEntity`, `WorkoutLogEntity` hanya memetakan `weight` dan `reps`.
+Sumber canvas: [IMFIT.pen](../../../imfit-ui-ux/IMFIT.pen), workspace `imfit-ui-ux`. Gunakan node ID untuk membuka frame existing melalui Pencil/pen.dev. Nama frame di bawah dibaca langsung dengan MCP; nilai contoh/nama seperti “3 dipilih” bukan konstanta perilaku aplikasi.
 
----
+| Layar / node ID | Nama frame existing | Kontrak UI target dari revisi mockup | Sumber data → alur dan persistence |
+| --- | --- | --- | --- |
+| Home — `eR0yE` | REF 01 · Home · Happy state / Hybrid | Volume legacy tetap terpisah dari volume beban tercatat baru. | `WorkoutLog`/agregat completed beserta versi/quality → presentasi seri/label terpisah (§7.1). `recorded_load_volume` baru tidak digabung dengan external/additional volume legacy; status pending/synced tidak menggandakan workout ID. |
+| Detail Routine — `njlmZ` | Routine · Detail / Light | Ringkasan target berbeda, misalnya `3 set · 12/10/8 reps`; gambar/nama mengikuti komponen existing. | Array canonical `template_exercises.set_targets` → urutan reps/durasi untuk ringkasan (§3). Bukan hasil active/history atau satu scalar yang meratakan seluruh target. |
+| Setup — `Q1BGbI` | REF 02 · Setup Awal Rutinitas · Happy state | Target/rest independen; tiga field Strength atau dua field durasi/rest tetap horizontal per baris. | Draft keyed `row_id` → `SaveCommand` → `save_template_revision` → array target atomik (§4.1/§6.1). Jumlah set turunan dari baris; perubahan baris tidak menyebar. |
+| Edit — `MdoRQ` | REF 03 · Edit Rutinitas · Happy state | Baris/nilai tersimpan dipertahankan, termasuk rest **0**. | Load canonical array atau ekspansi legacy → durable draft → commit revisi baru. Missing/null berbeda dari 0; tidak menjalankan ulang default 3/1 atau rest 60 pada edit/recovery (§4.1/§8.2). |
+| Picker — `Of1nW` | REF 04 · Pilih Gerakan · Happy state / 3 dipilih | Anggota existing dibedakan dari pilihan baru dan tidak dapat diduplikasi. **Tanpa label/badge Strength, Cardio, Conditioning, Isometric, atau badge kategori sejenis**; status existing/terpilih tetap. | `memberIds` dari draft dan `selectedNewIds` → selection result → `acceptSelection` (§4.3). Tidak ada write routine saat memilih; CTA hanya menghitung penambahan baru. Metadata format/profil/capability tetap dibawa DTO/draft walaupun tidak dirender sebagai badge. |
+| Active — `TXyaw` | REF 05 · Sesi Aktif · Happy state / v1.4 unified inputs | Unified inputs; Jumping Jacks hanya durasi, Bike hanya indikator supported; **rest read-only per set**. | Metadata snapshot → field hasil sesuai capability; `target_row_id` → target dalam `set_targets`/`extra_set_targets` → label rest dan timer. Hasil → `mutateActiveSession` → Room → finish/aggregate sync (§4.2/§6/§7.2). Tidak menulis rest ke measurement hasil. |
 
-## 3. Spesifikasi Domain Model Target (6 Tipe Pengukuran)
+**Aturan lintas frame:**
 
-```
-+----------------------------------------------------------------------------------------------------+
-|                                    KLASIFIKASI 6 TRACKING TYPE                                     |
-+-------------------+-----------------------------+-------------------------+------------------------+
-| TrackingType      | Input Primer                | Input Sekunder          | Kondisi Set Selesai    |
-+-------------------+-----------------------------+-------------------------+------------------------+
-| WEIGHT_REPS       | Weight (kg) > 0             | Reps > 0                | weight > 0 && reps > 0 |
-| BODYWEIGHT_REPS   | Reps > 0                    | Additional Wt (kg) >= 0 | reps > 0               |
-| ASSISTED_REPS     | Reps > 0                    | Assistance Wt (kg) > 0  | reps > 0 && assist > 0 |
-| REPS_ONLY         | Reps > 0                    | -                       | reps > 0               |
-| DURATION          | Duration (detik) > 0        | -                       | duration > 0           |
-| DISTANCE_DURATION | Duration (detik) > 0        | Distance (meter) > 0    | duration > 0 && dist>0 |
-+-------------------+-----------------------------+-------------------------+------------------------+
-```
+- Layout pada lebar canvas **360 dan 412** serta state inline dilaporkan telah disiapkan/diperiksa user. Reuse struktur tersebut; jangan memperlakukan laporan desain sebagai hasil Compose/device test. Implementasi nanti tetap menguji nilai panjang/error inline pada kedua lebar tanpa memecah field Rest ke baris terpisah.
+- Error field, save pending/gagal, existing/selected, dan error sesi/sync memakai slot state inline existing. State berasal dari draft/ViewModel/hasil operasi; jangan membuat screen, route, workflow, tabel atau kolom baru hanya untuk merepresentasikan state visual.
+- Rest active adalah label konfigurasi, misalnya **Rest 90 s** atau **Rest 0 s**, bukan text field. Countdown dapat menampilkan sisa 60 s dari rest 90 s tanpa mengubah label/target 90. Reorder/delete memilih sumber lewat identitas target, bukan index; tidak ada write DB karena label dirender.
+- Penghapusan badge di Picker hanya perubahan presentasi. Jangan menghapus `modality`, `trackingType`, `trackingProfile`, `supportedMetrics` atau data kategori otot dari katalog/DTO/cache/snapshot; metadata tersebut tetap menentukan form, default, validasi dan analytics. Pencarian/filter existing tidak didesain ulang oleh revisi ini.
+- Angka/nilai dummy mockup bukan default global atau hasil pengukuran yang harus ditulis. Source canonical routine, snapshot sesi dan completed results tetap dibedakan sebagaimana kontrak PLAN.
 
-### 3.1 Kontrak Domain Model Kotlin
-Definisi enum dan model domain di `domain/model/`:
 
-```kotlin
-package com.diajarkoding.imfit.domain.model
+## 3. Komponen: UI Detail Routine
 
-enum class TrackingType {
-    WEIGHT_REPS,
-    BODYWEIGHT_REPS,
-    ASSISTED_REPS,
-    REPS_ONLY,
-    DURATION,
-    DISTANCE_DURATION
-}
+**Detail Revisi**
 
-data class ExerciseTarget(
-    val sets: Int = 3,
-    val targetReps: Int? = 10,
-    val targetDurationSeconds: Int? = null,
-    val targetDistanceMeters: Int? = null,
-    val restSeconds: Int = 60
-) {
-    fun validate(trackingType: TrackingType): Boolean {
-        if (sets !in 1..20 || restSeconds !in 0..600) return false
-        return when (trackingType) {
-            TrackingType.WEIGHT_REPS,
-            TrackingType.BODYWEIGHT_REPS,
-            TrackingType.ASSISTED_REPS,
-            TrackingType.REPS_ONLY -> (targetReps ?: 0) in 1..100
-            TrackingType.DURATION -> (targetDurationSeconds ?: 0) in 1..86400
-            TrackingType.DISTANCE_DURATION -> (targetDurationSeconds ?: 0) in 1..86400 && 
-                (targetDistanceMeters == null || targetDistanceMeters in 1..1000000)
-        }
-    }
-}
+Setiap exercise card di daftar routine **hanya** memuat gambar/ilustrasi bila tersedia sesuai perilaku sekarang, nama exercise, dan ringkasan target tepat di bawah nama. Tidak mengubah sumber, fallback, pemuatan, atau mekanisme gambar yang sudah berjalan.
 
-data class SetMeasurement(
-    val weight: Float? = null,
-    val reps: Int? = null,
-    val durationSeconds: Int? = null,
-    val distanceMeters: Int? = null,
-    val additionalWeight: Float? = null,
-    val assistanceWeight: Float? = null
-) {
-    fun isCompleteEligible(type: TrackingType): Boolean = when (type) {
-        TrackingType.WEIGHT_REPS -> (weight ?: 0f) > 0f && (reps ?: 0) > 0
-        TrackingType.BODYWEIGHT_REPS -> (reps ?: 0) > 0 && (additionalWeight ?: 0f) >= 0f
-        TrackingType.ASSISTED_REPS -> (reps ?: 0) > 0 && (assistanceWeight ?: 0f) > 0f
-        TrackingType.REPS_ONLY -> (reps ?: 0) > 0
-        TrackingType.DURATION -> (durationSeconds ?: 0) > 0
-        TrackingType.DISTANCE_DURATION -> (durationSeconds ?: 0) > 0 && (distanceMeters ?: 0) > 0
-    }
-}
-```
+| Kategori | Contoh ringkasan |
+| --- | --- |
+| Strength | `3 x 12 reps` atau `4 x 8 reps` |
+| Isometric | `3 set · 60 s` |
+| Cardio | `1 set · 30 min` |
 
-### 3.2 Pembaruan Model Existing
-- **`Exercise.kt`**:
-  ```kotlin
-  data class Exercise(
-      val id: String,
-      val name: String,
-      val muscleCategory: MuscleCategory,
-      val description: String,
-      val imageUrl: String? = null,
-      val isActive: Boolean = true,
-      val modality: ExerciseModality,
-      val defaultTrackingType: TrackingType,
-      val allowedTrackingTypes: List<TrackingType>
-  )
-  ```
-- **`TemplateExercise.kt`**:
-  ```kotlin
-  data class TemplateExercise(
-      val exercise: Exercise,
-      val trackingType: TrackingType = exercise.defaultTrackingType,
-      val sets: Int = 3,
-      val reps: Int? = 10,
-      val targetDurationSeconds: Int? = null,
-      val targetDistanceMeters: Int? = null,
-      val restSeconds: Int = 60
-  )
-  ```
-- **`WorkoutSet.kt`**:
-  ```kotlin
-  data class WorkoutSet(
-      val setNumber: Int,
-      val weight: Float = 0f,
-      val reps: Int = 0,
-      val durationSeconds: Int? = null,
-      val distanceMeters: Int? = null,
-      val additionalWeight: Float? = null,
-      val assistanceWeight: Float? = null,
-      val isCompleted: Boolean = false
-  )
-  ```
+Jangan menampilkan beban, rest, mode, badge kategori tambahan, maupun metrik kardio dalam ringkasan card. Ringkasan Isometric memakai detik; Cardio memakai menit jika kelipatan menit, selain itu detik. Editor dan active session tetap `HH:MM:SS`. Tidak menambah layar detail exercise mandiri.
 
-Kontrak metadata katalog pada contoh di atas wajib berasal dari server dan dipertahankan melalui DTO, cache Room, dan domain. `ExerciseModality` membedakan `STRENGTH`, `CALISTHENICS`, `ISOMETRIC`, `CARDIO`, dan `CONDITIONING`; kategori otot tetap dimensi terpisah. `defaultTrackingType` harus termasuk dalam `allowedTrackingTypes`. Jangan memberi metadata katalog baru fallback diam-diam `WEIGHT_REPS` atau menghitung klasifikasi dari ID gerakan. Pembacaan snapshot/data legacy tetap mengikuti jalur kompatibilitas dan penanda kualitas yang sudah ditetapkan, bukan diklasifikasi ulang berdasarkan katalog terbaru.
+**Logika Data**
 
----
+Card membaca jumlah dan nilai **daftar target baris** routine tersimpan, bukan scalar target tunggal atau hasil sesi. Target homogen tetap diringkas seperti tabel di atas; target berbeda dapat ditampilkan `3 set · 12/10/8 reps` atau `3 set · 60/90/60 s`, sesuai urutan baris. Tidak meratakan nilai berbeda menjadi target seragam. Save memperbarui ringkasan; batal tidak mengubahnya. Durasi tidak pernah ditampilkan sebagai `0 reps`.
 
-## 4. Aturan Produk & Coaching Fitness Invariants
+Navigasi tambah gerakan tetap detail → picker langsung → setup/edit setelah konfirmasi. Back dari picker kembali ke detail tanpa draft setup kosong atau write database.
 
-1. **Konvensi Berat Beban Eksternal**:
-   - **Barbell**: Total berat piringan ditambah berat bar (standar Olympic bar 20 kg).
-   - **Dumbbell**: Berat **per satu dumbbell** (misal: Dumbbell Bench Press dengan dua dumbbell 20 kg dicatat sebagai **20 kg**, bukan 40 kg, sesuai konvensi standar aplikasi fitness modern untuk menghindari distorsi progres per tangan).
-2. **Bodyweight Semantics**:
-   - Pengguna dengan berat badan 70 kg yang melakukan Push-Up 12 repetisi cukup mencatat repetisi $12$ tanpa mengisi kg. Beban tambahan kosong atau nol berarti tidak memakai beban tambahan; bukan berarti berat badan pengguna nol.
-   - **Dilarang keras mengalikan berat badan pengguna ke dalam external volume**, karena berat badan fluktuatif dan biomekanika push-up hanya memindahkan ~64% massa tubuh.
-   - Progres calisthenics dievaluasi dari kenaikan repetisi (*Repetition Progress*) atau beban sabuk tambahan (*Additional Load Volume*).
-3. **Pemisahan Timer**:
-   - **Set Execution Timer (Timer Durasi Latihan)**: Berjalan saat set isometrik/kardio aktif (misal 45 detik Plank).
-   - **Rest Timer (Waktu Istirahat Antar-Set)**: Hitung mundur jeda pemulihan setelah set ditandai selesai (misal 60 detik istirahat). Keduanya tidak boleh saling menggantikan atau memakai satu slot memori yang sama.
-4. **Prefill History Rules**:
-   - Prefill nilai set sebelumnya hanya valid jika `exercise_id` **dan** `tracking_type` cocok 100%. Riwayat DURATION tidak boleh mem-prefill field REPS.
+**Rasionalitas & Output**
 
-5. **Karakter Gerakan Tidak Sama dengan Tracking Mode**:
-   - Weighted pull-up adalah bodyweight dengan tambahan beban; assisted pull-up adalah bodyweight dengan bantuan. Jangan mengubah keduanya menjadi beban eksternal biasa.
-   - `DURATION` tidak otomatis berarti cardio: plank tetap isometric, sedangkan cardio waktu saja tetap cardio. Conditioning berbeban tetap menggunakan metrik beban sesuai mode.
-6. **Cardio Tanpa Jarak yang Diketahui**:
-   - Gunakan pilihan **Waktu saja** (`DURATION`) bila tersedia pada katalog; hanya durasi positif diperlukan untuk menuntaskan set.
-   - Pilihan **Jarak + waktu** (`DISTANCE_DURATION`) tetap mensyaratkan kedua nilai positif untuk hasil set. Target jarak rutinitas boleh belum ditentukan sebagaimana §3.1, tetapi hasil set mode ini tidak boleh memakai jarak kosong/nol.
-   - Jarak yang tidak diketahui tidak dikonversi menjadi nol; pace tidak ditampilkan sebagai nilai nol jika data pendukung tidak tersedia. Jangan mengganti mode secara otomatis karena field kosong.
+Card cukup untuk memindai isi routine. Beban/rest tetap disimpan dan dapat diedit pada setup/edit, tetapi tidak menambah kepadatan informasi di daftar detail routine.
 
----
+## 4. Komponen: Setup Form dan Active Session
 
-## 5. Rencana Migrasi Database Supabase (PostgreSQL 17)
+### 4.1 Setup awal dan edit routine: dynamic set rows
 
-Pendekatan migrasi menggunakan prinsip **Expand $\rightarrow$ Backfill $\rightarrow$ Cutover $\rightarrow$ Contract**.
+**Detail Revisi**
 
-### 5.1 Tahap Expand: Additive Schema Changes
-Dibuat migrasi baru: `supabase/migrations/20261101000100_exercise_multimodality_tracking.sql`.
+Hapus field jumlah set numerik. Gunakan pola baris, aksi **Tambah set**, dan hapus existing; `setCount = setTargets.size`. Nilai setiap baris independen. Penomoran tampilan selalu 1..N menurut urutan tersisa, bukan identitas permanen baris.
 
-```sql
--- 1. Create Tracking Type ENUM
-CREATE TYPE public.tracking_type_enum AS ENUM (
-    'WEIGHT_REPS',
-    'BODYWEIGHT_REPS',
-    'ASSISTED_REPS',
-    'REPS_ONLY',
-    'DURATION',
-    'DISTANCE_DURATION'
-);
+| Set | Beban (kg) | Reps | Rest (s) |
+| --- | ---: | ---: | ---: |
+| Set 1 | 20 | 12 | 60 |
+| Set 2 | 25 | 10 | 60 |
+| Set 3 | 30 | 8 | 60 |
 
--- 2. Alter exercises
-ALTER TABLE public.exercises 
-ADD COLUMN default_tracking_type public.tracking_type_enum NOT NULL DEFAULT 'WEIGHT_REPS';
+Strength, termasuk bodyweight: **Set → Beban (kg) → Reps → Rest (s)** pada satu baris horizontal. Pertahankan tiga field seperti `Q1BGbI`; Rest tidak dipindah ke bawah atau menjadi form tersendiri.
 
--- 3. Create allowed tracking modes table
-CREATE TABLE public.exercise_tracking_modes (
-    exercise_id VARCHAR NOT NULL REFERENCES public.exercises(id) ON DELETE CASCADE,
-    tracking_type public.tracking_type_enum NOT NULL,
-    is_default BOOLEAN NOT NULL DEFAULT false,
-    PRIMARY KEY (exercise_id, tracking_type)
-);
+| Set | Durasi | Rest (s) |
+| --- | --- | ---: |
+| Set 1 | 00:01:00 | 60 |
+| Set 2 | 00:01:00 | 60 |
+| Set 3 | 00:01:00 | 60 |
 
--- 4. Alter template_exercises
-ALTER TABLE public.template_exercises
-ADD COLUMN tracking_type public.tracking_type_enum NOT NULL DEFAULT 'WEIGHT_REPS',
-ADD COLUMN target_duration_seconds INTEGER NULL CHECK (target_duration_seconds IS NULL OR (target_duration_seconds >= 1 AND target_duration_seconds <= 86400)),
-ADD COLUMN target_distance_meters INTEGER NULL CHECK (target_distance_meters IS NULL OR (target_distance_meters >= 1 AND target_distance_meters <= 1000000));
+Cardio/Isometric: **Set → Durasi (HH:MM:SS) → Rest (s)**, dua field dalam satu baris horizontal seperti `MdoRQ`. Durasi/rest boleh berbeda antarbaris; tidak ada beban/reps. Metrik cardio bukan input target routine.
 
-ALTER TABLE public.template_exercises ALTER COLUMN reps DROP NOT NULL;
-ALTER TABLE public.template_exercises ALTER COLUMN reps DROP DEFAULT;
+| Exercise saat pertama ditambahkan | Default jumlah baris |
+| --- | ---: |
+| Strength termasuk bodyweight | 3 |
+| Isometric | 3 |
+| Cardio `duration_only` | 3 |
+| Cardio `distance_activity` | 1 |
+| Cardio `equipment_metrics` | 1 |
 
--- 5. Alter workout_sets
-ALTER TABLE public.workout_sets
-ADD COLUMN duration_seconds INTEGER NULL CHECK (duration_seconds IS NULL OR duration_seconds >= 0),
-ADD COLUMN distance_meters INTEGER NULL CHECK (distance_meters IS NULL OR distance_meters >= 0),
-ADD COLUMN additional_weight NUMERIC(7,2) NULL CHECK (additional_weight IS NULL OR additional_weight >= 0),
-ADD COLUMN assistance_weight NUMERIC(7,2) NULL CHECK (assistance_weight IS NULL OR assistance_weight >= 0);
+- Tambah baris membuat target baru yang independen dengan struktur yang sama dan **Rest 60 detik**. Tidak menyalin referensi mutable atau menerapkan perubahan ke seluruh baris.
+- Default jumlah baris hanya saat exercise pertama ditambahkan ke routine. Edit/recovery membaca seluruh baris/nilai tersimpan, termasuk rest 0; jangan regenerate default saat recomposition atau metadata diperbarui.
+- Identitas baris stabil selama edit; hapus satu baris hanya menghapus baris tersebut lalu menomori ulang baris tersisa tanpa mengubah nilainya. Draft boleh kosong setelah hapus terakhir; save memerlukan 1..20 baris mengikuti batas existing. Jangan otomatis menambahkan ulang tiga baris.
+- Beban 0..1000 kg, reps target 1..100, rest 0..600; satu field `weightKg`, tanpa kalkulasi bodyweight. Beban default baru dapat 0 terlihat; draft kosong bukan 0 otomatis.
+- Durasi input selalu `HH:MM:SS` (`00:00:00`), disimpan detik; menit/detik 00..59 dan total positif ≤86400. Target isometric relevan diprioritaskan; plank/sejenisnya tanpa target memakai `00:01:00`. Durasi cardio mengikuti target exercise/routine bila tersedia, selain itu user mengisi sebelum save.
+- Tidak ada mode manual, selector profil, atau konfigurasi metrik oleh user.
 
--- 6. Alter exercise_logs
-ALTER TABLE public.exercise_logs
-ADD COLUMN tracking_type public.tracking_type_enum NOT NULL DEFAULT 'WEIGHT_REPS',
-ADD COLUMN total_duration_seconds INTEGER NOT NULL DEFAULT 0,
-ADD COLUMN total_distance_meters INTEGER NOT NULL DEFAULT 0,
-ADD COLUMN additional_volume NUMERIC(10,2) NOT NULL DEFAULT 0,
-ADD COLUMN metric_quality VARCHAR NOT NULL DEFAULT 'VERIFIED' CHECK (metric_quality IN ('VERIFIED', 'LEGACY_UNVERIFIED'));
+**Logika Data**
 
--- 7. Alter workout_logs
-ALTER TABLE public.workout_logs
-ADD COLUMN total_duration_seconds INTEGER NOT NULL DEFAULT 0,
-ADD COLUMN total_distance_meters INTEGER NOT NULL DEFAULT 0,
-ADD COLUMN additional_volume NUMERIC(10,2) NOT NULL DEFAULT 0,
-ADD COLUMN data_quality VARCHAR NOT NULL DEFAULT 'VERIFIED' CHECK (data_quality IN ('VERIFIED', 'LEGACY_UNVERIFIED'));
+Picker → metadata kategori/profil → inisialisasi baris sekali → edit baris berdasarkan identitas → validasi daftar → `save_template_revision` menyimpan daftar target utuh dan `sets` turunan bila diperlukan API existing. `sets` tidak boleh menjadi sumber independen; server menolak mismatch dengan panjang daftar. Save atomik mempertahankan nilai tiap baris. Error menjaga draft; batal tidak menulis perubahan.
 
--- 8. Alter active_sessions to allow schema_version 2
-ALTER TABLE public.active_sessions DROP CONSTRAINT IF EXISTS active_sessions_schema_version_check;
-ALTER TABLE public.active_sessions ADD CONSTRAINT active_sessions_schema_version_check CHECK (schema_version IN (1, 2));
-```
+**Lifecycle baris dan kegagalan save:**
 
-### 5.2 Tahap Backfill: Klasifikasi Katalog 161 Exercise
-Script DML backfill memetakan seluruh latihan katalog:
-1. **Core / Isometric**:
-   - `ex_core_1` (Plank), `ex_core_9` (Side Plank) $\rightarrow$ `DURATION`. Allowed: `[DURATION]`.
-   - `ex_core_2` (Crunches), `ex_core_3` (Russian Twist), `ex_core_4` (Leg Raises), `ex_core_7` (Bicycle Crunches), `ex_core_8` (Mountain Climbers), `ex_core_10` (Hanging Knee Raise) $\rightarrow$ `BODYWEIGHT_REPS`. Allowed: `[BODYWEIGHT_REPS, REPS_ONLY, DURATION]`.
-   - `ex_core_11` (Kneeling Cable Crunch), `ex_core_12` (Cable Pallof Press), `ex_core_13` (Dumbbell Side Bend), `ex_core_14` (Barbell Landmine Twist), `ex_core_15` (Ab Machine) $\rightarrow$ `WEIGHT_REPS`.
-2. **Cardio**:
-   - `ex_cardio_1` (Treadmill Running), `ex_cardio_2` (Stationary Bike), `ex_cardio_3` (Rowing Machine), `ex_cardio_6` (Elliptical), `ex_cardio_7` (Stair Climber), `ex_cardio_11` (Assault AirBike), `ex_cardio_12` (SkiErg), `ex_cardio_13` (Incline Treadmill Walk), `ex_cardio_14` (Recumbent Bike) $\rightarrow$ `DISTANCE_DURATION`. Allowed: `[DISTANCE_DURATION, DURATION]`.
-   - `ex_cardio_4` (Jump Rope), `ex_cardio_5` (Burpees), `ex_cardio_8` (Box Jumps), `ex_cardio_9` (High Knees), `ex_cardio_10` (Jumping Jacks) $\rightarrow$ `REPS_ONLY`. Allowed: `[REPS_ONLY, DURATION]`.
-   - `ex_cardio_15` s/d `ex_cardio_19` (Dumbbell Thrusters, Man Makers, Bear Complex, Devil Press) $\rightarrow$ `WEIGHT_REPS`.
-3. **Calisthenics / Bodyweight Upper & Lower**:
-   - `ex_chest_4` (Push-Ups), `ex_chest_9` (Dips), `ex_chest_10` (Incline Push-Ups), `ex_back_2` (Pull-Ups), `ex_back_8` (Back Extensions), `ex_back_9` (Chin-Ups), `ex_legs_10` (Bodyweight Squats), `ex_legs_11` (Walking Lunges) $\rightarrow$ `BODYWEIGHT_REPS`. Allowed: `[BODYWEIGHT_REPS, REPS_ONLY]`.
-4. **Assisted Machines**:
-   - `ex_back_17` (Assisted Pull-Up Machine), `ex_triceps_7` (Assisted Dip Machine) $\rightarrow$ `ASSISTED_REPS`. Allowed: `[ASSISTED_REPS]`.
-5. **Standard Strength (Barbell, Dumbbell, Cable, Machine)**:
-   - Sisa 125 latihan $\rightarrow$ `WEIGHT_REPS`. Allowed: `[WEIGHT_REPS]`.
+| Aksi | State/persistence yang wajib | Contoh benar / kegagalan |
+| --- | --- | --- |
+| Tambah | Buat `row_id` baru sekali, append, isi default baris baru, lalu persist draft. Jangan membuat ulang ID baris lain. | `r1,r2,r3` → `r1,r2,r3,r4`; rest `r4=60`, nilai `r1..r3` tetap. |
+| Edit | Update hanya `row_id` yang dituju; simpan raw input yang belum valid di draft, bukan ke routine canonical. | Target `r2` 45 kg/8/90 s → 47.5 kg/8/90 s; baris lain tidak berubah. |
+| Hapus | Buang baris terpilih dari draft; nomor posisi dihitung ulang. ID yang dihapus tidak dipakai kembali oleh tambah berikutnya. | Hapus `r2` → `r1,r3`, nomor 1/2; `r3` tetap 50 kg/6/120 s. |
+| Save/reload | Command menyimpan ID, urutan dan nilai seluruh array; RPC commit atomik, reload mengikuti array canonical yang diakui. | Reload `r1,r3` tetap dua baris yang sama, bukan tiga default baru. |
+| Save gagal | Validasi lokal/server menjaga raw draft dan menyorot baris/field; revision conflict tidak menimpa canonical. Timeout/outcome unknown mempertahankan `SaveCommand` dan request ID existing untuk replay identik. | Respons terlambat tidak menghasilkan routine ganda; perubahan baru menunggu outcome command lama terselesaikan, bukan mengganti payload request yang sama. |
 
-### 5.3 Pembaruan Kontrak RPC Backend Supabase
-1. **`save_template_revision`**:
-   - Parameter `p_exercises` JSON menerima objek:
-     `{"exercise_id": "...", "order_index": 0, "tracking_type": "...", "sets": 3, "reps": 10, "target_duration_seconds": null, "target_distance_meters": null, "rest_seconds": 60}`.
-   - Validasi disesuaikan dengan `tracking_type`: jika `DURATION`, `target_duration_seconds` wajib $1..86400$, sedangkan `reps` boleh null.
-2. **`create_active_session`**:
-   - Membuat snapshot `active_sessions` dengan `schema_version = 2`.
-   - Mengisi `tracking_type` untuk setiap child exercise dari konfigurasi template.
-3. **`update_active_session`**:
-   - Mengizinkan command `edit_set` menerima `duration_seconds`, `distance_meters`, `additional_weight`, `assistance_weight`.
-   - Validasi `complete_set` membedakan tipe:
-     - `WEIGHT_REPS`: `weight > 0 && reps > 0`
-     - `BODYWEIGHT_REPS`: `reps > 0 && coalesce(additional_weight, 0) >= 0`
-     - `ASSISTED_REPS`: `reps > 0 && coalesce(assistance_weight, 0) > 0`
-     - `REPS_ONLY`: `reps > 0`
-     - `DURATION`: `duration_seconds > 0`
-     - `DISTANCE_DURATION`: `duration_seconds > 0 && distance_meters > 0`
-4. **`imfit_private.terminal_session`**:
-   - Kalkulasi metrik terpisah saat workout selesai:
-     - `v_external_volume := sum(weight * reps)` HANYA untuk latihan `WEIGHT_REPS`.
-     - `v_additional_volume := sum(additional_weight * reps)` untuk `BODYWEIGHT_REPS` berbeban.
-     - `v_total_reps := sum(reps)` untuk tipe reps.
-     - `v_total_duration := sum(duration_seconds)` untuk tipe durasi.
-     - `v_total_distance := sum(distance_meters)` untuk tipe jarak.
-   - Sesi tidak lagi ditolak jika ada set 0 kg pada latihan bodyweight/durasi.
-5. **`persist_local_workout_aggregate`**:
-   - Validasi agregat diperbarui agar mencocokkan total volume hanya dari latihan bertipe `WEIGHT_REPS`.
-6. **`get_progress_summary`**:
-   - Mengembalikan payload yang diperluas:
-     ```json
-     {
-       "start_date": "2026-10-01",
-       "end_date": "2026-10-31",
-       "workout_count": 12,
-       "external_volume_kg": "14500.00",
-       "additional_volume_kg": "320.00",
-       "total_reps": 850,
-       "hold_duration_seconds": 920,
-       "cardio_duration_seconds": 7200,
-       "cardio_distance_meters": 15400,
-       "workout_duration_seconds": 38400
-     }
-     ```
+Gunakan `EditWorkoutViewModel` durable draft/`SavedStateHandle`, `SaveCommand`, dan `saveChanges` existing; perluas isi command untuk array, bukan membuat draft owner/service baru. Batal kembali ke canonical tanpa write. Draft setelah process death hanya dijamin untuk data yang telah disimpan oleh mekanisme state existing; jangan menjanjikan raw keystroke yang belum dipersist.
 
----
+**Rasionalitas & Output**
 
-## 6. Arsitektur Android Codebase (`hybrid`)
+Setup/edit mengikuti komponen existing, bukan satu target global yang menggandakan semua set. Jumlah, urutan dan target per set tetap konsisten setelah tambah/hapus/save/recovery.
 
-### 6.1 Room Database Migration (v7 $\rightarrow$ v8)
-Pada `IMFITDatabase.kt`:
-```kotlin
-val MIGRATION_7_8 = object : Migration(7, 8) {
-    override fun migrate(database: SupportSQLiteDatabase) {
-        // template_exercises
-        database.execSQL("ALTER TABLE template_exercises ADD COLUMN tracking_type TEXT NOT NULL DEFAULT 'WEIGHT_REPS'")
-        database.execSQL("ALTER TABLE template_exercises ADD COLUMN target_duration_seconds INTEGER")
-        database.execSQL("ALTER TABLE template_exercises ADD COLUMN target_distance_meters INTEGER")
+### 4.2 Active Session, tambah set, dan timer
 
-        // workout_sets
-        database.execSQL("ALTER TABLE workout_sets ADD COLUMN duration_seconds INTEGER")
-        database.execSQL("ALTER TABLE workout_sets ADD COLUMN distance_meters INTEGER")
-        database.execSQL("ALTER TABLE workout_sets ADD COLUMN additional_weight REAL")
-        database.execSQL("ALTER TABLE workout_sets ADD COLUMN assistance_weight REAL")
+**Detail Revisi**
 
-        // exercise_logs
-        database.execSQL("ALTER TABLE exercise_logs ADD COLUMN tracking_type TEXT NOT NULL DEFAULT 'WEIGHT_REPS'")
-        database.execSQL("ALTER TABLE exercise_logs ADD COLUMN total_duration_seconds INTEGER NOT NULL DEFAULT 0")
-        database.execSQL("ALTER TABLE exercise_logs ADD COLUMN total_distance_meters INTEGER NOT NULL DEFAULT 0")
-        database.execSQL("ALTER TABLE exercise_logs ADD COLUMN additional_volume REAL NOT NULL DEFAULT 0")
+- Strength: **Set → Beban (kg) → Reps** setiap baris. Hapus **+ Tambah Beban**/`additionalWeightExpanded` dan pemisahan additional/assistance pada jalur baru; nilai beban/reps boleh berbeda antarset.
+- Isometric: **Set → Durasi (HH:MM:SS)**, tanpa metrik tambahan; plank/sejenisnya fallback 60 detik jika belum ada target relevan.
+- Cardio: **Set → Durasi (HH:MM:SS)**. `duration_only` tampil identik dengan Isometric; profil lain hanya menampilkan metrik yang didukung snapshot exercise, di bawah durasi dalam set yang sama (§5).
+- Tidak ada field **input** rest hasil. Tampilkan rest **read-only per set** sesuai `TXyaw`, dari `restSeconds` target snapshot yang direferensikan `target_row_id`; sumber yang sama dipakai timer, bukan rest global exercise atau kolom measurement baru. Rest 0 tetap terlihat sebagai 0, bukan dianggap missing.
+- Saat start, setiap baris target menjadi draft hasil dengan asosiasi identitas baris dan urutan yang sama. Target eksplisit per baris mengalahkan history; prefill hanya kompatibel exercise/format/versi/semantik dan tidak meratakan target berbeda.
+- Tambah/hapus set memakai pola active session existing dan menjaga nilai set lain. Set tambahan memakai target exercise relevan jika tersedia; rest konfigurasi fallback 60 bila tidak memiliki baris routine asal. Ini state konfigurasi sesi, bukan field input hasil dan tidak otomatis mengubah routine.
 
-        // workout_logs
-        database.execSQL("ALTER TABLE workout_logs ADD COLUMN total_duration_seconds INTEGER NOT NULL DEFAULT 0")
-        database.execSQL("ALTER TABLE workout_logs ADD COLUMN total_distance_meters INTEGER NOT NULL DEFAULT 0")
-        database.execSQL("ALTER TABLE workout_logs ADD COLUMN additional_volume REAL NOT NULL DEFAULT 0")
+**Logika Data**
 
-        // exercises
-        database.execSQL("ALTER TABLE exercises ADD COLUMN default_tracking_type TEXT NOT NULL DEFAULT 'WEIGHT_REPS'")
-    }
-}
+Android tetap **Room-first**: `startWorkout` menyimpan daftar target/rest per baris dan metadata exercise sebagai snapshot; `updateSetMeasurement`/`completeSet` hanya mengubah hasil set yang dituju. Completion membekukan timer eksekusi lalu memicu rest dari target baris snapshot set tersebut. Finish menyimpan hasil/pending sync atomik; aggregate import memvalidasi ulang.
+
+Rest 0 melewati countdown. State deadline/recovery timer tetap state sesi yang terpisah dari timer eksekusi dan hasil set. Edit routine setelah sesi dimulai tidak mengubah snapshot/timer sesi berjalan. Tidak menambah kolom measurement rest per set atau command override sesi baru. Override rest yang sudah ada pada sesi lama tetap dibaca sesuai versi asal; sesi baru memakai rest routine.
+
+**Rasionalitas & Output**
+
+Input per set tetap singkat dan konsisten, sementara routine menyediakan durasi istirahat. Hasil aktual, konfigurasi routine, serta state timer memiliki tanggung jawab terpisah.
+
+### 4.2.1 Lifecycle hasil set dan completion
+
+Ini **perilaku target v3**; existing `updateSetMeasurement` dan `removeSet` mengunci completed set, sedangkan `completeSet` hanya melakukan transisi belum-selesai → selesai.
+
+- Set hasil mempunyai `set_id` stabil (UUID) yang dipersist saat dibuat; gunakan sebagai `WorkoutSetEntity.id` saat finish. `target_row_id` menunjuk konfigurasi snapshot, `set_number` hanya posisi tampilan. Jangan lagi membentuk identitas hasil/timer dari index atau nomor yang dapat berubah.
+- Saat start, buat tepat satu draft hasil per target. Snapshot `set_targets` routine awal tetap immutable. Pada tambah active, append hanya konfigurasi tambahan ke `extra_set_targets` JSON sesi (awal `[]`), dengan `row_id` baru/rest 60 dan hasil `set_id` baru. Beban/reps/durasi mengikuti default relevan, bukan hasil/metric set terakhir; routine tidak bertambah.
+- Hapus hanya set **belum selesai** dan sisakan minimal satu hasil per exercise sesuai guard existing. Buang konfigurasi tambahan yang tak direferensikan dari `extra_set_targets`, tetapi jangan menghapus target routine awal dari `set_targets`. Nomor hasil diurutkan ulang, ID/asosiasi/nilai/status hasil lain tetap; hapus completed ditolak sampai undo eksplisit. Target awal yang hasilnya dihapus tetap tersedia sebagai bukti rencana awal, bukan hasil completed.
+- Edit hanya draft; completed tetap read-only. Aksi **Batal selesai** pada kontrol completion existing direncanakan mengubah `is_completed=false` tanpa menghapus angka; setelah itu user dapat edit/hapus. Sesi final tidak diedit lewat layar active.
+- Complete memvalidasi hasil sesuai snapshot, membekukan stopwatch, lalu commit `is_completed=true` ke Room. Nilai wajib invalid → tetap draft, error pada field, tidak memulai rest. Double tap/replay pada set yang sudah selesai adalah no-op.
+- Batal selesai mengurangi completed count dan seluruh statistik hasil seketika setelah commit, menghentikan timer hanya jika timer itu milik set yang dibatalkan, serta mempertahankan nilai untuk koreksi. Complete ulang memvalidasi lagi; tidak menggandakan hasil atau menambah completion count dua kali.
+- `completedSets = count(is_completed=true)` dihitung dari state yang tercommit, bukan counter yang di-increment terpisah. Edit/delete/undo menghitung ulang agregat; hasil sesi tidak pernah menulis ulang target routine.
+- Saat paused, finishing/cancelling, atau mutasi set yang sama masih berlangsung, kunci mutasi/completion. Error transaksi mengembalikan UI ke state Room terakhir, mempertahankan raw input yang belum berhasil disimpan untuk retry, dan tidak menyalakan timer seolah commit berhasil.
+
+**Contoh:** hasil `a/b/c` berasal dari target `r1/r2/r3`, nilai 40/10, 45/8, 50/6. Hapus draft `b` → hasil `a/c` bernomor 1/2 dengan nilai dan asosiasi `r1/r3` tetap. Complete `c` → completed 1, reps 6, volume 300; undo → completed/reps/volume kontribusi `c` kembali 0, nilai 50/6 tetap terlihat.
+
+### 4.2.2 Rest per set dan recovery
+
+- Complete target rest 60/90/120 memicu masing-masing durasi itu; tidak membaca override global sesi baru. `RestTimerCoordinator` existing tetap satu countdown aktif: complete set lain menggantikan countdown sebelumnya, bukan menumpuk timer paralel.
+- Rest **0** tidak membuat countdown/alarm; hentikan countdown sebelumnya agar tidak terasosiasi keliru dengan set yang baru selesai. Set tambahan active memakai rest 60 pada konfigurasi snapshot sesinya, tanpa field hasil rest.
+- Timer memakai identitas `(session.id, exercise.id, set_id)` stabil. Pertahankan deduplikasi `startedSetIds` existing: replay complete maupun complete ulang setelah undo **tidak mengulang timer yang pernah dimulai untuk set itu**; status/angka hasil tetap dapat dikoreksi. Undo menghentikan countdown yang cocok, tidak menghentikan timer set lain.
+- Persist completion dan **pemicu rest pending** pada JSON active session dalam transaksi Room yang sama. Pemicu memuat stable set ID, waktu completion, deadline monotonic asal dan boot identity; ini metadata runtime, bukan measurement atau tabel baru. Coordinator memprosesnya memakai store/deadline existing, lalu menandai handled; recovery mengulang proses secara idempotent bila aplikasi mati di antara commit completion dan penyimpanan timer.
+- Perluas codec/reconcile existing agar memakai deadline pemicu yang sudah tersimpan, **bukan `now + rest` saat recovery**. Ini perubahan target; `start` existing saat ini membentuk deadline dari waktu panggil. Bila store timer sudah memuat set itu, jangan mulai ulang. Pemicu superseded/undo/rest 0/finish/cancel tidak boleh membangkitkan timer lama.
+- Reopen pada boot yang sama: sisa `max(0, ceil((deadlineElapsedMs-nowElapsedMs)/1000))`. Rest 90, aplikasi tertutup setelah 20 detik dan dibuka 10 detik kemudian → sekitar 60 detik tersisa, bukan 90.
+- Deadline lewat → expired sesuai kebijakan coordinator, tanpa restart atau suara ganda. Boot tidak cocok/tidak diketahui atau session/owner sudah tidak valid → cancel/cleanup, jangan menebak deadline dari wall clock. Pertahankan kebijakan existing untuk alert terlambat (`RestTimerRecoveryPolicy.MAX_ALERT_LATENESS_MS`), notification failure dan retry; jangan mengubahnya menjadi jaminan delivery Android.
+- Gagal timer store/scheduling tidak membatalkan hasil set yang sudah committed. Tampilkan error timer/recovery, pertahankan pemicu untuk retry yang memakai deadline asal, dan jangan menghapus sesi. Finish/cancel membersihkan timer setelah outcome lokal yang sah; kegagalan transaksi finish tidak boleh menghapus hasil aktif.
+
+### 4.3 Exercise Picker: anggota routine vs pilihan tambahan
+
+**Existing yang digunakan:** `ExerciseSelectionViewModel.initialize(excludedIds, selectionContextId)`, `selectedExercises`, `toggleExercise`; `RoutineFlowManager.updateSelection`/`acknowledgeResult`; `EditWorkoutViewModel.acceptSelection` dan durable draft. Picker tetap jalur pemilihan, bukan writer routine.
+
+**Presentasi sesuai `Of1nW`:** hapus label/badge kategori/modalitas Strength, Cardio, Conditioning, Isometric dan sejenisnya dari row picker. Pertahankan status **sudah ditambahkan** dan **terpilih** sebagai state interaksi yang berbeda, bukan badge kategori. Metadata exercise tetap melewati selection result/draft untuk menentukan input setelah pemilihan; user tidak memilih mode dan tidak perlu melihat enum/profil internal.
+
+1. Bentuk `memberIds` dari semua exercise dalam **draft editor saat ini** (atau canonical detail bila belum ada editor), termasuk penambahan yang belum disimpan. Anggota existing dikecualikan dari hasil picker atau ditampilkan disabled dengan status sudah ditambahkan; tidak dimasukkan ke `selectedExercises`.
+2. `selectedNewIds` adalah pilihan unik yang belum termasuk `memberIds`. Label/count/enable konfirmasi mengikuti **jumlah penambahan baru**, bukan total anggota routine. Reset pilihan hanya mengosongkan pilihan baru, bukan menghapus anggota routine.
+3. Konfirmasi mengirim ordered selection snapshot dengan owner/routine/flow/result ID existing. `acceptSelection` memfilter ulang ID duplikat/anggota, menginisialisasi target hanya untuk exercise baru, mempersist draft lalu acknowledge result. Replay result ID tidak menambahkan exercise/baris default dua kali.
+4. Tidak ada RPC save saat toggle/filter/confirm picker; penambahan baru menjadi canonical hanya setelah user menyimpan setup/edit. Kembali dari picker ke editor mempertahankan nama routine, target/rest/ID/urutan seluruh baris draft sebelumnya.
+5. Back tanpa confirm membatalkan pilihan picker pada kunjungan itu, bukan membuang draft editor. Pada direct-add dari Detail tanpa editor, kembali langsung ke Detail seperti §3. Reopen picker memakai konteks/selection state existing yang valid, tetapi exclusions dihitung ulang dari draft agar anggota tidak terpilih kembali.
+6. Hydration exercise gagal/tidak aktif/missing → tetap di picker dengan retry, jangan append placeholder atau menghapus draft. Result dari owner/flow/routine lain atau account berubah ditolak; tidak bocor ke routine lain. Save revision conflict tetap ditangani editor, bukan picker.
+
+**Contoh benar:** draft memiliki Bench Press, Push-Ups, Plank dengan target yang sudah diedit. Pilih Treadmill → tombol **Tambah 1 Gerakan**, bukan Tambah 4; konfirmasi menghasilkan empat anggota dan hanya target Treadmill yang baru. Back tanpa konfirmasi tetap tiga anggota beserta target semula; double confirm/replay tetap hanya satu Treadmill.
+
+## 5. Komponen: klasifikasi dan metrik cardio per exercise
+
+**Detail Revisi**
+
+Cardio tetap kategori utama dengan input wajib durasi. Profil berikut hanya metadata pencatatan/default, bukan `TrackingType` baru atau pilihan mode user.
+
+| Profil | Contoh | Metrik yang dapat didukung | Default baris baru |
+| --- | --- | --- | ---: |
+| `duration_only` | Jumping jacks, high knees, mountain climbers, burpees berbasis waktu | Tidak ada; `supportedMetrics=[]` | 3 |
+| `distance_activity` | Jogging outdoor, jalan santai, outdoor cycling | Jarak, kecepatan; lap bila relevan | 1 |
+| `equipment_metrics` | Treadmill, sepeda statis, elliptical, rowing machine berindikator | Subset indikator alat: kalori, jarak, kecepatan, lap, incline bila relevan | 1 |
+
+### 5.1 Metadata dan rendering field
+
+Gunakan metadata exercise existing yang diperluas secara sederhana: domain `trackingProfile` dan `supportedMetrics`; wire/storage `tracking_profile` dan `supported_metrics`. Satu profil dan daftar key metric cukup; tidak ada tabel/service baru, nama exercise hardcoded, atau konfigurasi capability manual oleh user.
+
+| Exercise (contoh metadata) | Profil | Supported metrics |
+| --- | --- | --- |
+| Jumping Jacks | `duration_only` | `[]` |
+| Outdoor Jogging | `distance_activity` | `[distance, speed, laps]` bila lap relevan |
+| Stationary Bike | `equipment_metrics` | `[calories, distance, speed]` |
+| Treadmill berindikator lengkap | `equipment_metrics` | `[calories, distance, speed, laps, incline]` |
+
+Contoh tersebut bukan asumsi semua alat memiliki seluruh indikator. Elliptical/rowing/bike lain mendeklarasikan subset yang benar-benar relevan. Incline tidak ditampilkan untuk distance activity atau alat tanpa dukungan. `duration_only` tidak menampilkan satu pun dari lima metrik, termasuk kalori.
+
+| Key metadata | Field UI | Unit | Field hasil yang direncanakan |
+| --- | --- | --- | --- |
+| `calories` | Kalori | kcal | `calories_kcal`, desimal nullable |
+| `distance` | Jarak | km | `distance_meters`, desimal nullable; konversi km di boundary |
+| `speed` | Kecepatan | km/h | `speed_kph`, desimal nullable |
+| `laps` | Lap / Rep | Jumlah | `lap_reps`, integer nullable; bukan reps Strength |
+| `incline` | Incline | % | `incline_percent`, desimal nullable |
+
+Renderer mengiterasi urutan key tabel di atas yang terdapat pada `supportedMetrics`; tidak merender field unsupported. Isometric tidak mempunyai profil cardio atau optional metrics. Tambah exercise baru cukup melalui metadata katalog tervalidasi, tanpa percabangan UI berdasarkan nama/ID/jenis alat.
+
+### 5.2 Logika Data
+
+1. Snapshot menyimpan kategori, profil dan daftar supported metrics. Profil menentukan default awal; daftar metrics menentukan field hasil yang ditampilkan. Keduanya tidak mengubah durasi sebagai input utama.
+2. Setiap metric supported tetap **opsional**; durasi positif saja dapat complete. Unsupported wajib null/tidak dikirim pada hasil baru, bukan disembunyikan sambil menyimpan angka aktif.
+3. Kosong → null/tidak tercatat, bukan 0 otomatis. Kalori/jarak/speed nonnegatif, lap/rep integer nonnegatif; incline boleh negatif untuk decline. Nol eksplisit sah bila metric didukung. Semua angka finite dan sesuai tipe penyimpanan.
+4. Durasi dan metric opsional tetap satu objek/row set; tambah set tidak membuat exercise atau row khusus metric. Nilai antarset independen.
+5. Clear → null eksplisit; PATCH omitted → tidak diubah. Draft/recovery dan round-trip Room/finish/sync/read-back menjaga seluruh nilai yang tercatat.
+6. Tidak mengisi otomatis kalori, jarak dari speed × durasi, atau speed dari jarak. Pace hanya jika durasi/jarak positif. `lap_reps` tidak menjadi total reps Strength.
+7. Update metadata katalog tidak menulis ulang snapshot aktif/riwayat atau mereset routine. Nilai legacy di luar capability baru tetap dapat dibaca pada versi asal; jangan dihapus karena renderer baru menyembunyikan field.
+
+**Rasionalitas & Output**
+
+Jumping jacks tetap sesingkat Isometric; jogging dapat mencatat jarak tanpa alat; indikator treadmill tidak bocor ke semua Cardio. Satu renderer memakai metadata, tanpa workflow/mode baru.
+
+## 6. Komponen: DB Schema dan kontrak pengukuran
+
+### 6.1 Bentuk kanonis dan penamaan
+
+**Detail Revisi**
+
+Gunakan tabel katalog, routine, sesi dan log existing; **tidak menambah tabel, service atau layer**. Perluas metadata exercise dan konfigurasi routine untuk kebutuhan yang kini eksplisit: profil/capability cardio dan target per baris. Format internal tetap dua, bukan tiga profil sebagai mode pencatatan baru.
+
+Satu field domain **`weightKg`** dipetakan ke key API/SQL existing **`weight`** pada hasil dan key `weight` di objek target baris. `setTargets` adalah daftar konfigurasi, berbeda dari daftar hasil `sets` sesi. Tidak mempertahankan scalar target global baru yang berkompetisi dengan nilai per baris.
+
+| Lokasi | Perubahan yang direncanakan |
+| --- | --- |
+| Katalog / DTO / Room | Metadata domain `trackingProfile`/`supportedMetrics`, wire/SQL `tracking_profile TEXT NULL` dan `supported_metrics TEXT[]`. Cardio wajib salah satu profil §5; non-cardio profil null/list kosong. Room menyimpan list lewat codec existing. Tidak memakai tabel capability terpisah. |
+| `template_exercises` | Tambahkan `set_targets JSONB` berupa array terurut dan penanda versi; Room menyimpan array melalui serialized column. Tiap objek: `row_id`, `set_number`, `weight`, `reps`, `duration_seconds`, **`rest_seconds`**. Field tidak relevan null. `sets` existing hanya cache turunan panjang array; scalar reps/durasi/rest lama tetap read/replay legacy, bukan sumber baru atau nilai yang meratakan array. |
+| Snapshot sesi | Simpan `set_targets` routine awal immutable dan `extra_set_targets` konfigurasi tambahan active, tanpa menyalin seluruh target awal dua kali. `target_row_id` hasil merujuk tepat satu target dalam gabungan keduanya pada exercise terkait; ID lintas kedua list tidak boleh bertabrakan. Metadata kategori/profil/metrics/versi dibekukan; pemicu rest pending/deadline/recovery tetap metadata runtime JSON, bukan measurement. |
+| `workout_sets` | Field `id` existing menerima UUID `set_id` yang sudah dipersist pada sesi, bukan ID baru dari index saat finish. Gunakan `weight` untuk `weightKg`; tambah nullable `target_row_id TEXT`, `calories_kcal NUMERIC(12,2)`, `speed_kph NUMERIC(12,2)`, `lap_reps INTEGER`, `incline_percent NUMERIC(5,2)`; jarak `NUMERIC(12,2)`. Target ID harus ada pada snapshot exercise terkait; nomor urut bukan FK. Tidak ada rest hasil. |
+| Nullability hasil | Longgarkan NOT NULL pada `weight`/`reps` agar hasil durasi baru menyimpan null. Pertahankan nilai/default legacy selama transisi; insert baru mengisi null eksplisit untuk field tidak relevan. Strength tetap membutuhkan angka beban, termasuk 0. |
+| Log hasil / agregat | Persist array target dan metadata snapshot pada `input_defaults` exercise log existing dengan encoding berversi; jangan hanya menyimpan key prefill scalar yang kehilangan target individual. Reader tetap mendukung key legacy. Pertahankan quality/provenance; volume baru berlabel volume beban tercatat dan tidak overwrite legacy external/additional volume. Tidak perlu agregat baru untuk semua detail mesin. |
+| Room / DTO / codec / sync | Mirror daftar target beserta stable row IDs, profil/metrics, versi dan field hasil nullable. Key prefill/defaults serta equality importer mempertimbangkan urutan/nilai tiap baris dan metadata. Preserve metrik hasil, null, dan presisi jarak termasuk total jarak. |
+
+`measurement_version=3`, payload sesi schema v3 dan Room v10 adalah rencana versi, **belum diterapkan**. Field baru nullable pada histori; jangan memberikan default 3 kepada data lama. Versi/quality lama tetap sesuai bukti asal.
+
+**Batas existing/target persistence:** routine canonical tetap remote-authoritative melalui `SupabaseRoutineRepository`/`save_template_revision`; **Room-first berlaku untuk sesi dan hasil**, bukan alasan membuat mirror/writer routine baru. Penyesuaian entity Room routine hanya untuk representasi/recovery legacy yang memang tersedia. Pada sesi v3, array target dan hasil dipersist bersama di `ActiveSessionEntity.sessionDataJson`.
+
+`input_defaults` v3 pada wire berupa **objek JSON**, berisi `schema_version=3`, `set_targets` awal, `extra_set_targets` (boleh `[]`), kategori/format dan metadata cardio snapshot. Room TEXT menyimpan serialisasi objek sekali; DTO sync memakai `JsonElement`, bukan JSON double-encoded. Key prefill diturunkan dari target routine awal, bukan hasil atau extra sets. Reader membedakan objek v3, object legacy server dan primitive key legacy Android; key lama tanpa array lengkap tidak dianggap snapshot v3.
+
+Setiap jalur decode memeriksa versi. Versi eksplisit yang tidak didukung/JSON rusak mempertahankan record mentah dan menampilkan error recovery; jangan membuat sesi kosong, menghapus record, atau fallback ke Strength/default 3. Field baru v3 wajib hadir sesuai kontraknya; field yang tidak relevan boleh null. Default lama hanya berlaku pada jalur legacy yang dikenali. Server dan Room menguji null/0, decimal, ID dan urutan yang sama; belum ada klaim migration/live parity sampai verifikasi implementasi.
+
+**Batas presentasi/persistence:** badge kategori yang dihapus di Picker tidak menghapus metadata katalog atau memerlukan migrasi tersendiri. Status existing/selected diturunkan dari membership/pilihan draft, bukan kolom kategori baru. Label rest read-only Active diturunkan dari target snapshot, bukan field `rest_seconds` pada `workout_sets`; rencana field/schema v3 di atas tidak berubah hanya karena penambahan label visual.
+
+Pertahankan meter sebagai satuan storage existing; UI menampilkan km dan mengonversi di boundary. Beban/kalori/speed/incline/jarak hingga dua desimal; lap/rep integer nonnegatif. Representasi numerik harus mempertahankan presisi dan menolak nilai non-finite. Jangan menyimpan string bersatuan atau melakukan kalkulasi komponen beban.
+
+**Kontrak array target:** identitas `row_id` unik dalam exercise routine dan tetap saat nilai diedit/baris lain dihapus. `set_number` adalah posisi 1..N yang diperbarui sesudah tambah/hapus; bukan kunci edit atau identitas hasil. Save menyimpan array dan `sets = jsonb_array_length(set_targets)` dalam transaksi yang sama; server menolak duplikasi ID, penomoran/count mismatch, format tidak relevan, atau array di luar 1..20. UI tidak memaparkan cache `sets` sebagai field input. Jangan menambah `target_weight_kg`/rest global v3 yang menduplikasi sumber per baris.
+
+**Validasi metadata:** `duration_only` wajib list kosong; `distance_activity` hanya subset `[distance, speed, laps]`; `equipment_metrics` hanya subset `[calories, distance, speed, laps, incline]` yang relevan dengan exercise. Duplikat/key asing ditolak. Non-cardio tidak memiliki capability cardio. Nilai unknown/missing pada katalog baru harus direkonsiliasi sebelum dipakai untuk target baru, bukan fallback universal yang menampilkan kelima field. Snapshot lama tetap readable tanpa dipaksa ke capability baru.
+
+### 6.2 Invariant konfigurasi dan hasil
+
+**Logika Data**
+
+| Kategori / aspek | Routine dan snapshot konfigurasi | Hasil per set |
+| --- | --- | --- |
+| Strength | 1..20 target baris; default pertama 3. Setiap baris punya beban 0..1000, reps 1..100, rest 0..600/default 60. | `weightKg` tersedia 0..1000; reps 1..1000 sesuai batas hasil existing; durasi/metrik cardio null. |
+| Isometric | 1..20 target baris; default pertama 3. Durasi tiap baris positif ≤86400; plank/sejenisnya fallback 60; rest default 60. | Durasi positif; weight/reps/metrik cardio null. |
+| Cardio | 1..20 target baris; default pertama 3 untuk `duration_only`, 1 untuk dua profil lain. Durasi/rest per baris, tidak wajib metrik alat di setup. | Durasi positif; hanya supported metrics yang boleh terisi dan semuanya opsional. |
+| Rest | Routine target baris → snapshot target baris → timer set terkait. | Bukan input atau measurement hasil; tidak memakai satu rest global untuk semua baris. |
+| Draft | Boleh belum lengkap selama editing. | Validasi nilai wajib sebelum save target/complete; kosong bukan nol otomatis. |
+| Legacy | Baca/replay sesuai versi asal. | Additional/assistance lama tidak otomatis dijumlahkan ke beban baru. |
+
+UI, ViewModel, repository dan RPC sepakat mengenai array, format/null/rentang dan capability. SQL CHECK bersyarat versi menjaga data lama; RPC memvalidasi struktur/urutan array, profil dan metric hasil sesuai snapshot. Nilai wajib completed set memakai `IS NOT NULL`; metric supported tidak menjadi wajib. Field unsupported terisi pada payload baru ditolak, bukan diam-diam dibuang. Snapshot menentukan makna hasil, bukan katalog terbaru.
+
+**Rasionalitas & Output**
+
+Satu field beban dan dua pola input cukup; versi melindungi arti histori. Konfigurasi rest dan hasil set tidak dicampur.
+
+### 6.3 Contoh payload kanonis
+
+Fragmen ini bukan envelope RPC lengkap; identitas exercise, request ID, revision/version dan ownership guard tetap mengikuti kontrak existing. `row_id` contoh merupakan identitas stabil baris. `sets` pada target adalah output turunan, bukan input user. Field `weight` memetakan domain `weightKg`; durasi wire dalam detik.
+
+Target Strength dengan tiga nilai berbeda; Rest tetap di masing-masing baris:
+
+```json
+{"measurement_version":3,"tracking_type":"WEIGHT_REPS","sets":3,"set_targets":[{"row_id":"s1","set_number":1,"weight":20,"reps":12,"duration_seconds":null,"rest_seconds":60},{"row_id":"s2","set_number":2,"weight":25,"reps":10,"duration_seconds":null,"rest_seconds":75},{"row_id":"s3","set_number":3,"weight":30,"reps":8,"duration_seconds":null,"rest_seconds":90}]}
 ```
 
-### 6.2 Polymorphic `ActiveSetRow.kt`
-Menggantikan row kaku weight-reps dengan rendering dinamis:
+Target Isometric, durasi berbeda antarbaris; default baru boleh seragam 60 sebelum diedit:
 
-```kotlin
-@Composable
-internal fun ActiveSetRow(
-    set: WorkoutSet,
-    trackingType: TrackingType,
-    exerciseName: String,
-    mutationEnabled: Boolean,
-    canDelete: Boolean,
-    isPaused: Boolean,
-    onUpdate: (SetMeasurement) -> Unit,
-    onComplete: () -> Unit,
-    onDelete: () -> Unit,
-    modifier: Modifier = Modifier
-) {
-    // 1. Tentukan input fields sesuai trackingType:
-    // - WEIGHT_REPS: [Weight Input (kg)] [Reps Input]
-    // - BODYWEIGHT_REPS: [Reps Input] [Tambah beban -> +kg opsional]
-    // - ASSISTED_REPS: [Bantuan (kg), wajib] [Reps Input]
-    // - REPS_ONLY: [Reps Input]
-    // - DURATION: [Stopwatch/Timer Trigger + MM:SS Manual Input]
-    // - DISTANCE_DURATION: [Distance Input (m/km)] [Duration Input (MM:SS)]
-    
-    // 2. Evaluasi kondisi checkbox aktif:
-    val isCompleteEnabled = mutationEnabled && !isPaused && !set.isCompleted && 
-        set.measurement.isCompleteEligible(trackingType)
-        
-    // 3. Render sesuai desain token IMFIT
-}
+```json
+{"measurement_version":3,"tracking_type":"DURATION","sets":3,"set_targets":[{"row_id":"i1","set_number":1,"weight":null,"reps":null,"duration_seconds":60,"rest_seconds":60},{"row_id":"i2","set_number":2,"weight":null,"reps":null,"duration_seconds":90,"rest_seconds":60},{"row_id":"i3","set_number":3,"weight":null,"reps":null,"duration_seconds":60,"rest_seconds":60}]}
 ```
 
-Perilaku bodyweight mengikuti Q7: input `+kg` tidak wajib ditampilkan pada kondisi awal tanpa tambahan beban. Jika nilai beban tambahan sudah digunakan, termasuk dari draft/prefill yang valid, nilai dan inputnya harus terlihat; jangan menyembunyikan nilai aktif di balik kontrol **Tambah beban**. Input bantuan ditulis jelas sebagai **Bantuan (kg)** dengan besaran positif; bantuan tidak dianggap beban eksternal yang diangkat.
+Metadata cardio `duration_only`; tidak ada field metrik yang dirender:
 
-### 6.3 Dynamic Routine Form & Eliminasi Input Rest Timer (`EditWorkoutScreen.kt` & `EditWorkoutViewModel.kt`)
-1. **Target Prescriptions Sesuai Tipe (Tanpa Input Rest)**:
-   - **Eliminasi Pengisian Rest Timer pada Routine**: Field input "Jeda (dtk)" / "Rest (s)" **dihapus sepenuhnya** dari `RoutineExerciseEditor` dan form pembuatan/pengeditan routine (`EditWorkoutScreen`). Routine template hanya mendefinisikan target latihan inti: Sets, Repetisi, Durasi, atau Jarak.
-   - Jika latihan bertipe `DURATION` (Plank), tampilkan hanya field Sets dan target Durasi (detik/menit), tanpa input repetisi atau rest.
-   - Jika bertipe `DISTANCE_DURATION` (Treadmill), tampilkan field Sets, target Waktu/Durasi, dan target Jarak, tanpa input rest.
-   - Jika bertipe `WEIGHT_REPS` / `BODYWEIGHT_REPS` / `ASSISTED_REPS` / `REPS_ONLY`, tampilkan Sets dan Repetisi saja.
-   - Selector hanya menawarkan mode yang diizinkan katalog. Untuk cardio dengan kedua mode tersebut, tampilkan label **Waktu saja** dan **Jarak + waktu**, bukan nama enum teknis. Pilihan `DURATION` tidak menampilkan atau mewajibkan target jarak.
-2. **Pembersihan Restriksi Katalog**:
-   - Hapus pembatasan `ExercisePrescriptionCapability.kt`. Seluruh 161 latihan diaktifkan kembali pada `ExerciseSelectionScreen.kt`.
-   - Badge menjelaskan **modality**, bukan menggantikan tracking mode: `Strength`, `Bodyweight`, `Isometric`, `Cardio`, `Conditioning`. Bodyweight/weighted/cardio dapat membantu pencarian, tetapi tidak boleh menjadi tiga kelompok eksklusif yang menghilangkan karakter gerakan atau metrik yang valid. Susunan final filter/badge masih membutuhkan keputusan desain lanjutan (§1.2).
+```json
+{"modality":"CARDIO","tracking_type":"DURATION","tracking_profile":"duration_only","supported_metrics":[]}
+```
 
-### 6.4 Alur Navigasi Tambah Gerakan Langsung (Single Direct Navigation)
-1. **Eliminasi Double Navigation (`Detail -> Edit -> Picker`)**:
-   - **Alur Lama (Bermasalah)**: Dari `WorkoutDetailScreen`, klik tombol tambah gerakan membuka `EditWorkoutScreen` / `SetupRoutine` terlebih dahulu, lalu layar edit tersebut langsung membuka picker `ExerciseSelectionScreen` (`openPickerOnLoad = true`), memicu transisi layar ganda yang tidak mulus dan tumpukan backstack berulang.
-   - **Alur Baru (Direct Single Navigation)**:
-     - Ketika user menekan tombol "Tambah Gerakan" / "Lengkapi Rutinitas" pada `WorkoutDetailScreen`, navigasi **langsung berpindah ke `ExerciseSelectionScreen` (Pilih Gerakan)**.
-     - Setelah user memilih gerakan pada katalog dan menekan tombol konfirmasi ("Tambah N Gerakan"), aplikasi bernavigasi/melanjutkan ke halaman **`SetupRoutine` / `EditWorkoutScreen`** dengan daftar gerakan terpilih yang siap dikonfigurasi (sets, reps/durasi/jarak).
-     - **Alur Batal (Cancel Flow)**: Jika user menekan tombol kembali (Back) di `ExerciseSelectionScreen` tanpa menambah gerakan, navigasi **langsung kembali ke halaman pemanggil (`WorkoutDetailScreen`)**, tanpa membuka atau meninggalkan halaman setup/edit kosong di backstack.
-2. **Implementasi State & Routing**:
-   - `WorkoutDetailScreen` memicu navigasi ke `ExerciseSelection(context, isInitial = isSetup)` secara langsung.
-   - `NavGraph` mengelola `backStack`:
-     - Saat user menekan Back pada `ExerciseSelection` awal (`isInitial = true`), flow dibersihkan via `routineFlowManager.clearFlow(context)` dan kembali ke `WorkoutDetail`.
-     - Saat user mengonfirmasi pilihan latihan, `ExerciseSelection` digantikan oleh `SetupRoutine(context)` atau `EditWorkout(context)` pada posisi backstack yang tepat.
+Metadata jogging outdoor dengan lap relevan:
 
-### 6.5 Dampak Skema Database, DTO, dan Alur Data (Database & Data Flow Impact)
-1. **Perubahan Skema Database Backend Supabase (`public.template_exercises`)**:
-   - Kolom `rest_seconds` di `public.template_exercises`:
-     - Sifat: Diberikan default fallback di database (`DEFAULT 60`) dan constraint `NOT NULL` dapat dilonggarkan menjadi nullable (`INTEGER NULL`) untuk transisi penuh.
-     - Kompatibilitas: Klien Android baru tidak lagi mengirimkan `rest_seconds` dalam form routine. RPC `save_template_revision` diperbarui agar memperlakukan `rest_seconds` sebagai opsional menggunakan `coalesce((e->>'rest_seconds')::integer, 60)` saat menyisipkan baris template baru, sehingga data historis tetap aman dan klien lama tetap berfungsi (*zero-loss backward compatibility*).
-2. **Perubahan Skema Database Lokal Room (`IMFITDatabase`)**:
-   - Tabel `template_exercises`: Kolom `rest_seconds` di `TemplateExerciseEntity` tetap dipertahankan pada skema Room v8 dengan default value 60 (atau nullable) agar tidak memerlukan migrasi destruktif, tetapi field ini tidak lagi dipaparkan sebagai input yang dapat diedit pengguna di UI routine editor.
-3. **Alur Data Rest Timer pada Sesi Aktif (`ActiveWorkoutScreen`)**:
-   - **Rest Timer Eksklusif Runtime Sesi**: Timer istirahat hanya dapat diatur dan dipicu saat sesi workout aktif berlangsung.
-   - **Konfigurasi On-the-Fly**: User mengatur durasi jeda istirahat dengan mengklik icon/kartu timer pada app bar sesi aktif (`ActiveWorkoutScreen`) atau dialog rest timer (pilihan preset: 30s, 60s, 90s, 120s, atau kustom).
-   - **Penyimpanan Runtime**: Pilihan waktu istirahat ini disimpan pada level sesi aktif (`session_rest_override` di `active_sessions` Supabase dan Room `active_sessions`), bukan sebagai properti statis template routine.
-   - **Trigger Otomatis**: Ketika set selesai dicentang (`complete_set`), rest timer membaca `session_rest_override` (jika ada) atau default aplikasi (60 detik) untuk memulai hitung mundur `RestTimerCoordinator`.
+```json
+{"modality":"CARDIO","tracking_type":"DURATION","tracking_profile":"distance_activity","supported_metrics":["distance","speed","laps"]}
+```
 
+Metadata treadmill yang memang mendukung kelima indikator:
 
-### 6.6 Otoritas Katalog dan Snapshot Sepanjang Alur
+```json
+{"modality":"CARDIO","tracking_type":"DURATION","tracking_profile":"equipment_metrics","supported_metrics":["calories","distance","speed","laps","incline"]}
+```
 
-1. **Katalog → DTO → Room → Domain**: semua jalur pembacaan katalog, termasuk hasil picker dan hidrasi detail, mempertahankan modality, default mode, dan allowed modes dari server. Tidak boleh ada jalur yang mengabaikan metadata lalu menggantinya dengan daftar ID Android.
-2. **Domain → Rutinitas**: default form berasal dari katalog; pilihan user dibatasi allowed modes. Simpan `tracking_type` beserta target yang relevan, bukan menebak ulang dari nama, kategori otot, atau alat.
-3. **Rutinitas → Sesi**: mode pilihan dan metadata yang menentukan arti pencatatan disnapshot saat sesi dibuat. Pembaruan katalog tidak menulis ulang snapshot sesi berjalan; perubahan mode oleh user saat sesi aktif belum diputuskan (§1.2).
-4. **Sesi → Riwayat/Progres**: simpan dan baca arti mode/metrik dari snapshot hasil latihan. Jangan menafsirkan ulang hasil historis memakai default katalog terbaru; pertahankan perlakuan `LEGACY_UNVERIFIED` untuk data lama sesuai kontrak migrasi.
+Target treadmill baru: satu baris awal, dapat ditambah tanpa mengubah profil:
 
-### 6.7 Konsistensi Presentasi Target dan Hasil
+```json
+{"measurement_version":3,"tracking_type":"DURATION","sets":1,"set_targets":[{"row_id":"t1","set_number":1,"weight":null,"reps":null,"duration_seconds":1800,"rest_seconds":60}]}
+```
 
-- **Library/picker**: istilah pengelompokan tidak mengubah mode yang valid; katalog tetap read-only. Mode/metrik harus dapat dipahami tanpa memperlihatkan enum internal.
-- **Editor/detail rutinitas**: tampilkan target sesuai mode—sets × reps, sets × durasi, atau sets dengan target durasi/jarak. Target durasi tidak boleh ditampilkan sebagai `0 reps`; target bukan hasil aktual latihan.
-- **Sesi aktif/ringkasan**: pakai field dan satuan yang sesuai mode. Bodyweight tanpa tambahan beban tidak dipaksa mengisi kg; durasi/jarak tidak disamarkan sebagai reps.
-- **Riwayat/progres**: pisahkan volume beban eksternal, volume tambahan, repetisi, durasi isometrik, durasi cardio/conditioning, dan jarak sesuai semantiknya. Jangan menyajikan sesi non-weighted seolah hasilnya hanya volume kg nol. Tata letak dan prioritas metrik utama sesi campuran belum diputuskan (§1.2).
+Hasil Strength baris kedua; timer membaca rest 75 dari snapshot `s2`, tanpa field rest hasil:
 
-## 7. Rencana Eksekusi & Phase Breakdown (Phase 0 — Phase 5)
+```json
+{"measurement_version":3,"set_id":"00000000-0000-4000-8000-000000000002","target_row_id":"s2","set_number":2,"tracking_type":"WEIGHT_REPS","weight":25,"reps":10,"duration_seconds":null,"is_completed":true}
+```
+
+Hasil Jumping Jacks `duration_only`; semua key metrik unsupported tidak dikirim:
+
+```json
+{"measurement_version":3,"set_id":"00000000-0000-4000-8000-000000000003","target_row_id":"j1","set_number":1,"tracking_type":"DURATION","weight":null,"reps":null,"duration_seconds":60,"is_completed":true}
+```
+
+Hasil jogging pada set yang sama; lap supported tetapi tidak diisi:
+
+```json
+{"measurement_version":3,"set_id":"00000000-0000-4000-8000-000000000004","target_row_id":"o1","set_number":1,"tracking_type":"DURATION","weight":null,"reps":null,"duration_seconds":1800,"distance_meters":5000,"speed_kph":10,"lap_reps":null,"is_completed":true}
+```
+
+Hasil treadmill dengan kelima metrik dalam satu set; UI jarak 5 km:
+
+```json
+{"measurement_version":3,"set_id":"00000000-0000-4000-8000-000000000005","target_row_id":"t1","set_number":1,"tracking_type":"DURATION","weight":null,"reps":null,"duration_seconds":1800,"calories_kcal":300,"distance_meters":5000,"speed_kph":10,"lap_reps":12,"incline_percent":2.5,"is_completed":true}
+```
+
+Hasil sepeda pada set tambahan dengan konfigurasi sesi `b2`; metadata contoh bike mendukung kalori/jarak/speed, speed kosong:
+
+```json
+{"measurement_version":3,"set_id":"00000000-0000-4000-8000-000000000006","target_row_id":"b2","set_number":2,"tracking_type":"DURATION","weight":null,"reps":null,"duration_seconds":1200,"calories_kcal":150,"distance_meters":6000,"speed_kph":null,"is_completed":true}
+```
+
+## 7. Komponen: RPC, snapshot, dan alur routine/live tracking
+
+**Detail Revisi**
+
+Android tetap Room-first: `WorkoutRepositoryImpl.startWorkout`, mutasi set, `finishWorkout`, lalu `SyncManager` → `persist_local_workout_aggregate`. Tidak memindahkan setiap input ke round-trip server. RPC sesi server tetap mengikuti kontrak yang sama.
+
+| Jalur | Kontrak implementasi mendatang |
+| --- | --- |
+| `save_template_revision` | Simpan array atomik, jumlah turunan, ID/urutan/format/rest, dengan receipt/ownership/revision existing. Client lama tanpa array hanya boleh memutasi routine legacy; request scalar baru ke routine v3 ditolak agar target heterogen tidak hilang. Replay receipt request lama tetap identik. |
+| `create_active_session` / start lokal | Snapshot array target/rest dan metadata profil/metrics. Buat satu hasil draft per target, dengan stable target association. Tidak regenerate default 3/1 saat start/edit routine existing. |
+| `update_active_session` / mutasi lokal | Edit hanya set yang dituju; tambah/hapus menjaga identitas/nilai set lain dan penomoran. Metric hanya didukung snapshot dan tetap opsional. Timer memakai rest target baris terkait; tidak ada input hasil rest atau mode/override baru. |
+| `imfit_private.terminal_session` | Validasi ulang completed set sesuai versi, simpan hasil/snapshot dan agregat atomik; draft belum selesai tidak dihitung. |
+| `persist_local_workout_aggregate` | Perubahan mendatang pada definisi efektif `20261101000300_local_workout_legacy_provenance.sql` melalui migrasi baru. Validasi/persist hasil per set, capability snapshot, target association, versi, dan metrik yang terisi; payload replay tetap immutable. |
+| `get_exercise_prefill` | Target eksplisit per baris diutamakan; history kompatibel tidak boleh menimpa atau meratakan array. Metric history harus didukung snapshot. Jangan otomatis mengubah additional weight legacy menjadi beban baru. |
+| `get_workout_detail`, `get_progress_summary`, read-back | Pertahankan unit/metrik per set. Jarak opsional pada `DURATION` cardio baru ikut agregasi; volume baru tidak dicampur legacy external/additional volume. |
+
+**Logika Data**
 
 ```mermaid
-gantt
-    title Roadmap Implementasi Multi-Modality Exercise Refactor
-    dateFormat  YYYY-MM-DD
-    section Phase 0: Baseline & Safety
-    Reconcile Schema & Logical Backup   :2026-11-01, 1d
-    Inventory 161 Exercises Mapping     :2026-11-01, 1d
-    section Phase 1: Database Additive
-    PostgreSQL Additive Migrations      :2026-11-02, 2d
-    Backfill Catalog & Tracking Modes   :2026-11-03, 1d
-    section Phase 2: Backend RPCs
-    Rewrite save_template_revision      :2026-11-04, 1d
-    Rewrite active_session RPCs (v2)    :2026-11-05, 2d
-    Rewrite persist_aggregate & summary :2026-11-06, 1d
-    section Phase 3: Android Domain & Repo
-    Kotlin Domain Models & Room v7->v8  :2026-11-07, 2d
-    Routine & Workout Repositories      :2026-11-08, 1d
-    section Phase 4: Android UI & Presentation
-    Polymorphic ActiveSetRow & Timer    :2026-11-09, 2d
-    Dynamic Routine Editor & Picker     :2026-11-10, 1d
-    Progress & History UI Separation    :2026-11-11, 1d
-    section Phase 5: Verification & Gate
-    End-to-End Test Matrix Execution    :2026-11-12, 2d
-    Canary Verification on Staging DB   :2026-11-13, 1d
+flowchart LR
+    C[Kategori + profil + supported metrics] --> U[Setup/edit: dynamic target rows]
+    U --> T[Save array + jumlah turunan]
+    T --> S[startWorkout: snapshot target rows + metadata]
+    S --> I[Hasil per set + metric yang didukung]
+    I --> L[Validasi dan transaksi Room]
+    L --> R[Timer dari rest target baris terkait]
+    L --> F[finishWorkout: hasil pending sync]
+    F --> H[Riwayat lokal]
+    F --> A[Aggregate import: validasi + receipt]
+    A --> B[Read-back hasil dan metrik opsional]
 ```
 
-### Phase 0: Baseline, Rekonsiliasi, dan Logical Backup
-- [x] Buat logical backup penuh Supabase project `imfit` menggunakan pg_dump / SQL export. (SELESAI - 5 file SQL di `IMFIT-SAFE/phase0/backups`, SHA256 verified)
-- [x] Lakukan uji restore hasil backup pada schema terisolasi. (SELESAI - PostgreSQL 17 cluster lokal 127.0.0.1:54322, 0 exit code, row counts match 100%, 0 orphan)
-- [x] Verifikasi rekonsiliasi file migrasi repo lokal (`supabase/migrations`) dengan tabel `supabase_migrations.schema_migrations` pada server live. (SELESAI - Timestamp diselaraskan, 20261031154000 repaired)
-- [x] Freeze review tabel mapping 161 exercise sebelum eksekusi DML. (SELESAI - Review 161 exercise PASS)
+- Pertahankan CAS/revision routine dan RPC sesi, transaksi Room serta idempotensi upload. Jangan mengubah pending payload dengan request/workout ID yang sama.
+- Routine/katalog yang diperbarui tidak mengubah snapshot aktif. Tidak ada aksi mengganti mode pencatatan di tengah sesi.
+- `recorded_load_volume = Σ(weightKg × reps)` untuk completed Strength baru; volume legacy tetap terpisah. Durasi dikelompokkan menurut kategori; durasi sesi bukan jumlah durasi set/rest.
+- Jarak cardio baru dijumlahkan dari tiap set `DURATION`, bukan hanya `DISTANCE_DURATION` lama. Lap/rep bukan total reps Strength. Tidak menambah analytics semua metrik opsional.
+- Direct-add, `addDefaultSet`, draft `SavedStateHandle`, snapshot picker, command immutable, key `ExerciseInputDefaults`, codec dan equality `RemoteSnapshotImporter` menjaga field/versi yang sama. Tidak memotong cardio multi-set menjadi satu set.
 
-### Phase 1: Database Additive Schema & Catalog Backfill
-- [x] Terapkan DDL migrasi additive (`20261101000100_exercise_multimodality_tracking.sql`). (SELESAI - Deployed to live Supabase)
-- [x] Terapkan DML backfill default tracking type dan tabel `exercise_tracking_modes` untuk 161 latihan. (SELESAI - 161 exercises, 196 mode relations)
-- [x] Verifikasi RLS dan integritas foreign keys untuk tabel baru. (SELESAI - authenticated SELECT granted, anon denied, no client writes)
-- [x] Tambahkan snapshot schema version 2 pada `active_sessions`. (SELESAI - Constraint updated to schema_version IN (1, 2))
+**Rasionalitas & Output**
 
-### Phase 2: Backend Services & RPC Modernization
-- [x] Update RPC `save_template_revision` agar menerima `tracking_type`, `target_duration_seconds`, dan `target_distance_meters`. (SELESAI - Backward-compatible v1 & v2 deployed)
-- [x] Update RPC `create_active_session` untuk memproduksi snapshot session JSON v2. (SELESAI - schema_version = 2 with typed metadata deployed)
-- [x] Update RPC `update_active_session` dengan validasi per `tracking_type` pada `complete_set` dan `edit_set`. (SELESAI - Typed set validation deployed, Push-Up 0kg PASS, Bench Press 0kg rejected)
-- [ ] Update RPC `terminal_session` dan `persist_local_workout_aggregate` untuk kalkulasi metrik terpisah. (Phase 5: typed lifecycle PASS pada SQL lokal, tetapi pending Plank v1 ditolak `22023` dan aggregate import menerima mode katalog terlarang; perlu fix-forward.)
-- [x] Update RPC `get_exercise_prefill` agar mem-prefill metrik yang relevan dengan tipe tracking. (SELESAI - Typed prefill without cross-contamination deployed)
-- [x] Update RPC `get_progress_summary` dan `get_workout_detail`. (SELESAI - Modality-separated metrics & raw parity verified)
+Routine menyediakan target/rest; sesi menyimpan hasil per set. Retry, recovery, sync dan history mempertahankan data tanpa workflow baru.
 
-### Phase 3: Android Domain, Room Migration, & Repository
-- [x] Buat enum `TrackingType`, model `ExerciseTarget`, dan `SetMeasurement`. (SELESAI - Domain models created, A3-01 to A3-06 unit tests PASS)
-- [x] Update entity Room `TemplateExerciseEntity`, `WorkoutSetEntity`, `ExerciseLogEntity`, `WorkoutLogEntity`, `ExerciseEntity`. (SELESAI - All 5 Room entities updated for typed tracking)
-- [x] Implementasikan `MIGRATION_7_8` pada `IMFITDatabase.kt` beserta test migrasi Room. (Phase 5: corrected instrumentation 5/5 PASS, termasuk 7→8/6→8, active session, relasi dan `PENDING_SYNC`; bukan installed-APK upgrade.)
-- [x] Update mapper DTO $\leftrightarrow$ Entity $\leftrightarrow$ Domain. (SELESAI - Codec active session schema_version 2, Room, DTO & remote import mempertahankan metadata typed & legacy quality.)
-- [x] Perbarui `SupabaseRoutineRepository.kt` dan `WorkoutRepositoryImpl.kt` untuk transport data bertipe. (SELESAI - Finish Plank 90s tercatat di Room, finish legacy mempertahankan LEGACY_UNVERIFIED.)
+### 7.1 Summary, statistik, dan estimasi routine
 
-### Phase 4: Android Presentation & UI/UX
-- [x] Implementasikan komponen polymorphic `ActiveSetRow.kt` dengan input dinamis. (Phase 5: enam mode input dan strength weight=0 rejection PASS pada Compose component test; bukan full E2E.)
-- [x] Implementasikan set stopwatch/timer selector untuk latihan durasi dengan input manual fallback. (SELESAI - Format MM:SS 01:30->90s, stopwatch durable recovery terverifikasi lintas 2x SIGKILL PID-verified.)
-- [x] Refactor `EditWorkoutScreen.kt` dan `EditWorkoutViewModel.kt` untuk form dinamis (Reps vs Waktu/Jarak). (SELESAI - Target durasi 45->90 dan jarak tersimpan, draft recovery, dan tracking mode selector aktif.)
-- [x] Implementasikan alur navigasi langsung "Tambah Gerakan": Klik "Tambah Gerakan" pada Detail Routine langsung membuka `ExerciseSelectionScreen` tanpa perantara halaman edit. Setelah memilih gerakan, navigasi ke Setup/Edit Routine. Jika batal (Back) di picker, kembali langsung ke Detail Routine. (SELESAI - Direct Add Navigation terverifikasi di RedesignNavigationTest).
-- [x] Hilangkan pengisian rest timer pada form setup awal dan edit routine (`RoutineExerciseEditor`). Rest timer hanya dapat diatur secara situasional melalui klik timer pada sesi aktif (`ActiveWorkoutScreen`). (SELESAI - Input rest timer dihilangkan dari form routine; dialog dan countdown runtime aktif).
-- [x] Hapus pemblokiran pada `ExerciseSelectionScreen.kt` dan tambahkan badge modality. (SELESAI - Pemblokiran dihapus; modalitas dan chips mode ditampilkan secara informatif).
-- [x] Update layar `ProgressScreen`, `HomeScreen`, dan `WorkoutHistoryDetailScreen` agar menampilkan metrik terpisah. (SELESAI - ProgressMetricOverview, Home recent card, dan History detail merender metrik volume, durasi isometrik, kardio jarak/waktu, dan repetisi terpisah).
+**Kontrak sumber:** Routine Detail/Home card routine membaca konfigurasi canonical terakhir yang diakui; editor boleh menampilkan preview draft, tetapi bukan statistik hasil. Active membaca snapshot/hasil **Room yang committed**. Summary, Home hasil terakhir dan History membaca `WorkoutLog` beserta log/set hasil yang sama; satu workout pending dan salinan remote ber-ID sama tidak boleh dihitung dua kali.
 
-### Tambahan Revisi 1.2 — Selesai Diimplementasikan & Diverifikasi
+Misalkan `R` adalah target routine/snapshot awal immutable (`set_targets`, **tanpa** `extra_set_targets`), `A` hasil set yang masih ada di sesi aktif, dan `C` subset hasil dengan `is_completed=true`. Semua agregat hasil berikut memakai `C`, bukan target, nilai prefill, atau draft yang belum selesai. Hapus/tambah active tidak mengubah bukti jumlah target awal `R`.
 
-Checklist ini mencatat penyelesaian penuh kontrak produk Q1–Q7:
+| Metrik | Formula/sumber target v3 | Aturan tampilan dan perubahan |
+| --- | --- | --- |
+| Jumlah exercise | Routine: jumlah anggota unik; Active: jumlah exercise snapshot yang masih ada; final: jumlah exercise log dengan minimal satu completed set, sesuai filtering finish existing. | Label sesuai konteks; bukan jumlah kartu picker yang terpilih. |
+| Jumlah target set | `count(R)` dari array target tersimpan; subtotal per exercise = panjang array. | Tambah/hapus routine mengubah target count. Tambah active mengubah `count(A)`, bukan target routine. History legacy tanpa snapshot penuh tidak boleh menebak target awal dari completed count. |
+| Completed sets | `count(C)`; denominator progress active = `count(A)`. Final `WorkoutLog.totalSets` adalah completed count, bukan target count. | Undo mengurangi; complete ulang mengembalikan satu kontribusi. Set tak selesai tidak menambah statistik hasil. |
+| Total reps Strength | `Σ reps` completed format `WEIGHT_REPS` unified Strength, termasuk gerakan berpola Strength yang masih mempunyai metadata deskriptif conditioning. | Lap/rep cardio dan legacy reps berdimensi lain tidak dicampur. |
+| Volume beban tercatat | `Σ(weightKg × reps)` completed kontrak v3 `WEIGHT_REPS`, satuan kg·repetisi. | 0 kg sah; volume baru tidak dijumlahkan dengan legacy external/additional volume. Pisahkan seri/label per semantik. |
+| Durasi Cardio | `Σ duration_seconds` completed snapshot kategori `CARDIO`. | Semua profil ikut, independent dari optional metrics. |
+| Durasi Isometric | `Σ duration_seconds` completed snapshot kategori `ISOMETRIC`. | Tidak digabung ke cardio hanya karena sama-sama `DURATION`. Conditioning berdurasi tetap subtotal deskriptif tersendiri, bukan diklasifikasikan ulang. |
+| Jarak Cardio | Jumlah `distance_meters` yang benar-benar tercatat pada completed Cardio; km untuk UI = meter/1000. | Semua null → tidak tercatat (`—`/null), bukan jarak 0 palsu. Nol eksplisit yang didukung tetap nilai tercatat; tidak menghitung dari speed. |
+| Durasi sesi | Final `endTime−startTime`; active padanan `now−startTime`. Ini elapsed keseluruhan termasuk rest, perpindahan dan pause. | `WorkoutLog.durationMinutes` existing merupakan floor(ms/60000). Nilai ini **bukan** jumlah durasi Cardio/Isometric atau countdown rest. |
+| Waktu aktif tanpa pause | `WorkoutSession.actualElapsedMs = now−start−totalPaused−pauseBerjalan`, konsep existing yang berbeda. | Jika ditampilkan oleh stopwatch active, label/interpretasinya Waktu aktif; jangan mengirimnya sebagai durasi sesi gross di Home/History. History lama tidak punya pause lengkap untuk merekonstruksinya. |
+| Estimasi durasi routine | Formula/asumsi di bawah, dari target per baris, bukan hasil sesi. | Nilai perkiraan, tidak disimpan sebagai hasil aktual. |
 
-- [x] Pertahankan metadata server di seluruh jalur katalog → DTO → Room (v9) → domain → rutinitas → snapshot sesi/riwayat; hilangkan klasifikasi katalog berbasis ID Android tanpa menghapus kompatibilitas legacy. (SELESAI - Room v9, CatalogMetadataContractTest, dan IMFITDatabaseMigrationTest 8→9 PASS).
-- [x] Terapkan pengelompokan non-eksklusif tanpa menghilangkan isometric/conditioning, setelah detail filter/badge dikonfirmasi. (SELESAI - Badge modalitas & chips tracking dinamis).
-- [x] Sediakan pilihan cardio **Waktu saja** dan **Jarak + waktu** sesuai allowed modes, tanpa jarak palsu atau pergantian mode diam-diam. (SELESAI - Mode waktu saja mencatat detik murni; mode jarak+waktu menghitung pace aktual).
-- [x] Terapkan bodyweight reps-first dengan kontrol **Tambah beban**, nilai tambahan aktif tetap terlihat, dan field wajib **Bantuan (kg)** untuk assisted. (SELESAI - Reps-first dengan toggle `+ Tambah beban`, bantuan wajib positif).
-- [x] Selaraskan editor/detail rutinitas, sesi, ringkasan, riwayat, dan progres agar target/hasil memakai mode serta satuan yang sesuai. (SELESAI - Konsisten dari input hingga visualisasi).
-- [x] Rekonsiliasi status bukti historis dan verifikasi acceptance tambahan T-15–T-21 sebelum mengubah release gate. (SELESAI - Seluruh T-01 s/d T-21 PASS).
+**Fixture statistik yang benar:** routine berisi satu exercise Strength dengan target 40×10, 45×8, 50×6; satu Plank 60 s; satu Cardio 1800 s. Strength dua set pertama, Plank, dan Cardio selesai; cardio mencatat 5000 m. Tambah satu draft set cardio 300 s tanpa complete. Target awal 5, hasil active 6, progress **4/6**; completed 4; reps Strength 18; volume **760 kg·repetisi**; durasi Isometric 60 s, Cardio 1800 s, jarak 5 km. Set Strength ketiga/draft cardio tidak masuk agregat. Sesi start→finish 2400 s dengan pause 300 s menghasilkan durasi sesi 40 menit; waktu aktif 35 menit, bukan dua nama untuk metrik yang sama.
 
-### Phase 5: Verification, Canary Testing, & Release Gate
-- [x] Eksekusi seluruh skenario test matrix (756 unit tests PASS, 111 demo connected tests PASS/skipped, 34 SQL integration tests PASS).
-- [x] Uji kompatibilitas backward: Buka dan selesaikan active session v1 pada build aplikasi baru (v1 weight/reps & pending v1 Plank PASS).
-- [x] Uji recovery process death dan background timer saat set durasi berjalan (9/9 release rest timer PASS, 4/4 stopwatch recovery phases PASS).
-- [ ] Release Canary internal pada akun beta test sebelum cutover produksi.
+**Estimasi routine — keputusan dan batas bukti:**
 
-Hasil eksekusi Phase 5 pasca Fix-Forward: Unit test **756 PASS (256 demoDebug, 250 productionDebug, 250 productionRelease)**; Full demo connected instrumentation **111 total (98 PASS, 0 FAIL, 13 skipped)**; Room migration class **5/5 PASS**; SQL integration **20/20 matrix PASS + 14/14 behavioral regressions PASS**; Production release rest timer runner **9/9 PASS**; Execution stopwatch process death recovery **4/4 phases PASS**. Seluruh 7 blocker teknis (P5-01 s/d P5-07) dinyatakan **RESOLVED & VERIFIED**. Keputusan rilis: **TETAP NO-GO** sampai prasyarat operasional (release signing upload key, versionCode Play Store, live backup & testing pada 2 perangkat fisik) dilaksanakan sebelum cutover produksi.
+- Existing `WorkoutDetailViewModel.estimatedDuration` = `ceil((Σ targetDurationSeconds×sets untuk tipe waktu + 480 detik per exercise lainnya)/60)`, tanpa rest. Angka 480 merupakan heuristic existing, bukan durasi eksekusi Strength yang terukur atau keputusan baru.
+- Untuk routine target durasi seluruhnya, formula target v1.4: `E_seconds = Σ duration_target_per_baris + Σ rest_baris_yang_diikuti_baris_berikutnya`; `E_minutes = ceil(E_seconds/60)`. Urutan melintasi exercise; rest baris terakhir sesi dikecualikan. Asumsi: setiap target dilakukan sekali; tidak memasukkan setup alat, warm-up, perjalanan, pause atau cooldown.
+- Contoh tiga target durasi 60/90/60 dengan rest 60/60/120: `E=60+90+60+60+60=330 s`, tampil **perkiraan 6 menit**, bukan waktu aktual.
+- **TODO/VERIFY — belum final:** belum ada model/keputusan terverifikasi untuk waktu eksekusi target Strength (tempo/repetisi/transisi). Routine campuran/Strength tidak boleh menampilkan subtotal durasi atau angka 8 menit per exercise seolah estimasi lengkap yang akurat. Sampai formula disetujui, tampilkan `—`/estimasi belum tersedia; tidak mengarang seconds-per-rep atau menambah form tempo. Audit dokumentasi tidak menyetujui heuristic baru.
+- Data invalid/unknown legacy tidak dipaksa menjadi nol; tampilkan ketidaktersediaan sesuai metrik. Seluruh surface memakai snapshot versi/quality yang sama, bukan klasifikasi katalog terkini untuk menghitung ulang histori.
 
----
+### 7.2 Persistensi sesi, recovery, finish dan sinkronisasi
 
-## 8. Test Matrix Wajib (Pre-Release Gate)
+Gunakan `ActiveSessionEntity`, `WorkoutRepositoryImpl.mutateActiveSession/getActiveSessionForTimer/finishWorkout`, `SyncManager`, `SyncScheduler`, `SyncWorker`, dan receipt aggregate existing. Tidak menambah tabel/service sinkronisasi baru.
 
-| No | Skenario Uji | Input Latihan | TrackingType | Ekspektasi Hasil | Status Verifikasi |
-| :---: | :--- | :--- | :--- | :--- | :---: |
-| **T-01** | Strength Standar | Bench Press 40 kg $\times$ 10 reps | `WEIGHT_REPS` | Checkbox aktif, Volume = 400 kg tercatat di External Load. | Wajib PASS |
-| **T-02** | Strength Nilai Nol | Bench Press 0 kg $\times$ 10 reps | `WEIGHT_REPS` | Checkbox disabled, server menolak jika dipaksa via RPC. | Wajib PASS |
-| **T-03** | Calisthenics Push-Up | Push-Ups 0 kg $\times$ 15 reps | `BODYWEIGHT_REPS` | Checkbox aktif, Complete sukses, volume eksternal 0 kg, reps 15. | Wajib PASS |
-| **T-04** | Weighted Calisthenics | Pull-Ups +10 kg $\times$ 8 reps | `BODYWEIGHT_REPS` | Complete sukses, reps 8, Additional Load = 80 kg (terpisah dari barbell). | Wajib PASS |
-| **T-05** | Assisted Machine | Assisted Pull-Up -25 kg $\times$ 10 | `ASSISTED_REPS` | Complete sukses, bantuan 25 kg tidak dihitung sebagai beban angkatan. | Wajib PASS |
-| **T-06** | Calisthenics Reps-Only | Jumping Jacks 30 reps | `REPS_ONLY` | Tidak ada input kg, Complete sukses dengan 30 reps. | Wajib PASS |
-| **T-07** | Isometric Time-Based | Plank 45 detik | `DURATION` | Timer berjalan / input 45s, Complete sukses, Hold Duration = 45s. | Wajib PASS |
-| **T-08** | Cardio Jarak & Waktu | Treadmill 5000 m / 1800 s (30m) | `DISTANCE_DURATION` | Complete sukses, Pace 6:00/km terhitung, Cardio Distance & Time tercatat. | Wajib PASS |
-| **T-09** | Backward Compat v1 | Sesi v1 lama dibuka di app baru | v1 Snapshot | Dibaca sebagai `WEIGHT_REPS`, dapat diselesaikan tanpa error 400/409. | Wajib PASS |
-| **T-10** | Offline Finish & Sync | Complete saat offline $\rightarrow$ online | All Types | Room v8 menampung data staging, sync sukses via aggregate RPC baru. | Wajib PASS |
-| **T-11** | Idempotency Replay | Finish session di-request 2x | All Types | Server mengembalikan receipt yang sama tanpa duplikasi workout_logs. | Wajib PASS |
-| **T-12** | Cross-Account Security | Mutasi session akun lain | All Types | Ditolak server dengan `42501` / `PT404` melalui RLS guard. | Wajib PASS |
-| **T-13** | Navigasi Langsung Tambah Gerakan | Klik "Tambah Gerakan" di Detail Routine | Flow | Langsung ke `ExerciseSelectionScreen` (tanpa transit edit); pilih gerakan $\rightarrow$ buka Setup/Edit; batal (Back) $\rightarrow$ kembali ke Detail Routine. | PASS |
-| **T-14** | Rest Timer Hanya di Sesi Aktif | Setup awal / Edit Routine vs Active Workout | UI / Timer | Form routine tidak memiliki input rest; pada `ActiveWorkoutScreen`, klik timer membuka dialog jeda dan timer istirahat berjalan otomatis pasca `complete_set`. | PASS |
-| **T-15** | Bodyweight reps-first | Push-up 15 reps tanpa tambahan beban | `BODYWEIGHT_REPS` | Kondisi awal mengutamakan reps dan kontrol Tambah beban, tanpa kolom kg wajib; set dapat diselesaikan, reps 15 tersimpan, tidak menambah external volume. | PASS |
-| **T-16** | Tambahan beban tetap terlihat | Pull-up +10 kg × 8 dari input/draft/prefill yang cocok | `BODYWEIGHT_REPS` | Kontrol Tambah beban membuka input; nilai +10 kg yang sudah digunakan tetap terlihat setelah pemulihan yang didukung; tambahan volume 80 kg·repetisi, bukan external volume. | PASS |
-| **T-17** | Assisted tidak ambigu | Assisted pull-up, bantuan 25 kg × 10 | `ASSISTED_REPS` | Field Bantuan (kg) langsung terlihat dan wajib positif; bantuan bukan beban eksternal dan karakter bodyweight tetap terjaga. | PASS |
-| **T-18** | Cardio waktu saja | Pilih Waktu saja pada treadmill yang mengizinkan mode tersebut; 1800 detik tanpa jarak | `DURATION` | Set selesai dan tersimpan sebagai cardio 1800 detik tanpa kewajiban jarak; tidak menghasilkan jarak palsu atau pace nol. Mode Jarak + waktu tetap menolak hasil tanpa jarak positif. | PASS |
-| **T-19** | Otoritas metadata dan stabilitas snapshot | Metadata katalog non-default melalui jalur picker/hidrasi/cache; katalog kemudian diperbarui | Allowed modes + snapshot | Semua jalur mempertahankan metadata server dan membatasi pilihan mode valid; perubahan katalog tidak menulis ulang mode sesi berjalan atau arti hasil historis. | PASS |
-| **T-20** | Target dan hasil konsisten end-to-end | Rutinitas campuran bench press, push-up, plank 45 detik, dan cardio waktu saja | Mixed | Pilihan/target tersimpan, detail plank tidak menampilkan 0 reps, sesi mencatat metrik sesuai mode, ringkasan/riwayat/progres mempertahankan arti hasil tanpa memaksa seluruhnya menjadi kg. | PASS |
-| **T-21** | Karakter tidak ditentukan satu metrik | Weighted pull-up, assisted pull-up, plank, dan conditioning berbeban | Mixed modality/tracking | Tidak dipaksa ke tiga kelompok eksklusif; plank tidak menjadi cardio karena waktu, bodyweight berbeban tidak kehilangan semantik tambahan/bantuan, conditioning tetap dapat mencatat kg. | PASS |
+| Tahap | Data/outcome yang wajib dipertahankan | Gagal / recovery |
+| --- | --- | --- |
+| Selama latihan | Tiap mutasi committed ke `active_sessions.session_data_json` beserta ID/urutan hasil, array target, metadata snapshot, completion dan state pause/stopwatch. Publish state berhasil sesudah commit. | Kegagalan write tidak diterjemahkan menjadi keberhasilan UI; state Room terakhir tetap canonical, raw input bisa di-retry. |
+| Reopen/process death | Restore session owner/ID sama melalui codec berversi; jangan start sesi baru atau regenerate target/default. Reconcile execution stopwatch serta rest lewat identitas/deadline §4.2.2. | Account lain tidak mengakses sesi; data korup/versi unknown dipertahankan dengan error recovery, bukan dihapus. Keystroke yang belum committed tidak dijanjikan pulih. |
+| Finish | Minimal satu completed set. Simpan `WorkoutLogEntity`, `ExerciseLogEntity` dan `WorkoutSetEntity` atomik sebagai `PENDING_SYNC`/`CREATE`; gunakan `session.id` sebagai workout ID dan stable set IDs yang telah tersimpan. Hapus active row hanya dalam transaksi berhasil yang sama. | Nol completed → tetap active dengan pesan. Transaksi gagal → rollback parent/children/delete; sesi tetap tersedia, finish dapat diulang dengan identitas yang sama. |
+| Snapshot hasil | Hanya completed results masuk final metrics; exercise tanpa completed set tidak menjadi performed exercise. `input_defaults` log yang disimpan memuat snapshot target/config lengkap exercise itu, bukan hasil yang dianggap target. | Bila seluruh snapshot routine awal tidak tersedia pada hasil lama, target count awal ditandai tidak tersedia, bukan direkonstruksi dari completed results. |
+| Upload | Setelah commit lokal, enqueue scheduler existing untuk owner. `SyncManager.syncWorkoutAggregate` mengirim aggregate utuh, tidak upload parent/child terpisah atau membuat workout ID baru. | Internet terputus tidak membatalkan finish lokal. Worker existing mengembalikan `Result.retry()` untuk retryable failure; jadwal aktual mengikuti WorkManager, bukan jaminan retry tepat waktu. |
+| Ack/retry | Server menerima `persist_local_workout_aggregate` secara atomik dengan receipt workout ID; payload identik → receipt sama. Tandai parent/children SYNCED hanya setelah RPC ack dan `markAsSyncedIfUnchanged` berhasil. | Ack hilang → retry ID/payload sama. Payload berbeda ditolak `IDEMPOTENCY_MISMATCH`; parent berubah saat upload → jangan menandai versi baru seolah sudah ack. |
+| Rejection/pull | Validation/ownership error mempertahankan aggregate lokal, menandai status gagal sesuai mekanisme existing dan menampilkan kebutuhan penanganan; jangan rewrite data agar lolos. Import memakai `RemoteSnapshotImporter` tanpa menimpa pending local changes. | Re-auth/retry hanya pada owner yang sama. Tidak loop payload invalid sebagai workout baru, dan tidak menggandakan pending lokal ketika row remote ber-ID sama ditemukan. |
 
----
+**Perlindungan immutable:** setelah finish, parent/children pending beserta snapshot/versi/unit membentuk payload tetap untuk replay. Upgrade codec/metadata tidak boleh menambah key/default/null atau menghitung ulang snapshot pada payload lama yang sedang menunggu ack. Kunci koreksi active setelah finish; koreksi history/import bukan perluasan scope tugas ini. Default snapshot target adalah bukti konfigurasi saat latihan, bukan lookup ke routine terbaru.
 
-## 9. Analisis Risiko & Mitigasi Operasional
+**Contoh benar:** user finish offline → hasil segera dapat dibaca di History lokal berstatus pending dan active session tidak dibuat ulang. Online → aggregate tersinkron; jika server sudah commit tetapi respons terputus, retry mengembalikan receipt workout yang sama. Home dan History hanya memiliki satu workout dengan ID sesi asal.
 
-1. **Risiko 1: Drift Sesi Aktif Saat Migrasi Berjalan**
-   - *Mitigasi*: Kolom baru bersifat nullable dengan default value. RPC server mendukung percabangan `schema_version = 1` dan `schema_version = 2`. User yang sedang berada di tengah latihan v1 saat migrasi DDL diterapkan tidak akan mengalami crash atau kehilangan data.
-2. **Risiko 2: Ambiguitas Data Historis Lama (*Push-up 70 kg*)**
-   - *Mitigasi*: Menandai data workout log lama yang dibuat sebelum cutover dengan `data_quality = 'LEGACY_UNVERIFIED'`. Jangan melakukan update massal mengubah nilai lama menjadi 0 kg tanpa konfirmasi, untuk menjaga audit trail historis.
-3. **Risiko 3: Supabase Free Tier Tanpa Automated Point-in-Time Restore**
-   - *Mitigasi*: Sebelum DDL/DML migrasi dijalankan, lakukan export skema dan data tabel utama (`exercises`, `workout_templates`, `template_exercises`, `workout_logs`, `exercise_logs`, `workout_sets`, `active_sessions`) ke file SQL terkompresi lokal.
-4. **Risiko 4: Strategi Rollback & Fix-Forward**
-   - *Kebijakan*: **Dilarang keras melakukan rollback dengan `DROP COLUMN`** jika aplikasi klien baru sudah sempat menulis data ke tabel produksi. Jika ditemukan bug pasca rilis, gunakan strategi **Fix-Forward**: nonaktifkan pembuatan routine multi-unit baru melalui remote config / feature flag, dan deploy patch perbaikan tanpa menghancurkan data yang telah diinput pengguna.
+## 8. Komponen: kompatibilitas dan rencana migrasi
+
+**Detail Revisi**
+
+Ini rencana implementasi mendatang, bukan eksekusi migrasi. Pertahankan **Expand → Backfill terukur → Cutover → Contract**, backup/restore, RLS, receipts dan larangan rollback destruktif.
+
+### 8.1 Expand
+
+1. Rekonsiliasi skema repository/live dan backup/restore terisolasi sebelum implementasi. Jangan mengedit atau menjalankan ulang migrasi yang telah diterapkan.
+2. Rencanakan metadata `tracking_profile`/`supported_metrics` di exercise existing, array `set_targets` di routine existing, field hasil nullable dan versi. Sesuaikan nullability weight/reps serta presisi jarak tanpa mengubah histori. Tidak perlu tabel capability atau tabel target set terpisah.
+3. Backend/reader menerima v3 sebelum writer baru. Schema sesi mendukung 1/2/3 selama transisi; sesi lama tetap selesai/replay. Room 9→10 mempertahankan PK/FK, sync status, command immutable, null dan nilai existing; tanpa destructive fallback.
+4. Scalar `sets/reps/durasi/rest` lama diekspansi **N baris dengan nilai asal yang sama**, ID baris deterministik/stabil, dan rest termasuk 0 dipertahankan. Jika sudah ada target individual, gunakan seluruh nilai/urutan asal, bukan ekspansi scalar. Target beban tak diketahui tetap null, bukan tebakan. Persist array baru ketika routine disimpan via kontrak baru; payload pending lama tidak dimutasi. Kontrak runtime-only perlu diperbarui pada implementasi nanti agar timer membaca rest tiap baris snapshot.
+5. Backfill profil/capability katalog melalui mapping yang direview per exercise, bukan inferensi nama/ID dalam UI. Metadata menentukan field/default baru, **tidak mengubah jumlah/nilai baris routine existing**. Katalog baru yang belum memiliki metadata valid tidak diberi fallback lima metrik universal; histori/sesi lama tetap readable.
+
+### 8.2 Pemetaan data lama
+
+| Data asal | Perlakuan kompatibilitas |
+| --- | --- |
+| Bodyweight / `CALISTHENICS` | Katalog/konfigurasi baru menggunakan Strength. Snapshot historis tetap versi/kategori asal, tanpa rewrite histori. |
+| `BODYWEIGHT_REPS`, `ASSISTED_REPS`, `REPS_ONLY` | Untuk konfigurasi baru yang diklasifikasikan Strength, pakai `WEIGHT_REPS` dan pertahankan reps relevan; target beban unknown menunggu angka user saat edit. Jika kategori baru Cardio/Isometric, perlukan target durasi sesuai aturan baris berikut, bukan menganggap semua `REPS_ONLY` sebagai Strength. |
+| `WEIGHT_REPS` lama | Angka historis utuh; saat dipakai sebagai target tampilkan untuk konfirmasi. Jangan menggandakan dumbbell/menambah berat badan otomatis. |
+| `DISTANCE_DURATION` cardio | Histori tetap terbaca. Hasil baru berdurasi dengan jarak opsional per set; setup baru tidak mewajibkan target jarak. |
+| Cardio reps-only tanpa waktu | Pertahankan data lama, minta durasi valid pada konfigurasi berikutnya; jangan mengubah reps menjadi detik. |
+| Isometric tanpa target relevan | Default target/draft baru 60 detik; hasil historis tidak diubah. Target tersimpan yang relevan diprioritaskan. |
+| Routine existing, termasuk cardio multi-set | Pertahankan jumlah/nilai/urutan baris. Scalar lama diekspansi sesuai jumlah asal, bukan default profil; array individual tidak diratakan. |
+| Rest routine existing | Pertahankan rest asal tiap baris, termasuk 0; fallback 60 hanya jika tidak tersedia. Sesi baru menyalin per baris; override sesi lama mengikuti versi asal sampai selesai. |
+| Sesi/pending operation lama | Payload/versi asal sampai selesai/replay. Jangan menyisipkan field/null yang mengubah identitas payload immutable. |
+
+Seluruh enam format legacy (`WEIGHT_REPS`, `BODYWEIGHT_REPS`, `ASSISTED_REPS`, `REPS_ONLY`, `DURATION`, `DISTANCE_DURATION`) tetap dibaca/difinalisasi oleh validator versi asal; tidak di-relabel massal ke dua format baru. Unknown weight/additional/assistance tidak dijumlahkan, dikurangi, atau diganti berat badan profil saat ini. Rest target lama bukan bukti waktu istirahat aktual; rest yang hilang hanya mendapat default pada konfigurasi baru, bukan measurement histori yang diciptakan.
+
+`row_id` hasil ekspansi legacy dibentuk deterministik dari identitas routine/exercise dan posisi asal, lalu dipersist saat konversi diakui; reload draft tidak menghasilkan ID acak baru. Stable result IDs/receipts legacy yang sudah ada tetap utuh. Bila konversi array gagal validasi, pertahankan record/revisi asal dan minta koreksi field terkait sebelum save baru; jangan sebagian menghapus/mengonversi baris atau mempromosikan `LEGACY_UNVERIFIED`.
+
+### 8.3 Cutover dan Contract
+
+Writer baru menghasilkan kontrak sederhana setelah backend siap; reader/replay legacy tetap sesuai kebutuhan nyata. Rollout mengikuti mekanisme existing, tidak menambah service minimum-version baru.
+
+Migrasikan caller/UI/mapper/serializer/prefill/sync/history terdampak bersama-sama. Reader/kolom historis dipertahankan selama dibutuhkan; jangan menghapus enum, hasil atau receipt lama tanpa jalur baca lossless.
+
+Request scalar dari client lama ke routine yang sudah memakai array v3 harus ditolak oleh RPC (pesan update aplikasi/kontrak tidak didukung), bukan meratakan array. Pengecualian hanya replay identik request yang receiptnya sudah ada; receipt tersebut tidak melakukan write ulang. Ini guard versi pada RPC existing, bukan service/gate baru. Sesi/pending upload lama tetap boleh selesai melalui jalur versi asal.
+
+Kegagalan setelah writer baru → fix-forward, bukan drop kolom, downgrade lossy, atau reset database user. `LEGACY_UNVERIFIED` tidak otomatis menjadi verified karena schema upgrade.
+
+**Logika Data**
+
+Versi membedakan makna angka baru/lama pada struktur existing. Routine, snapshot aktif dan hasil tetap terpisah; migrasi tidak mengarang beban total, durasi atau metrik yang tidak tercatat.
+
+**Rasionalitas & Output**
+
+Kompatibilitas mengikuti Room-first, schema sesi legacy, scalar target lama, pending sync dan replay. Capability cukup metadata pada exercise dan snapshot existing; tidak perlu arsip metadata/service baru.
+
+## 9. Peta implementasi dan risiko
+
+### 9.1 Area implementasi mendatang
+
+| Komponen | Area / simbol existing | Output yang harus selaras |
+| --- | --- | --- |
+| UI Detail | `WorkoutDetailScreen`, `RoutineExerciseRow` | Gambar existing, nama, ringkasan target routine saja. |
+| Setup/edit | `EditWorkoutScreen`, `RoutineExerciseEditor`, `EditWorkoutViewModel`, `RoutineFlowManager` | Baris horizontal 3/2 field, tambah/hapus, ID stabil, jumlah turunan, tanpa mode; draft/command menyimpan array target/rest. |
+| Active | `ActiveSetRow`, `ActiveWorkoutComponents`, `ActiveWorkoutViewModel` | Unified inputs existing; metric subset menurut metadata, tambah/hapus mempertahankan hasil lain; label rest read-only dan timer dari target baris yang sama (`TXyaw`, §2.1). |
+| Domain/persistence | `ExerciseTarget`, `TemplateExercise`, `SetMeasurement`, `WorkoutSet`, `ExerciseInputDefaults`, `IMFITDatabase`, entity/codec | Daftar target per set, metadata profile/metrics, weightKg tunggal, target association, versi/null/presisi; migrasi lossless. |
+| Backend/sync | `SupabaseRoutineRepository`, `WorkoutRepositoryImpl`, `SyncManager`, `RemoteSnapshotImporter`, DTO/RPC | Array atomik/jumlah turunan, validasi metadata snapshot, hasil per set dan rest association round-trip; receipt/ownership/provenance tetap. |
+| Picker | `ExerciseSelectionScreen`, `ExerciseSelectionViewModel`, `RoutineFlowManager` | Row tanpa badge kategori/modalitas; status existing/selected dan CTA penambahan baru dipertahankan (`Of1nW`). Metadata tetap ikut selection result, bukan dibuang bersama badge. |
+| Summary/history/progress | Presentation/read-back existing | Unit/makna sesuai snapshot; tidak memperluas fitur analytics. |
+
+### 9.2 Risiko dan mitigasi
+
+| Risiko | Keputusan |
+| --- | --- |
+| Bodyweight tetap workflow tersendiri | Satu Strength, satu beban, tanpa rumus profil/toggle tambahan. |
+| Baris saling mengubah nilai atau tertukar saat hapus | State per stable row ID; nomor hanya posisi. Persist urutan/ID/nilai utuh; server memeriksa jumlah turunan. |
+| Rest target tidak dipakai timer set terkait | Snapshot rest per target baris dan asosiasi hasil → target; tidak memakai rest global exercise. |
+| Default/classification mereset edit routine | Default 3/1 hanya first insert; edit/recovery/migrasi scalar mempertahankan jumlah/nilai asal. |
+| Metrik alat bocor ke seluruh Cardio | Renderer/validator memakai profil dan supported metrics snapshot, bukan kategori Cardio atau nama alat saja. |
+| Metrik hilang setelah finish/sync | Preserve field supported yang tercatat, null, snapshot capability dan versi; perubahan katalog tidak menghapus histori. |
+| Histori berubah arti | Versi/snapshot; tidak otomatis menjumlah beban, menggandakan dumbbell atau mengubah reps menjadi detik. |
+| Drift routine/hasil | Target/hasil terpisah; sesi memakai snapshot. |
+| Duplikasi/akun silang | Pertahankan receipt, CAS, transaction, FK dan ownership/RLS existing. |
+
+## 10. Acceptance dan pemeriksaan konsistensi
+
+### 10.1 Acceptance dokumentasi
+
+- [x] Setup/edit tidak memakai field jumlah set numerik; jumlah mengikuti baris dinamis.
+- [x] Semua jenis mendukung tambah/hapus set; nomor mengikuti urutan baris tersisa.
+- [x] Setiap baris punya nilai independen, identitas stabil, dan perubahan tidak memengaruhi baris lain.
+- [x] Strength setup/edit: Set → Beban → Reps → Rest, tiga field horizontal; Rest tidak dipindah ke bawah.
+- [x] Cardio/Isometric setup/edit: Set → Durasi → Rest, dua field horizontal, tanpa beban/reps.
+- [x] Rest default 60 detik per baris; rest existing termasuk 0 dipertahankan.
+- [x] Default 3 baris Strength/Isometric/`duration_only`; 1 baris `distance_activity`/`equipment_metrics`.
+- [x] Default hanya first insert; edit/recovery/perubahan klasifikasi tidak mereset routine existing.
+- [x] Active Strength tetap Set → Beban → Reps, tanpa + Tambah Beban.
+- [x] Active Isometric tetap Set → Durasi; default plank relevan 60 detik.
+- [x] Active Cardio tetap Set → Durasi; rest tampil read-only per set dari target snapshot, bukan input/measurement hasil.
+- [x] Cardio `duration_only` tidak menampilkan metrik tambahan, sama seperti Isometric.
+- [x] `distance_activity` hanya menawarkan subset jarak/speed/lap yang relevan, tanpa kalori/incline.
+- [x] `equipment_metrics` hanya menawarkan indikator supported; incline tidak universal.
+- [x] Supported metrics tetap opsional, kosong berarti tidak tercatat; unsupported tidak dirender.
+- [x] Metrik tetap atribut set yang sama; tidak ada mode manual atau konfigurasi metric oleh user.
+- [x] Metadata mendukung exercise baru tanpa percabangan UI berdasarkan nama/ID.
+- [x] Array target, snapshot, timer, payload dan kompatibilitas historis konsisten.
+- [x] Completion/undo/delete membedakan draft, completed dan hasil final; agregat hanya hasil tercommit.
+- [x] Rest pending/deadline/recovery dideduplikasi berdasarkan stable set ID, bukan nomor posisi.
+- [x] Picker memisahkan anggota routine dari pilihan baru dan tidak melakukan write prematur.
+- [x] Keenam mockup pen.dev dipetakan ke sumber data/persistence; state inline existing dipakai tanpa layar/workflow baru.
+- [x] Picker tanpa label/badge kategori/modalitas; status existing/selected tetap, metadata internal tidak dihapus.
+- [x] Statistik memiliki sumber/formula lintas surface; estimasi Strength yang belum final ditandai eksplisit.
+- [x] Finish offline dan retry mempertahankan workout ID, snapshot dan payload immutable.
+- [x] Card detail tetap gambar/nama/ringkasan target saja, termasuk target heterogen.
+- [x] Referensi enam node canvas dicatat read-only; laporan layout 360/412 dibedakan dari verifikasi runtime. Tidak ada source code, UI, DB, schema atau artefak implementasi diubah.
+
+Checkbox menunjukkan cakupan **spesifikasi dokumentasi**, bukan implementasi atau pengujian aplikasi.
+
+### 10.2 Kriteria verifikasi implementasi mendatang
+
+**Seluruh skenario di bawah belum dijalankan terhadap implementasi v3.** Audit P-11 memperluas skenario A-01–A-15 existing menjadi lima aspek yang dapat diamati; A-16–A-21 hanya menutup celah completion/recovery/picker/statistik/sync/estimasi. Kelulusan validasi dokumen bukan kelulusan aplikasi, Room migration, RPC atau Supabase live.
+
+| ID / Audit | Kondisi awal | Tindakan user/sistem | Hasil UI yang diharapkan | Hasil data yang diharapkan | Gagal / edge case material |
+| --- | --- | --- | --- | --- | --- |
+| A-01 / P-02 | Routine tiga target ber-ID r1/r2/r3. | Tambah r4, hapus r2, save lalu reload. | Tiga baris bernomor 1..3; tidak ada input jumlah manual. | Urutan r1/r3/r4; ID/nilai r1/r3 tetap, r4 ID baru, `sets=3`. | Hapus terakhir menghasilkan draft kosong; save diblokir, bukan otomatis membuat tiga baris. |
+| A-02 / P-01,P-02 | Setup/edit mengikuti `Q1BGbI`/`MdoRQ`; canvas 360/412 sesuai laporan desain. | Buka/edit tiap baris, tampilkan raw input panjang dan error inline pada kedua lebar implementasi. | Tiga field Strength atau dua field durasi/rest tetap horizontal; state inline tidak membutuhkan layar baru; tanpa mode manual. | Format internal tetap `WEIGHT_REPS`/`DURATION`; field tidak relevan null, raw draft tidak berubah karena layout. | Recomposition/rotasi/error tidak memindah Rest, mereset nilai atau mengubah target; laporan layout mockup bukan bukti lulus device test. |
+| A-03 / P-02,P-04 | Target r1=40/10/60, r2=45/8/90, r3=50/6/120. | Edit hanya beban r2 ke 47.5, save, reload. | Hanya r2 berubah; nilai/urutan lainnya tetap. | Array memuat nilai masing-masing dan rest independen; stable row IDs tidak diregenerasi. | Validasi gagal mempertahankan raw draft; timeout save mempertahankan command/request ID untuk replay, bukan payload baru. |
+| A-04 / P-01,P-02 | Exercise baru lima jenis default §4.1; routine existing alat punya tiga baris/rest 0. | Tambah exercise baru, lalu buka edit existing. | Default baru 3/3/3/1/1; existing tetap tiga dan rest 0. | Default hanya first insert; recovery/edit tidak overwrite count/nilai existing. | Metadata baru tidak mereset array yang sudah disimpan; unknown profile tidak diberi fallback lima metric. |
+| A-05 / P-01,P-05 | Sesi mengikuti `TXyaw`, dengan target rest berbeda per set termasuk 0. | Edit hasil/tambah set; baca label rest dan jalankan timer. | Unified inputs tanpa input Rest/+ Tambah Beban; rest read-only per set menunjukkan nilai snapshot, termasuk 0. | Hasil berubah hanya pada field measurement; label tidak menulis rest hasil atau mengubah target routine. | Countdown yang berkurang tidak menimpa label target rest; paused/finishing/cancelling mengunci mutasi. |
+| A-06 / P-03 | Jumping Jacks/burpees waktu memiliki `duration_only`, list kosong. | Isi durasi positif lalu complete. | Hanya durasi, sama seperti Isometric; tidak ada lima metric alat. | Satu hasil completed; metric unsupported null/omitted. | Durasi 0/null ditolak; payload baru dengan metric unsupported terisi ditolak, bukan disembunyikan. |
+| A-07 / P-03 | Outdoor jogging mendukung distance/speed/laps. | Isi durasi, biarkan ketiga metric kosong, complete. | Hanya tiga optional metrics itu; tanpa kalori/incline; complete berhasil. | Ketiganya null, tidak ada distance/speed/pace palsu. | Key asing/calories/incline terisi ditolak; nilai lap pecahan ditolak. |
+| A-08 / P-03,P-04 | Treadmill full dan bike mendukung calories/distance/speed saja. | Isi indikator yang tersedia pada satu set masing-masing; finish/read-back. | Treadmill dapat lima field, bike tidak menampilkan lap/incline. | Nilai tersimpan pada row set terkait dan bertahan sync. | Supported kosong tetap sah; alat lain mengikuti subset metadata, bukan nama/if-else UI. |
+| A-09 / P-03,P-04 | Cardio mempunyai nilai distance dan metric supported lain kosong. | Clear distance; PATCH yang tidak menyertakan speed; simpan. | Clear menjadi tidak tercatat; speed yang sudah ada tetap. | Explicit null menghapus distance, omission tidak mengubah speed; nol eksplisit bukan null. | Nilai negatif pada metric nonnegatif/non-finite ditolak; lap/rep tidak masuk reps Strength. |
+| A-10 / P-05,P-06 | Target r1/r2/r3 rest 60/90/120; hasil a/b/c sesuai target. | Hapus draft b, lalu complete c yang kini bernomor 2. | Dua baris; c nilainya tetap, timer 120 sesuai r3. | ID c/target r3 tetap; timer key memakai stable set ID, bukan nomor 2. | Completed c tidak dapat dihapus sebelum undo; penomoran tidak mengubah set lain atau target routine. |
+| A-11 / P-04,P-09 | Sesi memiliki hasil/target/optional metrics yang sudah committed. | Process death, reopen akun sama; katalog kemudian berubah. | Sesi yang sama pulih dengan angka/urutan/status sebelumnya, bukan halaman default baru. | Array/ID/metadata snapshot, target association dan pause/stopwatch tetap; katalog baru tidak rewrite snapshot. | JSON rusak/versi unsupported → error recovery, record mentah dipertahankan; akun lain tidak mendapat data sesi. |
+| A-12 / P-04,P-10 | Routine legacy N=2 scalar dan history/pending enam format lama. | Baca/konversi routine ke editor baru; save hasil konfirmasi. | Dua baris nilai asal, bukan default 3/1; histori tetap semantik lama. | Ekspansi ID deterministik; pending payload/receipt, rest 0, quality legacy dan additional/assistance tidak berubah. | Scalar write baru client lama ke routine v3 ditolak; replay receipt lama tetap no-op; tidak menebak total bodyweight/detik dari reps. |
+| A-13 / P-01,P-03 | Target plank unknown atau existing 90 s; dumbbell user 20 kg; cardio input 5 km. | Buka/tambah set dan simpan pengukuran. | Plank unknown 00:01:00, existing 00:01:30; beban tetap 20; jarak UI km. | Durasi detik, distance 5000 m, weight 20 tanpa penggandaan/profil. | Unknown bukan perintah rewrite histori; parser menolak menit/detik >59 dan waktu melampaui batas. |
+| A-14 / P-02,P-08 | Routine target homogen lalu heterogen tersimpan. | Buka Detail/Home routine; edit target, batal atau save. | Gambar existing/nama/ringkasan target saja; heterogen tidak diratakan. | Canonical berubah hanya setelah save ack; ringkasan tidak mengambil hasil history/prefill. | Read sesudah save gagal → tampil error/stale state yang jelas, bukan sukses palsu atau reset target. |
+| A-15 / P-04,P-09 | Dua akun, revision/session version lama, dan workout ID ber-receipt. | Coba mutasi akun lain, save stale revision, replay payload identik lalu berbeda. | Error sesuai konteks; draft/hasil lokal tidak hilang. | Ownership/CAS menolak overwrite; replay identik receipt sama; berbeda ditolak tanpa log/set baru. | Account change membatalkan context flow; parent berubah saat upload tidak ditandai synced oleh ack versi lama. |
+| A-16 / P-05 | Draft hasil stable ID x, nilai 40/10; target routine tetap. | Complete → undo → edit 45/8 → complete lagi. | Read-only saat selesai; count 1→0→1; angka tetap saat undo lalu dapat diedit. | Satu hasil ID x, final reps 8/volume 360; target routine tidak berubah. | Double tap/replay no-op; nilai wajib invalid atau write Room gagal tidak menaikkan count/memulai timer. |
+| A-17 / P-06,P-09 | Rest 90 dimulai; boot sama, 30 s sudah berlalu. | Reopen, atau matikan proses antara completion commit dan timer store. | Sekitar 60 s tersisa; tidak reset 90. Rest 0 tidak menampilkan countdown. | Pemicu pending diproses idempotent dengan deadline asal; undo/recomplete tidak menggandakan trigger. | Reboot/owner/session invalid cancel; expired tidak restart; kegagalan timer store menjaga hasil dan pemicu untuk retry. |
+| A-18 / P-07 | Draft berisi Bench Press/Push-Ups/Plank; Picker `Of1nW` tidak menampilkan badge kategori/modalitas. | Pilih Treadmill, confirm dua kali; ulang dengan Back tanpa confirm. | Existing dibedakan dari selected baru; Tambah 1 Gerakan, bukan 4; tanpa badge Strength/Cardio/Conditioning/Isometric; Back menjaga draft. | Satu Treadmill setelah accept; metadata format/profil/metrics tetap dibawa, tanpa RPC save hingga editor disimpan. | Duplicate/result replay no-op; hydration gagal memakai state inline/retry tanpa placeholder/draft hilang; context akun lain ditolak. |
+| A-19 / P-05,P-08 | Fixture §7.1 dan Home `eR0yE` memiliki hasil legacy serta kontrak baru. | Baca active, finish, Home/History; undo sebelum finish pada variasi fixture. | Active 4/6; Home memisahkan volume legacy dari volume tercatat baru; durasi sesi/Waktu aktif dibedakan. | Agregat completed memakai versi/semantik masing-masing; satu workout ID, tidak menjumlah legacy external/additional ke volume baru. | Semua jarak null → tidak tercatat; exercise tanpa completed bukan performed final; undo menghitung ulang kontribusi, bukan mengubah target. |
+| A-20 / P-09 | Minimal satu completed set; koneksi offline atau respons server akan hilang. | Finish, reopen History, online dan retry upload identik. | Finish lokal berhasil/pending terlihat; kemudian synced; hanya satu workout di Home/History. | Parent/children pending atomik, ID=ID sesi; active row dihapus hanya pada commit sukses; ack receipt sama tanpa duplikasi. | Finish tanpa completed tetap active; transaksi gagal rollback; network gagal tetap pending, server validation gagal tidak menghapus data/mengganti ID. |
+| A-21 / P-08 | Routine durasi 60/90/60 s, rest 60/60/120; variasi mengandung Strength. | Hitung estimasi dan bandingkan durasi sesi aktual. | Durasi-only perkiraan 6 menit; Strength/mixed `—` sampai formula disetujui, bukan angka pasti 8 menit. | Subtotal 330 s mengecualikan rest terakhir; tidak disimpan sebagai workout duration aktual. | Target invalid/unknown tidak dipaksa nol; asumsi tempo/transisi Strength tetap TODO/VERIFY, tidak dibuat formula tanpa persetujuan. |

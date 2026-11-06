@@ -7,17 +7,17 @@
 | Atribut | Kontrak |
 | --- | --- |
 | Versi / tanggal | **1.4 / 2026-11-05** |
-| Status | **Spesifikasi target siap menjadi acuan implementasi; belum diimplementasikan/diverifikasi pada aplikasi atau database.** |
+| Status | **T01–T10 tersedia di repository dan lulus verifikasi PostgreSQL terisolasi (2026-11-06); G01/G02 ditutup pada lingkup repository. Supabase live belum diperbarui; G03/G04 BLOCKED (§13). Android T12–T18 menunggu G04.** |
 | Prioritas | Konsistensi data dan logging cepat; bukan penambahan mode atau fitur analytics. |
 | Ruang lingkup | Katalog → UI Detail → Setup Form → rutin → sesi aktif → penyimpanan lokal/remote → ringkasan, riwayat, dan progres. |
-| Basis yang diperiksa | Sumber Android `app/src/main`, model domain, Room **v9**, dan migrasi SQL dalam repository. Bukan inspeksi Supabase live. |
-| Target versi | Payload sesi **v3**, kontrak pengukuran **v3**, Room **v10**; ketiganya adalah target baru, bukan versi yang sudah tersedia. |
+| Basis yang diperiksa | Sumber Android `app/src/main`, model domain, Room **v9**, migrasi repository, serta inspeksi read-only Supabase live pada **2026-11-06** (§11). |
+| Target versi | Payload sesi **v3** dan kontrak pengukuran **v3** sudah diimplementasikan pada SQL repository, belum deployed. Android/codec v3 dan Room **v10** masih target; Android tetap Room v9. |
 | Otoritas | Server menentukan format katalog dan validasi; UI tidak memilih mode pencatatan. Snapshot mempertahankan makna data. |
 | Gate | Status pengujian v1.3 **tidak berlaku untuk v1.4**. Implementasi harus memenuhi acceptance §10 sebelum cutover. |
 
 Revisi ini menggantikan keputusan lama yang mempertahankan enam mode, selector **Waktu saja / Jarak + waktu**, bodyweight reps-first, serta pemisahan input beban tambahan/bantuan untuk data baru. Bukti dan hasil pengujian lama tetap historis: [Phase 5 Verification Report](PHASE5_VERIFICATION_REPORT.md). Angka kelulusan di laporan tersebut bukan bukti kontrak baru ini.
 
-**Changelog:** v1.4 menyatukan Strength/bodyweight, memakai dynamic set rows pada setup/edit, menyimpan target/rest per baris, dan membatasi metrik cardio menurut profil/capability exercise. Default jumlah baris hanya diterapkan saat pertama ditambahkan; routine existing tidak direset. Revisi hanya dokumentasi, tanpa perubahan kode, canvas, schema, atau eksekusi migrasi.
+**Changelog:** v1.4 menyatukan Strength/bodyweight, memakai dynamic set rows pada setup/edit, menyimpan target/rest per baris, dan membatasi metrik cardio menurut profil/capability exercise. Default jumlah baris hanya diterapkan saat pertama ditambahkan; routine existing tidak direset. Revisi spesifikasi 2026-11-05 hanya dokumentasi. Implementasi/verifikasi terisolasi T01–T03 dicatat di §11; T04–T07 di §12; T08–T10 serta status gate terkini di §13. Tidak ada DDL live atau perubahan Android/canvas.
 
 **Penyempurnaan audit eksternal P-01–P-11:** aturan kategori/profil yang sudah konsisten dipertahankan; lifecycle baris, status completion, timer/recovery, picker, statistik dan sync diperjelas pada bagian terkait. Semua tambahan adalah kontrak target, bukan bukti implementasi. Estimasi routine yang memuat Strength masih memerlukan keputusan produk (§7.1); jangan menganggap angka heuristik existing sebagai durasi pasti.
 
@@ -77,7 +77,7 @@ Revisi ini menggantikan keputusan lama yang mempertahankan enam mode, selector *
 
 **Keselarasan desain terkini:** gunakan ulang keenam mockup existing pada §2.1, termasuk state inline; tidak menambah layar/workflow baru. Laporan user memperbarui bukti desain sebelumnya: Jumping Jacks pada `TXyaw` kini durasi saja, Bike memakai subset indikator, dan rest tampil read-only per set. Catatan lama bahwa Jumping Jacks masih menampilkan kelima metrik tidak lagi berlaku. Contoh jumlah set pada Edit adalah data tersimpan yang dipertahankan, bukan perintah mereset default.
 
-Semua nama field, versi, batas baru, dan perubahan perilaku di §3–§10 adalah **kontrak usulan v1.4**, bukan klaim implementasi saat ini. Struktur skema aktual harus direkonsiliasi dengan server sebelum DDL; jangan menjalankan ulang migrasi v1.3 yang sudah tercatat.
+Nama field, versi, batas baru, dan perubahan perilaku di §3–§10 adalah **kontrak target v1.4**. Subset database/backend T01–T10 sudah diimplementasikan/diverifikasi terisolasi (§11–§13), bukan keseluruhan kontrak atau deployment live. Struktur skema aktual harus direkonsiliasi dengan server sebelum DDL; jangan menjalankan ulang migrasi yang sudah tercatat.
 
 ### 2.1 Referensi mockup pen.dev dan traceability UI → data
 
@@ -315,7 +315,7 @@ Satu field domain **`weightKg`** dipetakan ke key API/SQL existing **`weight`** 
 | Log hasil / agregat | Persist array target dan metadata snapshot pada `input_defaults` exercise log existing dengan encoding berversi; jangan hanya menyimpan key prefill scalar yang kehilangan target individual. Reader tetap mendukung key legacy. Pertahankan quality/provenance; volume baru berlabel volume beban tercatat dan tidak overwrite legacy external/additional volume. Tidak perlu agregat baru untuk semua detail mesin. |
 | Room / DTO / codec / sync | Mirror daftar target beserta stable row IDs, profil/metrics, versi dan field hasil nullable. Key prefill/defaults serta equality importer mempertimbangkan urutan/nilai tiap baris dan metadata. Preserve metrik hasil, null, dan presisi jarak termasuk total jarak. |
 
-`measurement_version=3`, payload sesi schema v3 dan Room v10 adalah rencana versi, **belum diterapkan**. Field baru nullable pada histori; jangan memberikan default 3 kepada data lama. Versi/quality lama tetap sesuai bukti asal.
+Marker routine/result `measurement_version=3` tersedia dalam migration T04–T07 (§12); payload sesi, writer aggregate, dan reader/sync server v3 tersedia dalam migration T08–T10 (§13), seluruhnya **belum deployed**. Android writer/codec v3 dan Room v10 **belum diterapkan**. Field baru nullable pada histori; tidak ada default 3 atau promosi data lama. Versi/quality lama tetap sesuai bukti asal.
 
 **Batas existing/target persistence:** routine canonical tetap remote-authoritative melalui `SupabaseRoutineRepository`/`save_template_revision`; **Room-first berlaku untuk sesi dan hasil**, bukan alasan membuat mirror/writer routine baru. Penyesuaian entity Room routine hanya untuk representasi/recovery legacy yang memang tersedia. Pada sesi v3, array target dan hasil dipersist bersama di `ActiveSessionEntity.sessionDataJson`.
 
@@ -514,7 +514,7 @@ Gunakan `ActiveSessionEntity`, `WorkoutRepositoryImpl.mutateActiveSession/getAct
 
 **Detail Revisi**
 
-Ini rencana implementasi mendatang, bukan eksekusi migrasi. Pertahankan **Expand → Backfill terukur → Cutover → Contract**, backup/restore, RLS, receipts dan larangan rollback destruktif.
+Bagian ini adalah urutan rollout, bukan bukti deployment live. Persiapan dan verifikasi terisolasi T01–T10 tercatat di §11–§13. Pertahankan **Expand → Backfill terukur → Cutover → Contract**, backup/restore, RLS, receipts dan larangan rollback destruktif.
 
 ### 8.1 Expand
 
@@ -649,3 +649,297 @@ Checkbox menunjukkan cakupan **spesifikasi dokumentasi**, bukan implementasi ata
 | A-19 / P-05,P-08 | Fixture §7.1 dan Home `eR0yE` memiliki hasil legacy serta kontrak baru. | Baca active, finish, Home/History; undo sebelum finish pada variasi fixture. | Active 4/6; Home memisahkan volume legacy dari volume tercatat baru; durasi sesi/Waktu aktif dibedakan. | Agregat completed memakai versi/semantik masing-masing; satu workout ID, tidak menjumlah legacy external/additional ke volume baru. | Semua jarak null → tidak tercatat; exercise tanpa completed bukan performed final; undo menghitung ulang kontribusi, bukan mengubah target. |
 | A-20 / P-09 | Minimal satu completed set; koneksi offline atau respons server akan hilang. | Finish, reopen History, online dan retry upload identik. | Finish lokal berhasil/pending terlihat; kemudian synced; hanya satu workout di Home/History. | Parent/children pending atomik, ID=ID sesi; active row dihapus hanya pada commit sukses; ack receipt sama tanpa duplikasi. | Finish tanpa completed tetap active; transaksi gagal rollback; network gagal tetap pending, server validation gagal tidak menghapus data/mengganti ID. |
 | A-21 / P-08 | Routine durasi 60/90/60 s, rest 60/60/120; variasi mengandung Strength. | Hitung estimasi dan bandingkan durasi sesi aktual. | Durasi-only perkiraan 6 menit; Strength/mixed `—` sampai formula disetujui, bukan angka pasti 8 menit. | Subtotal 330 s mengecualikan rest terakhir; tidak disimpan sebagai workout duration aktual. | Target invalid/unknown tidak dipaksa nol; asumsi tempo/transisi Strength tetap TODO/VERIFY, tidak dibuat formula tanpa persetujuan. |
+
+## 11. Implementasi T01–T03 — 2026-11-06
+
+**Batas hasil:** implementasi SQL repository dan smoke PostgreSQL terisolasi selesai; **deployment live ditahan**. Tidak mengubah Android, Room v9, routine, sesi, hasil historis, receipt, atau writer v3. Checklist berikut bukan tanda bahwa keseluruhan acceptance §10 telah terpenuhi.
+
+- [x] **T01 — Rekonsiliasi database:** inspeksi live read-only, perbandingan migration ledger/RPC/schema/Room v9, backup SQL katalog, dan restore terisolasi.
+- [x] **T02 — Migrasi katalog:** kolom serta validasi kategori/format/profil/capability dalam `supabase/migrations/20261106000100_exercise_catalog_capabilities.sql`.
+- [x] **T03 — Backfill katalog:** fixture Cardio eksplisit serta normalisasi Strength dalam migration yang sama; snapshot historis tidak di-update.
+- [ ] **Deployment live:** selesaikan gate di §11.5 sebelum apply. Tidak ada migration repair, DDL/DML katalog, atau perubahan role live pada pengerjaan ini.
+
+### 11.1 Rekonsiliasi live / repository / Room
+
+Server live yang dibaca: project `ltcxltahkrjnsjaxndsa`, PostgreSQL **17.6**. Ledger berisi **19** migration repository sampai `20261101000200_backend_rpc_multimodality_modernization.sql`; tidak ada versi live-only. Dua migration lama repository belum tercatat:
+
+| Migration belum diterapkan | Perubahan yang belum tersedia pada RPC live |
+| --- | --- |
+| `20261101000300_local_workout_legacy_provenance.sql` | `persist_local_workout_aggregate`: provenance payload tanpa tracking eksplisit dan validasi legacy/mixed transport. |
+| `20261102144339_routine_rest_runtime_contract.sql` | `save_template_revision` public/private dan `create_active_session`: rest routine dipertahankan, runtime rest dipisahkan. |
+| `20261106000100_exercise_catalog_capabilities.sql` | Migration baru T02/T03: metadata, backfill dan constraint katalog. |
+
+Seluruh **56** definisi fungsi `public`/`imfit_private` live dibandingkan dengan baseline repository yang direkonstruksi sampai ledger live. Tidak ditemukan perbedaan isi setelah mengabaikan baris komentar dan trailing whitespace; ini perbandingan definisi, bukan pembuktian ekivalensi SQL secara umum.
+
+Perbandingan **87** kolom pada tujuh tabel relevan menemukan **20** perbedaan baseline fisik: typmod `VARCHAR` live lebih ketat, numeric live (`workout_sets.weight NUMERIC(6,2)`, `exercise_logs.total_volume NUMERIC(10,2)`), `exercise_logs.total_sets/total_reps` live nullable, serta serial live versus identity repository pada `muscle_categories.id`. Ini dicatat, bukan dinormalisasi diam-diam. Weight/reps hasil live tetap NOT NULL, distance masih integer, profile/metrics dan array target belum ada.
+
+Trigger katalog live hanya `update_exercises_updated_at` → `update_updated_at_column`; tidak ada trigger katalog yang menulis ulang histori. RLS katalog aktif; `authenticated` hanya SELECT; `postgres`/`service_role` memiliki hak tulis katalog. `exercise_tracking_modes` tetap berfungsi sebagai allow-list legacy RPC.
+
+Room tetap **v9** (`IMFITDatabase.kt`, exported `app/schemas/com.diajarkoding.imfit.data.local.database.IMFITDatabase/9.json`): belum menyimpan profile/metrics, array target/ID baris, association hasil, nullable weight/reps atau metrik mesin baru. Codec sesi masih 1/2, writer masih 2. Perubahan 9→10, DTO/cache/projection RPC dan cutover writer bukan T01–T03. SDK catalog mengabaikan unknown fields; penambahan kolom tidak berarti metadata sudah sampai ke UI.
+
+Query rekonsiliasi yang dapat dipakai ulang: `supabase/operations/exercise_catalog_reconcile.sql`. CLI `migration list --linked` dan `db query --linked` gagal pada izin alter role `cli_login_postgres`; pembacaan berhasil melalui endpoint Management API `database/query` dengan `read_only=true`. Tidak mengubah role untuk melewati kegagalan CLI.
+
+### 11.2 Backup sebelum DDL
+
+Generator read-only: `supabase/operations/exercise_catalog_backup.sql`. Satu transaksi repeatable-read menghasilkan SQL data-only untuk **8 kategori otot, 161 exercise dan 196 relasi mode**, dengan kolom eksplisit dan nilai timestamp asli.
+
+Backup lokal di luar Git: `C:/Users/SMMA-Softeng/IMFIT-SAFE/exercise-catalog-20261106/`:
+
+- `catalog-data.sql` — **124177 byte**, SHA-256 `68d14e0a4edb9442e57e640d3b2ad018cc5597524d37ace66861e499ca7982f3`.
+- `live-functions.sql` / `live-functions.json` — definisi fungsi/RPC sebelum perubahan; JSON juga menyimpan ACL fungsi.
+- `live-ledger.json`, `live-columns.json`, `live-column-shapes.json` — bukti baseline.
+- `isolated-verification.json` — keluaran verifikasi SQL.
+
+Restore `catalog-data.sql` dijalankan ke tabel katalog **kosong** pada baseline terisolasi; equality PostgreSQL seluruh field exercise termasuk timestamp dan seluruh relasi mode lulus. Format timestamp Management API berbeda secara tekstual dari JSON PostgreSQL, sehingga equality diperiksa setelah cast kembali ke tipe kolom, bukan membandingkan string waktu mentah.
+
+**Batas backup:** ini backup data katalog dan definisi fungsi, **bukan full disaster-recovery dump** auth/storage/data user/seluruh schema. SQL restore bukan rollback in-place ke produksi; kolom/constraint baru tidak dihapus olehnya. Backup seluruh database dan restore terisolasinya tetap gate deployment untuk rangkaian DDL/RPC yang lebih luas. Jangan menyimpan backup data user atau credential di Git.
+
+### 11.3 Kontrak dan mapping katalog
+
+Satu migration atomik menambahkan `tracking_profile TEXT NULL` dan `supported_metrics TEXT[] NOT NULL DEFAULT '{}'`. Helper immutable `imfit_private.exercise_supported_metrics_valid(TEXT[])` dan CHECK `exercises_catalog_capabilities_check` menolak key asing, duplikat, NULL member/list, array multidimensi dan lower-bound nonstandar. Profil/cardinality/capability mengikuti §5/§6; `distance_activity` dan `equipment_metrics` tetap boleh list kosong. Non-cardio wajib profile null/list kosong.
+
+CHECK dibuat `NOT VALID` hanya selama tahap internal migration, kemudian backfill dan `VALIDATE CONSTRAINT` selesai **sebelum transaksi commit**. Tidak memisahkan T02/T03 menjadi dua deployment yang meninggalkan katalog lama tidak valid. Apply via migration runner atau `psql --single-transaction`.
+
+Fixture memuat seluruh **12** exercise live ber-modality Cardio; ID/nama diverifikasi terhadap hasil live. Perbedaan ID/nama/modality, termasuk Cardio tambahan yang belum dipetakan, membatalkan seluruh transaksi:
+
+| ID | Exercise live | Profil | Supported metrics |
+| --- | --- | --- | --- |
+| `ex_cardio_1` | Treadmill Running | `equipment_metrics` | calories, distance, speed, incline |
+| `ex_cardio_2` | Stationary Bike | `equipment_metrics` | calories, distance, speed |
+| `ex_cardio_3` | Rowing Machine | `equipment_metrics` | calories, distance |
+| `ex_cardio_4` | Jump Rope | `duration_only` | kosong |
+| `ex_cardio_6` | Elliptical Trainer | `equipment_metrics` | calories, distance |
+| `ex_cardio_7` | Stair Climber | `equipment_metrics` | calories |
+| `ex_cardio_9` | High Knees | `duration_only` | kosong |
+| `ex_cardio_10` | Jumping Jacks | `duration_only` | kosong |
+| `ex_cardio_11` | Assault AirBike Sprint | `equipment_metrics` | calories, distance, speed |
+| `ex_cardio_12` | SkiErg Machine | `equipment_metrics` | calories, distance |
+| `ex_cardio_13` | Incline Treadmill Power Walk | `equipment_metrics` | calories, distance, speed, incline |
+| `ex_cardio_14` | Recumbent Bike Cycling | `equipment_metrics` | calories, distance, speed |
+
+Subset alat dipilih konservatif dari jenis exercise; katalog tidak menyebut model console alat, sehingga bukan klaim audit perangkat fisik. Tidak mengasumsikan lap atau incline pada semua alat. Tidak ada exercise outdoor dalam 12 Cardio live, sehingga tidak membuat exercise `distance_activity` palsu; profil tersebut tetap tervalidasi dan diuji.
+
+Seluruh **20 CALISTHENICS** dipetakan ke `STRENGTH/WEIGHT_REPS` hanya di katalog; Strength existing dengan default assisted/bodyweight juga dinormalisasi ke `WEIGHT_REPS`. `CONDITIONING` tetap deskriptif: lima exercise berbeban tetap `WEIGHT_REPS`, empat exercise `REPS_ONLY` menjadi `DURATION` untuk konfigurasi baru. Burpees, Box Jumps, Smith Machine Bar Hops dan Mountain Climbers tidak direklasifikasi kategori otot/modality secara spekulatif.
+
+Mode canonical ditambahkan ke `exercise_tracking_modes` dengan `ON CONFLICT DO NOTHING`; **tidak ada mode legacy dihapus**. Relasi ini tetap menerima enam format payload lama, bukan daftar pilihan mode baru untuk user. Tidak ada perubahan nilai/jumlah set routine atau versi histori.
+
+### 11.4 Verifikasi yang dijalankan
+
+Engine terisolasi: Docker `postgres:17`, PostgreSQL **17.11**, dengan bootstrap auth/storage minimal untuk menjalankan migration repository; bukan stack Supabase/Android end-to-end. Baseline direkonstruksi sampai ledger live, typmod/nullability relevan disesuaikan dengan live, backup katalog direstore, lalu dua migration repository yang tertinggal diterapkan **hanya secara lokal** sebelum migration T02/T03.
+
+| Pemeriksaan aktual | Hasil |
+| --- | --- |
+| Restore SQL katalog baseline | PASS; equality typed seluruh field exercise dan mode legacy. |
+| Smoke migration dengan routine/bodyweight active snapshot/history/set/receipt nonkosong | PASS; snapshot sembilan tabel sebelum/sesudah identik, termasuk template children, active JSON, workout/exercise logs, sets, template-write/operation/local-workout receipts. |
+| Hasil katalog dan constraint | PASS; 138 Strength, 2 Isometric, 12 Cardio, 9 Conditioning; CHECK validated; tidak ada mode legacy hilang. |
+| `supabase/tests/exercise_catalog_capabilities.sql` | PASS; positive/negative profile/capability/category/format, malformed arrays, NULL, legacy allow-list dan write sebagai `service_role` (`UPDATE 1`). Semua fixture rollback. |
+| `supabase/tests/phase2_verification_regressions.sql` | PASS; seluruh **14** kasus legacy lifecycle/import/provenance/ownership/permissions/receipt replay. |
+| `supabase/tests/routine_rest_contract.sql` | PASS; rest omitted/0/existing, runtime independence, replay dan invalid rest. |
+| Negative migration dengan nama Cardio berubah | PASS; drift ditolak, psql exit 3 yang diharapkan; rollback meninggalkan nol kolom baru dan tanpa CHECK baru. |
+| Android/Room v10/UI dan deployment live | NOT_TESTED / NOT_APPLIED; tidak diubah oleh T01–T03. |
+
+Script SQL dijalankan melalui `docker exec -i imfit-exercises-t01-20261106 psql -X -v ON_ERROR_STOP=1 -U postgres`; migration dibungkus transaksi. Container/database smoke bersifat sementara, bukan dependency aplikasi.
+
+### 11.5 Gate deployment yang masih berlaku
+
+1. Rekonsiliasi dua versi repository yang tertinggal, tanpa mengedit/menjalankan ulang migration yang sudah recorded. Jangan menandai migration applied hanya agar ledger terlihat sinkron.
+2. Sediakan backup penuh untuk rangkaian deployment dan buktikan restore terisolasi; backup katalog §11.2 tidak menggantikannya.
+3. Tutup risiko kontrak snapshot sebelum mengaktifkan katalog baru: RPC existing `get_workout_detail` masih fallback metadata null ke katalog sekarang; `get_template_detail` fallback tracking null dan membaca modality katalog. `persist_local_workout_aggregate` bahkan pada repository terbaru masih mengambil modality katalog, bukan modality pending snapshot. **Tidak melakukan historical UPDATE saja belum menjamin makna legacy saat read/upload tidak berubah.** Ini perlu penyelesaian pada kontrak RPC/snapshot berikutnya sebelum cutover.
+4. Selaraskan projection katalog/DTO/Room dan kontrak routine/session v3 sebelum writer/UI baru diaktifkan. T01–T03 tidak menambah shim atau mengklaim dukungan v3 yang belum tersedia.
+5. Pada apply resmi, ambil backup/reconciliation terbaru dan gunakan runner atomik. Drift fixture membatalkan transaksi; perbarui mapping berdasarkan katalog aktual, bukan fallback universal atau penghapusan data.
+
+
+## 12. Implementasi T04–T07 dan deployment gates — 2026-11-06
+
+**Status:** T04–T07 implemented dan verified pada repository/PostgreSQL terisolasi; G01/G02 selesai untuk lingkup yang diminta. **G03/G04 tetap BLOCKED. Tidak ada apply/repair ledger/DDL/DML live.** Android, Room v10, sesi v3, aggregate upload v3 dan analytics/read-back hasil v3 belum diimplementasikan oleh tahap ini.
+
+### 12.1 Migration dan invariant
+
+| Task | Migration baru | Kontrak yang diterapkan |
+| --- | --- | --- |
+| T04 | `20261106000200_routine_set_targets.sql` | `template_exercises.set_targets JSONB NULL`, marker `measurement_version SMALLINT NULL`, dan marker parent pada `workout_templates`. NULL tetap legacy, 3 hanya konversi eksplisit; seluruh scalar lama dipertahankan. Marker parent tetap 3 setelah child terakhir dihapus. |
+| T05 | `20261106000300_routine_target_validation.sql` | Helper `imfit_private.validate_set_targets_v3` dan trigger tabel: 1–20 row, ID nonkosong/unik, nomor sesuai posisi 1..N, field relevan/null, Strength 0–1000 kg/reps 1–100, durasi 1–86400 s, rest integer 0–600, beban maksimal dua desimal. |
+| T06 | `20261106000400_workout_results_v3.sql` | Weight/reps nullable dengan default legacy tetap; distance `NUMERIC(12,2)`; tambahan `target_row_id`, calories/speed `NUMERIC(12,2)`, lap integer, incline `NUMERIC(5,2)` dan marker result nullable. Metric nullable/finite; kalori/speed/jarak/lap nonnegatif, decline sah. Tidak menulis ulang data/versi lama. |
+| T07 | `20261106000500_routine_revision_targets_v3.sql` | Writer array atomik, reader routine canonical, receipt/CAS/ownership tetap; scalar writer tidak dapat memutasi routine v3. Session RPC menolak routine v3 sampai T08 tersedia, bukan meratakan target ke v2. PostgREST schema cache mendapat NOTIFY sesudah migration. |
+
+Helper target dipakai RPC dan trigger yang memvalidasi write tabel nyata, termasuk update kolom lain pada row v3. `sets` tidak menjadi sumber independen: RPC menurunkannya dari panjang array; `sets` yang disertakan wajib sama. Trigger menolak mismatch dan menurunkan nilai ketika `sets` NULL sebelum constraint NOT NULL diperiksa.
+
+Target v3 memerlukan tepat key `row_id`, `set_number`, `weight`, `reps`, `duration_seconds`, `rest_seconds`. Strength memerlukan weight/reps dan duration null; format DURATION memerlukan duration serta weight/reps null. Tidak menerima field metrik alat di target routine. Semua nilai/ID/urutan target disimpan sebagai array asli, bukan ringkasan scalar.
+
+Pada konversi existing child, scalar reps/rest/duration/distance lama **tidak ditimpa** oleh baris pertama atau rata-rata. Child v3 baru memakai scalar placeholder legacy yang tidak berwenang atas target; reader/writer baru memakai array. Target association hasil ke snapshot dan capability hasil tetap memerlukan validator/writer T08/T09; schema T06 tidak diklaim membuktikan hubungan JSON tersebut.
+
+### 12.2 Kontrak `save_template_revision`
+
+Public/private RPC menggunakan **satu signature sembilan argumen**, menggantikan signature delapan argumen; argumen terakhir **`p_measurement_version INTEGER DEFAULT NULL`**:
+
+- Caller legacy tetap dapat memakai delapan positional argumen atau delapan named parameter existing. Tidak ada overload/alias writer tambahan. NULL mempertahankan persis bentuk payload receipt lama, **tanpa menyisipkan key versi null**.
+- Writer v3 mengirim `p_measurement_version=3`, termasuk save routine kosong atau delete. Ini membedakan writer baru dari scalar writer meskipun daftar exercise kosong.
+- Child v3 menerima `exercise_id`, `order_index`, `set_targets`; `sets`, `tracking_type`, `measurement_version` boleh disertakan hanya jika konsisten. Format canonical ditentukan katalog. Scalar target/rest/distance dalam child v3 ditolak agar tidak ada sumber kedua.
+- Reader `get_template_detail` mengembalikan marker parent/child, seluruh `set_targets`, `sets` turunan dan field legacy existing. Tracking null pada routine legacy dibaca sebagai kontrak historis `WEIGHT_REPS`, bukan default katalog terbaru.
+- Request replay diperiksa sebelum validasi baru/guard writer/CAS. Receipt template juga tetap berwenang jika operation receipt sudah tidak ada. Replay identik mengembalikan JSON receipt lama tanpa perubahan canonical, timestamp, revision atau pembuatan operation receipt pengganti. Payload berbeda pada request ID sama ditolak `PT409/IDEMPOTENCY_MISMATCH`.
+- Parent masih memakai lock request/owner/template, ownership, explicit removed identities dan revision existing. Stale revision → `PT409/REVISION_CONFLICT`; resource owner lain tetap tidak tersedia.
+- Request scalar **baru** ke parent v3, termasuk parent yang sudah kosong, ditolak `PT409/CONTRACT_NOT_SUPPORTED`; replay scalar yang sudah memiliki receipt tetap sukses tanpa mutasi.
+
+`create_active_session` masih writer schema 2. Sesudah ownership/revision dan replay checks, parent/child v3 ditolak `PT409/CONTRACT_NOT_SUPPORTED`. Guard ini mencegah kehilangan target heterogen, **bukan implementasi T08**. Jangan deploy/aktifkan routine writer v3 sebagai end-to-end sebelum sesi/readers yang dibutuhkan kompatibel.
+
+### 12.3 G01 — rekonsiliasi efektif dan urutan apply
+
+Live read-only preflight `supabase/operations/architectural_deployment_preflight.sql` **PASS** pada baseline asli. Semua 15 body RPC yang didefinisikan `20261101000200` cocok dengan live. Empat body yang diganti dua migration tertinggal berbeda dari live: `persist_local_workout_aggregate`, public/private `save_template_revision`, dan `create_active_session`. Jadi kedua migration memang belum efektif; tidak cukup/benar melakukan metadata repair.
+
+Urutan sesudah gate deployment terpenuhi:
+
+1. `20261101000300_local_workout_legacy_provenance.sql`
+2. `20261102144339_routine_rest_runtime_contract.sql`
+3. `20261105000100_legacy_snapshot_metadata.sql`
+4. `20261106000100_exercise_catalog_capabilities.sql`
+5. `20261106000200_routine_set_targets.sql`
+6. `20261106000300_routine_target_validation.sql`
+7. `20261106000400_workout_results_v3.sql`
+8. `20261106000500_routine_revision_targets_v3.sql`
+
+Jangan ulang `20261101000200`. Preflight sengaja mengunci baseline pristine dan harus gagal sesudah partial deployment, bukan dipakai sebagai post-deploy health check.
+
+**Transaksi:** migration rest existing memiliki `BEGIN`/`COMMIT` sendiri. Jangan menggabungkan seluruh file dan ledger insert di satu outer transaction secara buta: COMMIT internal akan mengakhiri outer transaction. Runner harus menangani statement transaksi secara sadar dan mencatat tiap migration atomik. File historical tidak diubah. Pada rehearsal terisolasi, file rest dijalankan dengan transaksinya sendiri; seluruh migration baru dijalankan dalam transaksi masing-masing. Runner deployment live belum dieksekusi.
+
+### 12.4 G02 — metadata snapshot legacy dibekukan
+
+`20261105000100_legacy_snapshot_metadata.sql` mengganti `get_workout_detail`, `persist_local_workout_aggregate`, `imfit_private.terminal_session` dan `imfit_private.prefill`, tanpa historical UPDATE:
+
+- Missing tracking pada v1 → `WEIGHT_REPS` historis; explicit null/unknown/type salah ditolak pada writer, bukan fallback katalog.
+- Modality snapshot eksplisit yang valid tetap disimpan/dibaca, termasuk `CALISTHENICS` setelah katalog menjadi Strength. Missing/null modality tetap unknown/null.
+- Lookup receipt mendahului validasi baru; receipt replay lama tetap sama JSON maupun teks.
+- Allow-list mode legacy, validator measurement, ownership, CAS dan provenance tetap berlaku. Tidak melonggarkan typed upload menjadi sembarang mode.
+- Prefill tetap menentukan format konfigurasi **baru** dari katalog, tetapi tracking null pada **histori** berarti `WEIGHT_REPS`, bukan wildcard. Kecocokan format historis wajib sebelum source HISTORY; guard fingerprint `input_defaults` legacy dan kompatibilitas typed yang sudah ada tetap dipertahankan. Ini bukan implementasi prefill array T10.
+- Sync/history/summary/progress yang diperiksa sudah memakai snapshot/agregat tersimpan dan tidak memerlukan replacement tambahan untuk G02.
+
+Regresi `supabase/tests/legacy_snapshot_metadata.sql` **gagal dengan definisi asli** (`Frozen metadata, metrics or provenance changed: history_null`) dan **lulus dengan migration G02**. Kedua skenario memakai PostgreSQL terisolasi, bukan mutasi live.
+
+### 12.5 Bukti runtime dan regresi
+
+Seluruh tujuh script berikut lulus pada PostgreSQL **17.11** terisolasi, dengan fixture rollback:
+
+| Script / skenario | Hasil exercised |
+| --- | --- |
+| `routine_target_validation_v3.sql` | Batas 1/20 row, weight 0/1000, reps/duration/rest boundaries, duplicate ID dengan nomor tetap contiguous, bentuk/tipe/null/precision/field relevance. |
+| `routine_revision_targets_v3.sql` | Save/read target heterogen, konversi tanpa overwrite scalar, row ID surviving delete/add, rollback invalid child, count mismatch, ownership/CAS, old/new receipt replay, empty routine sticky version, direct-table invariant dan guard sesi. |
+| `workout_results_v3.sql` | Nullable hasil, explicit zero versus clear/null, decimal meters, decline, finite/nonnegative metrics, target identity dan default legacy. |
+| `legacy_snapshot_metadata.sql` | Snapshot history/import/finalization, unknown metadata, CALISTHENICS setelah katalog berubah, prefill format/fingerprint compatibility, malformed payload, provenance dan receipt JSON/text equality. |
+| `exercise_catalog_capabilities.sql` | Validasi profil/capability, malformed arrays, legacy mode retention dan service-role write. |
+| `phase2_verification_regressions.sql` | Seluruh **14** kasus kompatibilitas lifecycle/import/provenance/ownership/permissions/replay existing. |
+| `routine_rest_contract.sql` | Rest existing/omitted/0, runtime independence, replay dan invalid rest. |
+
+Smoke terpisah dari suite: panggil RPC sebagai authenticated, **COMMIT** routine Strength/Cardio dengan target berbeda, lalu baca melalui proses/koneksi psql baru. ID, urutan, weight 0/37.5, reps 12/8, durasi 45/90, rest termasuk 0 serta jumlah turunan bertahan. Fixture committed smoke dihapus sesudah proof.
+
+Sebelum seluruh migration baru, dibuat fixture nonkosong routine, active session, workout/exercise logs, sets, dan receipt. Sesudah migration, seluruh nilai kolom lama pada **sembilan tabel** identik; tambahan field baru tetap null pada histori. Tidak menganggap perubahan representasi angka `0`→`0.00` sebagai perubahan nilai.
+
+Bukti keluaran: `C:/Users/SMMA-Softeng/IMFIT-SAFE/routine-v3-20261106/t04-t07-verification.json`. PostgreSQL dibootstrap dengan auth/storage minimal dan katalog hasil backup asli; **bukan** full Supabase stack/HTTP PostgREST/Android test. Tidak ada build Android atau claim Room v10.
+
+### 12.6 G03/G04 — blocker dan prasyarat yang tersisa
+
+**G03 live BLOCKED.** Credential Supabase yang tersedia hanya token Management API, bukan login/password PostgreSQL berizin untuk unfiltered `pg_dump`. Endpoint backup mengembalikan daftar kosong, PITR disabled; tidak ada full logical backup untuk diunduh. DNS direct DB gagal; session pooler IPv4 port 5432 reachable tetapi password tidak tersedia. Transaction pooler 6543 bukan jalur dump snapshot. Tidak mereset password, mengubah role live, atau menebak credential.
+
+Tool nyata: `supabase/operations/full_database_backup_restore.py`. Backup memakai snapshot read-only, unfiltered `pg_dump` custom format, schema/globals/role/grant/sequence/receipt evidence; password DB diminta lewat prompt lokal, tidak melalui argv atau Git. Role passwords dan Storage object bytes bukan isi backup logical ini. Restore memerlukan image PostgreSQL 17 dengan extension/version source yang cocok, termasuk `pg_graphql 1.5.11` dan `supabase_vault 0.3.1`; kegagalan izin/extension/fidelity tidak diabaikan.
+
+Tool sudah dieksekusi pada **sumber PostgreSQL lokal disposable**, melalui SSL → export snapshot → pg_dump/pg_dumpall → isolated pg_restore. Schema dan seluruh **47 manifest records** cocok, termasuk dua receipt, tiga item, dua sequence, owner/grant/default privilege/membership/index/view. Ini bukti tool berfungsi, **bukan full backup Supabase live**. Container/volume/password scaffold smoke dihapus. Artefak dan blocker evidence berada di `C:/Users/SMMA-Softeng/IMFIT-SAFE/full-database-20261106/` dengan ACL terbatas.
+
+Contoh menjalankan backup setelah credential tersedia (jangan mengirim password lewat chat):
+
+```sh
+python supabase/operations/full_database_backup_restore.py backup --host aws-1-ap-south-1.pooler.supabase.com --user postgres.ltcxltahkrjnsjaxndsa
+```
+
+Lalu gunakan subcommand `restore --backup-directory <backup-yang-selesai> --image <image-kompatibel>` dan wajib memperoleh `RESTORE_FIDELITY_PASSED` untuk **backup live** sebelum G03 dicentang.
+
+**G04 NOT DEPLOYED:** G03 belum PASS. Kekurangan kontrak active-session/aggregate/read-back v3 pada saat §12 ditulis sudah ditutup di repository oleh T08–T10 (§13), bukan oleh deployment live. Schema routine/result baru tidak boleh dianggap aman untuk live cutover hanya karena SQL terisolasi lulus. Jangan menjalankan `db push` seluruh pending migration atau mengaktifkan Android writer v3 dalam status ini.
+
+## 13. Implementasi T08–T10 dan status gate — 2026-11-06
+
+**Status:** T08–T10 **IMPLEMENTED + VERIFIED ISOLATED**, bukan DEPLOYED. G03 belum PASS; G04/T11 tetap BLOCKED. T12–T18 menunggu G04 sesuai urutan eksekusi; tidak ada perubahan source Android, migrasi Room v10, atau aktivasi writer Android v3.
+
+### 13.1 Migration dan kontrak server
+
+| Migration | Implementasi |
+| --- | --- |
+| `20261106000600_active_session_v3.sql` | Validator snapshot/result v3, mutator command sesi, pembentukan snapshot, dan insert aggregate bersama. Tambahkan marker versi/recorded load pada parent log; lebarkan agregat jarak tanpa mengubah versi histori. |
+| `20261106000610_active_session_v3_lifecycle.sql` | Upgrade `create_active_session`, `update_active_session`, dan `imfit_private.terminal_session`; pertahankan cabang v1/v2, ownership, CAS, dan receipt. |
+| `20261106000700_local_workout_aggregate_v3.sql` | Dispatch upload v3 ke validator/insert atomik; lookup receipt dan proteksi ID existing tetap mendahului penulisan. Jalur legacy dipertahankan. |
+| `20261106000800_workout_read_contract_v3.sql` | Upgrade prefill, detail, summary, progress, serta hydration `get_workout_sync_page` agar metrik/desimal v3 tidak merusak wire format legacy. |
+
+**T08 — sesi aktif:**
+
+- Snapshot menyimpan `set_targets`, `extra_set_targets`, `tracking_profile`, `supported_metrics`, dan `measurement_version`. Array canonical disimpan sekali dalam objek `input_defaults`, bukan diduplikasi sebagai array top-level.
+- UUID hasil stabil sepanjang edit/complete/undo/finish; `target_row_id` tetap mengacu ke konfigurasi snapshot. Target awal tidak ditulis ulang ketika menambah/menghapus hasil ekstra; target ekstra mempunyai ID sendiri dan penomoran berurutan pada daftar ekstra.
+- PATCH membedakan field tidak dikirim dengan null eksplisit. Rest target read-only; add-exercise v3 wajib membawa target canonical, bukan mengarang nilai durasi.
+- Validasi completion memakai capability snapshot, bukan metadata katalog terbaru. Strength v3 menerima beban 0; hasil durasi tidak dipaksa mempunyai weight/reps/jarak.
+- Finish v3 memakai session ID sebagai workout ID dan mempertahankan UUID hasil; hanya hasil completed dari sesi yang dipersist. Identitas workout legacy tidak dimigrasikan. Replay receipt identik tidak melakukan mutasi ulang.
+- Ownership, paused-state restrictions, CAS revision, serta legacy v1/v2 tetap diuji. Helper privat baru tidak dapat dieksekusi langsung oleh `anon`/`authenticated`.
+
+**T09 — aggregate upload:**
+
+- Terima nullable weight/reps dan optional cardio metrics; periksa versi, target association, ID, nilai numerik, presisi, serta capability dari snapshot payload.
+- Simpan snapshot target lengkap sebagai objek JSON native di `input_defaults`; pertahankan null, angka 0, desimal, urutan, serta ID. Tidak ada fallback katalog terkini untuk mengisi metadata histori v3.
+- Validasi seluruh envelope sebelum insert; log, exercise, result, serta receipt tersimpan atomik. Request identik mengembalikan receipt existing; payload berbeda dengan workout ID sama ditolak `IDEMPOTENCY_MISMATCH` tanpa mengubah data.
+- `recorded_load_volume` v3 dipisahkan dari `total_volume` legacy. Presisi agregat jarak menjadi `NUMERIC(16,2)`, sedangkan jarak per hasil tetap `NUMERIC(12,2)`. Ini menampung penjumlahan beberapa jarak per hasil yang masing-masing valid.
+
+**T10 — reader:**
+
+- Prefill v3 mengembalikan target individual beserta snapshot; history tidak meratakan atau menimpa target eksplisit.
+- Detail mengembalikan target snapshot, ID, measurement version, nullable measurements, seluruh metrik dan flag hasil v3. Filter completed-only pada detail legacy tetap dipertahankan.
+- Progress dihitung dari hasil completed, bukan cached total parent. Recorded load v3 terpisah dari volume legacy; lap Cardio tidak dihitung sebagai reps Strength. Jarak opsional Cardio `DURATION` dijumlahkan bila ada; seluruhnya tidak dicatat tetap null, bukan jarak wajib atau angka 0 buatan.
+- Pelebaran kolom fisik sempat membuat jarak legacy keluar sebagai `500.00` dan merusak konsumen integer. Reader kini mengeluarkan JSON integer untuk jarak legacy pada detail, summary, prefill, progress, dan sync hydration; v3 mempertahankan desimal/null. Measurement version menentukan semantik, bukan kategori katalog terbaru.
+
+### 13.2 Verifikasi yang benar-benar dijalankan
+
+Lingkungan: Docker PostgreSQL **17.11**, database terisolasi dengan bootstrap `auth`/`storage` minimal. Seluruh **31 migration file** direhearsal dari awal dengan penanganan transaction boundary yang sesuai. Bentuk kolom baseline yang relevan diselaraskan dengan hasil inspeksi live sebelum migration baru diterapkan. Ini **bukan** full Supabase stack, backup live, atau disaster-recovery restore.
+
+Fixture legacy nonkosong dibuat sebelum migration T08; nilai existing pada **9 tabel** tetap sama sesudah migration, termasuk receipt. Perbandingan mengecualikan kolom nullable baru dan tidak menyamakan perubahan tipe numerik dengan perubahan nilai historis.
+
+Sebelas script SQL berikut lulus:
+
+| Script | Bukti utama |
+| --- | --- |
+| `routine_target_validation_v3.sql` | Batas dan bentuk target v3. |
+| `routine_revision_targets_v3.sql` | Ownership/CAS/receipt routine; assertion transisi yang melarang sesi v3 dihapus karena T08 sudah menggantikannya. |
+| `workout_results_v3.sql` | Penyimpanan hasil nullable dan metrik v3. |
+| `legacy_snapshot_metadata.sql` | Semantik snapshot lama tidak mengambil metadata katalog terkini. |
+| `exercise_catalog_capabilities.sql` | Validasi katalog/profile/capability. |
+| `phase2_verification_regressions.sql` | **14 kasus** legacy; dua kegagalan wire integer diamati sebelum perbaikan, seluruhnya lulus setelahnya. |
+| `routine_rest_contract.sql` | Kontrak rest existing. |
+| `phase2_test_matrix.sql` | **20 kasus B2** existing. |
+| `active_session_v3.sql` | Lifecycle authenticated, stable IDs, explicit null/omission, paused/rest guards, ownership, capability drift, completion/undo/replay. |
+| `local_workout_aggregate_v3.sql` | Upload/replay/conflict atomik, snapshot frozen, nullable/desimal, serta agregat `19999999999.98` dari dua jarak per hasil valid. |
+| `workout_read_contract_v3.sql` | Target heterogen, detail/sync legacy integer, metrik v3, completed-only progress, pemisahan volume, serta jarak opsional. |
+
+**Smoke nyata dengan COMMIT dan pembacaan koneksi baru:** create sesi v3 Strength + Cardio, edit metrik Cardio, complete, finish, baca detail, lalu upload aggregate workout lain dan replay receipt. UUID hasil serta workout ID tetap stabil; request berbeda dengan ID sama ditolak dan data tetap utuh. Progress dua workout menghasilkan recorded load **200**, volume legacy **0**, jarak **2469.12**, **4** completed results dan **2** workout. Data user smoke dibersihkan setelah pembuktian.
+
+Enam helper privat baru diperiksa melalui privilege PostgreSQL: `anon` dan `authenticated` tidak mempunyai EXECUTE langsung. Preflight Supabase live **read-only** lulus dengan hasil `PASS: pristine baseline only; deployment release gates still required`; tidak ada apply atau repair migration ledger live.
+
+Bukti terisolasi, output script/smoke, preservasi fixture, dan SHA256 keempat migration disimpan di luar Git:
+`~/IMFIT-SAFE/backend-v3-20261106/verification.json`.
+Tidak ada klaim pengujian HTTP Supabase, Android, atau Room v10.
+
+### 13.3 G03 — akses dan full backup live masih BLOCKED
+
+- Chrome relay tidak tersambung. Browser langsung benar-benar membuka Dashboard project dan diarahkan ke **Sign in**; belum ada sesi Dashboard berizin untuk memperoleh credential PostgreSQL.
+- Pembacaan Management API terbaru mengembalikan **0** backup tersedia, `pitr_enabled=false`, `walg_enabled=true`. Token Management API bukan login PostgreSQL.
+- [Dokumentasi Supabase](https://supabase.com/kb/troubleshooting/download-logical-backups) menjelaskan bahwa physical backup/PITR tidak menghasilkan logical `backup.gz` yang dapat diunduh; logical backup tetap memerlukan CLI/`pg_dump` dengan koneksi DB berizin. Endpoint download tidak menggantikan backup yang belum tersedia.
+- Tidak ada password diambil/disimpan, reset password, perubahan role, atau perubahan database live. Credential harus dimasukkan lokal secara aman setelah login/2FA pribadi atau diberikan melalui environment lokal; jangan mengirim password lewat chat/repository/log.
+- **Full backup live: belum dibuat. Lokasi/checksum full backup: N/A. Restore/fidelity live: belum dijalankan.** Backup katalog §11 dan smoke backup/restore sumber lokal §12 tidak memenuhi G03.
+- Bukti blocker: `~/IMFIT-SAFE/full-database-20261106/g03-blocker-evidence.json`. Tool `supabase/operations/full_database_backup_restore.py` siap dijalankan setelah akses tersedia; verifikasi data/schema/owner/RLS/receipt dan pencatatan objek managed yang tidak terbackup tetap wajib pada backup live sebenarnya.
+
+### 13.4 G04/T11 dan urutan berikutnya
+
+**NOT DEPLOYED.** G01/G02 dan kompatibilitas SQL repository T08–T10 sudah tersedia; **G03 belum PASS**. Tidak ada schema v3 atau Android writer baru diaktifkan di live.
+
+Setelah full backup live + restore fidelity berhasil, jalankan ulang preflight read-only dan deploy per dependency:
+
+```text
+20261101000300 → 20261102144339 → 20261105000100
+→ 20261106000100 → 20261106000200 → 20261106000300
+→ 20261106000400 → 20261106000500 → 20261106000600
+→ 20261106000610 → 20261106000700 → 20261106000800
+```
+
+Jangan mengulang migration yang sudah efektif. `20261102144339` memiliki BEGIN/COMMIT sendiri; aturan atomic ledger dan transaction runner §12 tetap berlaku. Verifikasi ledger, owner/RLS, receipt, serta kontrak reader/RPC live sebelum menandai DEPLOYED. Reader/RPC v3 harus aktif sebelum writer Android v3.
+
+Sesudah G04 benar-benar selesai, lanjutkan **T12–T18**: domain, metadata, stable IDs, codec v3, migrasi Room v9→v10, adapter legacy, dan DTO. Semua masih unchecked; tidak ada build/test Android yang diklaim.

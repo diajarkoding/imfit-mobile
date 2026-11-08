@@ -32,5 +32,9 @@ data class TemplateExerciseEntity(
     @ColumnInfo(name = "target_duration_seconds")
     val targetDurationSeconds: Int? = null,
     @ColumnInfo(name = "target_distance_meters")
-    val targetDistanceMeters: Int? = null
+    val targetDistanceMeters: Int? = null,
+    @ColumnInfo(name = "set_targets")
+    val setTargets: String? = null,
+    @ColumnInfo(name = "measurement_version")
+    val measurementVersion: Int? = null
 )

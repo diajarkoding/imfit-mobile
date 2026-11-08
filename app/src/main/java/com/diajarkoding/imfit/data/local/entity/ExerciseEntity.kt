@@ -25,5 +25,9 @@ data class ExerciseEntity(
     @ColumnInfo(name = "modality")
     val modality: String = "STRENGTH",
     @ColumnInfo(name = "allowed_tracking_types", defaultValue = "''")
-    val allowedTrackingTypes: List<String> = listOf(defaultTrackingType)
+    val allowedTrackingTypes: List<String> = listOf(defaultTrackingType),
+    @ColumnInfo(name = "tracking_profile")
+    val trackingProfile: String? = null,
+    @ColumnInfo(name = "supported_metrics", defaultValue = "''")
+    val supportedMetrics: List<String> = emptyList()
 )

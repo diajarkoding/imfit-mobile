@@ -39,9 +39,19 @@ data class WorkoutLogEntity(
     @ColumnInfo(name = "total_duration_seconds")
     val totalDurationSeconds: Int = 0,
     @ColumnInfo(name = "total_distance_meters")
-    val totalDistanceMeters: Int = 0,
+    val totalDistanceMeters: Double? = 0.0,
     @ColumnInfo(name = "additional_volume")
     val additionalVolume: Float = 0f,
     @ColumnInfo(name = "data_quality")
-    val dataQuality: String = "LEGACY_UNVERIFIED"
+    val dataQuality: String = "LEGACY_UNVERIFIED",
+    @ColumnInfo(name = "measurement_version")
+    val measurementVersion: Int? = null,
+    @ColumnInfo(name = "recorded_load_volume")
+    val recordedLoadVolume: Double? = null,
+    /** v3: total time paused (ms). */
+    @ColumnInfo(name = "paused_elapsed_ms")
+    val pausedElapsedMs: Long? = null,
+    /** v3: whole-session time without Pause, including rest (ms); not a sum of set durations. */
+    @ColumnInfo(name = "active_elapsed_ms")
+    val activeElapsedMs: Long? = null
 )

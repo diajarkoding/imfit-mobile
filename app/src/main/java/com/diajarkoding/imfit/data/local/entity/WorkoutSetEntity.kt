@@ -17,8 +17,8 @@ data class WorkoutSetEntity(
     val exerciseId: String,
     @ColumnInfo(name = "set_number")
     val setNumber: Int,
-    val weight: Float,
-    val reps: Int,
+    val weight: Double?,
+    val reps: Int?,
     @ColumnInfo(name = "is_completed")
     val isCompleted: Boolean = false,
     @ColumnInfo(name = "sync_status")
@@ -32,9 +32,26 @@ data class WorkoutSetEntity(
     @ColumnInfo(name = "duration_seconds")
     val durationSeconds: Int? = null,
     @ColumnInfo(name = "distance_meters")
-    val distanceMeters: Int? = null,
+    val distanceMeters: Double? = null,
     @ColumnInfo(name = "additional_weight")
     val additionalWeight: Float? = null,
     @ColumnInfo(name = "assistance_weight")
-    val assistanceWeight: Float? = null
+    val assistanceWeight: Float? = null,
+    @ColumnInfo(name = "target_row_id")
+    val targetRowId: String? = null,
+    @ColumnInfo(name = "calories_kcal")
+    val caloriesKcal: Double? = null,
+    @ColumnInfo(name = "speed_kph")
+    val speedKph: Double? = null,
+    @ColumnInfo(name = "lap_reps")
+    val lapReps: Int? = null,
+    @ColumnInfo(name = "incline_percent")
+    val inclinePercent: Double? = null,
+    @ColumnInfo(name = "measurement_version")
+    val measurementVersion: Int? = null,
+    /** Actual rest that followed this completed set (v3). Never the target rest_seconds. */
+    @ColumnInfo(name = "rest_elapsed_ms")
+    val restElapsedMs: Long? = null,
+    @ColumnInfo(name = "rest_end_reason")
+    val restEndReason: String? = null
 )

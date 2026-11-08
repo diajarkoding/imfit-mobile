@@ -34,7 +34,9 @@ object DatabaseModule {
                 IMFITDatabase.MIGRATION_5_6,
                 IMFITDatabase.MIGRATION_6_7,
                 IMFITDatabase.MIGRATION_7_8,
-                IMFITDatabase.MIGRATION_8_9
+                IMFITDatabase.MIGRATION_8_9,
+                IMFITDatabase.MIGRATION_9_10,
+                IMFITDatabase.MIGRATION_10_11
             )
             .build()
     }

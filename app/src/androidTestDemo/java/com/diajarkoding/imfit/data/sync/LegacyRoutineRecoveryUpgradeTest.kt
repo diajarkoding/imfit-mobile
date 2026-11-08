@@ -40,8 +40,8 @@ class LegacyRoutineRecoveryUpgradeTest {
                     arrayOf(id, "exercise-$index", 2, 4, 12, 90, "SYNC_FAILED", "UPDATE", 33L, 44L))
             }
         }
-        migrations.runMigrationsAndValidate(name, 9, true, IMFITDatabase.MIGRATION_6_7, IMFITDatabase.MIGRATION_7_8, IMFITDatabase.MIGRATION_8_9).close()
-        val db = Room.databaseBuilder(context, IMFITDatabase::class.java, name).build()
+        migrations.runMigrationsAndValidate(name, 10, true, IMFITDatabase.MIGRATION_6_7, IMFITDatabase.MIGRATION_7_8, IMFITDatabase.MIGRATION_8_9, IMFITDatabase.MIGRATION_9_10).close()
+        val db = Room.databaseBuilder(context, IMFITDatabase::class.java, name).addMigrations(IMFITDatabase.MIGRATION_10_11).build()
         try {
             val recovery = RoomLegacyRoutineRecovery(db)
             val originals = db.workoutTemplateDao().getAllTemplatesByUserIncludingDeleted("owner").sortedBy { it.id }

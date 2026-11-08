@@ -50,9 +50,13 @@ data class ExerciseLogEntity(
     @ColumnInfo(name = "total_duration_seconds")
     val totalDurationSeconds: Int = 0,
     @ColumnInfo(name = "total_distance_meters")
-    val totalDistanceMeters: Int = 0,
+    val totalDistanceMeters: Double? = 0.0,
     @ColumnInfo(name = "additional_volume")
     val additionalVolume: Float = 0f,
     @ColumnInfo(name = "metric_quality")
-    val metricQuality: String = "LEGACY_UNVERIFIED"
+    val metricQuality: String = "LEGACY_UNVERIFIED",
+    @ColumnInfo(name = "measurement_version")
+    val measurementVersion: Int? = null,
+    @ColumnInfo(name = "recorded_load_volume")
+    val recordedLoadVolume: Double? = null
 )

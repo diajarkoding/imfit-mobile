@@ -48,7 +48,7 @@ class DemoWorkoutRepository @Inject constructor(
                 val previous = getPrefillForExercise(log.exercise.id, template.userId, config)
                 log.copy(inputDefaults = config, sets = log.sets.map { set ->
                     previous[set.setNumber]?.let { measurement ->
-                        set.copy(weight = measurement.weight ?: 0f, reps = measurement.reps ?: 0,
+                        set.copy(weightKg = measurement.weightKg ?: 0.0, reps = measurement.reps ?: 0,
                             durationSeconds = measurement.durationSeconds, distanceMeters = measurement.distanceMeters,
                             additionalWeight = measurement.additionalWeight, assistanceWeight = measurement.assistanceWeight,
                             isCompleted = false)

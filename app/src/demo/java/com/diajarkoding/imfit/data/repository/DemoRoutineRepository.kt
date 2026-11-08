@@ -44,16 +44,30 @@ class DemoRoutineRepository @Inject constructor() : RoutineRepository {
             return if (original == command) Result.success(receipt)
             else Result.failure(RoutineError.ValidationError("Request payload changed"))
         }
+        val version = try {
+            if (command.deleted) routines[command.id]?.measurementVersion
+            else explicitRoutineVersion(command.exercises)
+        } catch (e: IllegalArgumentException) {
+            return Result.failure(RoutineError.ValidationError(e.message ?: "Invalid routine version"))
+        }
         if (command.name.length !in 2..100 || command.exercises.size > 100 ||
             command.exercises.map { it.id }.distinct().size != command.exercises.size ||
-            command.exercises.any { !it.exercise.isActive || !it.target.isValidFor(it.trackingType) ||
-                it.trackingType !in it.exercise.allowedTrackingTypes }) {
+            command.exercises.any {
+                !it.exercise.isActive || !it.target.isValidFor(it.trackingType) ||
+                    it.trackingType !in it.exercise.allowedTrackingTypes ||
+                    (it.measurementVersion == 3 && (runCatching { it.exercise.requireV3Metadata() }.isFailure ||
+                        it.trackingType != it.exercise.defaultTrackingType))
+            }) {
             return Result.failure(RoutineError.ValidationError("Invalid routine name or prescription"))
         }
         val existing = routines[command.id]
         if (existing == null && command.revision != null) return Result.failure(RoutineError.NotFound())
         if (existing != null && command.revision != existing.revision) return Result.failure(RoutineError.RevisionConflict())
-        val saved = WorkoutTemplate(command.id, command.owner, command.name, command.exercises, revision = (existing?.revision ?: 0L) + 1L)
+        if (!command.deleted && existing?.measurementVersion == 3 && version != 3) {
+            return Result.failure(RoutineError.ValidationError("Routine requires explicit version 3 set targets"))
+        }
+        val saved = WorkoutTemplate(command.id, command.owner, command.name, command.exercises,
+            revision = (existing?.revision ?: 0L) + 1L, measurementVersion = version)
         synchronized(routines) { if (command.deleted) routines.remove(command.id) else routines[command.id] = saved }
         receipts[requestId] = command to saved
         return Result.success(saved)

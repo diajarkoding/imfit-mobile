@@ -13,6 +13,7 @@ import com.diajarkoding.imfit.data.local.entity.WorkoutLogEntity
 import com.diajarkoding.imfit.data.local.database.IMFITDatabase
 import com.diajarkoding.imfit.data.local.sync.SyncStatus
 import com.diajarkoding.imfit.data.remote.ImfitAggregateRemoteDataSource
+import com.diajarkoding.imfit.domain.model.ExerciseInputDefaults
 import io.github.jan.supabase.SupabaseClient
 import io.github.jan.supabase.auth.auth
 import io.github.jan.supabase.postgrest.postgrest
@@ -33,15 +34,9 @@ import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonElement
-import kotlinx.serialization.json.JsonPrimitive
-import kotlinx.serialization.json.contentOrNull
 import kotlinx.serialization.json.decodeFromJsonElement
-import kotlinx.serialization.json.encodeToJsonElement
-import kotlinx.serialization.json.jsonArray
-import kotlinx.serialization.json.jsonObject
 import java.time.OffsetDateTime
 import java.time.ZoneOffset
-import java.time.format.DateTimeFormatter
 import java.util.Collections
 import javax.inject.Inject
 import javax.inject.Singleton
@@ -319,10 +314,11 @@ class SyncManager @Inject constructor(
         val workoutSets = workoutSetDao.getSetsByWorkoutLogId(log.id)
         
         try {
+            val payload = WorkoutAggregatePayloadCodec.encode(log, exerciseLogs, workoutSets)
             val result = aggregateRemoteDataSource.upsertWorkout(
-                workout = rpcJson.encodeToJsonElement(workoutDto(log)).jsonObject,
-                exercises = rpcJson.encodeToJsonElement(exerciseLogs.map(::exerciseLogDto)).jsonArray,
-                sets = rpcJson.encodeToJsonElement(workoutSets.map(::workoutSetDto)).jsonArray,
+                workout = payload.workout,
+                exercises = payload.exercises,
+                sets = payload.sets,
             )
 
             database.withTransaction {
@@ -426,6 +422,9 @@ class SyncManager @Inject constructor(
                     val children = aggregate.exercises
                     val sets = aggregate.sets
                     val remoteUpdatedAt = parseTimestamp(remote.updatedAt ?: remote.startTime)
+                    require(remote.measurementVersion == null || remote.measurementVersion == 3) { "Unsupported workout measurement version" }
+                    require(children.all { it.measurementVersion == remote.measurementVersion }) { "Mixed exercise measurement versions" }
+                    require(sets.all { it.measurementVersion == remote.measurementVersion }) { "Mixed set measurement versions" }
                     require(remote.userId == userId)
                     require(children.all { it.workoutLogId == remote.id })
                     require(sets.all { it.workoutLogId == remote.id })
@@ -450,31 +449,55 @@ class SyncManager @Inject constructor(
                             totalDurationSeconds = remote.totalDurationSeconds,
                             totalDistanceMeters = remote.totalDistanceMeters,
                             additionalVolume = remote.additionalVolume.toFloat(),
-                            dataQuality = remote.dataQuality
+                            dataQuality = remote.dataQuality,
+                            measurementVersion = remote.measurementVersion,
+                            recordedLoadVolume = remote.recordedLoadVolume,
+                            pausedElapsedMs = remote.pausedElapsedMs,
+                            activeElapsedMs = remote.activeElapsedMs
                         ),
                         exercises = children.map { child ->
+                            val defaults = child.inputDefaults?.let(ExerciseInputDefaults::fromSnapshotJson)
+                            require((defaults?.schemaVersion == 3) == (child.measurementVersion == 3)) {
+                                "Exercise snapshot measurement version mismatch"
+                            }
+                            if (child.measurementVersion == 3) {
+                                require(defaults?.trackingType == child.trackingType &&
+                                    defaults?.modality?.name == child.modality) {
+                                    "Exercise metadata differs from its frozen snapshot"
+                                }
+                            }
                             com.diajarkoding.imfit.data.local.entity.ExerciseLogEntity(
                                 child.id, child.workoutLogId, child.exerciseId, child.exerciseName, child.muscleCategory,
                                 child.orderIndex, child.totalVolume.toFloat(), child.totalSets, child.totalReps,
                                 syncStatus = SyncStatus.SYNCED.name, pendingOperation = null,
-                                inputDefaults = (child.inputDefaults as? JsonPrimitive)?.contentOrNull,
+                                inputDefaults = defaults?.toStoredString(),
                                 trackingType = child.trackingType ?: "WEIGHT_REPS",
                                 modality = child.modality ?: "STRENGTH",
                                 totalDurationSeconds = child.totalDurationSeconds,
                                 totalDistanceMeters = child.totalDistanceMeters,
                                 additionalVolume = child.additionalVolume.toFloat(),
-                                metricQuality = child.metricQuality
+                                metricQuality = child.metricQuality,
+                                measurementVersion = child.measurementVersion,
+                                recordedLoadVolume = child.recordedLoadVolume
                             )
                         },
                         sets = sets.map { set ->
                             com.diajarkoding.imfit.data.local.entity.WorkoutSetEntity(
                                 set.id, set.exerciseLogId, set.workoutLogId, set.exerciseId, set.setNumber,
-                                set.weight.toFloat(), set.reps, set.isCompleted ?: false,
+                                set.weight, set.reps, set.isCompleted ?: false,
                                 syncStatus = SyncStatus.SYNCED.name, pendingOperation = null,
                                 durationSeconds = set.durationSeconds,
                                 distanceMeters = set.distanceMeters,
                                 additionalWeight = set.additionalWeight?.toFloat(),
-                                assistanceWeight = set.assistanceWeight?.toFloat()
+                                assistanceWeight = set.assistanceWeight?.toFloat(),
+                                targetRowId = set.targetRowId,
+                                caloriesKcal = set.caloriesKcal,
+                                speedKph = set.speedKph,
+                                lapReps = set.lapReps,
+                                inclinePercent = set.inclinePercent,
+                                measurementVersion = set.measurementVersion,
+                                restElapsedMs = set.restElapsedMs,
+                                restEndReason = set.restEndReason
                             )
                         },
                         isCurrentOwner = {
@@ -520,77 +543,6 @@ class SyncManager @Inject constructor(
         }
     }
 
-    private fun workoutDto(log: WorkoutLogEntity): UpsertWorkoutLogDto {
-        val startDateTime = OffsetDateTime.ofInstant(
-            java.time.Instant.ofEpochMilli(log.startTime),
-            ZoneOffset.UTC
-        )
-        val endDateTime = OffsetDateTime.ofInstant(
-            java.time.Instant.ofEpochMilli(log.endTime),
-            ZoneOffset.UTC
-        )
-        
-        val deletedAtString = log.deletedAt?.let { timestamp ->
-            OffsetDateTime.ofInstant(
-                java.time.Instant.ofEpochMilli(timestamp),
-                ZoneOffset.UTC
-            ).format(DateTimeFormatter.ISO_OFFSET_DATE_TIME)
-        }
-
-        return UpsertWorkoutLogDto(
-            id = log.id,
-            userId = log.userId,
-            templateId = log.templateId,
-            templateName = log.templateName,
-            date = startDateTime.toLocalDate().toString(),
-            startTime = startDateTime.format(DateTimeFormatter.ISO_OFFSET_DATE_TIME),
-            endTime = endDateTime.format(DateTimeFormatter.ISO_OFFSET_DATE_TIME),
-            totalVolume = log.totalVolume.toDouble(),
-            totalSets = log.totalSets,
-            totalReps = log.totalReps,
-            deletedAt = deletedAtString,
-            totalDurationSeconds = log.totalDurationSeconds,
-            totalDistanceMeters = log.totalDistanceMeters,
-            additionalVolume = log.additionalVolume.toDouble()
-        )
-    }
-
-    private fun exerciseLogDto(
-        log: com.diajarkoding.imfit.data.local.entity.ExerciseLogEntity
-    ) = UpsertExerciseLogDto(
-            id = log.id,
-            workoutLogId = log.workoutLogId,
-            exerciseId = log.exerciseId,
-            exerciseName = log.exerciseName,
-            muscleCategory = log.muscleCategory,
-            orderIndex = log.orderIndex,
-            totalVolume = log.totalVolume.toDouble(),
-            totalSets = log.totalSets,
-            totalReps = log.totalReps,
-            inputDefaults = log.inputDefaults,
-            // Omitted mode is the historical weight/reps envelope on the server.
-            trackingType = log.trackingType.takeUnless { log.metricQuality == "LEGACY_UNVERIFIED" },
-            modality = log.modality.takeUnless { log.metricQuality == "LEGACY_UNVERIFIED" },
-            totalDurationSeconds = log.totalDurationSeconds,
-            totalDistanceMeters = log.totalDistanceMeters,
-            additionalVolume = log.additionalVolume.toDouble()
-        )
-    private fun workoutSetDto(
-        set: com.diajarkoding.imfit.data.local.entity.WorkoutSetEntity
-    ) = UpsertWorkoutSetDto(
-            id = set.id,
-            exerciseLogId = set.exerciseLogId,
-            workoutLogId = set.workoutLogId,
-            exerciseId = set.exerciseId,
-            setNumber = set.setNumber,
-            weight = set.weight.toDouble(),
-            reps = set.reps,
-            isCompleted = set.isCompleted,
-            durationSeconds = set.durationSeconds,
-            distanceMeters = set.distanceMeters,
-            additionalWeight = set.additionalWeight?.toDouble(),
-            assistanceWeight = set.assistanceWeight?.toDouble()
-        )
     companion object {
         private const val TAG = "SyncManager"
         private val rpcJson = Json {
@@ -602,93 +554,6 @@ class SyncManager @Inject constructor(
 }
 
 
-@Serializable
-private data class UpsertWorkoutLogDto(
-    val id: String,
-    @SerialName("user_id")
-    val userId: String,
-    @SerialName("template_id")
-    val templateId: String?,
-    @SerialName("template_name")
-    val templateName: String,
-    val date: String,
-    @SerialName("start_time")
-    val startTime: String,
-    @SerialName("end_time")
-    val endTime: String,
-    @SerialName("total_volume")
-    val totalVolume: Double,
-    @SerialName("total_sets")
-    val totalSets: Int,
-    @SerialName("total_reps")
-    val totalReps: Int,
-    @SerialName("deleted_at")
-    val deletedAt: String? = null,
-    @SerialName("total_duration_seconds")
-    val totalDurationSeconds: Int = 0,
-    @SerialName("total_distance_meters")
-    val totalDistanceMeters: Int = 0,
-    @SerialName("additional_volume")
-    val additionalVolume: Double = 0.0
-)
-
-@Serializable
-private data class UpsertExerciseLogDto(
-    val id: String,
-    @SerialName("workout_log_id")
-    val workoutLogId: String,
-    @SerialName("exercise_id")
-    val exerciseId: String,
-    @SerialName("exercise_name")
-    val exerciseName: String,
-    @SerialName("muscle_category")
-    val muscleCategory: String,
-    @SerialName("order_index")
-    val orderIndex: Int,
-    @SerialName("total_volume")
-    val totalVolume: Double,
-    @SerialName("total_sets")
-    val totalSets: Int,
-    @SerialName("total_reps")
-    val totalReps: Int,
-    @SerialName("input_defaults")
-    val inputDefaults: String? = null,
-    @SerialName("tracking_type")
-    val trackingType: String? = null,
-    @SerialName("modality")
-    val modality: String? = null,
-    @SerialName("total_duration_seconds")
-    val totalDurationSeconds: Int = 0,
-    @SerialName("total_distance_meters")
-    val totalDistanceMeters: Int = 0,
-    @SerialName("additional_volume")
-    val additionalVolume: Double = 0.0
-)
-
-@Serializable
-private data class UpsertWorkoutSetDto(
-    val id: String,
-    @SerialName("exercise_log_id")
-    val exerciseLogId: String,
-    @SerialName("workout_log_id")
-    val workoutLogId: String,
-    @SerialName("exercise_id")
-    val exerciseId: String,
-    @SerialName("set_number")
-    val setNumber: Int,
-    val weight: Double,
-    val reps: Int,
-    @SerialName("is_completed")
-    val isCompleted: Boolean,
-    @SerialName("duration_seconds")
-    val durationSeconds: Int? = null,
-    @SerialName("distance_meters")
-    val distanceMeters: Int? = null,
-    @SerialName("additional_weight")
-    val additionalWeight: Double? = null,
-    @SerialName("assistance_weight")
-    val assistanceWeight: Double? = null
-)
 
 // ============ REMOTE DTOs (for Pull) ============
 
@@ -750,11 +615,19 @@ private data class RemoteWorkoutLogDto(
     @SerialName("total_duration_seconds")
     val totalDurationSeconds: Int = 0,
     @SerialName("total_distance_meters")
-    val totalDistanceMeters: Int = 0,
+    val totalDistanceMeters: Double? = 0.0,
     @SerialName("additional_volume")
     val additionalVolume: Double = 0.0,
     @SerialName("data_quality")
-    val dataQuality: String = "LEGACY_UNVERIFIED"
+    val dataQuality: String = "LEGACY_UNVERIFIED",
+    @SerialName("measurement_version")
+    val measurementVersion: Int? = null,
+    @SerialName("recorded_load_volume")
+    val recordedLoadVolume: Double? = null,
+    @SerialName("paused_elapsed_ms")
+    val pausedElapsedMs: Long? = null,
+    @SerialName("active_elapsed_ms")
+    val activeElapsedMs: Long? = null
 )
 
 @Serializable
@@ -785,11 +658,15 @@ private data class RemoteExerciseLogDto(
     @SerialName("total_duration_seconds")
     val totalDurationSeconds: Int = 0,
     @SerialName("total_distance_meters")
-    val totalDistanceMeters: Int = 0,
+    val totalDistanceMeters: Double? = 0.0,
     @SerialName("additional_volume")
     val additionalVolume: Double = 0.0,
     @SerialName("metric_quality")
-    val metricQuality: String = "LEGACY_UNVERIFIED"
+    val metricQuality: String = "LEGACY_UNVERIFIED",
+    @SerialName("measurement_version")
+    val measurementVersion: Int? = null,
+    @SerialName("recorded_load_volume")
+    val recordedLoadVolume: Double? = null
 )
 
 @Serializable
@@ -803,18 +680,34 @@ private data class RemoteWorkoutSetDto(
     val exerciseId: String,
     @SerialName("set_number")
     val setNumber: Int,
-    val weight: Double,
-    val reps: Int,
+    val weight: Double?,
+    val reps: Int?,
     @SerialName("is_completed")
     val isCompleted: Boolean? = false,
     @SerialName("duration_seconds")
     val durationSeconds: Int? = null,
     @SerialName("distance_meters")
-    val distanceMeters: Int? = null,
+    val distanceMeters: Double? = null,
     @SerialName("additional_weight")
     val additionalWeight: Double? = null,
     @SerialName("assistance_weight")
-    val assistanceWeight: Double? = null
+    val assistanceWeight: Double? = null,
+    @SerialName("target_row_id")
+    val targetRowId: String? = null,
+    @SerialName("calories_kcal")
+    val caloriesKcal: Double? = null,
+    @SerialName("speed_kph")
+    val speedKph: Double? = null,
+    @SerialName("lap_reps")
+    val lapReps: Int? = null,
+    @SerialName("incline_percent")
+    val inclinePercent: Double? = null,
+    @SerialName("measurement_version")
+    val measurementVersion: Int? = null,
+    @SerialName("rest_elapsed_ms")
+    val restElapsedMs: Long? = null,
+    @SerialName("rest_end_reason")
+    val restEndReason: String? = null
 )
 
 @Serializable

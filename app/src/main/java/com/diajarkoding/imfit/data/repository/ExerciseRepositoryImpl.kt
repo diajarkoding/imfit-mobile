@@ -9,6 +9,8 @@ import com.diajarkoding.imfit.domain.model.Exercise
 import com.diajarkoding.imfit.domain.model.MuscleCategory
 import com.diajarkoding.imfit.domain.model.ExerciseModality
 import com.diajarkoding.imfit.domain.model.TrackingType
+import com.diajarkoding.imfit.domain.model.TrackingProfile
+import com.diajarkoding.imfit.domain.model.CardioMetric
 import com.diajarkoding.imfit.domain.repository.ExerciseRepository
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.flow.distinctUntilChanged
@@ -56,6 +58,8 @@ private fun ExerciseEntity.toExercise(): Exercise? = takeIf { allowedTrackingTyp
         description = description, imageUrl = imageUrl, isActive = isActive,
         defaultTrackingType = TrackingType.valueOf(defaultTrackingType),
         modality = ExerciseModality.valueOf(modality),
-        allowedTrackingTypes = allowedTrackingTypes.map(TrackingType::valueOf)
+        allowedTrackingTypes = allowedTrackingTypes.map(TrackingType::valueOf),
+        trackingProfile = trackingProfile?.let(TrackingProfile::fromWire),
+        supportedMetrics = supportedMetrics.map(CardioMetric::fromWire)
     )
 }

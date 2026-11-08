@@ -1,13 +1,17 @@
 package com.diajarkoding.imfit.data.remote.dto
 
 import com.diajarkoding.imfit.domain.model.ExerciseLog
+import com.diajarkoding.imfit.domain.model.ExerciseInputDefaults
 import com.diajarkoding.imfit.domain.model.ExerciseModality
+import com.diajarkoding.imfit.domain.model.RestEndReason
+import com.diajarkoding.imfit.domain.model.RestOutcome
 import com.diajarkoding.imfit.domain.model.TrackingType
 import com.diajarkoding.imfit.domain.model.WorkoutLog
 import com.diajarkoding.imfit.domain.model.WorkoutSet
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.JsonElement
+import java.util.UUID
 
 @Serializable
 data class WorkoutLogDto(
@@ -42,11 +46,19 @@ data class WorkoutLogDto(
     @SerialName("total_duration_seconds")
     val totalDurationSeconds: Int = 0,
     @SerialName("total_distance_meters")
-    val totalDistanceMeters: Int = 0,
+    val totalDistanceMeters: Double? = 0.0,
     @SerialName("additional_volume")
     val additionalVolume: Double = 0.0,
     @SerialName("data_quality")
-    val dataQuality: String = "LEGACY_UNVERIFIED"
+    val dataQuality: String = "LEGACY_UNVERIFIED",
+    @SerialName("measurement_version")
+    val measurementVersion: Int? = null,
+    @SerialName("recorded_load_volume")
+    val recordedLoadVolume: Double? = null,
+    @SerialName("paused_elapsed_ms")
+    val pausedElapsedMs: Long? = null,
+    @SerialName("active_elapsed_ms")
+    val activeElapsedMs: Long? = null
 )
 
 @Serializable
@@ -80,11 +92,15 @@ data class ExerciseLogDto(
     @SerialName("total_duration_seconds")
     val totalDurationSeconds: Int = 0,
     @SerialName("total_distance_meters")
-    val totalDistanceMeters: Int = 0,
+    val totalDistanceMeters: Double? = 0.0,
     @SerialName("additional_volume")
     val additionalVolume: Double = 0.0,
     @SerialName("metric_quality")
-    val metricQuality: String = "LEGACY_UNVERIFIED"
+    val metricQuality: String = "LEGACY_UNVERIFIED",
+    @SerialName("measurement_version")
+    val measurementVersion: Int? = null,
+    @SerialName("recorded_load_volume")
+    val recordedLoadVolume: Double? = null
 )
 
 @Serializable
@@ -98,8 +114,8 @@ data class WorkoutSetDto(
     val exerciseId: String? = null,
     @SerialName("set_number")
     val setNumber: Int,
-    val weight: Double = 0.0,
-    val reps: Int = 0,
+    val weight: Double? = null,
+    val reps: Int? = null,
     @SerialName("is_completed")
     val isCompleted: Boolean = false,
     @SerialName("is_warmup")
@@ -108,17 +124,37 @@ data class WorkoutSetDto(
     @SerialName("duration_seconds")
     val durationSeconds: Int? = null,
     @SerialName("distance_meters")
-    val distanceMeters: Int? = null,
+    val distanceMeters: Double? = null,
     @SerialName("additional_weight")
     val additionalWeight: Double? = null,
     @SerialName("assistance_weight")
-    val assistanceWeight: Double? = null
+    val assistanceWeight: Double? = null,
+    @SerialName("target_row_id")
+    val targetRowId: String? = null,
+    @SerialName("calories_kcal")
+    val caloriesKcal: Double? = null,
+    @SerialName("speed_kph")
+    val speedKph: Double? = null,
+    @SerialName("lap_reps")
+    val lapReps: Int? = null,
+    @SerialName("incline_percent")
+    val inclinePercent: Double? = null,
+    @SerialName("measurement_version")
+    val measurementVersion: Int? = null,
+    @SerialName("rest_elapsed_ms")
+    val restElapsedMs: Long? = null,
+    @SerialName("rest_end_reason")
+    val restEndReason: String? = null
 )
 
 fun WorkoutLogDto.toDomain(): WorkoutLog {
+    require(measurementVersion == null || measurementVersion == 3) { "Unsupported workout measurement version" }
     val sortedExercises = exerciseLogs
         ?.sortedWith(compareBy<ExerciseLogDto> { it.orderIndex }.thenBy { it.id.orEmpty() }.thenBy { it.exerciseId })
-        ?.map { it.toDomain() }
+        ?.map {
+            require(it.measurementVersion == measurementVersion) { "Mixed workout measurement versions" }
+            it.toDomain(id)
+        }
         ?: emptyList()
     return WorkoutLog(
         id = id,
@@ -134,13 +170,28 @@ fun WorkoutLogDto.toDomain(): WorkoutLog {
         totalDurationSeconds = totalDurationSeconds,
         totalDistanceMeters = totalDistanceMeters,
         additionalVolume = additionalVolume.toFloat(),
-        dataQuality = dataQuality
+        dataQuality = dataQuality,
+        measurementVersion = measurementVersion,
+        recordedLoadVolume = recordedLoadVolume,
+        pausedElapsedMs = pausedElapsedMs,
+        activeElapsedMs = activeElapsedMs
     )
 }
 
-fun ExerciseLogDto.toDomain(): ExerciseLog {
-    val parsedTracking = trackingType?.let(TrackingType::valueOf) ?: TrackingType.WEIGHT_REPS
-    val parsedModality = modality?.let(ExerciseModality::valueOf) ?: ExerciseModality.STRENGTH
+fun ExerciseLogDto.toDomain(parentWorkoutId: String? = workoutLogId): ExerciseLog {
+    require(measurementVersion == null || measurementVersion == 3) { "Unsupported exercise measurement version" }
+    val defaults = inputDefaults?.let(ExerciseInputDefaults::fromSnapshotJson)
+    val isV3 = measurementVersion == 3
+    require((defaults?.schemaVersion == 3) == isV3) { "Exercise snapshot measurement version mismatch" }
+    val parsedTracking = if (isV3) TrackingType.valueOf(requireNotNull(defaults?.trackingType))
+        else trackingType?.let(TrackingType::valueOf) ?: TrackingType.WEIGHT_REPS
+    val parsedModality = if (isV3) requireNotNull(defaults?.modality)
+        else modality?.let(ExerciseModality::valueOf) ?: ExerciseModality.STRENGTH
+    if (isV3) {
+        require(trackingType == parsedTracking.name && modality == parsedModality.name) {
+            "Exercise metadata differs from its frozen snapshot"
+        }
+    }
     val exercise = com.diajarkoding.imfit.domain.model.Exercise(
         id = exerciseId,
         name = exerciseName,
@@ -150,49 +201,83 @@ fun ExerciseLogDto.toDomain(): ExerciseLog {
         description = "",
         defaultTrackingType = parsedTracking,
         modality = parsedModality,
-        allowedTrackingTypes = listOf(parsedTracking)
+        allowedTrackingTypes = listOf(parsedTracking),
+        trackingProfile = defaults?.trackingProfile,
+        supportedMetrics = defaults?.supportedMetrics.orEmpty()
     )
+    if (isV3) exercise.requireV3Metadata()
+    val scope = "${parentWorkoutId.orEmpty()}:${id ?: exerciseId}"
     val sortedSets = workoutSets
         ?.sortedWith(compareBy<WorkoutSetDto> { it.setNumber }.thenBy { it.id.orEmpty() })
-        ?.map { it.toDomain() }
+        ?.map {
+            require(it.measurementVersion == measurementVersion) { "Mixed exercise measurement versions" }
+            it.toDomain(scope)
+        }
         ?: emptyList()
 
-    // History without typed metadata is the historical weight/reps contract.
-    // Never reinterpret old measurements using a mutable exercise catalog.
-
+    // Only frozen snapshot metadata determines historical meaning.
     return ExerciseLog(
         exercise = exercise,
         sets = sortedSets,
+        inputDefaults = defaults,
         trackingType = parsedTracking,
         modality = parsedModality,
-        metricQuality = metricQuality
+        metricQuality = metricQuality,
+        measurementVersion = measurementVersion
     )
 }
 
-fun WorkoutSetDto.toDomain(): WorkoutSet {
+fun WorkoutSetDto.toDomain(idScope: String = "${workoutLogId.orEmpty()}:${exerciseLogId.orEmpty()}:${exerciseId.orEmpty()}"): WorkoutSet {
+    require(measurementVersion == null || measurementVersion == 3) { "Unsupported set measurement version" }
+    val stableId = if (measurementVersion == 3) requireNotNull(id?.takeIf(String::isNotBlank)) {
+        "Version 3 set has no stable ID"
+    } else id ?: UUID.nameUUIDFromBytes("remote-set:$idScope:$setNumber".toByteArray(Charsets.UTF_8)).toString()
+    if (measurementVersion == 3) {
+        require(UUID.fromString(stableId).toString().equals(stableId, ignoreCase = true)) { "Invalid v3 result UUID" }
+        require(!targetRowId.isNullOrBlank()) { "Version 3 set has no target row ID" }
+    }
     return WorkoutSet(
+        id = stableId,
         setNumber = setNumber,
-        weight = weight.toFloat(),
-        reps = reps,
+        weightKg = if (measurementVersion == 3) weight else (weight ?: 0.0).toFloat().toDouble(),
+        reps = if (measurementVersion == 3) reps else reps ?: 0,
         isCompleted = isCompleted,
         durationSeconds = durationSeconds,
         distanceMeters = distanceMeters,
         additionalWeight = additionalWeight?.toFloat(),
-        assistanceWeight = assistanceWeight?.toFloat()
+        assistanceWeight = assistanceWeight?.toFloat(),
+        targetRowId = targetRowId,
+        measurementVersion = measurementVersion,
+        caloriesKcal = caloriesKcal,
+        speedKph = speedKph,
+        lapReps = lapReps,
+        inclinePercent = inclinePercent,
+        restOutcome = restEndReason?.let { reason ->
+            RestOutcome(requireNotNull(restElapsedMs) { "Rest reason without elapsed time" }, RestEndReason.valueOf(reason))
+        }
     )
 }
 
 fun WorkoutSet.toDto(exerciseLogId: String? = null): WorkoutSetDto {
     return WorkoutSetDto(
+        id = id,
         exerciseLogId = exerciseLogId,
         setNumber = setNumber,
-        weight = weight.toDouble(),
+        weight = if (measurementVersion == 3) weightKg else weightKg?.toFloat()?.toDouble(),
         reps = reps,
         isCompleted = isCompleted,
         durationSeconds = durationSeconds,
         distanceMeters = distanceMeters,
         additionalWeight = additionalWeight?.toDouble(),
-        assistanceWeight = assistanceWeight?.toDouble()
+        assistanceWeight = assistanceWeight?.toDouble(),
+        targetRowId = targetRowId,
+        measurementVersion = measurementVersion,
+        caloriesKcal = caloriesKcal,
+        speedKph = speedKph,
+        lapReps = lapReps,
+        inclinePercent = inclinePercent,
+        restElapsedMs = restOutcome?.elapsedMs,
+        restEndReason = restOutcome?.endReason?.name
     )
 }
 

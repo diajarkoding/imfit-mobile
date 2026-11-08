@@ -64,7 +64,7 @@ class DemoRepositoriesTest {
 
         val completedSession = session.copy(
             exerciseLogs = session.exerciseLogs.map { log ->
-                log.copy(sets = log.sets.map { it.copy(weight = 20f, reps = 10, isCompleted = true) })
+                log.copy(sets = log.sets.map { it.copy(weightKg = 20.0, reps = 10, isCompleted = true) })
             }
         )
         repository.updateActiveSession(completedSession)
@@ -122,7 +122,7 @@ class DemoRepositoriesTest {
         try {
             val session = repository.startWorkout(template)
             repository.mutateActiveSession(session.id) { current -> current.copy(exerciseLogs = current.exerciseLogs.map { log ->
-                log.copy(sets = log.sets.map { it.copy(weight = 20f, reps = 8, isCompleted = true) })
+                log.copy(sets = log.sets.map { it.copy(weightKg = 20.0, reps = 8, isCompleted = true) })
             }) }
             withTimeout(2000) {
                 val previousEnd = previousLogs.maxOfOrNull { it.endTime } ?: Long.MIN_VALUE

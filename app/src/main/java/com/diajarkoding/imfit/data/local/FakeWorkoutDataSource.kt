@@ -73,9 +73,9 @@ object FakeWorkoutDataSource {
             ExerciseLog(
                 exercise = templateExercise.exercise,
                 sets = listOf(
-                    WorkoutSet(1, 60f, 10, true),
-                    WorkoutSet(2, 65f, 8, true),
-                    WorkoutSet(3, 70f, 6, true)
+                    WorkoutSet(1, 60.0, 10, true),
+                    WorkoutSet(2, 65.0, 8, true),
+                    WorkoutSet(3, 70.0, 6, true)
                 )
             )
         }
@@ -97,9 +97,9 @@ object FakeWorkoutDataSource {
             ExerciseLog(
                 exercise = templateExercise.exercise,
                 sets = listOf(
-                    WorkoutSet(1, 50f, 12, true),
-                    WorkoutSet(2, 55f, 10, true),
-                    WorkoutSet(3, 60f, 8, true)
+                    WorkoutSet(1, 50.0, 12, true),
+                    WorkoutSet(2, 55.0, 10, true),
+                    WorkoutSet(3, 60.0, 8, true)
                 )
             )
         }
@@ -121,9 +121,9 @@ object FakeWorkoutDataSource {
             ExerciseLog(
                 exercise = templateExercise.exercise,
                 sets = listOf(
-                    WorkoutSet(1, 80f, 10, true),
-                    WorkoutSet(2, 90f, 8, true),
-                    WorkoutSet(3, 100f, 6, true)
+                    WorkoutSet(1, 80.0, 10, true),
+                    WorkoutSet(2, 90.0, 8, true),
+                    WorkoutSet(3, 100.0, 6, true)
                 )
             )
         }
@@ -230,13 +230,16 @@ object FakeWorkoutDataSource {
     }
 
     fun startWorkout(template: WorkoutTemplate): WorkoutSession {
+        require(template.measurementVersion == null && template.exercises.all { it.measurementVersion == null }) {
+            "V3 session writer is not enabled"
+        }
         val exerciseLogs = template.exercises.map { templateExercise ->
             ExerciseLog(
                 exercise = templateExercise.exercise,
                 sets = (1..templateExercise.sets).map { setNum ->
                     WorkoutSet(setNumber = setNum, reps = templateExercise.reps ?: 0,
                         durationSeconds = templateExercise.targetDurationSeconds,
-                        distanceMeters = templateExercise.targetDistanceMeters)
+                        distanceMeters = templateExercise.targetDistanceMeters?.toDouble())
                 },
                 restSeconds = 60,
                 trackingType = templateExercise.trackingType,

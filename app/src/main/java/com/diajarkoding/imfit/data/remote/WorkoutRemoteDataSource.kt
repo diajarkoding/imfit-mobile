@@ -30,7 +30,9 @@ class SupabaseWorkoutRemoteDataSource(
             val child = element.jsonObject
             val sets = child.getValue("sets").jsonArray.map { set ->
                 val fields = set.jsonObject
-                JsonObject(fields + ("weight" to JsonPrimitive(fields.getValue("weight").jsonPrimitive.double)))
+                val weight = fields["weight"]
+                if (weight == null || weight == JsonNull) JsonObject(fields)
+                else JsonObject(fields + ("weight" to JsonPrimitive(weight.jsonPrimitive.double)))
             }
             JsonObject(child + mapOf(
                 "total_volume" to JsonPrimitive(child.getValue("total_volume").jsonPrimitive.double),

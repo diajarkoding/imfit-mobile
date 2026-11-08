@@ -5,6 +5,8 @@ import com.diajarkoding.imfit.domain.model.Exercise
 import com.diajarkoding.imfit.domain.model.ExerciseModality
 import com.diajarkoding.imfit.domain.model.MuscleCategory
 import com.diajarkoding.imfit.domain.model.TrackingType
+import com.diajarkoding.imfit.domain.model.TrackingProfile
+import com.diajarkoding.imfit.domain.model.CardioMetric
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
 
@@ -32,7 +34,11 @@ data class ExerciseDto(
     @SerialName("allowed_modes")
     val allowedModes: List<String>? = null,
     @SerialName("exercise_tracking_modes")
-    val trackingModes: List<ExerciseTrackingModeDto>? = null
+    val trackingModes: List<ExerciseTrackingModeDto>? = null,
+    @SerialName("tracking_profile")
+    val trackingProfile: String? = null,
+    @SerialName("supported_metrics")
+    val supportedMetrics: List<String> = emptyList()
 )
 
 @Serializable
@@ -63,7 +69,9 @@ fun ExerciseDto.toDomain(): Exercise {
         isActive = isActive,
         defaultTrackingType = parsedDefaultTracking,
         modality = parsedModality,
-        allowedTrackingTypes = parsedAllowedModes
+        allowedTrackingTypes = parsedAllowedModes,
+        trackingProfile = trackingProfile?.let(TrackingProfile::fromWire),
+        supportedMetrics = supportedMetrics.map(CardioMetric::fromWire)
     )
 }
 
@@ -74,6 +82,8 @@ fun ExerciseDto.toEntity(): ExerciseEntity {
         description = description, imageUrl = imageUrl, isActive = isActive,
         defaultTrackingType = exercise.defaultTrackingType.name,
         modality = exercise.modality.name,
-        allowedTrackingTypes = exercise.allowedTrackingTypes.map { it.name }
+        allowedTrackingTypes = exercise.allowedTrackingTypes.map { it.name },
+        trackingProfile = exercise.trackingProfile?.wireValue,
+        supportedMetrics = exercise.supportedMetrics.map { it.wireValue }
     )
 }

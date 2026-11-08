@@ -76,7 +76,7 @@ class WorkoutRepositoryRoomFirstTest {
         val session = repository.startWorkout(template)
         val completed = session.copy(
             exerciseLogs = session.exerciseLogs.map { log ->
-                log.copy(sets = log.sets.map { it.copy(weight = 50f, reps = 8, isCompleted = true) })
+                log.copy(sets = log.sets.map { it.copy(weightKg = 50.0, reps = 8, isCompleted = true) })
             }
         )
         repository.updateActiveSession(completed)
@@ -114,8 +114,8 @@ class WorkoutRepositoryRoomFirstTest {
         val untouched = base.exercises.first().copy(exercise = base.exercises.first().exercise.copy(id = "untouched"))
         val session = repository.startWorkout(base.copy(exercises = base.exercises + untouched))
         repository.mutateActiveSession(session.id) { current -> current.copy(exerciseLogs = current.exerciseLogs.mapIndexed { index, log ->
-            if (index == 0) log.copy(sets = listOf(WorkoutSet(1, 40f, 10, true), WorkoutSet(2, 999f, 99, false)))
-            else log.copy(sets = log.sets.map { it.copy(weight = 999f) })
+            if (index == 0) log.copy(sets = listOf(WorkoutSet(1, 40.0, 10, true), WorkoutSet(2, 999.0, 99, false)))
+            else log.copy(sets = log.sets.map { it.copy(weightKg = 999.0) })
         }) }
         val result = requireNotNull(repository.finishWorkout())
         assertEquals(400f, result.totalVolume)
@@ -139,14 +139,14 @@ class WorkoutRepositoryRoomFirstTest {
         val template = original.copy(exercises = original.exercises + other)
         val first = repository.startWorkout(template)
         repository.mutateActiveSession(first.id) { current -> current.copy(exerciseLogs = current.exerciseLogs.map { log ->
-            log.copy(sets = log.sets.map { it.copy(weight = 40f + it.setNumber, reps = 5 + it.setNumber, isCompleted = true) })
+            log.copy(sets = log.sets.map { it.copy(weightKg = 40.0 + it.setNumber, reps = 5 + it.setNumber, isCompleted = true) })
         }) }
         repository.finishWorkout()
         repository = WorkoutRepositoryImpl(FakeAuthRepository(user), database.exerciseLogDao(), database.workoutSetDao(),
             database.workoutLogDao(),
             database.activeSessionDao(), database, scheduler)
         val renamed = repository.startWorkout(template.copy(name = "Renamed"))
-        assertEquals(41f, renamed.exerciseLogs.first().sets.first().weight)
+        assertEquals(41.0, renamed.exerciseLogs.first().sets.first().weightKg)
         assertEquals(6, renamed.exerciseLogs.first().sets.first().reps)
         assertTrue(renamed.exerciseLogs.flatMap { it.sets }.none { it.isCompleted })
         assertEquals(0f, renamed.totalVolume)
@@ -156,20 +156,20 @@ class WorkoutRepositoryRoomFirstTest {
         repository.cancelWorkout()
         val changed = repository.startWorkout(template.copy(exercises = listOf(template.exercises.first().copy(sets = 4, reps = 12), other)))
         assertEquals(4, changed.exerciseLogs.first().sets.size)
-        assertTrue(changed.exerciseLogs.first().sets.all { it.weight == 0f && it.reps == 12 })
-        assertEquals(41f, changed.exerciseLogs.last().sets.first().weight)
+        assertTrue(changed.exerciseLogs.first().sets.all { it.weightKg == 0.0 && it.reps == 12 })
+        assertEquals(41.0, changed.exerciseLogs.last().sets.first().weightKg)
         val row = database.exerciseLogDao().getExerciseLogsByWorkoutLogId(first.id).first()
         database.exerciseLogDao().updateExerciseLog(row.copy(inputDefaults = null))
         repository.cancelWorkout()
         val legacy = repository.startWorkout(template)
-        assertTrue(legacy.exerciseLogs.first().sets.all { it.weight == 0f && it.reps == original.exercises.first().reps })
+        assertTrue(legacy.exerciseLogs.first().sets.all { it.weightKg == 0.0 && it.reps == original.exercises.first().reps })
     }
 
     @Test fun sessionExerciseChangesPersistAndFinishedAggregateContainsOnlyRemainingExercises() = runBlocking {
         val template = sampleTemplate()
         val original = repository.startWorkout(template)
         val added = ExerciseLog(Exercise(UUID.randomUUID().toString(), "Added", MuscleCategory.BACK, ""),
-            listOf(WorkoutSet(1, 25f, 8, true)))
+            listOf(WorkoutSet(1, 25.0, 8, true)))
         repository.mutateActiveSession(original.id) { it.appendExercises(listOf(added)).removeIncompleteExercise(template.exercises.first().exercise.id) }
         assertEquals(listOf(added), repository.getActiveSessionForTimer()?.exerciseLogs)
         assertEquals(listOf(added), requireNotNull(repository.finishWorkout()).exerciseLogs)
@@ -243,7 +243,8 @@ class WorkoutRepositoryRoomFirstTest {
         try {
             repository.getActiveSessionForTimer()
             org.junit.Assert.fail("Full rendering recovery must still report corrupt JSON")
-        } catch (_: kotlinx.serialization.SerializationException) { }
+        } catch (_: SessionRecoveryException) { }
+        assertEquals("invalid-json", database.activeSessionDao().getSessionById(session.id)?.sessionDataJson)
     }
 
 
@@ -275,7 +276,7 @@ class WorkoutRepositoryRoomFirstTest {
         val session = repoWithFailingRemote.startWorkout(tpl)
         repoWithFailingRemote.updateActiveSession(
             session.copy(exerciseLogs = session.exerciseLogs.map { log ->
-                log.copy(sets = log.sets.map { it.copy(weight = 60f, reps = 10, isCompleted = true) })
+                log.copy(sets = log.sets.map { it.copy(weightKg = 60.0, reps = 10, isCompleted = true) })
             })
         )
         val finishedLog = requireNotNull(repoWithFailingRemote.finishWorkout())

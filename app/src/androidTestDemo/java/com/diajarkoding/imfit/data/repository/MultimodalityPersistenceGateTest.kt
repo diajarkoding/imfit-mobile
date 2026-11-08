@@ -59,12 +59,12 @@ class MultimodalityPersistenceGateTest {
         val session = repo.startWorkout(WorkoutTemplate("gate-template", user.id, "Mixed", exercises))
         val expected = session.copy(exerciseLogs = session.exerciseLogs.map { log ->
             log.copy(sets = listOf(when (log.trackingType) {
-                TrackingType.WEIGHT_REPS -> WorkoutSet(1, 40f, 10, true)
+                TrackingType.WEIGHT_REPS -> WorkoutSet(1, 40.0, 10, true)
                 TrackingType.BODYWEIGHT_REPS -> WorkoutSet(1, reps = 8, additionalWeight = 10f, isCompleted = true)
                 TrackingType.ASSISTED_REPS -> WorkoutSet(1, reps = 8, assistanceWeight = 20f, isCompleted = true)
                 TrackingType.REPS_ONLY -> WorkoutSet(1, reps = 30, isCompleted = true)
                 TrackingType.DURATION -> WorkoutSet(1, durationSeconds = 90, isCompleted = true)
-                TrackingType.DISTANCE_DURATION -> WorkoutSet(1, durationSeconds = 1800, distanceMeters = 5000, isCompleted = true)
+                TrackingType.DISTANCE_DURATION -> WorkoutSet(1, durationSeconds = 1800, distanceMeters = 5000.0, isCompleted = true)
             }))
         })
         repo.updateActiveSession(expected)
@@ -82,7 +82,8 @@ class MultimodalityPersistenceGateTest {
         val finished = requireNotNull(repository().finishWorkout())
         val history = requireNotNull(repository().getWorkoutLogById(finished.id))
         assertEquals(expected.exerciseLogs.map { it.trackingType }, history.exerciseLogs.map { it.trackingType })
-        assertEquals(expected.exerciseLogs.map { it.sets }, history.exerciseLogs.map { it.sets })
+        assertEquals(expected.exerciseLogs.map { log -> log.sets.map { it.measurement } },
+            history.exerciseLogs.map { log -> log.sets.map { it.measurement } })
         val next = repository().startWorkout(WorkoutTemplate("gate-template", user.id, "Mixed", exercises))
         assertEquals(expected.exerciseLogs.map { it.sets.single().measurement },
             next.exerciseLogs.map { it.sets.single().measurement })
@@ -109,7 +110,7 @@ class MultimodalityPersistenceGateTest {
         val repo = repository()
         val active = requireNotNull(repo.getActiveSessionForTimer())
         assertEquals("legacy-session", active.id)
-        assertEquals(WorkoutSet(1, 40f, 10, true), active.exerciseLogs.single().sets.single())
+        assertEquals(SetMeasurement(weightKg = 40.0, reps = 10), active.exerciseLogs.single().sets.single().measurement)
         val finished = requireNotNull(repo.finishWorkout())
         assertEquals("legacy-session", finished.id)
         assertEquals(400f, finished.totalVolume)
@@ -153,15 +154,15 @@ class MultimodalityPersistenceGateTest {
         val remote = com.diajarkoding.imfit.data.remote.dto.WorkoutLogDto(
             id = "remote-mixed", userId = user.id, templateName = "Remote mixed",
             date = "2026-11-01", startTime = "2026-11-01T10:00:00Z", endTime = "2026-11-01T10:30:00Z",
-            totalSets = 3, totalReps = 16, totalDurationSeconds = 1800, totalDistanceMeters = 5000,
+            totalSets = 3, totalReps = 16, totalDurationSeconds = 1800, totalDistanceMeters = 5000.0,
             additionalVolume = 80.0, dataQuality = "VERIFIED",
             exerciseLogs = listOf(
                 com.diajarkoding.imfit.data.remote.dto.ExerciseLogDto(
                     id = "cardio-log", exerciseId = "ex_cardio_1", exerciseName = "Treadmill", muscleCategory = "CARDIO",
                     trackingType = "DISTANCE_DURATION", modality = "CARDIO", metricQuality = "VERIFIED",
-                    totalSets = 1, totalDurationSeconds = 1800, totalDistanceMeters = 5000,
+                    totalSets = 1, totalDurationSeconds = 1800, totalDistanceMeters = 5000.0,
                     workoutSets = listOf(com.diajarkoding.imfit.data.remote.dto.WorkoutSetDto(
-                        id = "cardio-set", setNumber = 1, isCompleted = true, durationSeconds = 1800, distanceMeters = 5000))),
+                        id = "cardio-set", setNumber = 1, isCompleted = true, durationSeconds = 1800, distanceMeters = 5000.0))),
                 com.diajarkoding.imfit.data.remote.dto.ExerciseLogDto(
                     id = "body-log", exerciseId = "ex_chest_4", exerciseName = "Push-Up", muscleCategory = "CHEST", orderIndex = 1,
                     trackingType = "BODYWEIGHT_REPS", modality = "CALISTHENICS", metricQuality = "VERIFIED",
@@ -184,11 +185,11 @@ class MultimodalityPersistenceGateTest {
         val history = requireNotNull(repository().getWorkoutLogById(remote.id))
         assertEquals("VERIFIED", history.dataQuality)
         assertEquals(1800, history.totalDurationSeconds)
-        assertEquals(5000, history.totalDistanceMeters)
+        assertEquals(5000.0, history.totalDistanceMeters!!, 0.0)
         assertEquals(80f, history.additionalVolume)
         val logs = history.exerciseLogs.associateBy { it.exercise.id }
         assertEquals(TrackingType.DISTANCE_DURATION, logs.getValue("ex_cardio_1").trackingType)
-        assertEquals(5000, logs.getValue("ex_cardio_1").sets.single().distanceMeters)
+        assertEquals(5000.0, logs.getValue("ex_cardio_1").sets.single().distanceMeters!!, 0.0)
         assertEquals(1800, logs.getValue("ex_cardio_1").sets.single().durationSeconds)
         assertEquals(10f, logs.getValue("ex_chest_4").sets.single().additionalWeight)
         assertEquals(20f, logs.getValue("ex_back_17").sets.single().assistanceWeight)

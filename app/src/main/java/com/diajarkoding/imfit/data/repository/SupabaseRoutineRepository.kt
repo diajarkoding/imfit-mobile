@@ -3,6 +3,7 @@ package com.diajarkoding.imfit.data.repository
 import com.diajarkoding.imfit.domain.model.MuscleCategory
 import com.diajarkoding.imfit.domain.model.TemplateExercise
 import com.diajarkoding.imfit.domain.model.TrackingType
+import com.diajarkoding.imfit.domain.model.SetTarget
 import com.diajarkoding.imfit.domain.model.WorkoutTemplate
 import com.diajarkoding.imfit.domain.repository.ExerciseCatalogRepository
 import com.diajarkoding.imfit.domain.repository.ExerciseHydrationResult
@@ -89,7 +90,8 @@ class SupabaseRoutineRepository @Inject constructor(
                     explicitPrimaryCategory = summary.primaryCategoryId?.let { id ->
                         MuscleCategory.entries.getOrNull(id - 1)
                     },
-                    exerciseCountOverride = summary.exerciseCount
+                    exerciseCountOverride = summary.exerciseCount,
+                    measurementVersion = summary.measurementVersion
                 )
             }
         }
@@ -109,6 +111,8 @@ class SupabaseRoutineRepository @Inject constructor(
     }
 
     private suspend fun hydrate(detail: TemplateDetail, userId: String): WorkoutTemplate {
+        require(detail.measurementVersion == null || detail.measurementVersion == 3) { "Unsupported routine measurement version" }
+        require(detail.exercises.all { it.measurementVersion == detail.measurementVersion }) { "Mixed routine measurement versions" }
         val children = detail.exercises.sortedBy { it.orderIndex }
         val ids = children.map { it.exerciseId }
         val exercises = when (val hydration = exerciseCatalogRepository.getExercisesByIds(ids)) {
@@ -128,9 +132,11 @@ class SupabaseRoutineRepository @Inject constructor(
                 restSeconds = child.restSeconds,
                 trackingType = parsedTracking,
                 targetDurationSeconds = child.targetDurationSeconds,
-                targetDistanceMeters = child.targetDistanceMeters
+                targetDistanceMeters = child.targetDistanceMeters,
+                setTargets = child.setTargets,
+                measurementVersion = child.measurementVersion
             )
-        }, revision = detail.revision)
+        }, revision = detail.revision, measurementVersion = detail.measurementVersion)
     }
 
     override suspend fun createRoutine(userId: String, name: String, requestId: String): Result<WorkoutTemplate> = result {
@@ -148,9 +154,14 @@ class SupabaseRoutineRepository @Inject constructor(
         val userId = owner()
         validate(name, exercises)
         if (expectedRevision == null) throw RoutineError.ValidationError("Routine baseline is required")
+        val version = explicitRoutineVersion(exercises)
+        if (getCachedRoutine(userId, routineId)?.measurementVersion == 3 && version != 3) {
+            throw RoutineError.ValidationError("Routine requires explicit version 3 set targets")
+        }
         val receipt = mutate(userId, routineId, name.trim(), exercises, expectedRevision, requestId,
-            baselineExerciseIds.filterNot { id -> exercises.any { it.id == id } }, false)
-        remember(WorkoutTemplate(receipt.templateId, userId, name.trim(), exercises.toList(), revision = receipt.revision))
+            baselineExerciseIds.filterNot { id -> exercises.any { it.id == id } }, false, version)
+        remember(WorkoutTemplate(receipt.templateId, userId, name.trim(), exercises.toList(), revision = receipt.revision,
+            measurementVersion = version))
     }
 
     override suspend fun deleteRoutine(
@@ -159,7 +170,8 @@ class SupabaseRoutineRepository @Inject constructor(
     ): Result<Boolean> = result {
         val userId = owner()
         if (expectedRevision == null) throw RoutineError.ValidationError("Routine baseline is required")
-        mutate(userId, routineId, name, emptyList(), expectedRevision, requestId, baselineExerciseIds, true)
+        mutate(userId, routineId, name, emptyList(), expectedRevision, requestId, baselineExerciseIds, true,
+            getCachedRoutine(userId, routineId)?.measurementVersion)
         synchronized(snapshots) { snapshots.remove(routineId) }
         true
     }
@@ -172,6 +184,12 @@ class SupabaseRoutineRepository @Inject constructor(
             if (!item.exercise.isActive || !item.target.isValidFor(item.trackingType)) {
                 throw RoutineError.ValidationError("Invalid routine name or prescription")
             }
+            if (item.measurementVersion == 3) {
+                item.exercise.requireV3Metadata()
+                if (item.trackingType != item.exercise.defaultTrackingType) {
+                    throw RoutineError.ValidationError("Version 3 target format must match exercise metadata")
+                }
+            }
             if (item.trackingType !in item.exercise.allowedTrackingTypes) {
                 throw RoutineError.ValidationError("Tracking type not allowed for exercise: ${item.name}")
             }
@@ -180,25 +198,15 @@ class SupabaseRoutineRepository @Inject constructor(
 
     private suspend fun mutate(
         userId: String, id: String, name: String, exercises: List<TemplateExercise>, revision: Long?,
-        requestId: String, removedIds: List<String>, deleted: Boolean
+        requestId: String, removedIds: List<String>, deleted: Boolean, measurementVersion: Int? = null
     ): Receipt {
         val response = supabaseClient.postgrest.rpc("save_template_revision", buildJsonObject {
             put("p_request_id", requestId)
             put("p_template_id", id)
             put("p_expected_revision", revision?.let(::JsonPrimitive) ?: JsonNull)
             put("p_name", name)
-            put("p_exercises", buildJsonArray {
-                exercises.forEachIndexed { index, child -> add(buildJsonObject {
-                    put("exercise_id", child.id)
-                    put("order_index", index)
-                    put("sets", child.sets)
-                    put("reps", child.reps?.let(::JsonPrimitive) ?: JsonNull)
-                    child.legacyRestSeconds?.let { put("rest_seconds", it) }
-                    put("tracking_type", child.trackingType.name)
-                    child.targetDurationSeconds?.let { put("target_duration_seconds", it) }
-                    child.targetDistanceMeters?.let { put("target_distance_meters", it) }
-                }) }
-            })
+            put("p_exercises", routineExercisePayload(exercises))
+            if (measurementVersion == 3) put("p_measurement_version", 3)
             put("p_removed_exercise_ids", buildJsonArray { removedIds.forEach { add(JsonPrimitive(it)) } })
             put("p_is_deleted", deleted)
             put("p_owner_id", userId)
@@ -232,10 +240,14 @@ class SupabaseRoutineRepository @Inject constructor(
         val name: String = "",
         val revision: Long = 0L,
         @SerialName("exercise_count") val exerciseCount: Int = 0,
-        @SerialName("primary_category_id") val primaryCategoryId: Int? = null
+        @SerialName("primary_category_id") val primaryCategoryId: Int? = null,
+        @SerialName("measurement_version") val measurementVersion: Int? = null
     )
     @Serializable private data class PageInfo(@SerialName("has_more") val hasMore: Boolean, @SerialName("next_cursor") val nextCursor: String? = null)
-    @Serializable private data class TemplateDetail(val id: String, val name: String, val revision: Long, val exercises: List<Child>)
+    @Serializable private data class TemplateDetail(
+        val id: String, val name: String, val revision: Long, val exercises: List<Child>,
+        @SerialName("measurement_version") val measurementVersion: Int? = null
+    )
     @Serializable private data class Child(
         @SerialName("exercise_id") val exerciseId: String,
         @SerialName("order_index") val orderIndex: Int,
@@ -244,7 +256,44 @@ class SupabaseRoutineRepository @Inject constructor(
         @SerialName("rest_seconds") val restSeconds: Int,
         @SerialName("tracking_type") val trackingType: String? = null,
         @SerialName("target_duration_seconds") val targetDurationSeconds: Int? = null,
-        @SerialName("target_distance_meters") val targetDistanceMeters: Int? = null
+        @SerialName("target_distance_meters") val targetDistanceMeters: Int? = null,
+        @SerialName("set_targets") val setTargets: List<SetTarget>? = null,
+        @SerialName("measurement_version") val measurementVersion: Int? = null
     )
     @Serializable private data class Receipt(@SerialName("request_id") val requestId: String, @SerialName("template_id") val templateId: String, val revision: Long)
 }
+
+/** A v3 command is explicit and complete; catalog metadata never upgrades a scalar command. */
+internal fun explicitRoutineVersion(exercises: List<TemplateExercise>): Int? {
+    val hasV3 = exercises.any { it.measurementVersion == 3 || it.setTargets != null }
+    if (hasV3) require(exercises.all { it.measurementVersion == 3 && it.setTargets != null }) {
+        "Version 3 routine commands require explicit targets for every exercise"
+    }
+    require(exercises.all { it.measurementVersion == null || it.measurementVersion == 3 }) {
+        "Unsupported routine measurement version"
+    }
+    return if (hasV3) 3 else null
+}
+
+internal fun routineExercisePayload(exercises: List<TemplateExercise>): JsonArray {
+    val version = explicitRoutineVersion(exercises)
+    return buildJsonArray {
+        exercises.forEachIndexed { index, child -> add(buildJsonObject {
+            put("exercise_id", child.id)
+            put("order_index", index)
+            put("tracking_type", child.trackingType.name)
+            if (version == 3) {
+                put("measurement_version", 3)
+                put("set_targets", routineTargetsJson.encodeToJsonElement(requireNotNull(child.setTargets)))
+            } else {
+                put("sets", child.sets)
+                put("reps", child.reps?.let(::JsonPrimitive) ?: JsonNull)
+                child.legacyRestSeconds?.let { put("rest_seconds", it) }
+                child.targetDurationSeconds?.let { put("target_duration_seconds", it) }
+                child.targetDistanceMeters?.let { put("target_distance_meters", it) }
+            }
+        }) }
+    }
+}
+
+private val routineTargetsJson = Json { encodeDefaults = true; explicitNulls = true }

@@ -22,13 +22,13 @@ class RemoteSnapshotImporterTest {
         syncStatus = SyncStatus.SYNCED.name, updatedAt = time)
     private fun exercise() = ExerciseLogEntity("exercise-log", "log", "exercise", "Bench", "CHEST", 0, 80f, 1, 8,
         syncStatus = SyncStatus.SYNCED.name)
-    private fun set() = WorkoutSetEntity("set", "exercise-log", "log", "exercise", 1, 10f, 8, true,
+    private fun set() = WorkoutSetEntity("set", "exercise-log", "log", "exercise", 1, 10.0, 8, true,
         syncStatus = SyncStatus.SYNCED.name)
 
     @Test fun existingChildrenUpdateAndRemovedChildrenDisappearAtomically() = runBlocking {
         importer.workout(parent(), listOf(exercise()), listOf(set()))
-        importer.workout(parent(2).copy(totalVolume = 160f), listOf(exercise().copy(totalVolume = 160f)), listOf(set().copy(weight = 20f)))
-        assertEquals(20f, db.workoutSetDao().getSetsByWorkoutLogId("log").single().weight)
+        importer.workout(parent(2).copy(totalVolume = 160f), listOf(exercise().copy(totalVolume = 160f)), listOf(set().copy(weight = 20.0)))
+        assertEquals(20.0, db.workoutSetDao().getSetsByWorkoutLogId("log").single().weight)
         assertEquals(160f, db.workoutLogDao().getWorkoutLogById("log")!!.totalVolume)
         importer.workout(parent(3).copy(deletedAt = 3), emptyList(), emptyList())
         assertTrue(db.exerciseLogDao().getExerciseLogsByWorkoutLogId("log").isEmpty())
@@ -38,8 +38,8 @@ class RemoteSnapshotImporterTest {
     @Test fun pendingLocalAndNewerLocalAggregatesAreNeverOverwritten() = runBlocking {
         importer.workout(parent(), listOf(exercise()), listOf(set()))
         db.workoutLogDao().updateWorkoutLog(parent().copy(syncStatus = SyncStatus.PENDING_SYNC.name))
-        importer.workout(parent(50), listOf(exercise()), listOf(set().copy(weight = 99f)))
-        assertEquals(10f, db.workoutSetDao().getSetsByWorkoutLogId("log").single().weight)
+        importer.workout(parent(50), listOf(exercise()), listOf(set().copy(weight = 99.0)))
+        assertEquals(10.0, db.workoutSetDao().getSetsByWorkoutLogId("log").single().weight)
         db.workoutLogDao().updateWorkoutLog(parent(100))
         importer.workout(parent(50), emptyList(), emptyList())
         assertEquals(1, db.exerciseLogDao().getExerciseLogsByWorkoutLogId("log").size)
@@ -53,8 +53,8 @@ class RemoteSnapshotImporterTest {
     }
     @Test fun dirtyWorkoutChildrenAreNeverOverwrittenByRemote() = runBlocking {
         importer.workout(parent(10), listOf(exercise()), listOf(set()))
-        db.workoutSetDao().insertWorkoutSets(listOf(set().copy(weight = 75f, syncStatus = SyncStatus.PENDING_SYNC.name, pendingOperation = "UPDATE")))
-        importer.workout(parent(999), listOf(exercise()), listOf(set().copy(weight = 10f)))
-        assertEquals(75f, db.workoutSetDao().getSetsByWorkoutLogId("log").single().weight)
+        db.workoutSetDao().insertWorkoutSets(listOf(set().copy(weight = 75.0, syncStatus = SyncStatus.PENDING_SYNC.name, pendingOperation = "UPDATE")))
+        importer.workout(parent(999), listOf(exercise()), listOf(set().copy(weight = 10.0)))
+        assertEquals(75.0, db.workoutSetDao().getSetsByWorkoutLogId("log").single().weight)
     }
 }

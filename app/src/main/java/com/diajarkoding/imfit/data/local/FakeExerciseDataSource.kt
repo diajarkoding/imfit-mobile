@@ -1,8 +1,10 @@
 package com.diajarkoding.imfit.data.local
 
+import com.diajarkoding.imfit.domain.model.CardioMetric
 import com.diajarkoding.imfit.domain.model.Exercise
 import com.diajarkoding.imfit.domain.model.MuscleCategory
 import com.diajarkoding.imfit.domain.model.ExerciseModality
+import com.diajarkoding.imfit.domain.model.TrackingProfile
 import com.diajarkoding.imfit.domain.model.TrackingType
 
 object FakeExerciseDataSource {
@@ -260,6 +262,8 @@ object FakeExerciseDataSource {
             muscleCategory = MuscleCategory.CARDIO,
             defaultTrackingType = TrackingType.DISTANCE_DURATION, modality = ExerciseModality.CARDIO,
             allowedTrackingTypes = listOf(TrackingType.DISTANCE_DURATION, TrackingType.DURATION),
+            trackingProfile = TrackingProfile.EQUIPMENT_METRICS,
+            supportedMetrics = listOf(CardioMetric.CALORIES, CardioMetric.DISTANCE, CardioMetric.SPEED, CardioMetric.INCLINE),
             description = "Run on treadmill at desired speed and incline for cardiovascular conditioning."
         ),
         Exercise(
@@ -268,6 +272,8 @@ object FakeExerciseDataSource {
             muscleCategory = MuscleCategory.CARDIO,
             defaultTrackingType = TrackingType.DISTANCE_DURATION, modality = ExerciseModality.CARDIO,
             allowedTrackingTypes = listOf(TrackingType.DISTANCE_DURATION, TrackingType.DURATION),
+            trackingProfile = TrackingProfile.EQUIPMENT_METRICS,
+            supportedMetrics = listOf(CardioMetric.CALORIES, CardioMetric.DISTANCE, CardioMetric.SPEED),
             description = "Cycle on stationary bike at moderate to high intensity."
         ),
         Exercise(
@@ -276,6 +282,8 @@ object FakeExerciseDataSource {
             muscleCategory = MuscleCategory.CARDIO,
             defaultTrackingType = TrackingType.DISTANCE_DURATION, modality = ExerciseModality.CARDIO,
             allowedTrackingTypes = listOf(TrackingType.DISTANCE_DURATION, TrackingType.DURATION),
+            trackingProfile = TrackingProfile.EQUIPMENT_METRICS,
+            supportedMetrics = listOf(CardioMetric.CALORIES, CardioMetric.DISTANCE),
             description = "Full body cardio exercise using rowing motion for endurance training."
         ),
         Exercise(
@@ -284,6 +292,8 @@ object FakeExerciseDataSource {
             muscleCategory = MuscleCategory.CARDIO,
             defaultTrackingType = TrackingType.REPS_ONLY, modality = ExerciseModality.CARDIO,
             allowedTrackingTypes = listOf(TrackingType.REPS_ONLY, TrackingType.DURATION),
+            trackingProfile = TrackingProfile.DURATION_ONLY,
+            supportedMetrics = emptyList(),
             description = "Skip rope continuously for cardiovascular and coordination training."
         ),
         Exercise(

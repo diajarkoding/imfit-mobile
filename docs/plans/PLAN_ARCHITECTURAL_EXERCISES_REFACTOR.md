@@ -6,18 +6,20 @@
 
 | Atribut | Kontrak |
 | --- | --- |
-| Versi / tanggal | **1.4 / 2026-11-05** |
-| Status | **T01–T10 tersedia di repository dan lulus verifikasi PostgreSQL terisolasi (2026-11-06); G01/G02 ditutup pada lingkup repository. Supabase live belum diperbarui; G03/G04 BLOCKED (§13). Android T12–T18 menunggu G04.** |
+| Versi / tanggal | **1.5 / 2026-11-08** (v1.4 / 2026-11-05 + revisi Active Session Semi-Offline, §17) |
+| Status | **T01–T18 selesai. Backend v3 DEPLOYED live (2026-11-06); Android domain, codec v3, Room v10 dan adapter legacy terimplementasi & terverifikasi (2026-11-07, §15). Android writer v3 belum diaktifkan; Room kini v10. Phase 3 (T19–T25) terimplementasi (§16). Revisi v1.5 (§17) menyusun ulang Phase 4–6: T26–T38 Active Session Semi-Offline; belum ada yang diimplementasikan.** |
 | Prioritas | Konsistensi data dan logging cepat; bukan penambahan mode atau fitur analytics. |
 | Ruang lingkup | Katalog → UI Detail → Setup Form → rutin → sesi aktif → penyimpanan lokal/remote → ringkasan, riwayat, dan progres. |
-| Basis yang diperiksa | Sumber Android `app/src/main`, model domain, Room **v9**, migrasi repository, serta inspeksi read-only Supabase live pada **2026-11-06** (§11). |
-| Target versi | Payload sesi **v3** dan kontrak pengukuran **v3** sudah diimplementasikan pada SQL repository, belum deployed. Android/codec v3 dan Room **v10** masih target; Android tetap Room v9. |
+| Basis yang diperiksa | Sumber Android `app/src/main`, model domain, Room **v10**, schema `10.json`, migrasi repository, backup/restore dan deployment Supabase live pada **2026-11-06** (§14), serta bukti verifikasi runtime emulator pada **2026-11-07** (§15). |
+| Target versi | Payload sesi **v3** dan kontrak pengukuran **v3** sudah deployed pada backend; Room **v10** dan codec v3 aktif di data layer; writer sesi v3 Android belum diaktifkan (tetap writer v2). |
 | Otoritas | Server menentukan format katalog dan validasi; UI tidak memilih mode pencatatan. Snapshot mempertahankan makna data. |
-| Gate | Status pengujian v1.3 **tidak berlaku untuk v1.4**. Implementasi harus memenuhi acceptance §10 sebelum cutover. |
+| Gate | **Writer Android v3 tidak diaktifkan sampai T26–T38 selesai** (Room-first, finalisasi completed-only, aggregate upload terhubung; §17.9). Status pengujian v1.3 **tidak berlaku untuk v1.4**. Implementasi harus memenuhi acceptance §10 sebelum cutover. |
 
 Revisi ini menggantikan keputusan lama yang mempertahankan enam mode, selector **Waktu saja / Jarak + waktu**, bodyweight reps-first, serta pemisahan input beban tambahan/bantuan untuk data baru. Bukti dan hasil pengujian lama tetap historis: [Phase 5 Verification Report](PHASE5_VERIFICATION_REPORT.md). Angka kelulusan di laporan tersebut bukan bukti kontrak baru ini.
 
-**Changelog:** v1.4 menyatukan Strength/bodyweight, memakai dynamic set rows pada setup/edit, menyimpan target/rest per baris, dan membatasi metrik cardio menurut profil/capability exercise. Default jumlah baris hanya diterapkan saat pertama ditambahkan; routine existing tidak direset. Revisi spesifikasi 2026-11-05 hanya dokumentasi. Implementasi/verifikasi terisolasi T01–T03 dicatat di §11; T04–T07 di §12; T08–T10 serta status gate terkini di §13. Tidak ada DDL live atau perubahan Android/canvas.
+**Changelog:** v1.4 menyatukan Strength/bodyweight, memakai dynamic set rows pada setup/edit, menyimpan target/rest per baris, dan membatasi metrik cardio menurut profil/capability exercise. Default jumlah baris hanya diterapkan saat pertama ditambahkan; routine existing tidak direset. Revisi spesifikasi 2026-11-05 hanya dokumentasi. Implementasi/verifikasi terisolasi T01–T03 dicatat di §11; T04–T07 di §12; T08–T10 di §13; **T11 deployment live backend di §14**; **T12–T18 (Phase 2 Android data layer, Room v10, codec v3, adapter legacy) selesai dan terverifikasi pada 2026-11-07 di §15**. Writer Android v3 tetap belum diaktifkan; UI setup/active tetap v2 sampai Phase 3/4.
+
+**Changelog v1.5 (2026-11-08):** dokumentasi saja. §17 menambahkan kontrak Active Session semi-offline: snapshot immutable, timer monotonic tanpa write per detik, Pause/Resume global, durasi set aktual, **rest aktual** (`rest_elapsed_ms`/`rest_end_reason`) terpisah dari target `rest_seconds`, recovery boot-aware, finalisasi atomik, dan sync satu aggregate per workout. Mengubah keputusan v1.4 "tidak ada rest hasil": yang tetap berlaku adalah rest **bukan input/measurement dan tidak mengubah target**; outcome aktual dicatat terpisah. Daftar task Phase 4–6 diganti (lihat TASKS).
 
 **Penyempurnaan audit eksternal P-01–P-11:** aturan kategori/profil yang sudah konsisten dipertahankan; lifecycle baris, status completion, timer/recovery, picker, statistik dan sync diperjelas pada bagian terkait. Semua tambahan adalah kontrak target, bukan bukti implementasi. Estimasi routine yang memuat Strength masih memerlukan keputusan produk (§7.1); jangan menganggap angka heuristik existing sebagai durasi pasti.
 
@@ -32,7 +34,9 @@ Revisi ini menggantikan keputusan lama yang mempertahankan enam mode, selector *
 | Setup/edit Cardio dan Isometric | Setiap baris horizontal: **Set → Durasi (HH:MM:SS) → Rest (s)**. Dua field input; tanpa beban/reps. |
 | Jumlah set | **Dihitung dari jumlah baris**, bukan field numerik manual. Semua jenis mendukung tambah/hapus baris, penomoran ulang, dan nilai independen. |
 | Active Session | Strength: **Set → Beban (kg) → Reps**. Cardio/Isometric: **Set → Durasi (HH:MM:SS)**. Metrik tambahan hanya jika didukung exercise, di bawah durasi dalam set yang sama. |
-| Rest | Target **per baris routine**, default 60 detik, rentang 0..600. Active menampilkan rest read-only per set dari target snapshot; timer/recovery memakai sumber yang sama. Bukan input/measurement hasil. |
+| Rest | Target **per baris routine**, default 60 detik, rentang 0..600. Active menampilkan rest read-only per set dari target snapshot; timer/recovery memakai sumber yang sama. Bukan input/measurement hasil. **v1.5:** durasi istirahat **aktual** (`rest_elapsed_ms`, `rest_end_reason`) dicatat terpisah saat rest berakhir; tidak pernah menimpa `rest_seconds` (§17.4). |
+| Waktu & Pause (v1.5) | Timer memakai `SystemClock.elapsedRealtime()` (anchor + accumulated), tanpa write Room per detik. Pause global membekukan execution dan rest; durasi hasil/rest tidak memuat interval Pause (§17.2–17.3). |
+| Sync (v1.5) | Tidak ada request backend saat tick/input/Pause/Resume/Complete. Satu workout = satu aggregate immutable setelah Finish (§17.6). |
 | Mode pencatatan | Tidak ada selector/toggle/pengganti. Server menurunkan format dari kategori: Strength → `WEIGHT_REPS`; Cardio/Isometric → `DURATION`. `CONDITIONING` yang sudah ada tetap metadata deskriptif dengan format yang ditetapkan katalog, bukan pilihan user baru. |
 | Profil cardio | `duration_only`, `distance_activity`, `equipment_metrics` adalah metadata internal kategori Cardio, bukan kategori utama atau pilihan mode baru. Seluruhnya memakai `DURATION`. |
 | Metrik cardio | Field ditentukan `supportedMetrics` per exercise, bukan kategori Cardio saja. Supported tetap opsional; unsupported tidak dirender/tidak diisi. |
@@ -77,7 +81,7 @@ Revisi ini menggantikan keputusan lama yang mempertahankan enam mode, selector *
 
 **Keselarasan desain terkini:** gunakan ulang keenam mockup existing pada §2.1, termasuk state inline; tidak menambah layar/workflow baru. Laporan user memperbarui bukti desain sebelumnya: Jumping Jacks pada `TXyaw` kini durasi saja, Bike memakai subset indikator, dan rest tampil read-only per set. Catatan lama bahwa Jumping Jacks masih menampilkan kelima metrik tidak lagi berlaku. Contoh jumlah set pada Edit adalah data tersimpan yang dipertahankan, bukan perintah mereset default.
 
-Nama field, versi, batas baru, dan perubahan perilaku di §3–§10 adalah **kontrak target v1.4**. Subset database/backend T01–T10 sudah diimplementasikan/diverifikasi terisolasi (§11–§13), bukan keseluruhan kontrak atau deployment live. Struktur skema aktual harus direkonsiliasi dengan server sebelum DDL; jangan menjalankan ulang migrasi yang sudah tercatat.
+Nama field, versi, batas baru, dan perubahan perilaku di §3–§10 adalah **kontrak target v1.4**. Subset database/backend T01–T10 diimplementasikan/diverifikasi terisolasi (§11–§13) dan deployed melalui T11 (§14); ini bukan bukti keseluruhan kontrak Android. Struktur skema aktual harus direkonsiliasi dengan server sebelum DDL; jangan menjalankan ulang migrasi yang sudah tercatat.
 
 ### 2.1 Referensi mockup pen.dev dan traceability UI → data
 
@@ -197,9 +201,9 @@ Setup/edit mengikuti komponen existing, bukan satu target global yang menggandak
 
 **Logika Data**
 
-Android tetap **Room-first**: `startWorkout` menyimpan daftar target/rest per baris dan metadata exercise sebagai snapshot; `updateSetMeasurement`/`completeSet` hanya mengubah hasil set yang dituju. Completion membekukan timer eksekusi lalu memicu rest dari target baris snapshot set tersebut. Finish menyimpan hasil/pending sync atomik; aggregate import memvalidasi ulang.
+Android tetap **Room-first**: `startWorkout` menyimpan daftar target/rest per baris dan metadata exercise sebagai snapshot; `updateSetMeasurement`/`completeSet` hanya mengubah hasil set yang dituju. Completion membekukan timer eksekusi lalu memicu rest dari target baris snapshot set tersebut (detail timer/Pause/rest aktual: §17). Finish menyimpan hasil/pending sync atomik; aggregate import memvalidasi ulang.
 
-Rest 0 melewati countdown. State deadline/recovery timer tetap state sesi yang terpisah dari timer eksekusi dan hasil set. Edit routine setelah sesi dimulai tidak mengubah snapshot/timer sesi berjalan. Tidak menambah kolom measurement rest per set atau command override sesi baru. Override rest yang sudah ada pada sesi lama tetap dibaca sesuai versi asal; sesi baru memakai rest routine.
+Rest 0 melewati countdown. State deadline/recovery timer tetap state sesi yang terpisah dari timer eksekusi dan hasil set. Edit routine setelah sesi dimulai tidak mengubah snapshot/timer sesi berjalan. Target rest tidak menjadi measurement dan tidak ada command override sesi baru; durasi rest **aktual** (v1.5) adalah outcome terpisah per `set_id` (§17.4), bukan kolom target maupun input user. Override rest yang sudah ada pada sesi lama tetap dibaca sesuai versi asal; sesi baru memakai rest routine.
 
 **Rasionalitas & Output**
 
@@ -228,7 +232,7 @@ Ini **perilaku target v3**; existing `updateSetMeasurement` dan `removeSet` meng
 - Persist completion dan **pemicu rest pending** pada JSON active session dalam transaksi Room yang sama. Pemicu memuat stable set ID, waktu completion, deadline monotonic asal dan boot identity; ini metadata runtime, bukan measurement atau tabel baru. Coordinator memprosesnya memakai store/deadline existing, lalu menandai handled; recovery mengulang proses secara idempotent bila aplikasi mati di antara commit completion dan penyimpanan timer.
 - Perluas codec/reconcile existing agar memakai deadline pemicu yang sudah tersimpan, **bukan `now + rest` saat recovery**. Ini perubahan target; `start` existing saat ini membentuk deadline dari waktu panggil. Bila store timer sudah memuat set itu, jangan mulai ulang. Pemicu superseded/undo/rest 0/finish/cancel tidak boleh membangkitkan timer lama.
 - Reopen pada boot yang sama: sisa `max(0, ceil((deadlineElapsedMs-nowElapsedMs)/1000))`. Rest 90, aplikasi tertutup setelah 20 detik dan dibuka 10 detik kemudian → sekitar 60 detik tersisa, bukan 90.
-- Deadline lewat → expired sesuai kebijakan coordinator, tanpa restart atau suara ganda. Boot tidak cocok/tidak diketahui atau session/owner sudah tidak valid → cancel/cleanup, jangan menebak deadline dari wall clock. Pertahankan kebijakan existing untuk alert terlambat (`RestTimerRecoveryPolicy.MAX_ALERT_LATENESS_MS`), notification failure dan retry; jangan mengubahnya menjadi jaminan delivery Android.
+- Deadline lewat → expired sesuai kebijakan coordinator, tanpa restart atau suara ganda. **Revisi v1.5 (§17.5):** boot tidak cocok/tidak diketahui → jangan menebak deadline/elapsed dari wall clock; rest dibatalkan **tanpa outcome**, dan sesi ditandai perlu rekonsiliasi (tidak dihapus, elapsed terakumulasi sampai transisi terakhir dipertahankan). Session/owner tidak valid → cancel/cleanup seperti sebelumnya. Pertahankan kebijakan existing untuk alert terlambat (`RestTimerRecoveryPolicy.MAX_ALERT_LATENESS_MS`), notification failure dan retry; jangan mengubahnya menjadi jaminan delivery Android.
 - Gagal timer store/scheduling tidak membatalkan hasil set yang sudah committed. Tampilkan error timer/recovery, pertahankan pemicu untuk retry yang memakai deadline asal, dan jangan menghapus sesi. Finish/cancel membersihkan timer setelah outcome lokal yang sah; kegagalan transaksi finish tidak boleh menghapus hasil aktif.
 
 ### 4.3 Exercise Picker: anggota routine vs pilihan tambahan
@@ -310,7 +314,7 @@ Satu field domain **`weightKg`** dipetakan ke key API/SQL existing **`weight`** 
 | Katalog / DTO / Room | Metadata domain `trackingProfile`/`supportedMetrics`, wire/SQL `tracking_profile TEXT NULL` dan `supported_metrics TEXT[]`. Cardio wajib salah satu profil §5; non-cardio profil null/list kosong. Room menyimpan list lewat codec existing. Tidak memakai tabel capability terpisah. |
 | `template_exercises` | Tambahkan `set_targets JSONB` berupa array terurut dan penanda versi; Room menyimpan array melalui serialized column. Tiap objek: `row_id`, `set_number`, `weight`, `reps`, `duration_seconds`, **`rest_seconds`**. Field tidak relevan null. `sets` existing hanya cache turunan panjang array; scalar reps/durasi/rest lama tetap read/replay legacy, bukan sumber baru atau nilai yang meratakan array. |
 | Snapshot sesi | Simpan `set_targets` routine awal immutable dan `extra_set_targets` konfigurasi tambahan active, tanpa menyalin seluruh target awal dua kali. `target_row_id` hasil merujuk tepat satu target dalam gabungan keduanya pada exercise terkait; ID lintas kedua list tidak boleh bertabrakan. Metadata kategori/profil/metrics/versi dibekukan; pemicu rest pending/deadline/recovery tetap metadata runtime JSON, bukan measurement. |
-| `workout_sets` | Field `id` existing menerima UUID `set_id` yang sudah dipersist pada sesi, bukan ID baru dari index saat finish. Gunakan `weight` untuk `weightKg`; tambah nullable `target_row_id TEXT`, `calories_kcal NUMERIC(12,2)`, `speed_kph NUMERIC(12,2)`, `lap_reps INTEGER`, `incline_percent NUMERIC(5,2)`; jarak `NUMERIC(12,2)`. Target ID harus ada pada snapshot exercise terkait; nomor urut bukan FK. Tidak ada rest hasil. |
+| `workout_sets` | Field `id` existing menerima UUID `set_id` yang sudah dipersist pada sesi, bukan ID baru dari index saat finish. Gunakan `weight` untuk `weightKg`; tambah nullable `target_row_id TEXT`, `calories_kcal NUMERIC(12,2)`, `speed_kph NUMERIC(12,2)`, `lap_reps INTEGER`, `incline_percent NUMERIC(5,2)`; jarak `NUMERIC(12,2)`. Target ID harus ada pada snapshot exercise terkait; nomor urut bukan FK. **v1.5:** `duration_seconds` hasil = durasi aktif aktual; tambah nullable `rest_elapsed_ms BIGINT`, `rest_end_reason TEXT` (`EXPIRED`/`SKIPPED`) sebagai outcome rest terpisah dari target (§17.4, migrasi additive T37). `rest_seconds` target tidak pernah ditulis di sini. |
 | Nullability hasil | Longgarkan NOT NULL pada `weight`/`reps` agar hasil durasi baru menyimpan null. Pertahankan nilai/default legacy selama transisi; insert baru mengisi null eksplisit untuk field tidak relevan. Strength tetap membutuhkan angka beban, termasuk 0. |
 | Log hasil / agregat | Persist array target dan metadata snapshot pada `input_defaults` exercise log existing dengan encoding berversi; jangan hanya menyimpan key prefill scalar yang kehilangan target individual. Reader tetap mendukung key legacy. Pertahankan quality/provenance; volume baru berlabel volume beban tercatat dan tidak overwrite legacy external/additional volume. Tidak perlu agregat baru untuk semua detail mesin. |
 | Room / DTO / codec / sync | Mirror daftar target beserta stable row IDs, profil/metrics, versi dan field hasil nullable. Key prefill/defaults serta equality importer mempertimbangkan urutan/nilai tiap baris dan metadata. Preserve metrik hasil, null, dan presisi jarak termasuk total jarak. |
@@ -340,7 +344,7 @@ Pertahankan meter sebagai satuan storage existing; UI menampilkan km dan mengonv
 | Strength | 1..20 target baris; default pertama 3. Setiap baris punya beban 0..1000, reps 1..100, rest 0..600/default 60. | `weightKg` tersedia 0..1000; reps 1..1000 sesuai batas hasil existing; durasi/metrik cardio null. |
 | Isometric | 1..20 target baris; default pertama 3. Durasi tiap baris positif ≤86400; plank/sejenisnya fallback 60; rest default 60. | Durasi positif; weight/reps/metrik cardio null. |
 | Cardio | 1..20 target baris; default pertama 3 untuk `duration_only`, 1 untuk dua profil lain. Durasi/rest per baris, tidak wajib metrik alat di setup. | Durasi positif; hanya supported metrics yang boleh terisi dan semuanya opsional. |
-| Rest | Routine target baris → snapshot target baris → timer set terkait. | Bukan input atau measurement hasil; tidak memakai satu rest global untuk semua baris. |
+| Rest | Routine target baris → snapshot target baris → timer set terkait. | Bukan input atau measurement hasil; tidak memakai satu rest global. Outcome aktual (v1.5) opsional per completed set, terpisah dari target (§17.4). |
 | Draft | Boleh belum lengkap selama editing. | Validasi nilai wajib sebelum save target/complete; kosong bukan nol otomatis. |
 | Legacy | Baca/replay sesuai versi asal. | Additional/assistance lama tidak otomatis dijumlahkan ke beban baru. |
 
@@ -500,7 +504,7 @@ Gunakan `ActiveSessionEntity`, `WorkoutRepositoryImpl.mutateActiveSession/getAct
 | --- | --- | --- |
 | Selama latihan | Tiap mutasi committed ke `active_sessions.session_data_json` beserta ID/urutan hasil, array target, metadata snapshot, completion dan state pause/stopwatch. Publish state berhasil sesudah commit. | Kegagalan write tidak diterjemahkan menjadi keberhasilan UI; state Room terakhir tetap canonical, raw input bisa di-retry. |
 | Reopen/process death | Restore session owner/ID sama melalui codec berversi; jangan start sesi baru atau regenerate target/default. Reconcile execution stopwatch serta rest lewat identitas/deadline §4.2.2. | Account lain tidak mengakses sesi; data korup/versi unknown dipertahankan dengan error recovery, bukan dihapus. Keystroke yang belum committed tidak dijanjikan pulih. |
-| Finish | Minimal satu completed set. Simpan `WorkoutLogEntity`, `ExerciseLogEntity` dan `WorkoutSetEntity` atomik sebagai `PENDING_SYNC`/`CREATE`; gunakan `session.id` sebagai workout ID dan stable set IDs yang telah tersimpan. Hapus active row hanya dalam transaksi berhasil yang sama. | Nol completed → tetap active dengan pesan. Transaksi gagal → rollback parent/children/delete; sesi tetap tersedia, finish dapat diulang dengan identitas yang sama. |
+| Finish | Minimal satu completed set (+ `paused_elapsed_ms`/`active_elapsed_ms` dan rest outcome valid, §17.6). Simpan `WorkoutLogEntity`, `ExerciseLogEntity` dan `WorkoutSetEntity` atomik sebagai `PENDING_SYNC`/`CREATE`; gunakan `session.id` sebagai workout ID dan stable set IDs yang telah tersimpan. Hapus active row hanya dalam transaksi berhasil yang sama. | Nol completed → tetap active dengan pesan. Transaksi gagal → rollback parent/children/delete; sesi tetap tersedia, finish dapat diulang dengan identitas yang sama. |
 | Snapshot hasil | Hanya completed results masuk final metrics; exercise tanpa completed set tidak menjadi performed exercise. `input_defaults` log yang disimpan memuat snapshot target/config lengkap exercise itu, bukan hasil yang dianggap target. | Bila seluruh snapshot routine awal tidak tersedia pada hasil lama, target count awal ditandai tidak tersedia, bukan direkonstruksi dari completed results. |
 | Upload | Setelah commit lokal, enqueue scheduler existing untuk owner. `SyncManager.syncWorkoutAggregate` mengirim aggregate utuh, tidak upload parent/child terpisah atau membuat workout ID baru. | Internet terputus tidak membatalkan finish lokal. Worker existing mengembalikan `Result.retry()` untuk retryable failure; jadwal aktual mengikuti WorkManager, bukan jaminan retry tepat waktu. |
 | Ack/retry | Server menerima `persist_local_workout_aggregate` secara atomik dengan receipt workout ID; payload identik → receipt sama. Tandai parent/children SYNCED hanya setelah RPC ack dan `markAsSyncedIfUnchanged` berhasil. | Ack hilang → retry ID/payload sama. Payload berbeda ditolak `IDEMPOTENCY_MISMATCH`; parent berubah saat upload → jangan menandai versi baru seolah sudah ack. |
@@ -620,7 +624,7 @@ Kompatibilitas mengikuti Room-first, schema sesi legacy, scalar target lama, pen
 - [x] Card detail tetap gambar/nama/ringkasan target saja, termasuk target heterogen.
 - [x] Referensi enam node canvas dicatat read-only; laporan layout 360/412 dibedakan dari verifikasi runtime. Tidak ada source code, UI, DB, schema atau artefak implementasi diubah.
 
-Checkbox menunjukkan cakupan **spesifikasi dokumentasi**, bukan implementasi atau pengujian aplikasi.
+Checkbox menunjukkan cakupan **spesifikasi dokumentasi**, bukan implementasi atau pengujian aplikasi. Acceptance tambahan revisi v1.5: A-22–A-32 pada §17.8.
 
 ### 10.2 Kriteria verifikasi implementasi mendatang
 
@@ -740,7 +744,7 @@ Engine terisolasi: Docker `postgres:17`, PostgreSQL **17.11**, dengan bootstrap 
 
 Script SQL dijalankan melalui `docker exec -i imfit-exercises-t01-20261106 psql -X -v ON_ERROR_STOP=1 -U postgres`; migration dibungkus transaksi. Container/database smoke bersifat sementara, bukan dependency aplikasi.
 
-### 11.5 Gate deployment yang masih berlaku
+### 11.5 Gate deployment saat T01–T03 selesai — ditutup oleh §14
 
 1. Rekonsiliasi dua versi repository yang tertinggal, tanpa mengedit/menjalankan ulang migration yang sudah recorded. Jangan menandai migration applied hanya agar ledger terlihat sinkron.
 2. Sediakan backup penuh untuk rangkaian deployment dan buktikan restore terisolasi; backup katalog §11.2 tidak menggantikannya.
@@ -751,7 +755,7 @@ Script SQL dijalankan melalui `docker exec -i imfit-exercises-t01-20261106 psql 
 
 ## 12. Implementasi T04–T07 dan deployment gates — 2026-11-06
 
-**Status:** T04–T07 implemented dan verified pada repository/PostgreSQL terisolasi; G01/G02 selesai untuk lingkup yang diminta. **G03/G04 tetap BLOCKED. Tidak ada apply/repair ledger/DDL/DML live.** Android, Room v10, sesi v3, aggregate upload v3 dan analytics/read-back hasil v3 belum diimplementasikan oleh tahap ini.
+**Status historis saat T04–T07 selesai:** implemented dan verified pada repository/PostgreSQL terisolasi; G01/G02 selesai untuk lingkup yang diminta. Saat itu G03/G04 BLOCKED dan belum ada apply/repair ledger/DDL/DML live. Android, Room v10, sesi v3, aggregate upload v3 dan analytics/read-back hasil v3 belum diimplementasikan oleh tahap ini. **Status deployment terbaru: T11/G03/G04 PASS (§14).**
 
 ### 12.1 Migration dan invariant
 
@@ -834,7 +838,7 @@ Sebelum seluruh migration baru, dibuat fixture nonkosong routine, active session
 
 Bukti keluaran: `C:/Users/SMMA-Softeng/IMFIT-SAFE/routine-v3-20261106/t04-t07-verification.json`. PostgreSQL dibootstrap dengan auth/storage minimal dan katalog hasil backup asli; **bukan** full Supabase stack/HTTP PostgREST/Android test. Tidak ada build Android atau claim Room v10.
 
-### 12.6 G03/G04 — blocker dan prasyarat yang tersisa
+### 12.6 G03/G04 — blocker historis, ditutup oleh §14
 
 **G03 live BLOCKED.** Credential Supabase yang tersedia hanya token Management API, bukan login/password PostgreSQL berizin untuk unfiltered `pg_dump`. Endpoint backup mengembalikan daftar kosong, PITR disabled; tidak ada full logical backup untuk diunduh. DNS direct DB gagal; session pooler IPv4 port 5432 reachable tetapi password tidak tersedia. Transaction pooler 6543 bukan jalur dump snapshot. Tidak mereset password, mengubah role live, atau menebak credential.
 
@@ -854,7 +858,7 @@ Lalu gunakan subcommand `restore --backup-directory <backup-yang-selesai> --imag
 
 ## 13. Implementasi T08–T10 dan status gate — 2026-11-06
 
-**Status:** T08–T10 **IMPLEMENTED + VERIFIED ISOLATED**, bukan DEPLOYED. G03 belum PASS; G04/T11 tetap BLOCKED. T12–T18 menunggu G04 sesuai urutan eksekusi; tidak ada perubahan source Android, migrasi Room v10, atau aktivasi writer Android v3.
+**Status historis sebelum T11:** T08–T10 **IMPLEMENTED + VERIFIED ISOLATED**, belum DEPLOYED; G03/G04 saat itu BLOCKED. **Deployment dan penutupan gate kini selesai di §14.** T12–T18 belum dikerjakan; tidak ada perubahan source Android, migrasi Room v10, atau aktivasi writer Android v3.
 
 ### 13.1 Migration dan kontrak server
 
@@ -918,7 +922,7 @@ Bukti terisolasi, output script/smoke, preservasi fixture, dan SHA256 keempat mi
 `~/IMFIT-SAFE/backend-v3-20261106/verification.json`.
 Tidak ada klaim pengujian HTTP Supabase, Android, atau Room v10.
 
-### 13.3 G03 — akses dan full backup live masih BLOCKED
+### 13.3 G03 — blocker akses/backup sebelum T11, ditutup oleh §14
 
 - Chrome relay tidak tersambung. Browser langsung benar-benar membuka Dashboard project dan diarahkan ke **Sign in**; belum ada sesi Dashboard berizin untuk memperoleh credential PostgreSQL.
 - Pembacaan Management API terbaru mengembalikan **0** backup tersedia, `pitr_enabled=false`, `walg_enabled=true`. Token Management API bukan login PostgreSQL.
@@ -927,9 +931,9 @@ Tidak ada klaim pengujian HTTP Supabase, Android, atau Room v10.
 - **Full backup live: belum dibuat. Lokasi/checksum full backup: N/A. Restore/fidelity live: belum dijalankan.** Backup katalog §11 dan smoke backup/restore sumber lokal §12 tidak memenuhi G03.
 - Bukti blocker: `~/IMFIT-SAFE/full-database-20261106/g03-blocker-evidence.json`. Tool `supabase/operations/full_database_backup_restore.py` siap dijalankan setelah akses tersedia; verifikasi data/schema/owner/RLS/receipt dan pencatatan objek managed yang tidak terbackup tetap wajib pada backup live sebenarnya.
 
-### 13.4 G04/T11 dan urutan berikutnya
+### 13.4 G04/T11 — rencana sebelum deployment
 
-**NOT DEPLOYED.** G01/G02 dan kompatibilitas SQL repository T08–T10 sudah tersedia; **G03 belum PASS**. Tidak ada schema v3 atau Android writer baru diaktifkan di live.
+**Catatan historis sebelum T11:** G01/G02 dan kompatibilitas SQL repository T08–T10 sudah tersedia; G03 saat itu belum PASS dan schema v3 belum aktif di live. **Urutan berikut telah dilaksanakan pada §14; jangan dijalankan ulang.** Writer Android v3 tetap belum diaktifkan.
 
 Setelah full backup live + restore fidelity berhasil, jalankan ulang preflight read-only dan deploy per dependency:
 
@@ -943,3 +947,298 @@ Setelah full backup live + restore fidelity berhasil, jalankan ulang preflight r
 Jangan mengulang migration yang sudah efektif. `20261102144339` memiliki BEGIN/COMMIT sendiri; aturan atomic ledger dan transaction runner §12 tetap berlaku. Verifikasi ledger, owner/RLS, receipt, serta kontrak reader/RPC live sebelum menandai DEPLOYED. Reader/RPC v3 harus aktif sebelum writer Android v3.
 
 Sesudah G04 benar-benar selesai, lanjutkan **T12–T18**: domain, metadata, stable IDs, codec v3, migrasi Room v9→v10, adapter legacy, dan DTO. Semua masih unchecked; tidak ada build/test Android yang diklaim.
+
+## 14. Deployment T11 dan penutupan G03/G04 — 2026-11-06
+
+**Status: DEPLOYED.** Target `ltcxltahkrjnsjaxndsa`; G01–G04 PASS. Credential PostgreSQL existing dibaca dari lokasi lokal yang diberikan user, tanpa menampilkan password atau memasukkannya ke argv/Git. Koneksi deployment memakai session pooler port 5432 dan libpq `sslmode=verify-full` dengan CA lokal. Tidak ada reset password atau perubahan role/ownership/ACL/RLS live.
+
+### 14.1 G03 — full backup live dan restore fidelity
+
+Tool `supabase/operations/full_database_backup_restore.py` benar-benar mengekspor snapshot live read-only memakai unfiltered custom-format `pg_dump`, schema dump, `pg_dumpall --globals-only --no-role-passwords`, dan manifest. Backup bukan salinan katalog atau fixture lokal.
+
+| Artefak | Lokasi / hasil |
+| --- | --- |
+| Direktori backup di luar Git, parent akses 0700 | `~/IMFIT-SAFE/full-database-20261106/backup-20261106T131705Z/` |
+| SHA256 `database.dump` | `2b278d2a6b67dfe5d05bc928b34a1dc947873ad79157123c222c968c7acd99c9` |
+| Checksum semua artefak | `backup-evidence.json`: dump, globals, source schema, source manifest. |
+| Restore terisolasi yang lulus | `backup-20261106T131705Z/restore-20261106T132058Z/restore-evidence.json` → `RESTORE_FIDELITY_PASSED`, `schema_matches=true`. |
+| Fidelity exercised | **1.704** manifest record identik, **54** tabel data/fingerprint, **4** sequence; termasuk receipts, role/membership/default privileges, owner/grant, policy/RLS, routine, constraint, dan trigger. |
+| Engine/image | Source PostgreSQL **17.6**, image `imfit-g03-clean:17.6.1.054`, turunan `public.ecr.aws/supabase/postgres:17.6.1.054`; extension source/version cocok. Dockerfile disimpan di `~/IMFIT-SAFE/full-database-20261106/restore-image/`. Tidak memublikasikan port restore. |
+
+Restore awal benar-benar gagal pada bootstrap/ownership/ACL extension managed; kegagalan tidak diabaikan. Tool diperbaiki untuk bootstrap schema dan extension dengan owner source, memulihkan wrapper `graphql_public.graphql` dari definisi backup beserta membership extension sebelum ACL, mereplay grant eksplisit dengan grantor/grant-option yang sama, dan memulihkan state sequence extension. Elevasi role untuk instalasi extension hanya pada transaksi database restore terisolasi; flag role source dipulihkan dan ikut dibandingkan.
+
+Manifest memakai `search_path=pg_catalog` dan mengurutkan entri ACL tanpa menghapus privilege. Normalisasi schema hanya menghilangkan header versi/restriction key, memisahkan perbandingan ACL ke manifest lengkap, serta menyamakan coercion array literal varchar→text[] yang diekspansi parser saat restore. Tidak menoleransi perbedaan owner, grant, RLS, row, atau receipt. Raw schema dan seluruh log percobaan tetap disimpan.
+
+**Batas backup:** role passwords, Storage object bytes, konfigurasi/secret layanan platform, dan binary extension bukan isi logical dump. Manifest source mencatat `storage.objects=0` dan `vault.secrets=0`; bucket metadata tetap terbackup. Ini restore PostgreSQL terisolasi, bukan disaster-recovery seluruh layanan Supabase.
+
+### 14.2 T11 — deployment berurutan dan ledger atomik
+
+Runner `supabase/operations/architectural_deploy.py` merehearsal urutan §13.4 pada hasil restore live, lalu menjalankan preflight pristine read-only lagi sebelum apply live. Dua belas file diterapkan **sekali**, mulai `20261101000300` sampai `20261106000800`; ledger akhir **31** migration. Sembilan belas row ledger baseline, termasuk statement history, tetap identik; tidak ada repair ledger atau pengulangan `20261101000200`.
+
+Setiap file memiliki transaksi runner sendiri, lock deployment/ledger, validasi predecessor, DDL/DML migration, dan insert ledger dengan versi/nama/statement yang sama dalam satu commit. Parser statement-aware hanya menormalkan outer `BEGIN`/`COMMIT` file rest `20261102144339`; file migration historis tidak diedit. Runner menolak pristine-baseline drift, missing/mismatched backup proof, serta reapply setelah deployment.
+
+- Rehearsal: `~/IMFIT-SAFE/full-database-20261106/t11-rehearsal-20261106T1322/`.
+- Deployment live: `~/IMFIT-SAFE/full-database-20261106/t11-live-20261106T1324/deployment-evidence.json` → `DEPLOYMENT_PASSED`; mencatat 12 committed version, SHA256 file migration/runner, preflight, backup/restore proof dan SQL/log aktual.
+- Verifikasi: `~/IMFIT-SAFE/full-database-20261106/t11-verification-20261106/verification.json`.
+
+### 14.3 G04 — reader/RPC live dan preservasi
+
+| Pemeriksaan yang dijalankan | Hasil |
+| --- | --- |
+| Rehearsal pada restore backup live | PASS; 12 migration dan smoke reader v1/v2/v3. |
+| Sebelas script regresi §13.2 pada restore yang sudah dimigrasikan | PASS seluruhnya, termasuk matrix 20 kasus B2 dan 14 regresi legacy. Suite tidak dijalankan pada live. |
+| `supabase/operations/architectural_reader_smoke.sql` pada live | PASS sebagai role `authenticated`: scalar routine→v3, snapshot Strength/Cardio, complete/finish, detail/prefill/progress/sync v1/v2/v3, nullable/desimal/zero, frozen target/rest/metadata, stable IDs, pemisahan volume, upload/replay/conflict, serta receipt historis. Seluruh fixture memakai owner/ID acak dan **ROLLBACK**. |
+| Preservasi data existing | PASS; semua row/kolom existing **9 tabel** identik sebelum/sesudah deployment dan smoke: routine/child, active JSON, workout/exercise/result, template receipt, operation receipt, local-workout receipt. Perbandingan typed membedakan null dan angka tanpa menyamakan representasi desimal dengan perubahan nilai. |
+| Owner/ACL/RLS/policy/role existing | PASS; manifest security sebelum/sesudah identik. Semua **9 helper privat baru** untuk validasi/mutasi/insert menolak direct EXECUTE oleh `anon`/`authenticated`. |
+| Route HTTP PostgREST/schema cache | PASS; signature `save_template_revision` sembilan argumen serta detail/prefill/progress/sync ter-resolve dan menolak publishable-key anon dengan HTTP **401 / 42501**, bukan missing-function/cache error. Tidak ada klaim authenticated HTTP end-to-end; lifecycle/readers authenticated diuji melalui PostgreSQL. |
+| Security advisors sebelum/sesudah | Jenis/jumlah finding sama: 5 INFO tabel receipt RLS tanpa policy, 4 WARN visibility GraphQL authenticated, 23 WARN public SECURITY DEFINER RPC authenticated, dan 1 WARN leaked-password protection disabled. Tidak mengubah permission API existing di luar scope. |
+| Writer Android v3 / Room v10 | **TIDAK DIAKTIFKAN / BELUM DIIMPLEMENTASIKAN.** Tidak ada perubahan source Android; `IMFITDatabase.version=9`. Tidak ada build/device/UI/Room v10 test pada T11. |
+
+Referensi advisor: [RLS tanpa policy](https://supabase.com/docs/guides/database/database-linter?lint=0008_rls_enabled_no_policy), [GraphQL visibility](https://supabase.com/docs/guides/database/database-linter?lint=0027_pg_graphql_authenticated_table_exposed), [SECURITY DEFINER RPC](https://supabase.com/docs/guides/database/database-linter?lint=0029_authenticated_security_definer_function_executable), dan [leaked-password protection](https://supabase.com/docs/guides/auth/password-security#password-strength-and-leaked-password-protection).
+
+Container/volume restore disposable dan transport rehearsal sementara telah dihapus; backup, log kegagalan/keberhasilan, Dockerfile image kompatibel, dan bukti deployment tetap disimpan di luar Git. Credential lokal tidak diubah.
+
+T11 selesai; dependency backend untuk **T12–T18** terbuka dan telah diselesaikan pada §15.
+
+## 15. Implementasi T12–T18 (Android Domain, Room v10 & Serialization) — 2026-11-07
+
+**Status: IMPLEMENTED & VERIFIED.** Seluruh tugas Phase 2 (T12–T18) telah diimplementasikan pada codebase Android, terkompilasi bersih pada flavor demo dan production, serta lolos verifikasi regresi unit test dan instrumentation test pada emulator Android (API 34). Database lokal kini berada pada Room **v10** (schema `app/schemas/.../10.json`). Writer sesi dan rutin v3 belum diaktifkan secara otomatis; writer lokal default tetap menghasilkan sesi v2 sampai Phase 3/4 diimplementasikan.
+
+### 15.1 Kontrak yang Diterapkan
+
+| Task | Komponen / Berkas | Kontrak yang Diterapkan |
+| --- | --- | --- |
+| **T12** | Domain model (`ExerciseTarget`, `TemplateExercise`, `SetMeasurement`, `WorkoutSet`, `ExerciseInputDefaults`, `ExerciseLog`, `WorkoutLog`, `WorkoutSession`, `Exercise`) | Unified single field `weightKg` bertipe `Double?` (0 kg sah; null pada draft/cardio); reps `Int?`; optional cardio metrics (`caloriesKcal`, `speedKph`, `lapReps`, `inclinePercent`); `totalDistanceMeters` bertipe `Double?` (null jika seluruh cardio unrecorded; 0.0 eksplisit sah); `recordedLoadVolume` dipisahkan dari `totalVolume` legacy; `SetMeasurement.isCompleteEligible` dua cabang (legacy 1 argumen vs v3 4 argumen berkapabilitas). |
+| **T13** | Metadata tracking (`TrackingProfile`, `CardioMetric`, `Exercise`, `ExerciseDto`, `ExerciseEntity`, `ExerciseRepositoryImpl`) | Enum `TrackingProfile` (`duration_only`, `distance_activity`, `equipment_metrics`) dan `CardioMetric` (`calories`, `distance`, `speed`, `laps`, `incline`); validasi metadata kategori/profil/metrik ketat (`validTrackingMetadata`); tersimpan di Room `ExerciseEntity` dan DTO remote; reader katalog/cache membawa metadata tanpa menghapus enum legacy. |
+| **T14** | Stable target/result IDs (`SetTarget`, `WorkoutSet`, `WorkoutSessionCodec`, `WorkoutLogDto`) | Konfigurasi target baris memakai `row_id` stabil; hasil sesi memakai UUID `set_id` stabil; `set_number` hanya urutan tampilan (1..N); setiap hasil menyimpan `target_row_id` yang wajib berelasi ke target snapshot (awal maupun ekstra); UUID hasil dipersist utuh saat finish ke `WorkoutSetEntity.id`. |
+| **T15** | Codec sesi v3 (`WorkoutSessionCodec.kt`, `WorkoutSessionCodecTest.kt`, `RestTimerTrigger.kt`) | Enkoder/dekoder sesi Room independen yang menangani schemaVersion 1, 2, dan 3; validasi v3 ketat (wajib snapshot lengkap, UUID hasil unik berelasi ke target, tanpa beban/reps pada durasi, metrik hanya yang didukung, order 1..N contiguous); kegagalan recovery melempar `SessionRecoveryException` dan **mempertahankan raw JSON Room** tanpa overwrite/delete; dukungan metadata runtime `RestTimerTrigger`. |
+| **T16** | Migrasi Room v9 → v10 (`IMFITDatabase.kt`, `MIGRATION_9_10`, `DatabaseModule.kt`, `IMFITDatabaseMigrationTest.kt`, `10.json`) | Migrasi non-destruktif: alter table `exercises`, `workout_templates`, `template_exercises`; tabel baru `workout_sets_new`, `exercise_logs_new`, `workout_logs_new` dengan tipe nullable `REAL` weight/distance/metrics dan penambahan kolom v3; migrasi data lama tanpa backfill versi palsu (kolom v3 null pada histori); PK, index, status sync, pending operation, dan JSON sesi lama dipertahankan byte-for-byte; terdaftar pada `DatabaseModule`. |
+| **T17** | Adapter legacy target (`LegacyTargetAdapter.kt`, `TemplateExercise.kt`, `MeasurementV3ContractTest.kt`) | `LegacyTargetAdapter.expand` mengekspansi scalar target lama menjadi N baris target dengan ID deterministik berbasis namespace UUID berlingkup (`imfit:legacy-target:$scope:$index`), mempertahankan urutan, nilai reps/durasi, rest 0, dan unknown weight sebagai null; tidak pernah memutasi data asal atau pending payload. |
+| **T18** | Sinkronisasi DTO & wire format (`WorkoutAggregatePayloadCodec.kt`, `WorkoutLogDto.kt`, `RemoteSnapshotImporter.kt`, `WorkoutRemoteDataSource.kt`) | `input_defaults` v3 dikirim sebagai native JSON object (8 key wajib backend), bukan double-encoded string; `WorkoutAggregatePayloadCodec` memisahkan branch v3 dari legacy: legacy tetap integer distance dan Float widening identik; v3 mengirim nullable/decimal metrik dan recorded_load_volume; importer membandingkan equality seluruh performa v3 dan menolak overwrite pending local changes. |
+
+### 15.2 Verifikasi yang Dijalankan
+
+Lingkungan pengujian: macOS arm64, OpenLogic OpenJDK 21, Android SDK Platform 37, Gradle 9.5.0 / AGP 9.1, emulator `sdk_gphone64_arm64` Android 14 (API 34).
+
+| Pemeriksaan | Cakupan / Berkas | Hasil |
+| --- | --- | --- |
+| Unit tests — Demo flavor | `:app:testDemoDebugUnitTest` (39 test suites) | **290 tests PASS**, 0 failures, 0 errors, 0 skipped. |
+| Unit tests — Production flavor | `:app:testProductionDebugUnitTest` (38 test suites) | **284 tests PASS**, 0 failures, 0 errors, 0 skipped. |
+| Regresi Domain & Codec | `MeasurementV3ContractTest`, `WorkoutSessionCodecTest`, `WorkoutAggregatePayloadCodecTest`, `WorkoutV3WireContractTest`, `RoutinePayloadContractTest` | **PASS**: snapshot v3 native JSON, roundtrip null vs 0, decimal distance/speed/incline, stable UUIDs, corruption refusal, duplicate ID rejection, legacy payload immutability. |
+| Connected Instrumentation Tests | `:app:connectedDemoDebugAndroidTest` pada Pixel 5 API 34 AVD | **36 tests PASS**, 0 failures: <br>• `IMFITDatabaseMigrationTest` (8 tests: v6→v7, v7→v8, v8→v9, v9→v10, v6→v10 chain, schema PRAGMA equality fresh vs migrated, active session preservation) <br>• `MultimodalityPersistenceGateTest` (7 tests: 6 mode measurements, cold Room read, finish persistence, remote import) <br>• `WorkoutRepositoryRoomFirstTest` (10 tests: lifecycle, finish atomik, prefill survival, corrupt session retention) <br>• `LegacyRoutineRecoveryUpgradeTest` (1 test: pending export preservation across v10 upgrade) <br>• `RemoteSnapshotImporterTest` (4 tests: atomic update, pending local protection) <br>• `WorkoutInteractionTest` (5 tests: Compose UI active set interaction, decimal comma parsing, 320dp width) <br>• `Phase2RuntimeSmoke` (1 test: full cycle persist→cold recovery→finish→aggregate encode→v2 writer check→corrupt retain). |
+| Runtime proof logcat | Disposable driver `Phase2RuntimeSmoke` | `PHASE2_RUNTIME_PASS Room=10 cold-recovery=3 stable-result=... recorded-load=300.0 distance=1234.56 null-weight-reps=true native-json=true writer=2 future-raw-retained=true` |
+| APK builds | `:app:assembleProductionDebug`, `:app:assembleDemoDebugAndroidTest`, `:app:assembleProductionDebugAndroidTest` | **BUILD SUCCESSFUL**, dexing lolos tanpa konflik bytecode atau desugaring. |
+| Scaffold cleanup | `Phase2RuntimeSmoke.kt` | Dihapus setelah pembuktian runtime; tidak ada scaffold sementara tertinggal di repository. |
+
+Ringkasan artefak pengujian disimpan di luar Git pada `~/IMFIT-SAFE/android-phase2-20261106/`:
+- `unit-results.json`: hasil test runner kedua varian (574 unit tests total).
+- `connected-results.json`: hasil connected Android test runner (36 tests).
+
+Phase 2 selesai. Database lokal Room siap (v10), codec siap (v3 + legacy), DTO/wire siap. Kode selanjutnya dapat melanjutkan ke **Phase 3 (T19–T25: Routine Setup, Edit & Picker)**. Writer Android v3 tetap tidak diaktifkan sampai seluruh integrasi selesai.
+
+## 16. Implementasi T19–T25 (Routine Setup, Edit, Picker & Detail) — 2026-11-07
+
+**Status: IMPLEMENTED & VERIFIED.** Seluruh tugas Phase 3 (T19–T25) telah diimplementasikan sesuai referensi node canvas `njlmZ`, `Q1BGbI`, `MdoRQ`, dan `Of1nW`, terkompilasi bersih pada varian Demo dan Production, serta lulus unit test suite lengkap.
+
+### 16.1 Kontrak yang Diterapkan
+
+| Task | Komponen / Berkas | Kontrak yang Diterapkan |
+| --- | --- | --- |
+| **T19** | `EditWorkoutViewModel.kt` (`RawSetTargetDraft`, `RawExerciseConfig`, `DraftRow`, `addSetRow`, `removeSetRow`, `updateSetRow`) | Menyimpan dynamic set rows berdasarkan `row_id` stabil di dalam `DurableRoutineDraft` (`SavedStateHandle`). Operasi tambah menghasilkan UUID baru ber-rest 60 detik; edit memutasi hanya `row_id` sasaran; hapus membuang hanya `row_id` sasaran dan menomori ulang (`1..N`) tanpa mengubah nilai/ID baris lain atau otomatis membuat ulang 3 baris saat habis (`0` baris). |
+| **T20** | `EditWorkoutViewModel.kt` (`defaultInitialRowCount`, `acceptSelection`, `toDraftRow`) | First insert dari Picker menghasilkan 3 baris untuk Strength, Isometric, dan Cardio `duration_only`, serta 1 baris untuk Cardio `distance_activity` dan `equipment_metrics`, seluruhnya dengan rest awal 60 detik. Pembukaan edit/recovery membaca `setTargets` tersimpan atau ekspansi deterministik `LegacyTargetAdapter.expand` tanpa pernah menjalankan ulang default 3/1 atau mereset rest `0`. |
+| **T21** | `EditWorkoutScreen.kt` (`RoutineExerciseEditor`, `RoutineSetField`) | Menghapus input jumlah set manual dan selector tracking mode. Merender baris dinamis sejajar horizontal: Strength `Set \| Beban (kg) \| Reps \| Rest (s)` + tombol hapus baris; Cardio/Isometric `Set \| Durasi (HH:MM:SS) \| Rest (s)` + tombol hapus baris, disertai tombol `+ Tambah Set` dan state kosong inline (`routine_empty_sets_error`). |
+| **T22** | `DurationInput.kt`, `EditWorkoutViewModel.kt`, `EditWorkoutScreen.kt` | Validasi draft per baris dan exercise: beban `0..1000` kg (maksimal 2 desimal, `0` sah, kosong tidak sah), target reps `1..100`, rest `0..600` detik, durasi `HH:MM:SS` positif `1..86400` detik (`MM` dan `SS` `00..59`, menolak `MM:SS` seperti `01:30`), dan jumlah baris `1..20`. Raw input invalid tetap tersimpan di draft melintasi reorder, kunjungan picker, dan process recreation. |
+| **T23** | `EditWorkoutViewModel.kt` (`CommandExercise`, `SaveCommand`, `saveChanges`), `DemoRoutineRepository.kt` | `SaveCommand` menyimpan array `setTargets` lengkap (`row_id`, `set_number` `1..N`, `weight`, `reps`, `duration_seconds`, `rest_seconds`) dengan `measurementVersion = 3` beserta metadata kapabilitas exercise sebelum dispatch RPC `save_template_revision`. Mempertahankan `requestId` dan mengunci draft saat outcome unknown (`Network`/`Server`) untuk replay identik, mempertahankan draft saat gagal validasi/konflik, dan menjaga state canonical saat batal. |
+| **T24** | `ExerciseSelectionViewModel.kt`, `ExerciseSelectionScreen.kt`, `RoutineFlowManager.kt` | Memisahkan `memberIds` (anggota rutinitas/draft saat ini) dan `selectedNewIds` (pilihan tambahan baru). Mencegah duplikasi dan replay `resultId`, menghitung CTA hanya dari tambahan baru, mereset hanya pilihan baru, menghapus badge kategori/modalitas dan teks mode dari `ExercisePickerRow` sesuai `Of1nW`, serta tetap meneruskan `trackingProfile` dan `supportedMetrics` melalui `SavedExercise`. |
+| **T25** | `WorkoutDetailScreen.kt` (`RoutineExerciseRow`, `formatRoutineTargetSummary`) | Menampilkan hanya gambar kategori otot existing, nama exercise, dan ringkasan target tersimpan tepat di bawah nama sesuai `njlmZ`. Mendukung format homogen (`3 x 8 reps`, `3 set · 60 s`, `1 set · 30 min`) dan heterogen (`3 set · 12/10/8 reps`, `3 set · 60/90/60 s`, `2 set · 45/90 s`) tanpa menampilkan beban, rest, awalan kategori otot, atau badge tambahan. |
+
+## 17. Revisi v1.5 — Active Session Semi-Offline, Timer Monotonic, dan Batch Sync
+
+**Status: SPESIFIKASI (2026-11-08), belum diimplementasikan.** Baseline: T01–T25 selesai; Room v10; writer Android v3 belum aktif. Bagian ini mengikat T26–T38 (TASKS Phase 4–5) dan memperbarui keputusan v1.4 yang bertentangan (ditandai di §0, §1, §4.2, §4.2.2, §6.1, §6.2, §7.2). Bagian lain v1.4 tetap berlaku.
+
+**Tujuan:** Active Workout memakai Room sebagai sumber utama dan tetap berjalan tanpa internet; semua timer akurat saat Pause/Resume; backend hanya menerima **satu aggregate workout lengkap** setelah Finish.
+
+**Catatan baseline (VERIFY saat implementasi):** `core/timer/*` (`RestTimerCoordinator`, `AndroidRestTimerStore`) dan `ActiveSetRow` sudah memakai `elapsedRealtime`; belum ada representasi rest aktual di model, Room, DTO, maupun RPC. Task T28/T29 harus mengaudit jalur existing (termasuk `WorkoutService`, stopwatch global di `ActiveWorkoutViewModel`) sebelum menambah state baru, bukan menduplikasi.
+
+### 17.1 Urutan dan dependensi
+
+**Urutan eksekusi (dikoreksi):** T26 snapshot → T27 pemisahan state → T28 timer monotonic → T29 Pause/Resume → T30 completion → T31 rest per target → T32 rest aktual → T33 atomic/recovery → T34 persist Room-first → **T37 kontrak Room v11 + backend rest aktual** → T35 finish atomik → T36 batch sync → T38 statistik/UI. Nomor task tidak berubah; T35 membutuhkan kolom Room v11 dari T37, sehingga T37 (migrasi Room dan SQL, termasuk deploy backend) mendahului T35/T36. Sebelum T32 selesai menyimpan outcome di JSON sesi, kolom Room v11 belum diperlukan; outcome runtime hidup di `sessionDataJson`. T39–T43 (UI row, cardio metrics, mutasi set, importer, estimasi) berjalan paralel menurut dependensi. **Gate writer:** aggregate **tidak boleh** memuat `rest_outcome`, `paused_elapsed_ms`, atau `active_elapsed_ms` sebelum backend T37 deployed dan tervalidasi (G-gate seperti §14); T35 hanya menulis kolom lokal v11, dan encoder T36 menghasilkan field tersebut hanya untuk payload v3 setelah gate lolos. Payload legacy tidak berubah.
+
+### 17.2 Pemisahan state
+
+| State | Isi | Lokasi | Ditulis ke Room |
+| --- | --- | --- | --- |
+| `set_targets` / `extra_set_targets` | Konfigurasi routine awal + tambahan active, rest target | Snapshot `ActiveSessionEntity` | Saat start / tambah set |
+| `sets` | Hasil per `set_id`: `DRAFT`/`COMPLETED`, nilai, `target_row_id` | Snapshot sesi | Setiap commit edit/complete/undo |
+| `executionTimer` | Per set: `accumulatedMs`, `anchorElapsedMs?`, status | Runtime sesi | Hanya transisi Start/Pause/Resume/Stop |
+| `restTimer` | Satu aktif: `set_id` pemicu, target s, `accumulatedMs`, anchor/deadline, boot identity | Runtime sesi + store timer existing | Hanya Start/Pause/Resume/End |
+| `pauseState` | `paused`, `pausedAtElapsedMs?`, `pausedTotalMs` | Runtime sesi | Hanya Pause/Resume |
+| Rest outcome | `rest_elapsed_ms`, `rest_end_reason` per `set_id` | Result set (setelah rest berakhir) | Sekali saat rest berakhir |
+
+Countdown tidak pernah ditulis ke measurement atau target; nilai tick hidup di memori/Compose dan dihitung ulang dari anchor.
+
+**Kepemilikan execution timer (keputusan):** satu sesi memiliki **paling banyak satu** execution timer aktif, terikat ke satu `set_id` (field `executionTimer.setId`). Start pada set lain saat ada timer aktif/paused ditolak dengan pesan (user harus Complete atau Stop set tersebut dahulu); tidak ada timer paralel. Elapsed disimpan pada set pemilik; Complete hanya membekukan dan menyimpan durasi untuk `set_id` pemilik. Undo set pemilik membuang timer dan elapsed-nya; Undo/Complete set lain tidak menyentuhnya. Hapus draft set pemilik membuang timernya. Process death/restart memulihkan timer dengan `set_id` yang sama; timer tanpa pemilik valid dibersihkan tanpa menulis durasi ke set lain.
+
+### 17.3 Timer monotonic, Pause, Resume
+
+- **Tiga durasi berbeda (jangan dicampur):** (a) `duration_seconds` set = durasi eksekusi aktif set itu (tanpa Pause, tanpa rest); (b) `active_elapsed_ms` sesi = **seluruh waktu sesi tanpa Pause, termasuk rest dan perpindahan** = `(end−start) − paused_elapsed_ms − segmen tak terbukti (§17.5)`; (c) durasi sesi gross = `end−start`. Server hanya memaksakan `paused + active ≤ gross (+1 s toleransi)`; `Σ durasi set + Σ rest aktual ≤ active` **tidak** dipaksakan karena durasi set yang diisi manual tidak terikat jam sesi.
+- Rumus: `elapsed(now) = accumulatedMs + (running ? now − anchorElapsedMs : 0)` dengan `now = SystemClock.elapsedRealtime()`. Tick UI menghitung ulang dari state memori; **tidak ada Room UPDATE per detik**.
+- Transisi bermakna yang menulis Room: Start, Pause, Resume, Stop/Complete, rest end. Wall clock hanya untuk `start_time`/`end_time` tampilan, bukan untuk elapsed.
+- Pause global membekukan execution dan rest aktif: `accumulatedMs += now − anchor`, anchor dihapus, `pausedAtElapsedMs = now`. Resume: `pausedTotalMs += now − pausedAtElapsedMs`, anchor baru `= now`; rest aktif memperoleh deadline baru `= now + sisa`. Alarm/notifikasi rest existing dibatalkan saat Pause dan dijadwalkan ulang saat Resume.
+- Background tanpa Pause: timer tetap berjalan (`elapsedRealtime` mencakup deep sleep). Mutasi/completion terkunci saat paused (§4.2.1).
+- **Contoh:** 60 s aktif + 30 s pause + 20 s aktif → durasi set **80 s**, `paused_elapsed_ms=30000`; bukan 110 s. Bila setelah itu rest 35 s aktif (Skip), `active_elapsed_ms ≥ 115000` (80 s set + 35 s rest), bukan 80000; gross ≥ 145000.
+
+### 17.4 Completion, durasi aktual, dan rest aktual
+
+- Selama `DRAFT` nilai boleh berubah dan tidak masuk statistik. Complete memvalidasi sesuai snapshot; untuk set berdurasi, stopwatch dibekukan dan `duration_seconds` hasil = **durasi aktif aktual** (bukan target); hasil + `is_completed=true` + pending rest trigger commit **satu transaksi**. Strength tidak memakai durasi eksekusi sebagai hasil. Double Complete = no-op; Undo → `DRAFT`, nilai dipertahankan, rest outcome set itu dibuang bila ada, countdown yang cocok dihentikan.
+- Rest dimulai hanya setelah commit Complete sukses; target `rest_seconds` dari `target_row_id`; 0 → tanpa countdown. Satu countdown aktif per sesi.
+- **Outcome rest** (hanya saat rest berakhir): `EXPIRED` → `rest_elapsed_ms` = durasi aktif yang tercapai pada deadline (≈ target×1000, tanpa interval Pause); `SKIPPED` → durasi aktif sampai Skip. Dicatat sekali per `set_id`, terkait set pemicu, tanpa mengubah `rest_seconds`.
+- **Tidak ada outcome** bila rest dibatalkan, digantikan complete set lain, di-undo, atau diputus rekonsiliasi reboot (§17.5). **Keputusan:** Finish saat rest masih berjalan menghentikan rest **tanpa outcome**; `SKIPPED` hanya dicatat bila user benar-benar menekan Skip, dan `EXPIRED` hanya bila deadline tercapai.
+- **Contoh:** target 90 s, Skip setelah 35 s aktif → `rest_elapsed_ms=35000`, `rest_end_reason=SKIPPED`, `rest_seconds` target tetap 90.
+
+### 17.5 Atomic completion dan recovery
+
+- Kunci stabil `(session_id, exercise_id, set_id)`; trigger rest memuat anchor/deadline monotonic, accumulated, pause state, **boot identity**. `handled` trigger diset setelah diproses → tidak dijalankan ulang. Process death: baca sesi yang sama, tanpa ID baru; countdown dihitung dari state tersimpan, bukan reset ke target (pada boot sama: sisa `max(0, ceil((deadline−now)/1000))`).
+- **Rest sudah lewat deadline saat proses mati, boot sama:** recovery memproses expiry **tepat satu kali** dari deadline tersimpan (trigger belum `handled`): menyimpan outcome `EXPIRED` dengan `rest_elapsed_ms` = durasi aktif sampai deadline (akumulasi tersimpan + sisa sampai deadline, tanpa Pause), menandai trigger handled, tanpa memulai ulang 90 s dan tanpa alert di luar kebijakan keterlambatan existing (§4.2.2). Replay recovery tidak membuat outcome kedua.
+- **Reboot / boot identity berbeda:** continuity monotonic tidak dapat dibuktikan → elapsed segmen berjalan sejak anchor terakhir **tidak dikarang** dari wall clock. Pulihkan sebagai kondisi *perlu rekonsiliasi*: sesi, draft, completed sets, dan **elapsed terakhir yang valid (akumulasi sampai transisi tersimpan terakhir)** dipertahankan; timer berjalan berhenti (tidak dihitung), rest dibatalkan tanpa outcome, user dapat Resume dengan anchor baru. Segmen tak terbukti tetap masuk durasi sesi gross (`end−start`) tetapi tidak ke `active_elapsed_ms`. **TODO/VERIFY:** apakah penanda rekonsiliasi dikirim ke backend; default v1.5 = hanya lokal, tanpa field payload baru.
+- Persist gagal: UI kembali ke state Room terakhir, tidak menyalakan timer seolah sukses; kegagalan timer store tidak membatalkan hasil committed (§4.2.2).
+
+### 17.6 Persist Room-first, Finish, dan batch sync
+
+- Semua edit, add/remove set, completion, undo, Pause/Resume, dan transisi timer dipersist ke Room; offline tidak memblokir Complete. Tidak memakai RPC `update_active_session` per perubahan lokal; sesi v1/v2 tetap terbaca (codec existing).
+- **Finish** (T35): minimal satu completed set; bekukan timer aktif; satu transaksi `WorkoutLogEntity` + `ExerciseLogEntity` + `WorkoutSetEntity` (hanya completed; rest outcome hanya yang valid terkait completed set); simpan template ref, revision, snapshot target, versi measurement, ID stabil, `paused_elapsed_ms`, `active_elapsed_ms`; `PENDING_SYNC`; hapus active session hanya jika commit sukses. Offline tetap menghasilkan histori lokal.
+- **Sync** (T36): setelah Finish bangun **satu** payload aggregate dari data committed → RPC existing `persist_local_workout_aggregate`. Payload immutable; retry memakai payload/workout ID/request identity yang sama; `SYNCED` hanya setelah ack valid; kegagalan jaringan mempertahankan data lokal. Tidak ada upload per set/measurement.
+
+**Bentuk logis payload** (nama field final harus diselaraskan dengan envelope RPC existing; `rest_outcome` adalah **ekstensi T37**, bukan field yang dijamin diterima backend v3 hari ini):
+
+```json
+{
+  "measurement_version": 3,
+  "workout_id": "session-uuid",
+  "template_id": "routine-id",
+  "template_revision": 7,
+  "session": {"start_time": "...", "end_time": "...", "paused_elapsed_ms": 30000, "active_elapsed_ms": 115000},
+  "exercises": [{
+    "exercise_id": "ex_core_1",
+    "tracking_type": "DURATION",
+    "set_targets": [{"row_id": "r1", "set_number": 1, "duration_seconds": 90, "rest_seconds": 90}],
+    "sets": [{
+      "set_id": "stable-set-uuid", "target_row_id": "r1", "is_completed": true,
+      "duration_seconds": 80,
+      "rest_outcome": {"elapsed_ms": 35000, "end_reason": "SKIPPED"}
+    }]
+  }]
+}
+```
+
+Makna: target 90 s, aktual 80 s (30 s Pause dikeluarkan); rest target 90 s, Skip pada 35 s aktif; `active_elapsed_ms=115000` = 80 s set + 35 s rest (waktu sesi tanpa pause, bukan durasi set); set non-completed tidak dikirim; seluruh objek dikirim setelah Finish. Contoh disederhanakan (field weight/reps/null mengikuti §6.3).
+
+### 17.7 Kontrak backend dan Room untuk rest aktual (T37)
+
+- **Tabel existing, kolom additive, nullable:** `workout_sets.rest_elapsed_ms BIGINT`, `workout_sets.rest_end_reason TEXT`; durasi sesi `workout_logs.paused_elapsed_ms`, `workout_logs.active_elapsed_ms` (nama final ditetapkan di §17.11). CHECK bersyarat: kedua field rest null bersama atau terisi bersama; `rest_elapsed_ms ≥ 0`; `rest_end_reason ∈ {EXPIRED, SKIPPED}`; outcome hanya pada `is_completed=true`. Tanpa tabel/service baru.
+- **Room v10 → v11** (`MIGRATION_10_11`, additive, tanpa destructive fallback): kolom baru null pada histori, tidak ada backfill palsu; PK, FK, sync status, pending operation, dan JSON sesi lama dipertahankan byte-for-byte. Codec (`WorkoutSessionCodec`, `WorkoutAggregatePayloadCodec`, DTO) membedakan payload dengan/tanpa `rest_outcome`; payload pending lama tidak ditulis ulang.
+- **Backend:** migrasi baru (tidak mengedit migrasi yang sudah deployed) memperluas `persist_local_workout_aggregate` untuk mengenali outcome; menolak set ID tak dikenal, durasi negatif, end_reason di luar enum, pasangan tak lengkap, atau outcome pada set non-completed. `get_workout_detail` dan read-back mengembalikan outcome; payload v1/v2/v3 lama dan receipt terbit tetap valid dan replay immutable. Pola deployment: backup, rehearsal terisolasi, ledger (seperti §14).
+- Round-trip Room → Backend → Room mempertahankan nilai dan relasi; `rest_seconds` target tidak berubah arti.
+
+### 17.8 Acceptance tambahan A-22–A-32
+
+| ID | Skenario | Hasil yang diharapkan |
+| --- | --- | --- |
+| A-22 | Start routine, lalu edit routine/katalog. | Snapshot sesi (target, rest, metadata, `template_id`/revision, set ID) tidak berubah; sesi berjalan tanpa internet. |
+| A-23 | Timer berjalan 5 menit, amati Room. | Tidak ada UPDATE per detik; hanya transisi Start/Pause/Resume/Stop; tidak ada request backend. |
+| A-24 | 60 s aktif, Pause 30 s, aktif 20 s, Complete. | `duration_seconds=80`, `paused_elapsed_ms=30000`; rest aktif ikut beku selama Pause. |
+| A-25 | Edit draft set, Complete, Undo, edit, Complete lagi; double tap. | Satu hasil `set_id`; read-only saat completed; statistik 1→0→1; tidak ada duplikasi. |
+| A-26 | Rest target 90, Skip pada 35 s aktif; ulang dengan expired. | Skip → 35000 ms `SKIPPED`; expired → ≈90000 ms `EXPIRED`; target tetap 90; tanpa Pause dihitung. |
+| A-27 | Rest berjalan lalu digantikan complete set lain / Undo / rest 0. | Tidak ada outcome palsu; satu countdown aktif; rest 0 tanpa countdown. |
+| A-28 | Process death di antara commit completion dan timer store; boot sama. | Sesi/ID sama; countdown lanjut dari deadline asal (bukan 90); trigger tidak diulang. |
+| A-29 | Reboot saat timer berjalan. | Tidak ada elapsed karangan; sesi pulih berstatus perlu rekonsiliasi; rest dibatalkan tanpa outcome; data committed utuh. |
+| A-30 | Mode pesawat di tengah workout dan saat Finish. | Complete tetap berhasil; Finish menulis histori lokal `PENDING_SYNC`; active session terhapus hanya setelah commit. |
+| A-31 | Online kembali; ack hilang lalu retry. | Satu RPC aggregate; payload/workout ID/request identity sama; receipt sama; `SYNCED` setelah ack; kegagalan jaringan menjaga data lokal. |
+| A-32 | Round-trip rest outcome; payload lama tanpa `rest_outcome`; set ID tak dikenal/durasi negatif. | Room → Backend → Room identik; payload lama tetap terbaca dan immutable; input invalid ditolak tanpa mengubah data. |
+
+### 17.9 Batas write, gate, dan Definition of Done
+
+| Peristiwa | Room | Backend |
+| --- | --- | --- |
+| Timer tick tiap detik | Tidak menulis | Tidak mengirim |
+| Start/Pause/Resume timer | Simpan state runtime | Tidak mengirim |
+| Ubah angka set | Simpan draft | Tidak mengirim |
+| Complete/Undo set | Commit hasil/status (+ trigger rest) | Tidak mengirim |
+| Rest expired/Skip | Simpan outcome aktual sekali | Tidak mengirim |
+| Finish workout | Commit aggregate `PENDING_SYNC` | Tidak harus online |
+| Koneksi kembali | Data lokal tetap | Kirim satu batch aggregate |
+| RPC berhasil | Tandai `SYNCED` | Simpan satu workout atomik |
+| RPC gagal | Tetap `PENDING_SYNC`/status error | Retry sesuai kebijakan |
+
+**Gate:** writer Android v3 tidak diaktifkan sebelum alur Room-first (T26–T34), finalisasi completed-only (T35), dan aggregate upload lengkap (T36) terhubung, serta kontrak rest aktual (T37) deployed.
+
+**Definition of Done:** tidak ada write DB atau request backend per detik · Pause membekukan semua waktu relevan dan Resume tidak menghitung interval pause · rest expired menyimpan durasi tercapai, Skip menyimpan elapsed aktual · stopwatch membeku pada Complete · hanya completed sets berkontribusi · sesi mempertahankan `template_id`, snapshot, dan ID stabil · offline tidak menghilangkan data committed · Finish offline menghasilkan histori lokal dan aggregate pending utuh · sync per-workout satu payload immutable · backend menerima, menyimpan, dan mengembalikan nilai serta relasi yang sama.
+
+**Item terbuka (TODO/VERIFY):** (1) ~~nama final field~~ — ditetapkan di §17.11; (2) ekspos penanda rekonsiliasi reboot ke backend; (3) T39–T43 ikut dimutakhirkan bila kontrak di atas berubah.
+
+### 17.10 Catatan implementasi T26–T34 (2026-11-08)
+
+Keputusan yang diambil saat implementasi (melengkapi §17.2–17.5; bukan perubahan kontrak):
+
+- **Rest yang di-pause** disimpan sebagai `TimerStatus.PAUSED` + `pausedRemainingMs` (durasi, tidak terikat boot), sehingga tetap valid setelah reboot; Resume membuat deadline baru dan mengunci `adjustedDurationMs` agar kenaikan `generation` tidak terbaca sebagai +30 s.
+- **Outcome rest** diputuskan sekali di `RestTimerCoordinator` (`outcomeReason`/`outcomeElapsedMs`) lalu dikirim at-least-once ke sesi (`recordRestOutcome` → `withRestOutcome`, idempoten). Deadline yang terlewat jauh pada boot sama tetap menghasilkan `EXPIRED` walau alert sudah terlalu terlambat; replaced/undo/finish/boot berubah/sesi invalid tidak menghasilkan outcome.
+- **Waktu sesi** memakai `sessionStopwatch` (aktif, termasuk rest) dan `pauseStopwatch` (hanya saat pause). Karena tick tidak lagi menulis Room, reboot kehilangan segmen stopwatch sejak transisi terakhir dan menandai rekonsiliasi; process death pada boot sama tidak kehilangan waktu.
+- **Durasi set:** nilai durasi yang diisi manual dianggap hasil user; jika stopwatch dipakai, durasi aktual stopwatch yang disimpan. Target hanya prefill draft.
+- **Gate:** `ActiveSessionV3Gate` (default off) menolak start sesi v3 di produksi sampai T48; sesi legacy v2 tidak berubah perilakunya (Pause saat rest tetap diblokir di v2).
+- Temuan: ticker sebelumnya menulis Room tiap detik selama stopwatch berjalan (`checkpointExecutionStopwatches`); dihapus dan diganti derivasi in-memory.
+
+### 17.11 Implementasi T37 — Room v11 dan migrasi backend (2026-11-08)
+
+**Status: DIIMPLEMENTASIKAN, DIREHEARSAL, dan DEPLOYED ke Supabase live pada 2026-11-08 (§17.13).**
+
+**Kontrak wire final (flat, sejajar field hasil lain; bukan objek `rest_outcome` bersarang):**
+
+| Level | Field | Aturan |
+| --- | --- | --- |
+| Set (`p_sets[]`) | `rest_elapsed_ms` (integer 0..86.400.000), `rest_end_reason` (`EXPIRED`/`SKIPPED`) | Keduanya atau tidak sama sekali; hanya pada set completed v3; set tak dikenal/outcome tanpa set completed ditolak `PT400`. |
+| Workout (`p_workout`) | `paused_elapsed_ms`, `active_elapsed_ms` (integer 0..172.800.000) | Keduanya atau tidak sama sekali; `paused + active ≤ (end−start) + 1 s`. |
+
+Penyimpanan (kolom additive, nullable, tanpa tabel baru): `workout_sets.rest_elapsed_ms BIGINT`, `rest_end_reason TEXT`; `workout_logs.paused_elapsed_ms BIGINT`, `active_elapsed_ms BIGINT`; CHECK menjaga pasangan, rentang, enum, dan `measurement_version=3`/`is_completed`. `rest_seconds` target (di snapshot `input_defaults`) tidak disentuh.
+
+**Backend** — `supabase/migrations/20261108000100_rest_outcome_contract.sql` (menggantikan fungsi lewat `CREATE OR REPLACE`, tidak mengedit migrasi lama): `validate_result_v3` (whitelist + validasi), `insert_workout_v3` (validasi + insert), `persist_local_workout_aggregate` (jalur legacy menolak field baru, bukan membuangnya), `workout_summary` dan `get_workout_detail` (read-back hanya untuk v3); `get_workout_sync_page` otomatis memuat kolom baru. Receipt/replay tidak berubah.
+
+**Android** — Room **v11** (`MIGRATION_10_11`, `ALTER TABLE ADD COLUMN` nullable; terdaftar di `DatabaseModule`; schema `11.json`), entity/DTO/`RemoteSnapshotImporter`/`SyncManager`/read-mapping membawa field baru, `WorkoutAggregatePayloadCodec` menulis field hanya bila ada pada payload v3 (legacy/draft/pasangan tak lengkap/negatif ditolak). **Belum:** `finishWorkout` belum mengisi `paused/active_elapsed_ms` (T35); kolom outcome set sudah dipetakan.
+
+**Verifikasi (lokal, bukan live):** rehearsal PostgreSQL 17 lokal dari **restore backup `backup-20261106T131705Z`** (161 exercise, 19 workout, 121 set, 3 receipt) + 12 migrasi T11 + migrasi T37: migrasi berhasil; jumlah baris dan hash receipt identik sebelum/sesudah; `rest_outcome_contract.sql` PASS (simpan, 14 payload ditolak, legacy menolak, round-trip detail + sync page, CHECK tabel, replay identik/mismatch) dan test v3 lama PASS (`workout_results_v3`, `active_session_v3`, `local_workout_aggregate_v3`, `workout_read_contract_v3`, `legacy_snapshot_metadata`, `routine_revision_targets_v3`, `routine_rest_contract`). `phase2_verification_regressions.sql` gagal 1 kasus pada rehearsal **sebelum maupun sesudah** migrasi T37 (lingkungan scaffold lokal; tidak dikaitkan dengan T37, belum diselidiki). Android: unit demo 322 / production 316 lulus; migrasi Room 10→11 dan 6→11 + data/JSON sesi utuh lulus di emulator.
+
+### 17.12 Urutan deploy T37 dan T35/T36 (2026-11-08)
+
+**Urutan: backend dulu, Android kemudian.** `validate_result_v3` memakai whitelist key, sehingga payload yang membawa `rest_*`/`*_elapsed_ms` ditolak `PT400` oleh backend yang belum memuat T37; migrasi sendiri additive dan tidak mengubah client/receipt lama. Android T35/T36 dapat dikerjakan paralel karena `ActiveSessionV3Gate` (off) mencegah pengiriman field baru sebelum cutover T48.
+
+Runner deploy T37: `supabase/operations/rest_outcome_deploy.py` (satu migrasi + satu baris ledger dalam satu transaksi; hanya di atas ledger T11 persis 31 baris; preflight dan verifikasi read-only; row count + hash receipt harus identik sebelum/sesudah; live butuh `--backup-directory` dengan restore PASSED). Diuji lokal: `DEPLOYMENT_PASSED` pada restore backup 2026-11-06 + T11, apply ulang `BLOCKED`, live tanpa SSL `BLOCKED`, dan `rest_outcome_contract.sql` PASS pada hasil deploy runner. Live dijalankan 2026-11-08 — lihat §17.13.
+
+Langkah live (butuh Anda; Docker dan password DB tidak tersedia bagi agent): (1) Docker aktif; (2) backup baru live lewat `full_database_backup_restore.py backup`; (3) `restore` ke image yang sama seperti G03 hingga `RESTORE_FIDELITY_PASSED`; (4) jalankan runner `--target local` terhadap container hasil restore + `supabase/tests/*` v3; (5) runner `--target live` dengan `PGHOST/PGPORT/PGUSER/PGDATABASE/PGSSLMODE`, `--backup-directory`, `--evidence-directory` baru di luar repo.
+
+### 17.13 Deploy live T37 — 2026-11-08
+
+**Status: DEPLOYED / PASS.** Migrasi `20261108000100_rest_outcome_contract` diterapkan ke Supabase live lewat `rest_outcome_deploy.py` (satu transaksi bersama baris ledger; ledger kini 32).
+
+| Langkah | Hasil |
+| --- | --- |
+| Backup live baru | `backup-20261108T051829Z`, `BACKUP_COMPLETE_RESTORE_UNPROVEN`, 1738 record manifest (backup diambil read-only; percobaan pertama dengan password lama gagal autentikasi sebelum membaca data, folder `backup-20261108T050912Z` hanya bukti gagal). |
+| Restore terisolasi | `restore-20261108T052000Z` → `RESTORE_FIDELITY_PASSED`, `schema_matches=true`, image `imfit-g03-clean:17.6.1.054` (Colima/Docker). |
+| Rehearsal pada restore | Runner `--target local` → `DEPLOYMENT_PASSED`; baris dan hash receipt identik; `rest_outcome_contract.sql` + `workout_results_v3`, `active_session_v3`, `local_workout_aggregate_v3`, `workout_read_contract_v3`, `legacy_snapshot_metadata`, `routine_revision_targets_v3`, `routine_rest_contract`, `phase2_verification_regressions` semuanya lulus (kegagalan `phase2_verification_regressions` pada rehearsal lokal sebelumnya adalah artefak scaffold; tidak terjadi pada image asli). |
+| Deploy live | `PGSSLMODE=verify-full` dengan CA `prod-ca-2021.crt`, session pooler port 5432; preflight (ledger tepat 31 baris, kolom belum ada) → apply → verifikasi read-only (4 kolom nullable, 2 constraint, tidak ada baris historis berisi nilai baru, 4 fungsi mengenal key baru, ledger 32) → `DEPLOYMENT_PASSED`; `workout_logs=19`, `workout_sets=121`, `receipts=3` dan hash receipt **tidak berubah**. |
+| Bukti | `~/IMFIT-SAFE/t37-live-20261108/` (di luar Git, termasuk `rehearsal-restore/`). |
+
+Writer Android v3 **tetap belum aktif**: backend kini siap, tetapi T36 belum punya bukti end-to-end, `ActiveSessionV3Gate` off, dan T38/T39–T43 belum selesai. Catatan operasional: container restore dihapus dan Colima dihentikan setelah selesai; file kredensial dibaca sebagai stdin/passfile sementara yang dihapus; password tidak dicatat di artefak mana pun.
+
+### 17.14 Bukti end-to-end T35–T37 (2026-11-08)
+
+`app/src/androidTestProduction/.../workspace/RestOutcomeEndToEndTest.kt` dijalankan pada emulator (flavor production, backend **live**, akun uji; kredensial dibaca dari file sementara di perangkat dan dihapus sesudahnya). Hasil: **PASS** (15 s). Rantai yang dibuktikan: routine v3 (rest target 90/0/60) → start (gate dinyalakan hanya selama test) → timer eksekusi ±3 s → Complete (durasi aktual 2–5 s, bukan target 60 s; trigger rest 90 s) → outcome rest `SKIPPED` 2000 ms → Pause ±2 s/Resume → set rest 0 tanpa trigger, set ketiga tetap draft → Finish hanya ke Room (`PENDING_SYNC`; server belum memiliki workout) → satu upload aggregate → server menyimpan `rest_elapsed_ms`/`rest_end_reason`/`paused_elapsed_ms`/`active_elapsed_ms` dan snapshot target tetap 90/0/60 → retry payload identik = receipt identik → data lokal dihapus lalu di-hydrate dari server: outcome, durasi, dan ID set kembali identik, set draft tidak ada.
+
+Sisa data uji di akun tes: satu workout `d8692a3a-dd04-4cde-8f2f-3fd8d0e02cb7` (riwayat immutable; routine fixture sudah di-soft-delete). Writer v3 tetap **off** untuk pengguna (gate default off) sampai T38/T39–T43 dan cutover T48.
+
+### 17.15 Phase 5B dan penutupan T26–T32, T34, T39–T43 (2026-11-08)
+
+Rujukan UI dibaca read-only dari Pencil MCP (`TXyaw` Sesi Aktif: baris set, teks `Rest target: N s`, Delete terkunci saat completed, label metrik `Kalori (kcal)`, `Jarak (km)`, `Kecepatan (km/h)`, `Lap / Rep`, `Incline (%)`, petunjuk `Metrik opsional · kosong = tidak dicatat`). Implementasi: `ActiveSetRow` (rest target read-only, undo, metrik cardio dinamis), `ActiveExerciseCard`/`ActiveWorkoutScreen` (teruskan metadata snapshot dan callback undo), dialog rest dengan Jeda/Lanjutkan, `ExerciseLog.addV3Set`, `estimateRoutineDurationMinutes`, metrik Waktu aktif di Summary, banner rekonsiliasi. Verifikasi: unit demo 334 / production 328 lulus; Compose `ActiveSetRowV3UiTest` (8) dan `WorkoutSummaryActiveTimeTest` (2) lulus; suite instrumentasi penuh 139 dari 140 lulus.
+
+**Satu kegagalan di luar lingkup:** `HomeScreenPresentationTest.homeLastWorkoutCardRendersThreeColumnLegacyMultiModalSummary` ("400 kg" tidak tampil). File Home (`HomeComponents.kt`, `HomeScreenPresentationTest.kt`, `home_redesign_strings.xml`, drawable `ic_home_*`, `DesignSystem.kt`, `IMFITShimmer.kt`) diubah oleh proses lain pada 12:18–12:19 (bukan oleh pekerjaan ini); kegagalan berasal dari redesign Home yang sedang berjalan dan sudah ada sebelum perubahan UI Active. Tidak disentuh.
+
+**Masih terbuka:** T33 (test kill proses nyata), T38 (History/Progress waktu aktif + audit volume), lalu T44–T49 (integrasi, kompatibilitas, build rilis, cutover T48, finalisasi).
+

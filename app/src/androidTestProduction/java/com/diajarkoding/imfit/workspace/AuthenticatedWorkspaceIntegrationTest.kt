@@ -136,7 +136,7 @@ class AuthenticatedWorkspaceIntegrationTest {
                 val edited = requireNotNull(workouts.mutateActiveSession(started.id) { current ->
                     current.copy(exerciseLogs = current.exerciseLogs.map { log ->
                         log.copy(sets = log.sets.mapIndexed { index, set ->
-                            set.copy(weight = if (index == 0) 20f else 25f, reps = if (index == 0) 8 else 6, isCompleted = index < 2)
+                            set.copy(weightKg = if (index == 0) 20.0 else 25.0, reps = if (index == 0) 8 else 6, isCompleted = index < 2)
                         })
                     })
                 })
@@ -196,8 +196,8 @@ class AuthenticatedWorkspaceIntegrationTest {
                 assertEquals(310f, restored.totalVolume, 0f)
                 assertEquals(exercise.id, restored.exerciseLogs.single().exercise.id)
                 assertEquals(2, restored.exerciseLogs.single().sets.size)
-                assertEquals(14, restored.exerciseLogs.single().sets.sumOf { it.reps })
-                assertEquals(listOf(20f, 25f), restored.exerciseLogs.single().sets.map { it.weight })
+                assertEquals(14, restored.exerciseLogs.single().sets.sumOf { it.reps ?: 0 })
+                assertEquals(listOf(20.0, 25.0), restored.exerciseLogs.single().sets.map { it.weightKg })
                 assertEquals(snapshot.exercises.single().jsonObject["input_defaults"]?.jsonPrimitive?.contentOrNull,
                     database.exerciseLogDao().getExerciseLogsByWorkoutLogId(finished.id).single().inputDefaults)
                 assertTrue(workouts.getWorkoutLogs(owner).any { it.id == finished.id })
@@ -319,7 +319,7 @@ class AuthenticatedWorkspaceIntegrationTest {
             buildJsonObject {
                 put("id", set.id); put("exercise_log_id", set.exerciseLogId); put("workout_log_id", id)
                 put("exercise_id", set.exerciseId); put("set_number", set.setNumber)
-                put("weight", set.weight.toDouble()); put("reps", set.reps); put("is_completed", set.isCompleted)
+                put("weight", requireNotNull(set.weight)); put("reps", set.reps); put("is_completed", set.isCompleted)
             }
         }))
     }

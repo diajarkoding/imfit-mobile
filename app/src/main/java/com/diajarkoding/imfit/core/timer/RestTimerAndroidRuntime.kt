@@ -24,6 +24,8 @@ import com.diajarkoding.imfit.core.notification.WorkoutNotificationManager
 import com.diajarkoding.imfit.domain.repository.AuthRepository
 import com.diajarkoding.imfit.domain.repository.WorkoutRepository
 import com.diajarkoding.imfit.domain.model.WorkoutSession
+import com.diajarkoding.imfit.domain.model.activeElapsedMs
+import com.diajarkoding.imfit.domain.model.withRestOutcome
 import com.diajarkoding.imfit.core.service.WorkoutService
 import com.diajarkoding.imfit.core.notification.WorkoutActions
 import dagger.hilt.android.qualifiers.ApplicationContext
@@ -77,6 +79,21 @@ class RestTimerAndroidRuntime @Inject constructor(
 
     fun register(application: Application) = application.registerActivityLifecycleCallbacks(this)
 
+    /** Writes the decided rest outcome into the committed active session, once (the domain call is a no-op on replay). */
+    override suspend fun recordRestOutcome(state: RestTimerState): Boolean {
+        val reason = state.outcomeReason ?: return true
+        val outcome = com.diajarkoding.imfit.domain.model.RestOutcome(
+            elapsedMs = state.outcomeElapsedMs ?: return true,
+            endReason = com.diajarkoding.imfit.domain.model.RestEndReason.valueOf(reason)
+        )
+        // A missing session (already finished/cancelled) or a legacy/undone set means nothing to record.
+        val repository = workouts.get()
+        val active = repository.getActiveSessionForTimer()?.takeIf { it.id == state.workoutId } ?: return true
+        if (active.schemaVersion != 3) return true // legacy sessions carry no rest outcome; avoid a pointless Room write
+        repository.mutateActiveSession(state.workoutId) { it.withRestOutcome(state.setId, outcome) }
+        return true
+    }
+
     override suspend fun validSession(state: RestTimerState): Boolean = RestTimerSessionValidator(
         localUserId = { auth.get().getLocalUserId() },
         peekUserId = { auth.get().peekLocalUserId() },
@@ -109,7 +126,7 @@ class RestTimerAndroidRuntime @Inject constructor(
         val now = android.os.SystemClock.elapsedRealtime()
         if (!renderRetry.available(now)) return
         val rest = state?.takeIf { it.status == TimerStatus.RUNNING && it.deadlineElapsedMs > now }
-        val elapsed = currentSession.actualElapsedMs.coerceAtLeast(0) / 1000
+        val elapsed = currentSession.activeElapsedMs(now, AndroidMonotonicClock(context).bootIdentity()).coerceAtLeast(0) / 1000
         // Include clock conversion so wall-clock changes rebuild the chronometer's calendar base.
         val epochOffsetSeconds = (System.currentTimeMillis() - now) / 1000
         val identity = listOf(currentSession, elapsed, state?.timerId, state?.generation, state?.status,

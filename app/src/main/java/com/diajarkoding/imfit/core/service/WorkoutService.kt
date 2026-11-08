@@ -13,6 +13,8 @@ import com.diajarkoding.imfit.core.notification.NotificationChannels
 import com.diajarkoding.imfit.core.notification.WorkoutActions
 import com.diajarkoding.imfit.core.notification.WorkoutNotificationManager
 import com.diajarkoding.imfit.core.timer.*
+import com.diajarkoding.imfit.domain.model.pauseWorkout
+import com.diajarkoding.imfit.domain.model.resumeWorkout
 import com.diajarkoding.imfit.domain.repository.WorkoutRepository
 import dagger.hilt.android.AndroidEntryPoint
 import kotlinx.coroutines.*
@@ -178,6 +180,18 @@ class WorkoutService : Service() {
     }
 
     private suspend fun setPaused(paused: Boolean) {
+        val current = workouts.getActiveSessionForTimer() ?: return
+        if (current.schemaVersion == 3) {
+            val nowElapsed = SystemClock.elapsedRealtime()
+            val boot = AndroidMonotonicClock(applicationContext).bootIdentity()
+            val wall = System.currentTimeMillis()
+            workouts.mutateActiveSession(current.id) {
+                if (paused) it.pauseWorkout(nowElapsed, boot, wall) else it.resumeWorkout(nowElapsed, boot, wall)
+            }
+            if (paused) timer.pause() else timer.resume()
+            update = update.copy(isPaused = paused)
+            return
+        }
         if (paused) {
             timer.whenRestInactive { persistPause(true) }
         } else persistPause(false)

@@ -293,10 +293,10 @@ class RestTimerProductionReleaseTest {
             session.exerciseLogs.map { it.trackingType })
         val distance = session.exerciseLogs.single { it.exercise.id == EXECUTION_DISTANCE }.sets.single()
         assertEquals(45, distance.durationSeconds)
-        assertEquals(750, distance.distanceMeters)
+        assertEquals(750.0, distance.distanceMeters!!, 0.0)
         val legacy = session.exerciseLogs.single { it.exercise.id == EXECUTION_LEGACY }
         assertEquals("LEGACY_UNVERIFIED", legacy.metricQuality)
-        assertEquals(20f, legacy.sets.single().weight)
+        assertEquals(20.0, legacy.sets.single().weightKg!!, 0.0)
         assertEquals(8, legacy.sets.single().reps)
         assertLegacyExecutionRowsUnchanged(local)
         return session
@@ -345,7 +345,7 @@ class RestTimerProductionReleaseTest {
         val exerciseRow = ExerciseLogEntity(UUID.randomUUID().toString(), legacyId, EXECUTION_LEGACY,
             "Original legacy snapshot", MuscleCategory.CHEST.name, 0, 70f, 1, 7, syncStatus = "SYNCED")
         val setRow = WorkoutSetEntity(UUID.randomUUID().toString(), exerciseRow.id, legacyId,
-            EXECUTION_LEGACY, 1, 10f, 7, true, syncStatus = "SYNCED")
+            EXECUTION_LEGACY, 1, 10.0, 7, true, syncStatus = "SYNCED")
         database.workoutLogDao().insertWorkoutLog(parent)
         database.exerciseLogDao().insertExerciseLogs(listOf(exerciseRow))
         database.workoutSetDao().insertWorkoutSets(listOf(setRow))
@@ -361,7 +361,7 @@ class RestTimerProductionReleaseTest {
                         else set
                     })
                     EXECUTION_LEGACY -> log.copy(metricQuality = "LEGACY_UNVERIFIED",
-                        sets = log.sets.map { it.copy(weight = 20f, reps = 8, isCompleted = true) })
+                        sets = log.sets.map { it.copy(weightKg = 20.0, reps = 8, isCompleted = true) })
                     else -> log
                 }
             })

@@ -9,7 +9,7 @@ import java.util.UUID
 import com.diajarkoding.imfit.domain.model.WorkoutSession
 
 @Serializable
-enum class TimerStatus { RUNNING, EXPIRED, ACKNOWLEDGED, SKIPPED, CANCELLED }
+enum class TimerStatus { RUNNING, EXPIRED, ACKNOWLEDGED, SKIPPED, CANCELLED, PAUSED }
 @Serializable
 enum class SchedulingMode { EXACT, BEST_EFFORT, UNAVAILABLE }
 
@@ -43,13 +43,26 @@ data class RestTimerState(
     // Distinguish an already handled alert from an undelivered expiry during delayed recovery.
     val presentationHandled: Boolean = false,
     // Null preserves progress for older records, whose generations only represented +30s.
-    val adjustedDurationMs: Long? = null
+    val adjustedDurationMs: Long? = null,
+    // Global Pause: remaining duration (not tied to a boot) while status == PAUSED.
+    val pausedRemainingMs: Long? = null,
+    // Actual rest outcome, decided once when rest ends by deadline (EXPIRED) or user Skip (SKIPPED).
+    val outcomeReason: String? = null,
+    val outcomeElapsedMs: Long? = null,
+    val outcomeRecorded: Boolean = false
 ) {
     val totalDurationMs: Long
         get() = adjustedDurationMs ?: (durationMs + generation * 30_000)
 
     fun remainingSeconds(now: Long): Int =
-        ((deadlineElapsedMs - now).coerceAtLeast(0L).let { (it + 999) / 1000 }).toInt()
+        ((if (status == TimerStatus.PAUSED) (pausedRemainingMs ?: 0L).coerceAtLeast(0L)
+          else (deadlineElapsedMs - now).coerceAtLeast(0L)).let { (it + 999) / 1000 }).toInt()
+
+    /** Active rest elapsed so far: pauses never count because resume moves the deadline. */
+    fun elapsedActiveMs(now: Long): Long {
+        val remaining = if (status == TimerStatus.PAUSED) pausedRemainingMs ?: 0L else (deadlineElapsedMs - now).coerceAtLeast(0L)
+        return (totalDurationMs - remaining).coerceIn(0L, totalDurationMs)
+    }
 
     fun matchesExpired(timerId: String?, generation: Long): Boolean =
         this.timerId == timerId && this.generation == generation && status == TimerStatus.EXPIRED
@@ -87,6 +100,11 @@ interface RestTimerEffects {
     fun cancelPlaybackChecks() {}
     fun enqueuePlaybackCheck(token: PlaybackToken) {}
     fun trace(event: String, state: RestTimerState?, detail: String = "") {}
+    /**
+     * Persist the actual rest outcome for the triggering set (idempotent). Return true once delivered or
+     * not applicable (legacy/undone set); false to retry on a later reconcile.
+     */
+    suspend fun recordRestOutcome(state: RestTimerState): Boolean = true
 }
 
 /** All mutations and effects are serialized. No tick counter is persisted. */
@@ -187,16 +205,26 @@ class RestTimerCoordinator(
         }
     }
 
-    suspend fun start(request: RestTimerState) = guarded {
+    /**
+     * @param triggerDeadlineElapsedMs when set (pending-trigger recovery) the stored deadline is honored instead of
+     * `now + duration`; ignored (nothing starts) if [triggerBootIdentity] is not the current boot.
+     */
+    suspend fun start(request: RestTimerState, triggerDeadlineElapsedMs: Long? = null, triggerBootIdentity: Int? = null) = guarded {
         effects.trace("start_requested", request)
+        if (triggerDeadlineElapsedMs != null && (triggerBootIdentity == null || triggerBootIdentity != clock.bootIdentity())) {
+            effects.trace("trigger_boot_mismatch", request)
+            return@guarded
+        }
         val old = state.value
         if (old?.workoutId == request.workoutId && (old.setId == request.setId || request.setId in old.startedSetIds)) return@guarded
         if (!effects.validSession(request)) return@guarded
+        deliverOutcomeLocked() // never drop a decided outcome of the rest being replaced
         val next = request.copy(
             timerId = UUID.randomUUID().toString(),
             startedAtEpochMs = clock.epochMillis(),
-            deadlineElapsedMs = clock.elapsedRealtime() + request.durationMs.coerceIn(0, 86_400_000),
+            deadlineElapsedMs = triggerDeadlineElapsedMs ?: (clock.elapsedRealtime() + request.durationMs.coerceIn(0, 86_400_000)),
             bootIdentity = clock.bootIdentity(),
+            pausedRemainingMs = null, outcomeReason = null, outcomeElapsedMs = null, outcomeRecorded = false,
             status = TimerStatus.RUNNING,
             generation = 0,
             adjustedDurationMs = null,
@@ -256,6 +284,19 @@ class RestTimerCoordinator(
             effects.clearOrphans()
             return true
         }
+        deliverOutcomeLocked()
+        current = state.value ?: current
+        if (current.status == TimerStatus.PAUSED) {
+            val reason = when {
+                effects.userStopped(current) -> "USER_STOPPED"
+                !effects.validSession(current) -> "SESSION_INVALID"
+                else -> null
+            }
+            if (reason != null) {
+                current = current.copy(status = TimerStatus.CANCELLED, reason = reason)
+                terminal(current)
+            }
+        }
         if (current.status == TimerStatus.RUNNING || current.status == TimerStatus.EXPIRED) {
             val reason = when {
                 current.bootIdentity == null || current.bootIdentity != clock.bootIdentity() -> "BOOT_UNVERIFIED"
@@ -267,16 +308,24 @@ class RestTimerCoordinator(
             if (reason != null) {
                 effects.trace("terminal_decided", current, "reason=$reason")
                 if (reason == "DELIVERY_WINDOW_EXPIRED") effects.trace("delivery_window_expired", current, "reason=$reason")
-                current = current.copy(status = TimerStatus.CANCELLED, reason = reason)
+                // The rest still reached its deadline on the same boot even if the alert is too late to
+                // deliver: record the EXPIRED outcome once. Boot/session/user cancellations record nothing.
+                val reachedDeadline = reason == "DELIVERY_WINDOW_EXPIRED" && current.status == TimerStatus.RUNNING
+                current = current.copy(status = TimerStatus.CANCELLED, reason = reason,
+                    outcomeReason = if (reachedDeadline) "EXPIRED" else current.outcomeReason,
+                    outcomeElapsedMs = if (reachedDeadline) current.totalDurationMs else current.outcomeElapsedMs)
                 terminal(current)
             }
         }
         if (current.status == TimerStatus.RUNNING && clock.elapsedRealtime() >= current.deadlineElapsedMs) {
             effects.trace("expiry_decided", current, "source=$source")
-            current = current.copy(status = TimerStatus.EXPIRED)
+            current = current.copy(status = TimerStatus.EXPIRED, outcomeReason = "EXPIRED",
+                outcomeElapsedMs = current.totalDurationMs)
             persist(current)
             effects.trace("expired_committed", current, "source=$source")
         }
+        deliverOutcomeLocked()
+        current = state.value ?: current
         renderLocked(current)
         return when (current.status) {
             TimerStatus.RUNNING -> {
@@ -313,8 +362,25 @@ class RestTimerCoordinator(
                 } else updatePlaybackLocked(current)
                 true
             }
+            TimerStatus.PAUSED -> {
+                effects.cancelAlarm(current)
+                scheduledIdentity = null
+                true
+            }
             else -> { cleanup(current); true }
         }
+    }
+
+    /** At-least-once, idempotent delivery of the decided outcome to the session (sink ignores replays). */
+    private suspend fun deliverOutcomeLocked() {
+        val current = state.value ?: return
+        if (current.outcomeReason == null || current.outcomeRecorded) return
+        val delivered = try { effects.recordRestOutcome(current) } catch (e: kotlinx.coroutines.CancellationException) { throw e }
+            catch (e: Exception) {
+                effects.trace("outcome_failed", current, "exception=${e.javaClass.simpleName}")
+                false
+            }
+        if (delivered) persist(current.copy(outcomeRecorded = true))
     }
 
     private fun cleanup(current: RestTimerState) {
@@ -423,8 +489,51 @@ class RestTimerCoordinator(
     suspend fun skip(timerId: String? = null) = guarded {
         val current = state.value ?: return@guarded
         if (timerId != null && timerId != current.timerId) return@guarded
-        if (current.status == TimerStatus.RUNNING) terminal(current.copy(status = TimerStatus.SKIPPED))
+        if (current.status == TimerStatus.RUNNING) {
+            // A deadline that already passed is an expiry, not a skip; let reconcile record EXPIRED.
+            if (clock.elapsedRealtime() >= current.deadlineElapsedMs) { reconcileLocked(); return@guarded }
+            terminal(current.copy(status = TimerStatus.SKIPPED, outcomeReason = "SKIPPED",
+                outcomeElapsedMs = current.elapsedActiveMs(clock.elapsedRealtime())))
+        }
         reconcileLocked()
+    }
+
+    /** Global Pause: freeze the countdown at its remaining time. Never records an outcome. */
+    suspend fun pause() = guarded {
+        val current = state.value ?: return@guarded
+        if (current.status != TimerStatus.RUNNING) return@guarded
+        val now = clock.elapsedRealtime()
+        if (now >= current.deadlineElapsedMs) { reconcileLocked(source = "pause"); return@guarded }
+        val paused = current.copy(status = TimerStatus.PAUSED, pausedRemainingMs = current.deadlineElapsedMs - now,
+            schedulingMode = SchedulingMode.UNAVAILABLE)
+        persist(paused)
+        effects.cancelAlarm(current)
+        scheduledIdentity = null
+        effects.trace("rest_paused", paused)
+        renderLocked(paused)
+    }
+
+    /** Global Resume: continue from the saved remaining time with a new deadline and boot identity. */
+    suspend fun resume() = guarded {
+        val current = state.value ?: return@guarded
+        if (current.status != TimerStatus.PAUSED) return@guarded
+        val remaining = (current.pausedRemainingMs ?: 0L).coerceAtLeast(0L)
+        persist(current.copy(status = TimerStatus.RUNNING, deadlineElapsedMs = clock.elapsedRealtime() + remaining,
+            bootIdentity = clock.bootIdentity(), generation = current.generation + 1, pausedRemainingMs = null,
+            adjustedDurationMs = current.totalDurationMs, // the generation bump must not read as a +30 s extension
+            schedulingMode = SchedulingMode.UNAVAILABLE, audioSuppressed = false, presentationHandled = false))
+        effects.trace("rest_resumed", state.value)
+        effects.cancelAlarm(current)
+        scheduledIdentity = null
+        reconcileLocked(source = "resume")
+    }
+
+    /** Undo of the triggering set: stop only a matching live timer, without any outcome. */
+    suspend fun cancelForSet(setId: String, reason: String = "SET_UNDONE") = guarded {
+        val current = state.value ?: return@guarded
+        if (current.setId != setId || current.status !in listOf(TimerStatus.RUNNING, TimerStatus.PAUSED, TimerStatus.EXPIRED)) return@guarded
+        terminal(current.copy(status = TimerStatus.CANCELLED, reason = reason, outcomeReason = null, outcomeElapsedMs = null))
+        cleanup(current)
     }
 
     suspend fun cancel(reason: String, endWorkout: Boolean = false) = guarded {

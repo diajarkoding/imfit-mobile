@@ -21,6 +21,7 @@ import json
 import os
 from pathlib import Path
 import secrets
+import re
 import subprocess
 import sys
 import threading
@@ -28,7 +29,7 @@ import threading
 ROOT = Path.home() / 'IMFIT-SAFE' / 'full-database-20261106'
 CONTAINER = 'imfit-g03-20261106'
 EXCLUDED = "n.nspname !~ '^pg_' AND n.nspname <> 'information_schema'"
-SETTINGS = "SET timezone='UTC'; SET datestyle='ISO, YMD'; SET extra_float_digits=3; SET bytea_output='hex'; SET row_security=off;"
+SETTINGS = "SET timezone='UTC'; SET datestyle='ISO, YMD'; SET extra_float_digits=3; SET bytea_output='hex'; SET row_security=off; SET search_path=pg_catalog;"
 
 
 def run(args, log=None, input_text=None):
@@ -61,11 +62,25 @@ def file_hash(path):
     return digest.hexdigest()
 
 
+def canonical_array_casts(text):
+    # Re-parsing a dump expands a varchar-literal array -> text[] coercion
+    # into per-element text casts. These are the same typed literal expression.
+    literal = r"'(?:[^']|'')*'::character varying"
+    pattern = r"ARRAY\[((?:" + literal + r")(?:, " + literal + r")*)\]::text\[\]"
+    text = re.sub(pattern, lambda match: 'ARRAY[' + re.sub(literal, lambda item: item.group()+'::text',match.group(1)) + ']', text)
+    quoted = r"\(ARRAY\[((?:" + literal + r")(?:, " + literal + r")*)\]\)::\"text\"\[\]"
+    return re.sub(quoted,lambda match: 'ARRAY['+re.sub(literal,lambda item: '('+item.group()+')::"text"',match.group(1))+']',text)
+
+
 def canonical_schema(text):
-    # pg_dump emits a random psql restriction key and client/server version
-    # comments. Everything else, including ownership/grants, must match.
-    return '\n'.join(line for line in text.splitlines()
-                     if not line.startswith(('-- Dumped from database version ', '-- Dumped by pg_dump version ', '\\restrict ', '\\unrestrict '))) + '\n'
+    # Owners/object definitions/comments must match. Compare ACLs separately in
+    # the complete manifest: pg_dump omits extension-init grants and may reorder
+    # equivalent GRANT statements, so its ACL text is not a fidelity oracle.
+    text = '\n'.join(line for line in text.splitlines()
+                     if not line.startswith(('-- Dumped from database version ', '-- Dumped by pg_dump version ', '\\restrict ', '\\unrestrict ')))
+    sections = re.split(r'(?m)(?=^--\n-- Name: )',text)
+    return '\n\n'.join(canonical_array_casts(section.strip()) for section in sections
+                      if not re.match(r'--\n-- Name: [^\n]*; Type: (?:ACL|DEFAULT ACL);',section))+'\n'
 
 
 def docker_source(directory, image, host, port, user, database, command):
@@ -124,7 +139,15 @@ COMMIT;
 
 
 def parse_manifest(text):
-    return sorted([json.loads(line) for line in text.splitlines() if line.strip()], key=lambda x: json.dumps(x, sort_keys=True))
+    records = [json.loads(line) for line in text.splitlines() if line.strip()]
+    # ACL array ordering is insertion order, not grant semantics. Preserve every
+    # grantor/grantee/privilege/grant-option entry while comparing stable order.
+    for record in records:
+        if isinstance(record.get('acl'), list):
+            record['acl'].sort()
+        if record['kind']=='constraint':
+            record['definition'] = canonical_array_casts(record['definition'])
+    return sorted(records, key=lambda x: json.dumps(x, sort_keys=True))
 
 
 def backup(args):
@@ -218,8 +241,12 @@ def restore(args):
         run(['docker','run','--detach','--name',CONTAINER,'--mount',f'type=bind,source={directory},target=/backup,readonly','--mount',f'type=bind,source={output},target=/restore,readonly','-e','POSTGRES_USER='+admin,'-e','POSTGRES_PASSWORD_FILE=/restore/local-admin-password',args.image],output/'container-start.log')
         import time
         for _ in range(60):
+            # pg_isready also accepts the entrypoint's temporary init server.
+            # Wait until PID 1 is the final postgres process, not its shell.
+            process = subprocess.run(['docker','exec',CONTAINER,'cat','/proc/1/cmdline'],capture_output=True)
+            executable = process.stdout.split(b'\0',1)[0].rsplit(b'/',1)[-1]
             ready = subprocess.run(['docker','exec',CONTAINER,'pg_isready','-U',admin,'-d','postgres'],capture_output=True)
-            if ready.returncode == 0:
+            if executable in (b'postgres',b'.postgres-wrapped') and ready.returncode == 0:
                 break
             time.sleep(1)
         else:
@@ -238,7 +265,94 @@ def restore(args):
             raise RuntimeError('Template databases are not valid application restore targets.')
         if source_database == 'postgres':
             local_sql('DROP DATABASE postgres;',database='template1')
-        run(['docker','exec',CONTAINER,'pg_restore','--exit-on-error','--create','--username='+admin,'--dbname=template1','/backup/database.dump'],output/'database-restore.log')
+        toc = run(['docker','exec',CONTAINER,'pg_restore','--list','/backup/database.dump']).splitlines()
+        deferred = [line for line in toc if ' ACL graphql_public FUNCTION graphql(' in line]
+        bootstrap = [line for line in toc if re.match(r'^\d+; \d+ \d+ (?:DATABASE -|SCHEMA -) ',line)]
+        (output/'restore-bootstrap.list').write_text('\n'.join(bootstrap)+'\n',encoding='utf-8')
+        (output/'restore-main.list').write_text('\n'.join(line for line in toc if line not in deferred and line not in bootstrap)+'\n',encoding='utf-8')
+        (output/'restore-wrapper-acl.list').write_text('\n'.join(deferred)+'\n',encoding='utf-8')
+        run(['docker','exec',CONTAINER,'pg_restore','--exit-on-error','--create','--use-list=/restore/restore-bootstrap.list','--username='+admin,'--dbname=template1','/backup/database.dump'],output/'database-bootstrap.log')
+        # pg_dump does not emit ALTER EXTENSION OWNER. Install extensions under
+        # their recorded source owners before replaying CREATE IF NOT EXISTS.
+        # Any elevation exists only inside this isolated transaction; source role
+        # flags are restored before COMMIT and checked again in the full manifest.
+        def identifier(value):
+            return '"' + value.replace('"','""') + '"'
+        extension_sql = ['BEGIN;']
+        roles = {item['name']:item for item in source if item['kind']=='role'}
+        for item in source:
+            if item['kind']!='extension' or item['name']=='plpgsql':
+                continue
+            owner = identifier(item['owner'])
+            extension_sql.extend(['ALTER ROLE '+owner+' SUPERUSER;',
+                'SET LOCAL ROLE '+owner+';',
+                'CREATE EXTENSION IF NOT EXISTS '+identifier(item['name'])+' WITH SCHEMA '+identifier(item['schema'])+" VERSION '"+item['version'].replace("'","''")+"';",
+                'RESET ROLE;'])
+            if not roles[item['owner']]['superuser']:
+                extension_sql.append('ALTER ROLE '+owner+' NOSUPERUSER;')
+        extension_sql.append('COMMIT;')
+        local_sql('\n'.join(extension_sql),database=source_database)
+        run(['docker','exec',CONTAINER,'pg_restore','--exit-on-error','--section=pre-data','--use-list=/restore/restore-main.list','--username='+admin,'--dbname='+source_database,'/backup/database.dump'],output/'database-pre-data.log')
+        # Supabase attaches this generated wrapper to pg_graphql. pg_dump then
+        # omits its definition as an extension member, but vanilla CREATE EXTENSION
+        # cannot recreate it without Supabase's later-installed event trigger.
+        # Restore the exact backed-up definition/membership BEFORE replaying ACLs.
+        wrapper = next((x for x in source if x['kind']=='routine' and
+                        x['schema']=='graphql_public' and x['name']=='graphql'), None)
+        if wrapper:
+            signature = 'graphql_public.graphql(text,text,jsonb,jsonb)'
+            if local_sql("SELECT to_regprocedure('" + signature + "') IS NULL;",database=source_database).strip() == 't':
+                sql = wrapper['definition'] + ';\nALTER FUNCTION ' + signature + ' OWNER TO "' + wrapper['owner'].replace('"','""') + '";\n'
+                sql += 'ALTER EXTENSION pg_graphql ADD FUNCTION ' + signature + ';\n'
+                (output/'managed-extension-wrapper.sql').write_text(sql,encoding='utf-8')
+                local_sql(sql,database=source_database)
+        if deferred:
+            run(['docker','exec',CONTAINER,'pg_restore','--exit-on-error','--use-list=/restore/restore-wrapper-acl.list','--username='+admin,'--dbname='+source_database,'/backup/database.dump'],output/'database-wrapper-acl.log')
+        run(['docker','exec',CONTAINER,'pg_restore','--exit-on-error','--section=data','--use-list=/restore/restore-main.list','--username='+admin,'--dbname='+source_database,'/backup/database.dump'],output/'database-data.log')
+        run(['docker','exec',CONTAINER,'pg_restore','--exit-on-error','--section=post-data','--use-list=/restore/restore-main.list','--username='+admin,'--dbname='+source_database,'/backup/database.dump'],output/'database-post-data.log')
+        # Restore explicit ACLs pg_dump can omit as extension init-privileges or
+        # default-owner ACLs. Never drop an unexpected grant: the manifest gate
+        # below still rejects any surplus privilege or changed grantor.
+        acl_targets = []
+        for item in source:
+            if not item.get('acl'):
+                continue
+            kind = item['kind']
+            if kind=='database':
+                target = 'DATABASE '+identifier(source_database)
+            elif kind=='schema':
+                target = 'SCHEMA '+identifier(item['name'])
+            elif kind=='routine':
+                target = 'FUNCTION '+identifier(item['schema'])+'.'+identifier(item['name'])+'('+item['args']+')'
+            elif kind=='relation' and item['type'] in ('r','p','v','m','f','S'):
+                target = ('SEQUENCE ' if item['type']=='S' else 'TABLE ')+identifier(item['schema'])+'.'+identifier(item['name'])
+            else:
+                continue
+            acl_targets.append({'target':target,'acl':item['acl']})
+        payload = json.dumps(acl_targets).replace("'","''")
+        acl_sql = local_sql("""
+SELECT format('SET LOCAL ROLE %I; GRANT %s ON %s TO %s%s; RESET ROLE;',
+  pg_get_userbyid(a.grantor),a.privilege_type,t.target,
+  CASE WHEN a.grantee=0 THEN 'PUBLIC' ELSE quote_ident(pg_get_userbyid(a.grantee)) END,
+  CASE WHEN a.is_grantable THEN ' WITH GRANT OPTION' ELSE '' END)
+FROM jsonb_to_recordset('"""+payload+"""'::jsonb) t(target text,acl text[])
+CROSS JOIN LATERAL aclexplode(t.acl::aclitem[]) a;
+""",database=source_database)
+        (output/'acl-restore.sql').write_text('BEGIN;\n'+acl_sql+'COMMIT;\n',encoding='utf-8')
+        local_sql('BEGIN;\n'+acl_sql+'COMMIT;\n',database=source_database)
+        # pg_restore only emits database comments with --create, which would
+        # recreate the already bootstrapped database. Replay the exact dump SQL.
+        database_comments = re.findall(r"""(?m)^COMMENT ON DATABASE "(?:[^"]|"")*" IS (?:'(?:[^']|'')*'|NULL);""",
+                                       (directory/'source-schema.sql').read_text(encoding='utf-8'))
+        local_sql('\n'.join(database_comments),database=source_database)
+        # Extension-owned sequence state is omitted by pg_dump too; preserve the
+        # recorded source state after restored DDL event triggers have run.
+        sequence_sql = []
+        for item in source:
+            if item['kind']=='sequence':
+                name = '"' + item['schema'].replace('"','""') + '"."' + item['name'].replace('"','""') + '"'
+                sequence_sql.append("SELECT pg_catalog.setval('" + name.replace("'","''") + "'," + str(item['last_value']) + ',' + str(item['is_called']).lower() + ');')
+        local_sql('\n'.join(sequence_sql),database=source_database)
         restored = parse_manifest(local_sql(manifest_sql(),database=source_database))
         save_json(output/'restored-manifest.json',restored)
         restored_schema = run(['docker','exec',CONTAINER,'pg_dump','--schema-only','--create','--quote-all-identifiers','--username='+admin,'--dbname='+source_database],output/'restored-schema.log')

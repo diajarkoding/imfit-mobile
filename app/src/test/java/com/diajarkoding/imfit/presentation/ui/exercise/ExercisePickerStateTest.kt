@@ -34,4 +34,20 @@ class ExercisePickerStateTest {
         assertEquals(listOf(bench, row), cleared.filteredExercises)
         assertEquals(listOf(row), cleared.selectedExercises)
     }
+
+    @Test fun memberIdsAreExcludedFromSelectedNewIdsAndCannotBeToggled() {
+        val withMember = ExerciseSelectionState(
+            allExercises = listOf(bench, row),
+            memberIds = setOf(bench.id),
+            isLoading = false
+        ).filtered()
+        val afterToggleMember = withMember.toggled(bench)
+        assertTrue(afterToggleMember.selectedExercises.isEmpty())
+        assertTrue(afterToggleMember.selectedNewIds.isEmpty())
+
+        val afterToggleNew = afterToggleMember.toggled(row)
+        assertEquals(setOf(row.id), afterToggleNew.selectedNewIds)
+        assertEquals(setOf(bench.id), afterToggleNew.memberIds)
+        assertEquals(listOf(row), afterToggleNew.selectedNewExercises)
+    }
 }

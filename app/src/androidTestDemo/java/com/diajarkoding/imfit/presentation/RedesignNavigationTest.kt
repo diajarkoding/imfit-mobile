@@ -18,7 +18,9 @@ import androidx.test.platform.app.InstrumentationRegistry
 import com.diajarkoding.imfit.di.RestTimerEntryPoint
 import dagger.hilt.android.EntryPointAccessors
 import androidx.compose.ui.test.printToString
+import com.diajarkoding.imfit.domain.model.SetTarget
 import com.diajarkoding.imfit.domain.model.TemplateExercise
+import com.diajarkoding.imfit.domain.model.TrackingType
 import com.diajarkoding.imfit.domain.repository.RoutineRepository
 import com.diajarkoding.imfit.data.local.FakeExerciseDataSource
 import kotlinx.coroutines.runBlocking
@@ -175,7 +177,7 @@ class RedesignNavigationTest {
             val finished = runBlocking {
                 val session = repository.startWorkout(template)
                 repository.mutateActiveSession(session.id) { current -> current.copy(exerciseLogs = current.exerciseLogs.map { log ->
-                    log.copy(sets = log.sets.map { it.copy(weight = 20f, reps = 8, isCompleted = true) })
+                    log.copy(sets = log.sets.map { it.copy(weightKg = 20.0, reps = 8, isCompleted = true) })
                 }) }
                 requireNotNull(repository.finishWorkout())
             }
@@ -240,7 +242,25 @@ class RedesignNavigationTest {
         val added = FakeExerciseDataSource.exercises.first { it.id == "ex_chest_2" }
         val routine = runBlocking {
             val empty = repository.createRoutine(requireNotNull(ports.auth().getLocalUserId()), name).getOrThrow()
-            repository.saveRoutine(empty.id, name, listOf(TemplateExercise(bench)), empty.revision).getOrThrow()
+            repository.saveRoutine(
+                empty.id,
+                name,
+                listOf(
+                    TemplateExercise(
+                        exercise = bench,
+                        sets = 3,
+                        reps = 10,
+                        restSeconds = 60,
+                        setTargets = listOf(
+                            SetTarget("b-1", 1, 20.0, 10, restSeconds = 60),
+                            SetTarget("b-2", 2, 20.0, 10, restSeconds = 60),
+                            SetTarget("b-3", 3, 20.0, 10, restSeconds = 60)
+                        ),
+                        measurementVersion = 3
+                    )
+                ),
+                empty.revision
+            ).getOrThrow()
         }
         try {
             rule.onNodeWithTag("home_pull_to_refresh").performTouchInput { swipeDown() }
@@ -302,13 +322,11 @@ class RedesignNavigationTest {
             waitForText(name)
             rule.onNodeWithContentDescription(text(R.string.action_edit)).performClick()
             waitForText(text(R.string.workout_edit_title))
-            rule.onAllNodesWithContentDescription(text(R.string.routine_duration_seconds)).onFirst().performTextReplacement("90")
+            rule.onNodeWithTag("routine_duration_${plank.id}_1").performTextReplacement("00:01:30")
             androidx.test.espresso.Espresso.closeSoftKeyboard()
-            rule.onNodeWithTag("routine_edit_list").performScrollToNode(hasText(text(R.string.routine_tracking_duration)) and hasClickAction())
-            rule.onNode(hasText(text(R.string.routine_tracking_duration)) and hasClickAction()).performClick()
-            rule.onNode(hasText(text(R.string.routine_tracking_duration)) and hasClickAction()).assertIsSelected()
+            rule.onNodeWithTag("routine_edit_list").performScrollToNode(hasTestTag("routine_duration_${run.id}_1"))
             screenshot("mixed-targets-time-only-editor")
-            rule.onAllNodesWithContentDescription(text(R.string.routine_duration_seconds)).onLast().performTextReplacement("1800")
+            rule.onNodeWithTag("routine_duration_${run.id}_1").performTextReplacement("00:30:00")
             androidx.test.espresso.Espresso.closeSoftKeyboard()
             rule.onNodeWithTag("routine_edit_list").performScrollToNode(hasText(text(R.string.action_add_exercise)))
             rule.onNodeWithText(text(R.string.action_add_exercise)).performClick()
@@ -320,9 +338,9 @@ class RedesignNavigationTest {
             waitForText(name)
             val saved = runBlocking { requireNotNull(repository.getRoutineById(routine.id).getOrThrow()) }
             org.junit.Assert.assertEquals(listOf(plank.id, run.id, bench.id), saved.exercises.map { it.id })
-            org.junit.Assert.assertEquals(90, saved.exercises[0].targetDurationSeconds)
-            org.junit.Assert.assertEquals(1800, saved.exercises[1].targetDurationSeconds)
-            org.junit.Assert.assertEquals(com.diajarkoding.imfit.domain.model.TrackingType.DURATION, saved.exercises[1].trackingType)
+            org.junit.Assert.assertEquals(90, saved.exercises[0].setTargets?.first()?.durationSeconds)
+            org.junit.Assert.assertEquals(1800, saved.exercises[1].setTargets?.first()?.durationSeconds)
+            org.junit.Assert.assertEquals(TrackingType.DURATION, saved.exercises[1].trackingType)
             org.junit.Assert.assertNull(saved.exercises[1].targetDistanceMeters)
             org.junit.Assert.assertEquals(com.diajarkoding.imfit.domain.model.ExerciseModality.CARDIO, saved.exercises[1].exercise.modality)
             screenshot("mixed-targets-detail")

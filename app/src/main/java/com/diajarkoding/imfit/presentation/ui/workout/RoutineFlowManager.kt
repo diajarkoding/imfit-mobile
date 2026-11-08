@@ -4,9 +4,11 @@ import androidx.lifecycle.SavedStateHandle
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.diajarkoding.imfit.domain.model.AuthSessionState
+import com.diajarkoding.imfit.domain.model.CardioMetric
 import com.diajarkoding.imfit.domain.model.Exercise
 import com.diajarkoding.imfit.domain.model.MuscleCategory
 import com.diajarkoding.imfit.domain.model.ExerciseModality
+import com.diajarkoding.imfit.domain.model.TrackingProfile
 import com.diajarkoding.imfit.domain.model.TrackingType
 import com.diajarkoding.imfit.domain.model.RoutineFlowContext
 import com.diajarkoding.imfit.domain.model.RoutineFlowState
@@ -97,6 +99,7 @@ class RoutineFlowManager internal constructor(
         if (!isCurrent(context)) return false
         val current = getFlow(context) ?: return false
         if (selectedExercises.isEmpty() || selectedExercises.map { it.id }.distinct().size != selectedExercises.size) return false
+        if (current.pendingResultId == resultId || current.acceptedResultId == resultId) return true
         _flows.value = _flows.value + (context.flowId to current.copy(
             selectedExercises = selectedExercises.toList(),
             selectionRevision = current.selectionRevision + 1,
@@ -202,16 +205,30 @@ private data class SavedExercise(
     val imageUrl: String? = null,
     val defaultTrackingType: TrackingType = TrackingType.WEIGHT_REPS,
     val modality: ExerciseModality = ExerciseModality.STRENGTH,
-    val allowedTrackingTypes: List<TrackingType> = listOf(defaultTrackingType)
+    val allowedTrackingTypes: List<TrackingType> = listOf(defaultTrackingType),
+    val trackingProfile: TrackingProfile? = null,
+    val supportedMetrics: List<CardioMetric> = emptyList()
 ) {
-    fun toExercise() = Exercise(id, name, MuscleCategory.valueOf(category), description, imageUrl, isActive,
-        defaultTrackingType, modality, allowedTrackingTypes)
+    fun toExercise() = Exercise(
+        id = id,
+        name = name,
+        muscleCategory = MuscleCategory.valueOf(category),
+        description = description,
+        imageUrl = imageUrl,
+        isActive = isActive,
+        defaultTrackingType = defaultTrackingType,
+        modality = modality,
+        allowedTrackingTypes = allowedTrackingTypes,
+        trackingProfile = trackingProfile,
+        supportedMetrics = supportedMetrics
+    )
 
     companion object {
         fun from(exercise: Exercise) = SavedExercise(
             exercise.id, exercise.name, exercise.muscleCategory.name,
             exercise.description, exercise.isActive, exercise.imageUrl,
-            exercise.defaultTrackingType, exercise.modality, exercise.allowedTrackingTypes
+            exercise.defaultTrackingType, exercise.modality, exercise.allowedTrackingTypes,
+            exercise.trackingProfile, exercise.supportedMetrics
         )
     }
 }

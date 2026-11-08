@@ -32,10 +32,10 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.diajarkoding.imfit.R
 import com.diajarkoding.imfit.domain.model.RoutineSelectionResult
 import com.diajarkoding.imfit.domain.model.RoutineFormMode
+import com.diajarkoding.imfit.domain.model.SetTarget
 import com.diajarkoding.imfit.domain.model.TemplateExercise
 import com.diajarkoding.imfit.domain.model.TrackingType
 import com.diajarkoding.imfit.presentation.components.common.*
-import com.diajarkoding.imfit.presentation.ui.exercise.trackingLabelRes
 import com.diajarkoding.imfit.theme.IMFITColors
 import com.diajarkoding.imfit.theme.IMFITSpacing
 import androidx.compose.ui.platform.testTag
@@ -107,7 +107,9 @@ fun EditWorkoutScreen(
         onMoveUp = viewModel::moveExerciseUp,
         onMoveDown = viewModel::moveExerciseDown,
         onRawConfig = viewModel::updateRawConfig,
-        onTrackingMode = viewModel::changeTrackingMode,
+        onAddSet = viewModel::addSetRow,
+        onRemoveSet = viewModel::removeSetRow,
+        onUpdateSet = viewModel::updateSetRow,
         onSave = viewModel::saveChanges,
         onRetryLoad = viewModel::loadWorkout,
         onAdd = { onAddExercises(workoutId, state.exercises.map { it.id }, state.workoutName) }
@@ -123,7 +125,9 @@ internal fun EditWorkoutContent(
     onMoveUp: (Int) -> Unit = {},
     onMoveDown: (Int) -> Unit = {},
     onRawConfig: (String, RawExerciseConfig) -> Unit = { _, _ -> },
-    onTrackingMode: (String, TrackingType) -> Unit = { _, _ -> },
+    onAddSet: (String) -> Unit = {},
+    onRemoveSet: (String, String) -> Unit = { _, _ -> },
+    onUpdateSet: (String, RawSetTargetDraft) -> Unit = { _, _ -> },
     onSave: () -> Unit = {},
     onRetryLoad: () -> Unit = {},
     onAdd: () -> Unit = {}
@@ -196,6 +200,31 @@ internal fun EditWorkoutContent(
                 }
                 item(key = "routine_exercise_heading") { RoutineExerciseHeading(state.exercises.size) }
                 itemsIndexed(state.exercises, key = { _, exercise -> exercise.id }) { index, exercise ->
+                    val fallbackMode = exercise.exercise.v3TrackingType()
+                    val fallbackConfig = state.rawConfigs[exercise.id] ?: run {
+                        val fallbackTargets = exercise.setTargets ?: List(exercise.sets.coerceIn(1, MAX_ROUTINE_SET_ROWS)) { idx ->
+                            SetTarget(
+                                rowId = "${exercise.id}-${idx + 1}",
+                                setNumber = idx + 1,
+                                weightKg = if (fallbackMode == TrackingType.WEIGHT_REPS) 0.0 else null,
+                                reps = if (fallbackMode == TrackingType.WEIGHT_REPS) (exercise.reps ?: 10) else null,
+                                durationSeconds = if (fallbackMode == TrackingType.DURATION) (exercise.targetDurationSeconds ?: 60) else null,
+                                restSeconds = exercise.restSeconds
+                            )
+                        }
+                        RawExerciseConfig(
+                            trackingType = fallbackMode,
+                            setRows = fallbackTargets.map { target ->
+                                RawSetTargetDraft(
+                                    rowId = target.rowId,
+                                    weight = if (fallbackMode == TrackingType.WEIGHT_REPS) target.weightKg?.let(::formatWeightInput).orEmpty() else "",
+                                    reps = if (fallbackMode == TrackingType.WEIGHT_REPS) target.reps?.toString().orEmpty() else "",
+                                    duration = if (fallbackMode == TrackingType.DURATION) target.durationSeconds?.let(::formatDurationHhMmSs).orEmpty() else "",
+                                    rest = target.restSeconds.toString()
+                                )
+                            }
+                        )
+                    }
                     RoutineExerciseEditor(
                         exercise = exercise,
                         enabled = editable,
@@ -204,13 +233,11 @@ internal fun EditWorkoutContent(
                         onMoveDown = { onMoveDown(index) },
                         canMoveUp = index > 0,
                         canMoveDown = index < state.exercises.size - 1,
-                        rawConfig = state.rawConfigs[exercise.id] ?: RawExerciseConfig(
-                            sets = exercise.sets.toString(), reps = exercise.reps?.toString().orEmpty(),
-                            trackingType = exercise.trackingType,
-                            durationSeconds = exercise.targetDurationSeconds?.toString().orEmpty(),
-                            distanceMeters = exercise.targetDistanceMeters?.toString().orEmpty()),
+                        rawConfig = fallbackConfig,
                         onRawConfig = { onRawConfig(exercise.id, it) },
-                        onTrackingMode = { onTrackingMode(exercise.id, it) }
+                        onAddSet = { onAddSet(exercise.id) },
+                        onRemoveSet = { rowId -> onRemoveSet(exercise.id, rowId) },
+                        onUpdateSet = { updated -> onUpdateSet(exercise.id, updated) }
                     )
                 }
                 item(key = "routine_add_exercise_button") {
@@ -246,17 +273,19 @@ internal fun RoutineExerciseEditor(
     canMoveUp: Boolean = false,
     canMoveDown: Boolean = false,
     rawConfig: RawExerciseConfig,
-    onRawConfig: (RawExerciseConfig) -> Unit,
-    onTrackingMode: (TrackingType) -> Unit
+    onRawConfig: (RawExerciseConfig) -> Unit = {},
+    onAddSet: () -> Unit = {},
+    onRemoveSet: (String) -> Unit = {},
+    onUpdateSet: (RawSetTargetDraft) -> Unit = {}
 ) {
     val c = IMFITColors.training
     val configEnabled = enabled && exercise.exercise.isActive
-    val sets = rawConfig.sets
-    val reps = rawConfig.reps
     val valid = rawConfig.isValid
+    val durationMode = rawConfig.trackingType == TrackingType.DURATION ||
+        rawConfig.trackingType == TrackingType.DISTANCE_DURATION
 
     Surface(color = c.surface, shape = RoundedCornerShape(14.dp), border = BorderStroke(1.dp, c.border)) {
-        Column(Modifier.fillMaxWidth().padding(16.dp), verticalArrangement = Arrangement.spacedBy(16.dp)) {
+        Column(Modifier.fillMaxWidth().padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
                     Text(exercise.name, color = c.text, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
@@ -282,66 +311,202 @@ internal fun RoutineExerciseEditor(
                     Icon(Symbols.Default.Close, stringResource(R.string.routine_remove_named, exercise.name), tint = c.muted, modifier = Modifier.size(20.dp))
                 }
             }
-            if (exercise.exercise.allowedTrackingTypes.size > 1) {
-                Text(stringResource(R.string.routine_tracking_mode), color = c.muted,
-                    style = MaterialTheme.typography.bodySmall)
-                Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                    exercise.exercise.allowedTrackingTypes.forEach { trackingType ->
-                        FilterChip(
-                            selected = rawConfig.trackingType == trackingType,
-                            onClick = { onTrackingMode(trackingType) },
-                            enabled = configEnabled,
-                            label = { Text(stringResource(trackingType.trackingLabelRes())) }
-                        )
+
+            if (rawConfig.setRows.isEmpty()) {
+                RoutineFailure(stringResource(R.string.routine_empty_sets_error))
+            } else {
+                Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                    rawConfig.setRows.forEachIndexed { setIndex, setRow ->
+                        key(setRow.rowId) {
+                            val setNumber = setIndex + 1
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .testTag("routine_set_row_${exercise.id}_$setNumber"),
+                                verticalAlignment = Alignment.Bottom,
+                                horizontalArrangement = Arrangement.spacedBy(6.dp)
+                            ) {
+                                Column(
+                                    modifier = Modifier.width(32.dp),
+                                    verticalArrangement = Arrangement.spacedBy(6.dp),
+                                    horizontalAlignment = Alignment.CenterHorizontally
+                                ) {
+                                    Text(
+                                        stringResource(R.string.routine_set_number_label),
+                                        color = c.muted,
+                                        style = MaterialTheme.typography.labelSmall,
+                                        maxLines = 1
+                                    )
+                                    Box(
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .height(48.dp)
+                                            .background(c.raised, RoutineControlShape),
+                                        contentAlignment = Alignment.Center
+                                    ) {
+                                        Text(
+                                            setNumber.toString(),
+                                            color = c.text,
+                                            style = MaterialTheme.typography.bodyMedium,
+                                            fontWeight = FontWeight.SemiBold
+                                        )
+                                    }
+                                }
+
+                                if (durationMode) {
+                                    RoutineSetField(
+                                        label = stringResource(R.string.routine_duration_seconds),
+                                        value = setRow.duration,
+                                        onChange = { onUpdateSet(setRow.copy(duration = it)) },
+                                        enabled = configEnabled,
+                                        invalid = !setRow.isDurationValid(rawConfig.trackingType),
+                                        keyboardType = KeyboardType.Ascii,
+                                        fieldTag = "routine_duration_${exercise.id}_$setNumber",
+                                        modifier = Modifier.weight(1.4f)
+                                    )
+                                    RoutineSetField(
+                                        label = stringResource(R.string.routine_set_rest_label),
+                                        value = setRow.rest,
+                                        onChange = { onUpdateSet(setRow.copy(rest = it)) },
+                                        enabled = configEnabled,
+                                        invalid = !setRow.isRestValid,
+                                        keyboardType = KeyboardType.Number,
+                                        fieldTag = "routine_rest_${exercise.id}_$setNumber",
+                                        modifier = Modifier.weight(1f)
+                                    )
+                                } else {
+                                    RoutineSetField(
+                                        label = stringResource(R.string.routine_set_weight_label),
+                                        value = setRow.weight,
+                                        onChange = { onUpdateSet(setRow.copy(weight = it)) },
+                                        enabled = configEnabled,
+                                        invalid = !setRow.isWeightValid(rawConfig.trackingType),
+                                        keyboardType = KeyboardType.Decimal,
+                                        fieldTag = "routine_weight_${exercise.id}_$setNumber",
+                                        modifier = Modifier.weight(1f)
+                                    )
+                                    RoutineSetField(
+                                        label = stringResource(R.string.routine_set_reps_label),
+                                        value = setRow.reps,
+                                        onChange = { onUpdateSet(setRow.copy(reps = it)) },
+                                        enabled = configEnabled,
+                                        invalid = !setRow.isRepsValid(rawConfig.trackingType),
+                                        keyboardType = KeyboardType.Number,
+                                        fieldTag = "routine_reps_${exercise.id}_$setNumber",
+                                        modifier = Modifier.weight(1f)
+                                    )
+                                    RoutineSetField(
+                                        label = stringResource(R.string.routine_set_rest_label),
+                                        value = setRow.rest,
+                                        onChange = { onUpdateSet(setRow.copy(rest = it)) },
+                                        enabled = configEnabled,
+                                        invalid = !setRow.isRestValid,
+                                        keyboardType = KeyboardType.Number,
+                                        fieldTag = "routine_rest_${exercise.id}_$setNumber",
+                                        modifier = Modifier.weight(1f)
+                                    )
+                                }
+
+                                IconButton(
+                                    onClick = { onRemoveSet(setRow.rowId) },
+                                    enabled = configEnabled,
+                                    modifier = Modifier
+                                        .size(40.dp, 48.dp)
+                                        .testTag("routine_delete_set_${exercise.id}_$setNumber")
+                                ) {
+                                    Icon(
+                                        Symbols.Default.Delete,
+                                        contentDescription = stringResource(R.string.routine_remove_set_named, exercise.name, setNumber),
+                                        tint = if (configEnabled) c.muted else c.muted.copy(alpha = 0.5f),
+                                        modifier = Modifier.size(18.dp)
+                                    )
+                                }
+                            }
+                        }
                     }
                 }
-            }
-            val fields: @Composable (Modifier) -> Unit = { modifier ->
-                RoutineConfigNumber(stringResource(R.string.workout_label_sets), sets,
-                    { onRawConfig(rawConfig.copy(sets = it)) }, configEnabled, 1, modifier)
-                when (rawConfig.trackingType) {
-                    TrackingType.WEIGHT_REPS, TrackingType.BODYWEIGHT_REPS,
-                    TrackingType.ASSISTED_REPS, TrackingType.REPS_ONLY ->
-                        RoutineConfigNumber(stringResource(R.string.workout_label_reps), reps,
-                            { onRawConfig(rawConfig.copy(reps = it)) }, configEnabled, 1, modifier)
-                    TrackingType.DURATION ->
-                        RoutineConfigNumber(stringResource(R.string.routine_duration_seconds), rawConfig.durationSeconds,
-                            { onRawConfig(rawConfig.copy(durationSeconds = it)) }, configEnabled, 1, modifier)
-                    TrackingType.DISTANCE_DURATION -> {
-                        RoutineConfigNumber(stringResource(R.string.routine_distance_meters), rawConfig.distanceMeters,
-                            { onRawConfig(rawConfig.copy(distanceMeters = it)) }, configEnabled, 1, modifier, optional = true)
-                        RoutineConfigNumber(stringResource(R.string.routine_duration_seconds), rawConfig.durationSeconds,
-                            { onRawConfig(rawConfig.copy(durationSeconds = it)) }, configEnabled, 1, modifier)
-                    }
+                if (!valid) {
+                    RoutineFailure(stringResource(R.string.routine_config_invalid))
                 }
             }
-            if (LocalDensity.current.fontScale > 1.4f) Column(verticalArrangement = Arrangement.spacedBy(12.dp)) { fields(Modifier.fillMaxWidth()) }
-            else Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) { fields(Modifier.weight(1f)) }
-            if (!valid) RoutineFailure(stringResource(R.string.routine_config_invalid))
+
+            RoutineButton(
+                text = stringResource(R.string.action_add_set),
+                onClick = onAddSet,
+                enabled = configEnabled && rawConfig.setRows.size < MAX_ROUTINE_SET_ROWS,
+                outlined = true,
+                icon = Symbols.Default.Add,
+                matchOutlineToContent = true,
+                modifier = Modifier.testTag("routine_add_set_${exercise.id}")
+            )
+
             if (!exercise.exercise.isActive) RoutineFailure(stringResource(R.string.routine_exercise_unavailable))
-            Text(stringResource(R.string.routine_config_hint), color = c.muted, style = MaterialTheme.typography.bodySmall)
+            Text(
+                stringResource(if (durationMode) R.string.routine_config_hint_duration else R.string.routine_config_hint),
+                color = c.muted,
+                style = MaterialTheme.typography.bodySmall
+            )
         }
     }
 }
 
-
 @Composable
-private fun RoutineConfigNumber(label: String, value: String, onChange: (String) -> Unit, enabled: Boolean, min: Int, modifier: Modifier, optional: Boolean = false) {
+private fun RoutineSetField(
+    label: String,
+    value: String,
+    onChange: (String) -> Unit,
+    enabled: Boolean,
+    invalid: Boolean,
+    keyboardType: KeyboardType,
+    fieldTag: String,
+    modifier: Modifier = Modifier
+) {
     val c = IMFITColors.training
-    val invalid = !(optional && value.isBlank()) && (value.toIntOrNull()?.let { it < min } ?: true)
     val interaction = remember { MutableInteractionSource() }
     val focused by interaction.collectIsFocusedAsState()
     val errorText = stringResource(R.string.routine_config_invalid)
-    Column(modifier, verticalArrangement = Arrangement.spacedBy(8.dp)) {
-        Text(label, color = c.muted, style = MaterialTheme.typography.bodySmall)
-        Surface(color = c.background, shape = RoutineControlShape,
-            border = BorderStroke(if (focused) 2.dp else 1.dp, if (invalid) c.error else if (focused) c.primary else MaterialTheme.colorScheme.onSurfaceVariant)) {
-            BasicTextField(value, onChange, enabled = enabled, singleLine = true,
+    Column(modifier, verticalArrangement = Arrangement.spacedBy(6.dp)) {
+        Text(
+            label,
+            color = if (invalid) c.error else c.muted,
+            style = MaterialTheme.typography.labelSmall,
+            maxLines = 1
+        )
+        Surface(
+            color = c.background,
+            shape = RoutineControlShape,
+            border = BorderStroke(
+                if (focused) 2.dp else 1.dp,
+                if (invalid) c.error else if (focused) c.primary else MaterialTheme.colorScheme.onSurfaceVariant
+            )
+        ) {
+            BasicTextField(
+                value = value,
+                onValueChange = onChange,
+                enabled = enabled,
+                singleLine = true,
                 interactionSource = interaction,
-                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number), cursorBrush = SolidColor(c.primary),
-                textStyle = MaterialTheme.typography.bodyLarge.copy(color = c.text, textAlign = TextAlign.Center),
-                modifier = Modifier.fillMaxWidth().heightIn(min = 52.dp).semantics { contentDescription = label; if (invalid) error(errorText) },
-                decorationBox = { input -> Box(Modifier.fillMaxWidth().heightIn(min = 52.dp).padding(12.dp), contentAlignment = Alignment.Center) { input() } })
+                keyboardOptions = KeyboardOptions(keyboardType = keyboardType),
+                cursorBrush = SolidColor(c.primary),
+                textStyle = MaterialTheme.typography.bodyMedium.copy(color = c.text, textAlign = TextAlign.Center),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .heightIn(min = 48.dp)
+                    .testTag(fieldTag)
+                    .semantics {
+                        contentDescription = label
+                        if (invalid) error(errorText)
+                    },
+                decorationBox = { input ->
+                    Box(
+                        Modifier
+                            .fillMaxWidth()
+                            .heightIn(min = 48.dp)
+                            .padding(horizontal = 6.dp, vertical = 10.dp),
+                        contentAlignment = Alignment.Center
+                    ) { input() }
+                }
+            )
         }
     }
 }

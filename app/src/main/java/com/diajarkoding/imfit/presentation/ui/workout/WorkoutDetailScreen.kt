@@ -65,7 +65,7 @@ fun WorkoutDetailScreen(
 }
 
 @Composable
-internal fun WorkoutDetailContent(state: WorkoutDetailState, estimatedMinutes: Int,
+internal fun WorkoutDetailContent(state: WorkoutDetailState, estimatedMinutes: Int?,
     onBack: () -> Unit = {}, onEdit: () -> Unit = {}, onDelete: () -> Unit = {},
     onAdd: () -> Unit = {}, onStart: () -> Unit = {}, onRetry: () -> Unit = {}, startPending: Boolean = false) {
     val c = IMFITColors.training
@@ -118,7 +118,7 @@ internal fun WorkoutDetailContent(state: WorkoutDetailState, estimatedMinutes: I
                         Text(if (exercises.isEmpty()) stringResource(R.string.routine_empty_description) else categories.joinToString(" · "), color = c.muted, style = MaterialTheme.typography.bodySmall)
                     }
                 }
-                item { RoutineSummary(exercises.size, exercises.sumOf { it.sets }, estimatedMinutes) }
+                item { RoutineSummary(exercises.size, exercises.sumOf { it.setCount }, estimatedMinutes) }
                 item { RoutineExerciseHeading(exercises.size) }
                 if (exercises.isEmpty()) item { RoutineEmptyExercises(onAdd, editable) }
                 else {
@@ -131,13 +131,13 @@ internal fun WorkoutDetailContent(state: WorkoutDetailState, estimatedMinutes: I
 }
 
 @Composable
-internal fun RoutineSummary(exerciseCount: Int, totalSets: Int, minutes: Int) {
+internal fun RoutineSummary(exerciseCount: Int, totalSets: Int, minutes: Int?) {
     val c = IMFITColors.training
     Surface(color = c.primaryContainer, shape = RoundedCornerShape(16.dp)) {
         Row(Modifier.fillMaxWidth().padding(20.dp), horizontalArrangement = Arrangement.spacedBy(16.dp)) {
             listOf(exerciseCount.toString() to stringResource(R.string.workout_exercises_label),
                 totalSets.toString() to stringResource(R.string.routine_total_sets),
-                (if (exerciseCount == 0) "—" else "±$minutes") to stringResource(R.string.workout_est_minutes)).forEach { (value, label) ->
+                (if (exerciseCount == 0 || minutes == null) "—" else "±$minutes") to stringResource(R.string.workout_est_minutes)).forEach { (value, label) ->
                 Column(Modifier.weight(1f), horizontalAlignment = Alignment.CenterHorizontally,
                     verticalArrangement = Arrangement.spacedBy(4.dp)) {
                     Text(value, Modifier.fillMaxWidth(), color = c.onPrimaryContainer, textAlign = TextAlign.Center,
@@ -163,26 +163,81 @@ internal fun RoutineExerciseHeading(count: Int) {
 @Composable
 internal fun RoutineExerciseRow(exercise: TemplateExercise) {
     val c = IMFITColors.training
+    val target = exercise.formatRoutineTargetSummary()
     Surface(color = c.surface, shape = RoundedCornerShape(12.dp), border = BorderStroke(1.dp, c.border)) {
         Row(Modifier.fillMaxWidth().padding(12.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
             MuscleCategoryArtwork(categoryArtAsset(exercise.muscleCategory), Modifier.size(48.dp, 56.dp).background(c.raised, RoutineControlShape))
             Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
                 Text(exercise.name, color = c.text, style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.SemiBold)
-                val target = when (exercise.trackingType) {
-                    TrackingType.WEIGHT_REPS, TrackingType.BODYWEIGHT_REPS, TrackingType.ASSISTED_REPS, TrackingType.REPS_ONLY ->
-                        stringResource(R.string.routine_target_reps, exercise.sets, exercise.reps?.toString() ?: "—")
-                    TrackingType.DURATION ->
-                        stringResource(R.string.routine_target_duration, exercise.sets, exercise.targetDurationSeconds?.toString() ?: "—")
-                    TrackingType.DISTANCE_DURATION -> if (exercise.targetDistanceMeters != null) {
-                        stringResource(R.string.routine_target_distance_duration, exercise.sets,
-                            exercise.targetDurationSeconds?.toString() ?: "—", exercise.targetDistanceMeters.toString())
-                    } else stringResource(R.string.routine_target_duration, exercise.sets, exercise.targetDurationSeconds?.toString() ?: "—")
-                }
-                Text(stringResource(R.string.routine_prescription, stringResource(exercise.muscleCategory.stringResourceId), target),
-                    color = c.muted, style = MaterialTheme.typography.bodySmall)
+                Text(target, color = c.muted, style = MaterialTheme.typography.bodySmall)
             }
         }
     }
+}
+
+internal fun TemplateExercise.formatRoutineTargetSummary(): String {
+    val rows = when {
+        !setTargets.isNullOrEmpty() -> setTargets
+        sets in 1..20 -> LegacyTargetAdapter.expand(
+            scope = "detail:$id",
+            sets = sets,
+            reps = reps,
+            durationSeconds = targetDurationSeconds,
+            distanceMeters = targetDistanceMeters,
+            restSeconds = restSeconds,
+            trackingType = trackingType
+        )
+        else -> emptyList()
+    }
+    val count = if (rows.isNotEmpty()) rows.size else setCount
+    val durationBased = trackingType == TrackingType.DURATION ||
+        trackingType == TrackingType.DISTANCE_DURATION ||
+        exercise.modality == ExerciseModality.CARDIO ||
+        exercise.modality == ExerciseModality.ISOMETRIC
+
+    if (!durationBased) {
+        val repValues = rows.map { it.reps }
+        if (rows.isNotEmpty() && repValues.all { it != null }) {
+            val nonNull = repValues.map { it!! }
+            val distinct = nonNull.distinct()
+            return if (distinct.size == 1) {
+                "$count x ${distinct.first()} reps"
+            } else {
+                "$count set · ${nonNull.joinToString("/")} reps"
+            }
+        }
+        if (rows.isNotEmpty() && repValues.any { it != null }) {
+            return "$count set · ${repValues.joinToString("/") { it?.toString() ?: "—" }} reps"
+        }
+        return "$count x ${reps?.toString() ?: "—"} reps"
+    }
+
+    val durationValues = rows.map { it.durationSeconds }
+    if (rows.isNotEmpty() && durationValues.all { it != null }) {
+        val nonNull = durationValues.map { it!! }
+        val useMinutes = exercise.modality != ExerciseModality.ISOMETRIC &&
+            nonNull.all { it > 0 && it % 60 == 0 }
+        return if (useMinutes) {
+            val mins = nonNull.map { it / 60 }
+            val distinct = mins.distinct()
+            if (distinct.size == 1) {
+                "$count set · ${distinct.first()} min"
+            } else {
+                "$count set · ${mins.joinToString("/")} min"
+            }
+        } else {
+            val distinct = nonNull.distinct()
+            if (distinct.size == 1) {
+                "$count set · ${distinct.first()} s"
+            } else {
+                "$count set · ${nonNull.joinToString("/")} s"
+            }
+        }
+    }
+    if (rows.isNotEmpty() && durationValues.any { it != null }) {
+        return "$count set · ${durationValues.joinToString("/") { it?.toString() ?: "—" }} s"
+    }
+    return "$count set · ${targetDurationSeconds?.toString() ?: "—"} s"
 }
 
 @Composable

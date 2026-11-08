@@ -71,7 +71,7 @@ class RoutineSessionCutoverTest {
     @Test fun resumeKeepsStableIdCompletedSetsAndIgnoresDeletedRoutine() = runBlocking {
         val fixture = Fixture(null)
         val original = WorkoutSession("original-local-id", routine.id, "Original name", 0,
-            listOf(ExerciseLog(exercise, listOf(WorkoutSet(1, 40f, 8, true)))))
+            listOf(ExerciseLog(exercise, listOf(WorkoutSet(1, 40.0, 8, true)))))
         fixture.active = original
         fixture.routines.response = Result.failure(RoutineError.NotFound())
         val restored = fixture.starter.start(routine.id, original.id)!!
@@ -147,7 +147,7 @@ class RoutineSessionCutoverTest {
                     val template = args[0] as WorkoutTemplate
                     startedTemplate = template
                     WorkoutSession("stable-local-session", template.id, template.name, 0,
-                        template.exercises.map { ExerciseLog(it.exercise, listOf(WorkoutSet(1, 0f, it.reps ?: 0))) })
+                        template.exercises.map { ExerciseLog(it.exercise, listOf(WorkoutSet(1, 0.0, it.reps ?: 0))) })
                         .also { active = it }
                 }
                 else -> error("Unexpected repository access (including Room routine lookup): $method")

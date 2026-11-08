@@ -24,6 +24,7 @@ data class ExerciseSelectionState(
     val allExercises: List<Exercise> = emptyList(),
     val filteredExercises: List<Exercise> = emptyList(),
     val selectedExercises: List<Exercise> = emptyList(),
+    val memberIds: Set<String> = emptySet(),
     val selectedCategory: ExerciseCategory = ExerciseCategory.ALL,
     val searchQuery: String = "",
     val routineName: String = "",
@@ -35,14 +36,23 @@ data class ExerciseSelectionState(
     @StringRes val errorRes: Int? = null,
     @StringRes val appendErrorRes: Int? = null
 ) {
+    val selectedNewExercises: List<Exercise>
+        get() = selectedExercises.filterNot { it.id in memberIds }.distinctBy { it.id }
+
+    val selectedNewIds: Set<String>
+        get() = selectedNewExercises.mapTo(linkedSetOf()) { it.id }
+
     internal fun filtered(query: String = searchQuery, category: ExerciseCategory = selectedCategory): ExerciseSelectionState =
         copy(searchQuery = query, selectedCategory = category, filteredExercises = allExercises.filter { exercise ->
             category.includes(exercise) && (query.isBlank() || exercise.name.contains(query.trim(), ignoreCase = true))
         })
 
-    internal fun toggled(exercise: Exercise): ExerciseSelectionState = copy(selectedExercises =
-        if (selectedExercises.any { it.id == exercise.id }) selectedExercises.filterNot { it.id == exercise.id }
-        else (selectedExercises + exercise).distinctBy { it.id })
+    internal fun toggled(exercise: Exercise): ExerciseSelectionState {
+        if (exercise.id in memberIds || !exercise.isActive) return this
+        return copy(selectedExercises =
+            if (selectedExercises.any { it.id == exercise.id }) selectedExercises.filterNot { it.id == exercise.id }
+            else (selectedExercises + exercise).distinctBy { it.id })
+    }
 }
 
 @HiltViewModel
@@ -81,7 +91,7 @@ class ExerciseSelectionViewModel(
         contextId = selectionContextId
         exclusions = requestedExclusions
         val token = generation
-        _state.value = ExerciseSelectionState(routineName = routineName.orEmpty())
+        _state.value = ExerciseSelectionState(routineName = routineName.orEmpty(), memberIds = requestedExclusions)
         loadJob = scope.launch {
             val owner = authRepository.getLocalUserId()
             if (generation != token) return@launch
@@ -95,7 +105,9 @@ class ExerciseSelectionViewModel(
                     ExerciseCategory.entries.firstOrNull { it.name == name }
                 } ?: ExerciseCategory.ALL
                 _state.update { it.copy(searchQuery = savedStateHandle[QUERY] ?: "", selectedCategory = category) }
-                restoredSelectionIds = savedStateHandle.get<ArrayList<String>>(SELECTION).orEmpty().filterNot { it in exclusions }
+                restoredSelectionIds = savedStateHandle.get<ArrayList<String>>(SELECTION).orEmpty()
+                    .filterNot { it in exclusions }
+                    .distinct()
             } else {
                 restoredSelectionIds = emptyList()
                 persist()
@@ -286,7 +298,7 @@ class ExerciseSelectionViewModel(
         savedStateHandle[CONTEXT] = contextId
         savedStateHandle[QUERY] = _state.value.searchQuery
         savedStateHandle[CATEGORY] = _state.value.selectedCategory.name
-        savedStateHandle[SELECTION] = ArrayList(restoredSelectionIds.ifEmpty { _state.value.selectedExercises.map { it.id } })
+        savedStateHandle[SELECTION] = ArrayList(restoredSelectionIds.ifEmpty { _state.value.selectedNewExercises.map { it.id } })
     }
 
     private companion object {

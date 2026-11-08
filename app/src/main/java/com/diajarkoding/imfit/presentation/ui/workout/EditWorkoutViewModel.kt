@@ -27,26 +27,156 @@ import kotlinx.serialization.json.Json
 import java.util.UUID
 import javax.inject.Inject
 
-data class RawExerciseConfig(
-    val sets: String,
-    val reps: String = "",
-    val trackingType: TrackingType = TrackingType.WEIGHT_REPS,
-    val durationSeconds: String = "",
-    val distanceMeters: String = ""
+@Serializable
+data class RawSetTargetDraft(
+    @SerialName("id") val rowId: String = UUID.randomUUID().toString(),
+    @SerialName("w") val weight: String = "",
+    @SerialName("r") val reps: String = "",
+    @SerialName("d") val duration: String = "",
+    @SerialName("rest") val rest: String = "60"
 ) {
-    val isValid: Boolean get() {
-        val setsNum = sets.toIntOrNull() ?: return false
-        if (setsNum !in 1..20) return false
-        return when (trackingType) {
-            TrackingType.WEIGHT_REPS,
-            TrackingType.BODYWEIGHT_REPS,
-            TrackingType.ASSISTED_REPS,
-            TrackingType.REPS_ONLY -> (reps.toIntOrNull() ?: 0) in 1..100
-            TrackingType.DURATION -> (durationSeconds.toIntOrNull() ?: 0) in 1..86400
-            TrackingType.DISTANCE_DURATION -> (durationSeconds.toIntOrNull() ?: 0) in 1..86400 &&
-                (distanceMeters.isBlank() || (distanceMeters.toIntOrNull() ?: 0) in 1..1000000)
-        }
+    fun parsedWeightKg(): Double? =
+        weight.trim().replace(',', '.').toDoubleOrNull()?.takeIf { it.isTwoDecimalIn(0.0, 1000.0) }
+
+    fun parsedReps(): Int? =
+        reps.trim().toIntOrNull()?.takeIf { it in 1..100 }
+
+    fun parsedDurationSeconds(): Int? =
+        parseRoutineDurationSeconds(duration.trim())
+
+    fun parsedRestSeconds(): Int? =
+        rest.trim().toIntOrNull()?.takeIf { it in 0..600 }
+
+    fun isWeightValid(trackingType: TrackingType): Boolean = when (trackingType) {
+        TrackingType.DURATION, TrackingType.DISTANCE_DURATION -> true
+        else -> parsedWeightKg() != null
     }
+
+    fun isRepsValid(trackingType: TrackingType): Boolean = when (trackingType) {
+        TrackingType.DURATION, TrackingType.DISTANCE_DURATION -> true
+        else -> parsedReps() != null
+    }
+
+    fun isDurationValid(trackingType: TrackingType): Boolean = when (trackingType) {
+        TrackingType.DURATION, TrackingType.DISTANCE_DURATION -> parsedDurationSeconds() != null
+        else -> true
+    }
+
+    val isRestValid: Boolean get() = parsedRestSeconds() != null
+
+    fun isValidFor(trackingType: TrackingType): Boolean =
+        rowId.isNotBlank() &&
+            isWeightValid(trackingType) &&
+            isRepsValid(trackingType) &&
+            isDurationValid(trackingType) &&
+            isRestValid
+
+    fun toSetTarget(setNumber: Int, trackingType: TrackingType): SetTarget {
+        val durationBased = trackingType == TrackingType.DURATION || trackingType == TrackingType.DISTANCE_DURATION
+        return SetTarget(
+            rowId = rowId,
+            setNumber = setNumber,
+            weightKg = if (durationBased) null else parsedWeightKg(),
+            reps = if (durationBased) null else parsedReps(),
+            durationSeconds = if (durationBased) parsedDurationSeconds() else null,
+            restSeconds = parsedRestSeconds() ?: 60
+        )
+    }
+}
+
+data class RawExerciseConfig(
+    val trackingType: TrackingType = TrackingType.WEIGHT_REPS,
+    val setRows: List<RawSetTargetDraft> = emptyList()
+) {
+    val sets: String get() = setRows.size.toString()
+    val reps: String get() = setRows.firstOrNull()?.reps.orEmpty()
+    val durationSeconds: String get() = setRows.firstOrNull()?.duration.orEmpty()
+
+    val isValid: Boolean
+        get() = setRows.size in 1..MAX_ROUTINE_SET_ROWS &&
+            setRows.map { it.rowId }.distinct().size == setRows.size &&
+            setRows.all { it.isValidFor(trackingType) }
+}
+
+internal const val MAX_ROUTINE_SET_ROWS = 20
+
+internal fun Exercise.v3TrackingType(): TrackingType = when (modality) {
+    ExerciseModality.CARDIO, ExerciseModality.ISOMETRIC -> TrackingType.DURATION
+    ExerciseModality.STRENGTH, ExerciseModality.CALISTHENICS -> TrackingType.WEIGHT_REPS
+    ExerciseModality.CONDITIONING ->
+        if (defaultTrackingType == TrackingType.DURATION || defaultTrackingType == TrackingType.DISTANCE_DURATION) {
+            TrackingType.DURATION
+        } else {
+            TrackingType.WEIGHT_REPS
+        }
+}
+
+internal fun Exercise.defaultInitialRowCount(): Int = when (modality) {
+    ExerciseModality.CARDIO -> when (trackingProfile) {
+        TrackingProfile.DISTANCE_ACTIVITY, TrackingProfile.EQUIPMENT_METRICS -> 1
+        TrackingProfile.DURATION_ONLY -> 3
+        null -> if (defaultTrackingType == TrackingType.DISTANCE_DURATION || TrackingType.DISTANCE_DURATION in allowedTrackingTypes) 1 else 3
+    }
+    ExerciseModality.STRENGTH,
+    ExerciseModality.CALISTHENICS,
+    ExerciseModality.ISOMETRIC,
+    ExerciseModality.CONDITIONING -> 3
+}
+
+internal fun Exercise.toV3Exercise(): Exercise {
+    if (validTrackingMetadata(modality, defaultTrackingType, trackingProfile, supportedMetrics)) return this
+    val normalizedModality = if (modality == ExerciseModality.CALISTHENICS) ExerciseModality.STRENGTH else modality
+    val normalizedType = v3TrackingType()
+    val normalizedProfile = when (normalizedModality) {
+        ExerciseModality.CARDIO -> trackingProfile ?: if (
+            defaultTrackingType == TrackingType.DISTANCE_DURATION || TrackingType.DISTANCE_DURATION in allowedTrackingTypes
+        ) TrackingProfile.DISTANCE_ACTIVITY else TrackingProfile.DURATION_ONLY
+        else -> null
+    }
+    val normalizedMetrics = when (normalizedModality) {
+        ExerciseModality.CARDIO -> when (normalizedProfile) {
+            TrackingProfile.DURATION_ONLY -> emptyList()
+            TrackingProfile.DISTANCE_ACTIVITY -> supportedMetrics.filter {
+                it == CardioMetric.DISTANCE || it == CardioMetric.SPEED || it == CardioMetric.LAPS
+            }
+            TrackingProfile.EQUIPMENT_METRICS -> supportedMetrics
+            null -> emptyList()
+        }
+        else -> emptyList()
+    }
+    val normalizedAllowed = (listOf(normalizedType) + allowedTrackingTypes).distinct()
+    return copy(
+        modality = normalizedModality,
+        defaultTrackingType = normalizedType,
+        allowedTrackingTypes = normalizedAllowed,
+        trackingProfile = normalizedProfile,
+        supportedMetrics = normalizedMetrics
+    )
+}
+
+internal fun defaultSetTargetDraft(trackingType: TrackingType): RawSetTargetDraft =
+    if (trackingType == TrackingType.DURATION || trackingType == TrackingType.DISTANCE_DURATION) {
+        RawSetTargetDraft(
+            rowId = UUID.randomUUID().toString(),
+            weight = "",
+            reps = "",
+            duration = "00:01:00",
+            rest = "60"
+        )
+    } else {
+        RawSetTargetDraft(
+            rowId = UUID.randomUUID().toString(),
+            weight = "0",
+            reps = "10",
+            duration = "",
+            rest = "60"
+        )
+    }
+
+internal fun formatWeightInput(weight: Double): String {
+    val asLong = weight.toLong()
+    return if (weight == asLong.toDouble()) asLong.toString()
+    else weight.toBigDecimal().stripTrailingZeros().toPlainString()
 }
 
 data class EditWorkoutState(
@@ -74,36 +204,58 @@ data class EditWorkoutState(
 @Serializable
 private data class DraftRow(
     val id: String,
-    val sets: String,
-    val reps: String,
-    val trackingType: String? = null,
-    val durationSeconds: String? = null,
-    val distanceMeters: String? = null
+    @SerialName("t") val trackingType: String? = null,
+    @SerialName("r") val setRows: List<RawSetTargetDraft> = emptyList()
 )
 
 @Serializable
 private data class CommandExercise(
     val id: String, val name: String, val category: String,
-    val active: Boolean, val sets: Int, val reps: Int?,
+    val active: Boolean = true, val sets: Int = 3, val reps: Int? = null,
     val trackingType: String? = null,
     val targetDurationSeconds: Int? = null,
     val targetDistanceMeters: Int? = null,
     @SerialName("rest") val legacyRest: Int? = null,
     val modality: ExerciseModality? = null,
     val defaultTrackingType: TrackingType? = null,
-    val allowedTrackingTypes: List<TrackingType>? = null
+    val allowedTrackingTypes: List<TrackingType>? = null,
+    val trackingProfile: TrackingProfile? = null,
+    val supportedMetrics: List<CardioMetric> = emptyList(),
+    @SerialName("targets") val setTargets: List<SetTarget>? = null,
+    @SerialName("mv") val measurementVersion: Int? = null
 ) {
-    fun template() = TemplateExercise(
-        Exercise(id, name, MuscleCategory.valueOf(category), "", null, active,
-            defaultTrackingType = defaultTrackingType ?: trackingType?.let(TrackingType::valueOf) ?: TrackingType.WEIGHT_REPS,
+    fun template(): TemplateExercise {
+        val parsedTracking = trackingType?.let(TrackingType::valueOf) ?: TrackingType.WEIGHT_REPS
+        val defTracking = defaultTrackingType ?: parsedTracking
+        val allowed = allowedTrackingTypes ?: listOf(defTracking)
+        val rawExercise = Exercise(
+            id = id,
+            name = name,
+            muscleCategory = MuscleCategory.valueOf(category),
+            description = "",
+            imageUrl = null,
+            isActive = active,
+            defaultTrackingType = defTracking,
             modality = modality ?: ExerciseModality.STRENGTH,
-            allowedTrackingTypes = allowedTrackingTypes ?: listOf(trackingType?.let(TrackingType::valueOf) ?: TrackingType.WEIGHT_REPS)),
-        sets = sets, reps = reps, restSeconds = legacyRest ?: 60,
-        trackingType = trackingType?.let(TrackingType::valueOf) ?: TrackingType.WEIGHT_REPS,
-        targetDurationSeconds = targetDurationSeconds,
-        targetDistanceMeters = targetDistanceMeters,
-        legacyRestSeconds = legacyRest
-    )
+            allowedTrackingTypes = if (defTracking in allowed) allowed else listOf(defTracking) + allowed,
+            trackingProfile = trackingProfile,
+            supportedMetrics = supportedMetrics
+        )
+        val exercise = if (measurementVersion == 3) rawExercise.toV3Exercise() else rawExercise
+        val effectiveTracking = if (measurementVersion == 3) exercise.defaultTrackingType else parsedTracking
+        return TemplateExercise(
+            exercise = exercise,
+            sets = if (measurementVersion == 3) setTargets?.size ?: sets else sets,
+            reps = if (measurementVersion == 3) setTargets?.firstOrNull()?.reps else reps,
+            restSeconds = if (measurementVersion == 3) setTargets?.firstOrNull()?.restSeconds ?: 60 else (legacyRest ?: 60),
+            trackingType = effectiveTracking,
+            targetDurationSeconds = if (measurementVersion == 3) setTargets?.firstOrNull()?.durationSeconds else targetDurationSeconds,
+            targetDistanceMeters = if (measurementVersion == 3) null else targetDistanceMeters,
+            legacyRestSeconds = if (measurementVersion == 3) null else legacyRest,
+            setTargets = setTargets,
+            measurementVersion = measurementVersion
+        )
+    }
 }
 
 @Serializable
@@ -224,8 +376,13 @@ class EditWorkoutViewModel(
                         ?: throw RoutineError.NotFound()
                     if (!ownsDraft()) return@launch
                     if (routine.userId != draft.ownerId) { invalidateAccount(); return@launch }
-                    durable = draft.copy(name = routine.name, rows = routine.exercises.map { it.row() },
-                        revision = routine.revision, baselineIds = routine.exercises.map { it.id }, loaded = true)
+                    durable = draft.copy(
+                        name = routine.name,
+                        rows = routine.exercises.map { it.toDraftRow(draft.routineId) },
+                        revision = routine.revision,
+                        baselineIds = routine.exercises.map { it.id },
+                        loaded = true
+                    )
                     persist()
                     publishDraft(routine.exercises.map { it.exercise })
                 }
@@ -253,39 +410,47 @@ class EditWorkoutViewModel(
     private fun publishDraft(exercises: List<Exercise>) {
         val draft = durable ?: return
         val byId = exercises.associateBy { it.id }
-        val templates = draft.rows.map { row ->
-            val ex = byId.getValue(row.id)
-            val parsedTracking = row.trackingType?.let(TrackingType::valueOf)
-                ?: ex.defaultTrackingType
-            TemplateExercise(
-                exercise = ex,
-                sets = row.sets.toIntOrNull() ?: 3,
-                reps = row.reps.toIntOrNull(),
-                trackingType = parsedTracking,
-                targetDurationSeconds = row.durationSeconds?.toIntOrNull(),
-                targetDistanceMeters = row.distanceMeters?.toIntOrNull()
-            )
-        }
         val raw = draft.rows.associate { row ->
             val ex = byId.getValue(row.id)
-            val parsedTracking = row.trackingType?.let(TrackingType::valueOf)
-                ?: ex.defaultTrackingType
+            val parsedTracking = ex.v3TrackingType()
             row.id to RawExerciseConfig(
-                sets = row.sets,
-                reps = row.reps,
                 trackingType = parsedTracking,
-                durationSeconds = row.durationSeconds ?: "",
-                distanceMeters = row.distanceMeters ?: ""
+                setRows = row.setRows
             )
         }
-        _state.value = _state.value.copy(workoutName = draft.name, exercises = templates, rawConfigs = raw,
-            baseRevision = draft.revision, hasLoaded = true, isLoading = false, isDirty = draft.dirty,
+        val templates = draft.rows.map { row ->
+            val ex = byId.getValue(row.id).toV3Exercise()
+            val config = raw.getValue(row.id)
+            val targets = config.setRows.mapIndexed { index, setRow ->
+                setRow.toSetTarget(setNumber = index + 1, trackingType = config.trackingType)
+            }
+            TemplateExercise(
+                exercise = ex,
+                sets = targets.size,
+                reps = targets.firstOrNull()?.reps,
+                restSeconds = targets.firstOrNull()?.restSeconds ?: 60,
+                trackingType = config.trackingType,
+                targetDurationSeconds = targets.firstOrNull()?.durationSeconds,
+                targetDistanceMeters = null,
+                setTargets = targets,
+                measurementVersion = 3
+            )
+        }
+        _state.value = _state.value.copy(
+            workoutName = draft.name,
+            exercises = templates,
+            rawConfigs = raw,
+            baseRevision = draft.revision,
+            hasLoaded = true,
+            isLoading = false,
+            isDirty = draft.dirty,
             hasPendingSave = draft.command != null,
             invalidConfigIds = templates.filter {
                 val config = raw.getValue(it.id)
-                !config.isValid || !it.exercise.supportsRoutinePrescription() || config.trackingType !in it.exercise.allowedTrackingTypes
+                !config.isValid || !it.exercise.supportsRoutinePrescription()
             }.map { it.id }.toSet(),
-            errorRes = null)
+            errorRes = null
+        )
     }
     private fun canEdit() = _state.value.let {
         it.hasLoaded && !it.isLoading && !it.isSaving && !it.hasPendingSave &&
@@ -306,27 +471,60 @@ class EditWorkoutViewModel(
 
     fun updateRawConfig(id: String, config: RawExerciseConfig) {
         val exercise = _state.value.exercises.find { it.id == id }?.exercise ?: return
-        if (!exercise.supportsRoutinePrescription() || config.trackingType !in exercise.allowedTrackingTypes) return
-        mutate { draft -> draft.copy(rows = draft.rows.map { row ->
-            if (row.id == id) DraftRow(id, config.sets, config.reps,
-                config.trackingType.name, config.durationSeconds, config.distanceMeters) else row
-        }) }
+        if (!exercise.supportsRoutinePrescription()) return
+        val mode = exercise.v3TrackingType()
+        mutate { draft ->
+            draft.copy(rows = draft.rows.map { row ->
+                if (row.id == id) DraftRow(id, mode.name, config.setRows) else row
+            })
+        }
     }
 
-    fun changeTrackingMode(id: String, mode: TrackingType) {
-        val exercise = _state.value.exercises.find { it.id == id }?.exercise ?: return
-        if (mode !in exercise.allowedTrackingTypes) return
-        val current = _state.value.rawConfigs[id] ?: return
-        if (mode == current.trackingType) return
-        val repetitions = mode in listOf(TrackingType.WEIGHT_REPS, TrackingType.BODYWEIGHT_REPS,
-            TrackingType.ASSISTED_REPS, TrackingType.REPS_ONLY)
-        val duration = mode == TrackingType.DURATION || mode == TrackingType.DISTANCE_DURATION
-        updateRawConfig(id, current.copy(
-            trackingType = mode,
-            reps = if (repetitions) current.reps else "",
-            durationSeconds = if (duration) current.durationSeconds else "",
-            distanceMeters = if (mode == TrackingType.DISTANCE_DURATION) current.distanceMeters else ""
-        ))
+    fun addSetRow(exerciseId: String) {
+        val exercise = _state.value.exercises.find { it.id == exerciseId }?.exercise ?: return
+        if (!exercise.supportsRoutinePrescription()) return
+        val mode = exercise.v3TrackingType()
+        mutate { draft ->
+            draft.copy(rows = draft.rows.map { row ->
+                if (row.id != exerciseId || row.setRows.size >= MAX_ROUTINE_SET_ROWS) row
+                else row.copy(
+                    trackingType = mode.name,
+                    setRows = row.setRows + defaultSetTargetDraft(mode)
+                )
+            })
+        }
+    }
+
+    fun removeSetRow(exerciseId: String, rowId: String) {
+        val exercise = _state.value.exercises.find { it.id == exerciseId }?.exercise ?: return
+        if (!exercise.supportsRoutinePrescription()) return
+        mutate { draft ->
+            draft.copy(rows = draft.rows.map { row ->
+                if (row.id != exerciseId) row
+                else row.copy(setRows = row.setRows.filterNot { it.rowId == rowId })
+            })
+        }
+    }
+
+    fun updateSetRow(exerciseId: String, updated: RawSetTargetDraft) {
+        updateSetRow(exerciseId, updated.rowId) { updated }
+    }
+
+    fun updateSetRow(
+        exerciseId: String,
+        rowId: String,
+        transform: (RawSetTargetDraft) -> RawSetTargetDraft
+    ) {
+        val exercise = _state.value.exercises.find { it.id == exerciseId }?.exercise ?: return
+        if (!exercise.supportsRoutinePrescription()) return
+        mutate { draft ->
+            draft.copy(rows = draft.rows.map { row ->
+                if (row.id != exerciseId) row
+                else row.copy(setRows = row.setRows.map { setRow ->
+                    if (setRow.rowId == rowId) transform(setRow).copy(rowId = rowId) else setRow
+                })
+            })
+        }
     }
 
     fun removeExercise(index: Int) = mutate { draft ->
@@ -351,13 +549,24 @@ class EditWorkoutViewModel(
         if (!canEdit()) return false
         val existing = draft.rows.map { it.id }.toSet()
         val additions = result.selectedExercises.distinctBy { it.id }.filterNot { it.id in existing }
-        durable = draft.copy(loaded = true, rows = draft.rows + additions.map {
-            if (it.supportsRoutinePrescription()) {
-                val mode = it.defaultTrackingType
-                val reps = if (mode == TrackingType.DURATION || mode == TrackingType.DISTANCE_DURATION) "" else "10"
-                DraftRow(it.id, "3", reps, mode.name, "", "")
-            } else DraftRow(it.id, "", "")
-        }, dirty = draft.dirty || additions.isNotEmpty(), acceptedResults = draft.acceptedResults + result.resultId)
+        durable = draft.copy(
+            loaded = true,
+            rows = draft.rows + additions.map { ex ->
+                val mode = ex.v3TrackingType()
+                if (ex.supportsRoutinePrescription()) {
+                    val count = ex.defaultInitialRowCount()
+                    DraftRow(
+                        id = ex.id,
+                        trackingType = mode.name,
+                        setRows = List(count) { defaultSetTargetDraft(mode) }
+                    )
+                } else {
+                    DraftRow(id = ex.id, trackingType = mode.name, setRows = emptyList())
+                }
+            },
+            dirty = draft.dirty || additions.isNotEmpty(),
+            acceptedResults = draft.acceptedResults + result.resultId
+        )
         persist()
         publishDraft(_state.value.exercises.map { it.exercise } + additions)
         return true
@@ -372,15 +581,34 @@ class EditWorkoutViewModel(
             if (draft.name.isBlank()) _state.value = state.copy(nameErrorRes = R.string.error_template_name_required)
             return
         }
-        val command = draft.command ?: SaveCommand(UUID.randomUUID().toString(), draft.name.trim(),
-            state.exercises.map { row -> CommandExercise(
-                id = row.id, name = row.name, category = row.exercise.muscleCategory.name,
-                active = row.exercise.isActive, sets = row.sets, reps = row.reps,
-                trackingType = row.trackingType.name,
-                targetDurationSeconds = row.targetDurationSeconds, targetDistanceMeters = row.targetDistanceMeters,
-                modality = row.exercise.modality, defaultTrackingType = row.exercise.defaultTrackingType,
-                allowedTrackingTypes = row.exercise.allowedTrackingTypes) },
-            draft.revision, draft.baselineIds)
+        val command = draft.command ?: SaveCommand(
+            requestId = UUID.randomUUID().toString(),
+            name = draft.name.trim(),
+            exercises = state.exercises.map { row ->
+                val v3Ex = row.exercise.toV3Exercise()
+                val targets = requireNotNull(row.setTargets)
+                CommandExercise(
+                    id = row.id,
+                    name = row.name,
+                    category = v3Ex.muscleCategory.name,
+                    active = v3Ex.isActive,
+                    sets = targets.size,
+                    reps = targets.firstOrNull()?.reps,
+                    trackingType = v3Ex.defaultTrackingType.name,
+                    targetDurationSeconds = targets.firstOrNull()?.durationSeconds,
+                    targetDistanceMeters = null,
+                    modality = v3Ex.modality,
+                    defaultTrackingType = v3Ex.defaultTrackingType,
+                    allowedTrackingTypes = v3Ex.allowedTrackingTypes,
+                    trackingProfile = v3Ex.trackingProfile,
+                    supportedMetrics = v3Ex.supportedMetrics,
+                    setTargets = targets,
+                    measurementVersion = 3
+                )
+            },
+            revision = draft.revision,
+            baselineIds = draft.baselineIds
+        )
         durable = draft.copy(command = command)
         persist() // Save the immutable command BEFORE dispatch, including its request identity.
         _state.value = state.copy(isSaving = true, hasPendingSave = false, errorRes = null, showErrorDialog = false)
@@ -422,14 +650,44 @@ class EditWorkoutViewModel(
 
     fun dismissErrorDialog() { _state.value = _state.value.copy(showErrorDialog = false) }
 
-    private fun TemplateExercise.row() = DraftRow(
-        id = id,
-        sets = sets.toString(),
-        reps = reps?.toString() ?: "",
-        trackingType = trackingType.name,
-        durationSeconds = targetDurationSeconds?.toString() ?: "",
-        distanceMeters = targetDistanceMeters?.toString() ?: ""
-    )
+    private fun TemplateExercise.toDraftRow(routineId: String): DraftRow {
+        val mode = exercise.v3TrackingType()
+        val durationBased = mode == TrackingType.DURATION || mode == TrackingType.DISTANCE_DURATION
+        val targets = if (measurementVersion == 3 && !setTargets.isNullOrEmpty()) {
+            setTargets
+        } else {
+            expandedLegacyTargets("$routineId:$id")
+        }
+        val rows = targets.map { target ->
+            if (durationBased) {
+                val formattedDuration = when {
+                    target.durationSeconds != null -> formatDurationHhMmSs(target.durationSeconds)
+                    exercise.modality == ExerciseModality.ISOMETRIC -> "00:01:00"
+                    else -> ""
+                }
+                RawSetTargetDraft(
+                    rowId = target.rowId,
+                    weight = "",
+                    reps = "",
+                    duration = formattedDuration,
+                    rest = target.restSeconds.toString()
+                )
+            } else {
+                RawSetTargetDraft(
+                    rowId = target.rowId,
+                    weight = target.weightKg?.let(::formatWeightInput).orEmpty(),
+                    reps = target.reps?.toString().orEmpty(),
+                    duration = "",
+                    rest = target.restSeconds.toString()
+                )
+            }
+        }
+        return DraftRow(
+            id = id,
+            trackingType = mode.name,
+            setRows = rows
+        )
+    }
     private fun Exercise.supportsRoutinePrescription() = isActive
 
     companion object { const val DRAFT_KEY = "routine_editor_durable_draft" }

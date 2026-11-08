@@ -69,10 +69,11 @@ fun ExerciseSelectionScreen(
         onLoadNext = viewModel::loadNextPage,
         onFilter = { filterSheet = true },
         onConfirm = {
-            if (!confirmed && state.selectedExercises.isNotEmpty()) {
+            val newSelections = state.selectedNewExercises
+            if (!confirmed && newSelections.isNotEmpty()) {
                 focusManager.clearFocus()
                 confirmed = true
-                onExercisesSelected(state.selectedExercises)
+                onExercisesSelected(newSelections)
             }
         },
         enabled = !confirmed
@@ -134,23 +135,24 @@ internal fun ExercisePickerContent(
             )
         },
         bottomBar = {
+            val selectedNewCount = state.selectedNewIds.size
             RoutineFooter(topPadding = 4.dp, contentGap = 4.dp) {
                 Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
                     Text(
-                        stringResource(R.string.routine_selected_count, state.selectedExercises.size),
+                        stringResource(R.string.routine_selected_count, selectedNewCount),
                         Modifier.weight(1f),
                         color = c.primary,
                         style = MaterialTheme.typography.labelMedium
                     )
-                    TextButton(onReset, enabled = enabled && state.selectedExercises.isNotEmpty()) {
+                    TextButton(onReset, enabled = enabled && selectedNewCount > 0) {
                         Text(stringResource(R.string.routine_reset), color = c.primary)
                     }
                 }
                 RoutineButton(
-                    if (state.selectedExercises.isEmpty()) stringResource(R.string.routine_add_selected)
-                    else stringResource(R.string.routine_add_count, state.selectedExercises.size),
+                    if (selectedNewCount == 0) stringResource(R.string.routine_add_selected)
+                    else stringResource(R.string.routine_add_count, selectedNewCount),
                     onConfirm,
-                    enabled = enabled && !state.isLoading && state.selectedExercises.isNotEmpty()
+                    enabled = enabled && !state.isLoading && selectedNewCount > 0
                 )
             }
         }
@@ -272,8 +274,14 @@ internal fun ExercisePickerContent(
                         }
                     }
                     items(state.filteredExercises, key = { it.id }) { exercise ->
-                        ExercisePickerRow(exercise, state.selectedExercises.any { it.id == exercise.id },
-                            enabled && !state.isLoading && exercise.isActive) { onToggle(exercise) }
+                        val isMember = exercise.id in state.memberIds
+                        val isSelected = !isMember && exercise.id in state.selectedNewIds
+                        ExercisePickerRow(
+                            exercise = exercise,
+                            selected = isSelected,
+                            enabled = enabled && !state.isLoading && exercise.isActive && !isMember,
+                            isMember = isMember
+                        ) { onToggle(exercise) }
                     }
                     if (state.isAppending) {
                         item(key = "append_progress") {
@@ -301,8 +309,19 @@ internal fun ExercisePickerContent(
 }
 
 @Composable
-internal fun ExercisePickerRow(exercise: Exercise, selected: Boolean, enabled: Boolean = true, onToggle: () -> Unit) {
+internal fun ExercisePickerRow(
+    exercise: Exercise,
+    selected: Boolean,
+    enabled: Boolean = true,
+    isMember: Boolean = false,
+    onToggle: () -> Unit
+) {
     val c = IMFITColors.training
+    val statusSuffix = when {
+        isMember -> " · " + stringResource(R.string.routine_already_added)
+        selected -> " · " + stringResource(R.string.routine_selected)
+        else -> ""
+    }
     Surface(
         shape = RoundedCornerShape(12.dp),
         color = if (selected) c.primaryContainer else c.surface,
@@ -312,7 +331,7 @@ internal fun ExercisePickerRow(exercise: Exercise, selected: Boolean, enabled: B
             Modifier
                 .fillMaxWidth()
                 .testTag("exercise_row_${exercise.id}")
-                .toggleable(selected, enabled = enabled, role = Role.Checkbox, onValueChange = { onToggle() })
+                .toggleable(selected, enabled = enabled && !isMember, role = Role.Checkbox, onValueChange = { onToggle() })
                 .padding(12.dp),
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(12.dp)
@@ -321,32 +340,15 @@ internal fun ExercisePickerRow(exercise: Exercise, selected: Boolean, enabled: B
             Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
                 Text(exercise.name, color = c.text, style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.SemiBold)
                 Text(
-                    stringResource(exercise.muscleCategory.stringResourceId) + if (selected) " · " + stringResource(R.string.routine_selected) else "",
+                    stringResource(exercise.muscleCategory.stringResourceId) + statusSuffix,
                     color = if (selected) c.onPrimaryContainer else c.muted,
                     style = MaterialTheme.typography.bodySmall
                 )
-                val modalityLabel = stringResource(exercise.modality.labelRes())
-                Surface(
-                    shape = RoundedCornerShape(4.dp),
-                    color = c.raised,
-                    modifier = Modifier.padding(top = 2.dp)
-                ) {
-                    Text(
-                        text = modalityLabel,
-                        color = c.muted,
-                        style = MaterialTheme.typography.labelSmall,
-                        modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
-                    )
-                }
-                if (exercise.allowedTrackingTypes.size > 1) {
-                    Text(exercise.allowedTrackingTypes.map { stringResource(it.trackingLabelRes()) }.joinToString(" · "),
-                        color = c.muted, style = MaterialTheme.typography.bodySmall)
-                }
             }
             Checkbox(
                 selected,
                 onCheckedChange = null,
-                enabled = enabled,
+                enabled = enabled && !isMember,
                 modifier = Modifier.size(48.dp),
                 colors = CheckboxDefaults.colors(
                     checkedColor = c.primary,

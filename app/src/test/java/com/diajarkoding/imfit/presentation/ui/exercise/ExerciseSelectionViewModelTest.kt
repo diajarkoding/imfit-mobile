@@ -311,6 +311,36 @@ class ExerciseSelectionViewModelTest {
         }
     }
 
+    @Test fun memberIdsStayDisjointFromSelectedNewIdsAcrossResetAndReopenWithExpandedDraft() {
+        val saved = SavedStateHandle()
+        Harness(saved).use { h ->
+            h.catalog.fetch = { page(listOf(bench, row, squat)) }
+            h.vm.initialize("routine", excludedIds = setOf(bench.id), routineName = "Push", selectionContextId = "flow")
+            assertEquals(setOf(bench.id), h.vm.state.value.memberIds)
+            assertEquals(listOf(row, squat), h.vm.state.value.filteredExercises)
+            h.vm.toggleExercise(bench) // member cannot be selected
+            assertTrue(h.vm.state.value.selectedNewIds.isEmpty())
+            h.vm.toggleExercise(row)
+            h.vm.toggleExercise(squat)
+            assertEquals(setOf(row.id, squat.id), h.vm.state.value.selectedNewIds)
+
+            // Reopen in same flow after `row` was accepted into the draft (now in excludedIds)
+            h.catalog.hydrate = { ids ->
+                assertEquals(listOf(squat.id), ids)
+                ExerciseHydrationResult.Success(listOf(squat))
+            }
+            h.vm.initialize("routine", excludedIds = setOf(bench.id, row.id), routineName = "Push", selectionContextId = "flow")
+            assertEquals(setOf(bench.id, row.id), h.vm.state.value.memberIds)
+            assertEquals(setOf(squat.id), h.vm.state.value.selectedNewIds)
+            assertEquals(listOf(squat), h.vm.state.value.filteredExercises)
+
+            // Reset clears only new selections, never memberIds
+            h.vm.resetSelection()
+            assertTrue(h.vm.state.value.selectedNewIds.isEmpty())
+            assertEquals(setOf(bench.id, row.id), h.vm.state.value.memberIds)
+        }
+    }
+
     private class Harness(val saved: SavedStateHandle = SavedStateHandle()) : Closeable {
         val scope = CoroutineScope(SupervisorJob() + Dispatchers.Unconfined)
         val auth = PickerAuth()

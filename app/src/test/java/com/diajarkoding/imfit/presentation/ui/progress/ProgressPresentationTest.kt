@@ -8,7 +8,7 @@ import java.time.*
 class ProgressPresentationTest {
     private fun log(start: Instant, volume: Float = 100f): WorkoutLog = WorkoutLog(
         start.toString(), "user", "workout", start.toEpochMilli(), start.toEpochMilli(), start.plusSeconds(3600).toEpochMilli(), volume,
-        listOf(ExerciseLog(Exercise("ex", "Exercise", MuscleCategory.CHEST, ""), listOf(WorkoutSet(1, 10f, 10, true), WorkoutSet(2, 10f, 10, false)))))
+        listOf(ExerciseLog(Exercise("ex", "Exercise", MuscleCategory.CHEST, ""), listOf(WorkoutSet(1, 10.0, 10, true), WorkoutSet(2, 10.0, 10, false)))))
 
     @Test fun volumeAndDurationUseTheSameCalendarMonthRatherThanWeekOrAllTime() {
         val zone = ZoneId.of("Asia/Jakarta")
@@ -93,7 +93,7 @@ class ProgressPresentationTest {
         val start = Instant.parse("2026-10-13T08:00:00Z")
         val exercises = listOf(
             ExerciseLog(Exercise("ex_chest_1", "Bench", MuscleCategory.CHEST, ""),
-                listOf(WorkoutSet(1, weight = 50f, reps = 10, isCompleted = true))),
+                listOf(WorkoutSet(1, weightKg = (50f).toDouble(), reps = 10, isCompleted = true))),
             ExerciseLog(Exercise("ex_chest_4", "Push up", MuscleCategory.CHEST, "", defaultTrackingType = TrackingType.BODYWEIGHT_REPS, modality = ExerciseModality.CALISTHENICS),
                 listOf(WorkoutSet(1, reps = 20, additionalWeight = 5f, isCompleted = true))),
             ExerciseLog(Exercise("ex_back_17", "Assisted", MuscleCategory.BACK, "", defaultTrackingType = TrackingType.ASSISTED_REPS, modality = ExerciseModality.CALISTHENICS),
@@ -104,7 +104,7 @@ class ProgressPresentationTest {
                 listOf(WorkoutSet(1, durationSeconds = 90, isCompleted = true),
                     WorkoutSet(2, durationSeconds = 900, isCompleted = false))),
             ExerciseLog(Exercise("ex_cardio_1", "Run", MuscleCategory.CARDIO, "", defaultTrackingType = TrackingType.DISTANCE_DURATION, modality = ExerciseModality.CARDIO),
-                listOf(WorkoutSet(1, durationSeconds = 600, distanceMeters = 2000, isCompleted = true))))
+                listOf(WorkoutSet(1, durationSeconds = 600, distanceMeters = 2000.0, isCompleted = true))))
         val session = log(start).copy(exerciseLogs = exercises, totalVolume = 500f,
             additionalVolume = 100f)
         val result = progressMetrics(listOf(session), start.plusSeconds(3600), ZoneOffset.UTC)
@@ -113,7 +113,7 @@ class ProgressPresentationTest {
         assertEquals(68, result.monthlyRepetitions)
         assertEquals(90, result.monthlyHoldDurationSeconds)
         assertEquals(600, result.monthlyCardioDurationSeconds)
-        assertEquals(2000, result.monthlyCardioDistanceMeters)
+        assertEquals(2000.0, result.monthlyCardioDistanceMeters, 0.0)
         assertEquals(60, result.monthlyMinutes)
         assertEquals(0, result.monthlyUnverifiedWorkouts)
     }
@@ -149,20 +149,20 @@ class ProgressPresentationTest {
         assertEquals(0, result.monthlyRepetitions)
         assertEquals(0, result.monthlyHoldDurationSeconds)
         assertEquals(0, result.monthlyCardioDurationSeconds)
-        assertEquals(0, result.monthlyCardioDistanceMeters)
+        assertEquals(0.0, result.monthlyCardioDistanceMeters, 0.0)
     }
 
     @Test fun mixedLegacySessionKeepsVerifiedChildrenWithoutTrustingLegacySessionTotals() {
         val start = Instant.parse("2026-10-13T08:00:00Z")
         val legacy = ExerciseLog(Exercise("ex_chest_1", "Legacy bench", MuscleCategory.CHEST, ""),
-            listOf(WorkoutSet(1, weight = 999f, reps = 99, isCompleted = true)),
+            listOf(WorkoutSet(1, weightKg = (999f).toDouble(), reps = 99, isCompleted = true)),
             metricQuality = "LEGACY_UNVERIFIED")
         val strength = ExerciseLog(Exercise("ex_chest_1", "Verified bench", MuscleCategory.CHEST, ""),
-            listOf(WorkoutSet(1, weight = 40f, reps = 5, isCompleted = true)))
+            listOf(WorkoutSet(1, weightKg = (40f).toDouble(), reps = 5, isCompleted = true)))
         val bodyweight = ExerciseLog(Exercise("ex_chest_4", "Push up", MuscleCategory.CHEST, "", defaultTrackingType = TrackingType.BODYWEIGHT_REPS, modality = ExerciseModality.CALISTHENICS),
             listOf(WorkoutSet(1, reps = 10, additionalWeight = 5f, isCompleted = true)))
         val cardio = ExerciseLog(Exercise("ex_cardio_1", "Run", MuscleCategory.CARDIO, "", defaultTrackingType = TrackingType.DISTANCE_DURATION, modality = ExerciseModality.CARDIO),
-            listOf(WorkoutSet(1, durationSeconds = 600, distanceMeters = 2000, isCompleted = true)))
+            listOf(WorkoutSet(1, durationSeconds = 600, distanceMeters = 2000.0, isCompleted = true)))
         val hold = ExerciseLog(Exercise("ex_core_1", "Plank", MuscleCategory.CORE, "", defaultTrackingType = TrackingType.DURATION, modality = ExerciseModality.ISOMETRIC),
             listOf(WorkoutSet(1, durationSeconds = 30, isCompleted = true)))
         val session = log(start).copy(dataQuality = "LEGACY_UNVERIFIED",
@@ -174,7 +174,7 @@ class ProgressPresentationTest {
         assertEquals(15, result.monthlyRepetitions)
         assertEquals(30, result.monthlyHoldDurationSeconds)
         assertEquals(600, result.monthlyCardioDurationSeconds)
-        assertEquals(2000, result.monthlyCardioDistanceMeters)
+        assertEquals(2000.0, result.monthlyCardioDistanceMeters, 0.0)
         assertEquals(60, result.monthlyMinutes)
         assertEquals(1, result.monthlyWorkouts)
         assertEquals(1, result.monthlyUnverifiedWorkouts)

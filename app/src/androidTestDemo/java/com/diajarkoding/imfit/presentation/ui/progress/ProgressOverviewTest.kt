@@ -76,7 +76,7 @@ class ProgressOverviewTest {
                     Column(Modifier.verticalScroll(rememberScrollState())) {
                         ProgressMetricOverview(ProgressMetrics(YearMonth.of(2026, 10), 500.0, 60, 1, 6,
                             monthlyHoldDurationSeconds = 90, monthlyCardioDurationSeconds = 600,
-                            monthlyCardioDistanceMeters = 2000, monthlyAdditionalVolume = 100.0,
+                            monthlyCardioDistanceMeters = 2000.0, monthlyAdditionalVolume = 100.0,
                             monthlyRepetitions = 68))
                     }
                 }

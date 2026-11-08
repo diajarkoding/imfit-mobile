@@ -28,7 +28,7 @@ class WorkoutHistoryPresentationTest {
             ExerciseLog(
                 exercise = Exercise("ex_$exIndex", "Exercise $exIndex", MuscleCategory.CHEST, ""),
                 sets = (1..completedSetsPerExercise).map { setIndex ->
-                    WorkoutSet(setIndex, totalVolume / (exerciseCount * completedSetsPerExercise), 10, isCompleted = true)
+                    WorkoutSet(setIndex, (totalVolume / (exerciseCount * completedSetsPerExercise)).toDouble(), 10, isCompleted = true)
                 }
             )
         }

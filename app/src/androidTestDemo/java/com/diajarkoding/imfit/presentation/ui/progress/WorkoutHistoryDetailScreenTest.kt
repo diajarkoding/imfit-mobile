@@ -231,15 +231,15 @@ class WorkoutHistoryDetailScreenTest {
             exerciseLogs = listOf(
                 ExerciseLog(
                     exercise = Exercise("1", "Barbell Bench Press", MuscleCategory.CHEST, ""),
-                    sets = (1..3).map { WorkoutSet(it, 100f, 6, isCompleted = true) }
+                    sets = (1..3).map { WorkoutSet(it, 100.0, 6, isCompleted = true) }
                 ),
                 ExerciseLog(
                     exercise = Exercise("2", "Incline Dumbbell Press", MuscleCategory.CHEST, ""),
-                    sets = (1..3).map { WorkoutSet(it, 60f, 6, isCompleted = true) }
+                    sets = (1..3).map { WorkoutSet(it, 60.0, 6, isCompleted = true) }
                 ),
                 ExerciseLog(
                     exercise = Exercise("3", "Triceps Pushdown", MuscleCategory.TRICEPS, ""),
-                    sets = (1..3).map { WorkoutSet(it, 40f, 6, isCompleted = true) }
+                    sets = (1..3).map { WorkoutSet(it, 40.0, 6, isCompleted = true) }
                 )
             )
         )
@@ -255,11 +255,11 @@ class WorkoutHistoryDetailScreenTest {
             exerciseLogs = listOf(
                 ExerciseLog(
                     exercise = Exercise("4", "Goblet Squat", MuscleCategory.LEGS, ""),
-                    sets = (1..3).map { WorkoutSet(it, 50f, 6, isCompleted = true) }
+                    sets = (1..3).map { WorkoutSet(it, 50.0, 6, isCompleted = true) }
                 ),
                 ExerciseLog(
                     exercise = Exercise("5", "Dumbbell Romanian Deadlift", MuscleCategory.LEGS, ""),
-                    sets = (1..3).map { WorkoutSet(it, 50f, 2, isCompleted = true) }
+                    sets = (1..3).map { WorkoutSet(it, 50.0, 2, isCompleted = true) }
                 )
             )
         )

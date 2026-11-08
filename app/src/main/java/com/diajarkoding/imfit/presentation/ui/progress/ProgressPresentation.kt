@@ -14,7 +14,7 @@ data class ProgressMetrics(
     val monthlyCompletedSets: Int,
     val monthlyHoldDurationSeconds: Int = 0,
     val monthlyCardioDurationSeconds: Int = 0,
-    val monthlyCardioDistanceMeters: Int = 0,
+    val monthlyCardioDistanceMeters: Double = 0.0,
     val monthlyAdditionalVolume: Double = 0.0,
     val monthlyRepetitions: Int = 0,
     val monthlyUnverifiedWorkouts: Int = 0,
@@ -37,7 +37,7 @@ internal fun progressMetrics(
     val holdDuration = exercises.filter { it.modality == ExerciseModality.ISOMETRIC }.sumOf { it.totalDurationSeconds }
     val cardio = exercises.filter { it.modality == ExerciseModality.CARDIO || it.modality == ExerciseModality.CONDITIONING }
     val cardioDuration = cardio.sumOf { it.totalDurationSeconds }
-    val cardioDistance = cardio.sumOf { it.totalDistanceMeters }
+    val cardioDistance = cardio.sumOf { it.totalDistanceMeters ?: 0.0 }
     val otherDuration = exercises.sumOf {
         if (it.modality != ExerciseModality.ISOMETRIC && it.modality != ExerciseModality.CARDIO &&
             it.modality != ExerciseModality.CONDITIONING) it.totalDurationSeconds else 0

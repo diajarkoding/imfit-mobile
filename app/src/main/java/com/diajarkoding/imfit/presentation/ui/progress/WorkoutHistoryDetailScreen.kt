@@ -198,9 +198,9 @@ private fun WorkoutHistoryDetailScreenLightPreview() {
                                 ExerciseLog(
                                     exercise = Exercise("1", "Barbell Bench Press", MuscleCategory.CHEST, ""),
                                     sets = listOf(
-                                        WorkoutSet(1, 100f, 6, true),
-                                        WorkoutSet(2, 100f, 6, true),
-                                        WorkoutSet(3, 100f, 6, true)
+                                        WorkoutSet(1, 100.0, 6, true),
+                                        WorkoutSet(2, 100.0, 6, true),
+                                        WorkoutSet(3, 100.0, 6, true)
                                     )
                                 )
                             )

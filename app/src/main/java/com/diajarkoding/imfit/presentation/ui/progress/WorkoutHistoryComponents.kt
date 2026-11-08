@@ -605,7 +605,7 @@ internal fun WorkoutHistoryExerciseRow(
                 TrackingType.BODYWEIGHT_REPS -> if (exerciseLog.additionalVolume > 0f) "+${formatSummaryVolume(exerciseLog.additionalVolume, locale)}" else "${exerciseLog.totalReps} reps"
                 TrackingType.ASSISTED_REPS, TrackingType.REPS_ONLY -> "${exerciseLog.totalReps} reps"
                 TrackingType.DURATION -> "${exerciseLog.totalDurationSeconds}s"
-                TrackingType.DISTANCE_DURATION -> if (exerciseLog.totalDistanceMeters > 0) "${String.format(locale, "%.2f km", exerciseLog.totalDistanceMeters / 1000f)} · ${exerciseLog.totalDurationSeconds}s" else "${exerciseLog.totalDurationSeconds}s"
+                TrackingType.DISTANCE_DURATION -> if ((exerciseLog.totalDistanceMeters ?: 0.0) > 0) "${String.format(locale, "%.2f km", (exerciseLog.totalDistanceMeters ?: 0.0) / 1000.0)} · ${exerciseLog.totalDurationSeconds}s" else "${exerciseLog.totalDurationSeconds}s"
             }
             Text(
                 text = exerciseMetricText,

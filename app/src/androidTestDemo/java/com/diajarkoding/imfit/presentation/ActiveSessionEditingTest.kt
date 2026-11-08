@@ -70,7 +70,7 @@ class ActiveSessionEditingTest {
             runBlocking {
                 repository.mutateActiveSession(original.id) { current -> current.copy(exerciseLogs = current.exerciseLogs.map { log ->
                     if (log.exercise.id != first.id) log else log.copy(sets = log.sets.mapIndexed { index, set ->
-                        if (index == 0) set.copy(isCompleted = true, weight = 20f) else set
+                        if (index == 0) set.copy(isCompleted = true, weightKg = 20.0) else set
                     })
                 }) }
             }
@@ -248,7 +248,7 @@ class ActiveSessionEditingTest {
             assertNull(actual.exerciseLogs.first().sets.single().distanceMeters)
             assertNull(actual.exerciseLogs.first().sets.single().paceSecondsPerKilometer)
             assertEquals(1800, actual.exerciseLogs.last().sets.single().durationSeconds)
-            assertEquals(5000, actual.exerciseLogs.last().sets.single().distanceMeters)
+            assertEquals(5000.0, actual.exerciseLogs.last().sets.single().distanceMeters!!, 0.0)
             assertEquals(360.0, actual.exerciseLogs.last().sets.single().paceSecondsPerKilometer!!, 0.001)
             com.diajarkoding.imfit.presentation.ui.workout.captureWorkoutEvidence("v12-real-cardio-session")
             rule.onNodeWithText(text(R.string.action_finish_workout)).performClick()

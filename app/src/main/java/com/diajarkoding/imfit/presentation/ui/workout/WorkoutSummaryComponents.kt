@@ -123,10 +123,16 @@ internal fun WorkoutSummaryMetrics(
     exerciseLogs: List<ExerciseLog>,
     locale: Locale,
     stacked: Boolean,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    formattedActiveTime: String? = null
 ) {
     Column(modifier.fillMaxWidth().testTag("workout_summary_metrics"), verticalArrangement = Arrangement.spacedBy(8.dp)) {
         SummaryMetricCard(Symbols.Filled.Timer, stringResource(R.string.label_duration), formattedDuration)
+        // v3 only: whole-session time without Pause (includes rest). Distinct from the gross span above and from exercise durations.
+        formattedActiveTime?.let {
+            SummaryMetricCard(Symbols.Filled.Timer, stringResource(R.string.label_active_time), it,
+                Modifier.testTag("workout_summary_active_time"))
+        }
         WorkoutMeasurementMetrics(exerciseLogs, locale, stacked)
     }
 }
@@ -235,7 +241,7 @@ internal fun WorkoutSummaryExerciseCard(
                     TrackingType.BODYWEIGHT_REPS -> if (exerciseLog.additionalVolume > 0f) "+${formatSummaryVolume(exerciseLog.additionalVolume, locale)}" else "${exerciseLog.totalReps} reps"
                     TrackingType.ASSISTED_REPS, TrackingType.REPS_ONLY -> "${exerciseLog.totalReps} reps"
                     TrackingType.DURATION -> "${exerciseLog.totalDurationSeconds}s"
-                    TrackingType.DISTANCE_DURATION -> if (exerciseLog.totalDistanceMeters > 0) "${String.format(locale, "%.2f km", exerciseLog.totalDistanceMeters / 1000f)} · ${exerciseLog.totalDurationSeconds}s" else "${exerciseLog.totalDurationSeconds}s"
+                    TrackingType.DISTANCE_DURATION -> if ((exerciseLog.totalDistanceMeters ?: 0.0) > 0) "${String.format(locale, "%.2f km", (exerciseLog.totalDistanceMeters ?: 0.0) / 1000.0)} · ${exerciseLog.totalDurationSeconds}s" else "${exerciseLog.totalDurationSeconds}s"
                 }
                 Text(
                     text = headerMetricText,
@@ -397,11 +403,11 @@ internal fun WorkoutSummaryUnavailableState(
 
 @Composable
 internal fun workoutSetMeasurementText(type: TrackingType, set: WorkoutSet, locale: Locale): String = when (type) {
-    TrackingType.WEIGHT_REPS -> stringResource(R.string.summary_set_details_formatted, formatSetWeight(set.weight, locale), set.reps)
+    TrackingType.WEIGHT_REPS -> stringResource(R.string.summary_set_details_formatted, set.weightKg?.let { formatSetWeight(it, locale) } ?: "—", set.reps ?: 0)
     TrackingType.BODYWEIGHT_REPS -> if ((set.additionalWeight ?: 0f) > 0f) {
-        "+${formatSetWeight(set.additionalWeight ?: 0f, locale)} kg × ${set.reps} reps"
+        "+${formatSetWeight((set.additionalWeight ?: 0f).toDouble(), locale)} kg × ${set.reps} reps"
     } else "${set.reps} reps"
-    TrackingType.ASSISTED_REPS -> "${set.reps} reps · ${stringResource(R.string.active_set_assistance_weight)} ${set.assistanceWeight?.let { formatSetWeight(it, locale) } ?: "—"}"
+    TrackingType.ASSISTED_REPS -> "${set.reps} reps · ${stringResource(R.string.active_set_assistance_weight)} ${set.assistanceWeight?.let { formatSetWeight(it.toDouble(), locale) } ?: "—"}"
     TrackingType.REPS_ONLY -> "${set.reps} reps"
     TrackingType.DURATION -> set.durationSeconds?.takeIf { it > 0 }?.let { "$it s" } ?: "—"
     TrackingType.DISTANCE_DURATION -> {

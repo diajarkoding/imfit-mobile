@@ -451,6 +451,21 @@
     <!-- User-Facing Operation Errors -->
     <string name="error_session_save">Unable to save session</string>
     <string name="error_set_complete">Unable to complete set</string>
+    <string name="label_active_time">Active time</string>
+    <string name="active_session_reconciliation_notice">The device restarted, so some elapsed time could not be verified. Saved times were kept and no time was invented. Check your set durations.</string>
+    <string name="error_execution_timer_busy">Stop the running set timer first</string>
+    <string name="active_set_rest_target">Rest target: %1$d s</string>
+    <string name="active_session_undo_set">Undo completion of %1$s set %2$d</string>
+    <string name="active_duration_hms">Duration (HH:MM:SS)</string>
+    <string name="active_metrics_hint">Optional metrics · empty = not recorded</string>
+    <string name="active_metric_calories">Calories (kcal)</string>
+    <string name="active_metric_distance">Distance (km)</string>
+    <string name="active_metric_speed">Speed (km/h)</string>
+    <string name="active_metric_laps">Lap / Rep</string>
+    <string name="active_metric_incline">Incline (%)</string>
+    <string name="rest_pause_action">Pause</string>
+    <string name="rest_resume_action">Resume</string>
+    <string name="rest_paused_label">Paused</string>
     <string name="error_exercise_remove">Unable to remove exercise</string>
     <string name="error_exercise_add">Unable to add exercises</string>
     <string name="error_session_finish">Unable to finish workout</string>

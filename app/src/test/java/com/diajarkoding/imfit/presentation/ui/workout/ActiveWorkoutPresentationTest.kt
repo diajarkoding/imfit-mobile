@@ -25,9 +25,9 @@ class ActiveWorkoutPresentationTest {
 
     @Test
     fun fractionalSetWeightIsNotTruncated() {
-        assertEquals("62.5", formatSetWeight(62.5f, Locale.US))
-        assertEquals("62,5", formatSetWeight(62.5f, Locale.forLanguageTag("id-ID")))
-        assertEquals("60", formatSetWeight(60f, Locale.US))
+        assertEquals("62.5", formatSetWeight(62.5, Locale.US))
+        assertEquals("62,5", formatSetWeight(62.5, Locale.forLanguageTag("id-ID")))
+        assertEquals("60", formatSetWeight(60.0, Locale.US))
     }
 
     @Test
@@ -103,14 +103,14 @@ class ActiveWorkoutPresentationTest {
             ExerciseLog(Exercise(type.name + modality.name, "Movement", MuscleCategory.CORE, "",
                 defaultTrackingType = type, modality = modality), listOf(set), metricQuality = quality)
         val logs = listOf(
-            log(TrackingType.WEIGHT_REPS, ExerciseModality.STRENGTH, WorkoutSet(1, 40f, 10, true), "LEGACY_UNVERIFIED"),
+            log(TrackingType.WEIGHT_REPS, ExerciseModality.STRENGTH, WorkoutSet(1, 40.0, 10, true), "LEGACY_UNVERIFIED"),
             log(TrackingType.BODYWEIGHT_REPS, ExerciseModality.CALISTHENICS, WorkoutSet(1, reps = 8, additionalWeight = 10f, isCompleted = true)),
             log(TrackingType.DURATION, ExerciseModality.CALISTHENICS, WorkoutSet(1, durationSeconds = 90, isCompleted = true)),
             log(TrackingType.DURATION, ExerciseModality.ISOMETRIC, WorkoutSet(1, durationSeconds = 45, isCompleted = true)),
-            log(TrackingType.DISTANCE_DURATION, ExerciseModality.CARDIO, WorkoutSet(1, durationSeconds = 1800, distanceMeters = 5000, isCompleted = true)),
+            log(TrackingType.DISTANCE_DURATION, ExerciseModality.CARDIO, WorkoutSet(1, durationSeconds = 1800, distanceMeters = 5000.0, isCompleted = true)),
             log(TrackingType.DURATION, ExerciseModality.CARDIO, WorkoutSet(1, durationSeconds = 999, isCompleted = false))
         )
-        assertEquals(WorkoutMeasurements(400.0, 80.0, 18, 45, 1800, 90, 5000), workoutMeasurements(logs))
-        assertEquals(WorkoutMeasurements(0.0, 80.0, 8, 45, 1800, 90, 5000), workoutMeasurements(logs, verifiedOnly = true))
+        assertEquals(WorkoutMeasurements(400.0, 80.0, 18, 45, 1800, 90, 5000.0), workoutMeasurements(logs))
+        assertEquals(WorkoutMeasurements(0.0, 80.0, 8, 45, 1800, 90, 5000.0), workoutMeasurements(logs, verifiedOnly = true))
     }
 }

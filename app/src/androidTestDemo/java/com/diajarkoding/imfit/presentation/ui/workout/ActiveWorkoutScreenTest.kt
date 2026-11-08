@@ -70,8 +70,8 @@ class ActiveWorkoutScreenTest {
                             ExerciseLog(
                                 exercise = Exercise("ex_1", "Barbell Bench Press", MuscleCategory.CHEST, ""),
                                 sets = listOf(
-                                    WorkoutSet(1, 60f, 10, isCompleted = true),
-                                    WorkoutSet(2, 60f, 10, isCompleted = true)
+                                    WorkoutSet(1, 60.0, 10, isCompleted = true),
+                                    WorkoutSet(2, 60.0, 10, isCompleted = true)
                                 )
                             )
                         )
@@ -268,16 +268,16 @@ class ActiveWorkoutScreenTest {
             ExerciseLog(
                 exercise = Exercise("ex_1", "Barbell Bench Press", MuscleCategory.CHEST, ""),
                 sets = listOf(
-                    WorkoutSet(1, 60f, 10, isCompleted = true),
-                    WorkoutSet(2, 65f, 10, isCompleted = true),
-                    WorkoutSet(3, 70f, 8, isCompleted = false)
+                    WorkoutSet(1, 60.0, 10, isCompleted = true),
+                    WorkoutSet(2, 65.0, 10, isCompleted = true),
+                    WorkoutSet(3, 70.0, 8, isCompleted = false)
                 )
             ),
             ExerciseLog(
                 exercise = Exercise("ex_2", "Dumbbell Fly", MuscleCategory.CHEST, ""),
                 sets = listOf(
-                    WorkoutSet(1, 14f, 12, isCompleted = false),
-                    WorkoutSet(2, 14f, 12, isCompleted = false)
+                    WorkoutSet(1, 14.0, 12, isCompleted = false),
+                    WorkoutSet(2, 14.0, 12, isCompleted = false)
                 )
             )
         )

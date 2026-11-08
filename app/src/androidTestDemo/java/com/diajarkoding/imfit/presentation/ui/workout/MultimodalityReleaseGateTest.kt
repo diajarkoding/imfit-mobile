@@ -164,7 +164,7 @@ class MultimodalityReleaseGateTest {
 
 
     private fun WorkoutSet.withMeasurement(m: SetMeasurement) = copy(
-        weight = m.weight ?: 0f, reps = m.reps ?: 0,
+        weightKg = m.weightKg ?: 0.0, reps = m.reps ?: 0,
         durationSeconds = m.durationSeconds, distanceMeters = m.distanceMeters,
         additionalWeight = m.additionalWeight, assistanceWeight = m.assistanceWeight)
 }

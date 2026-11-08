@@ -448,6 +448,21 @@
     <!-- User-Facing Operation Errors -->
     <string name="error_session_save">Tidak dapat menyimpan sesi</string>
     <string name="error_set_complete">Tidak dapat menyelesaikan set</string>
+    <string name="label_active_time">Waktu aktif</string>
+    <string name="active_session_reconciliation_notice">Perangkat dimulai ulang sehingga sebagian waktu tidak dapat dipastikan. Waktu yang tersimpan dipertahankan dan tidak ada waktu yang dikarang. Periksa durasi set Anda.</string>
+    <string name="error_execution_timer_busy">Hentikan timer set yang berjalan terlebih dahulu</string>
+    <string name="active_set_rest_target">Rest target: %1$d s</string>
+    <string name="active_session_undo_set">Batalkan selesai %1$s set %2$d</string>
+    <string name="active_duration_hms">Durasi (HH:MM:SS)</string>
+    <string name="active_metrics_hint">Metrik opsional · kosong = tidak dicatat</string>
+    <string name="active_metric_calories">Kalori (kcal)</string>
+    <string name="active_metric_distance">Jarak (km)</string>
+    <string name="active_metric_speed">Kecepatan (km/h)</string>
+    <string name="active_metric_laps">Lap / Rep</string>
+    <string name="active_metric_incline">Incline (%)</string>
+    <string name="rest_pause_action">Jeda</string>
+    <string name="rest_resume_action">Lanjutkan</string>
+    <string name="rest_paused_label">Dijeda</string>
     <string name="error_exercise_remove">Tidak dapat menghapus gerakan</string>
     <string name="error_exercise_add">Tidak dapat menambahkan gerakan</string>
     <string name="error_session_finish">Tidak dapat menyelesaikan sesi</string>

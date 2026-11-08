@@ -46,4 +46,4 @@ internal fun formatSummaryDuration(durationMinutes: Int, locale: Locale): String
 }
 
 internal fun formatSummaryVolume(volume: Float, locale: Locale): String =
-    "${formatSetWeight(volume, locale)} kg·reps"
+    "${formatSetWeight(volume.toDouble(), locale)} kg·reps"

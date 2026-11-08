@@ -269,6 +269,24 @@ private fun ActiveMetricCard(
     }
 }
 
+/** T33: after a reboot the monotonic clock cannot prove elapsed time; saved time is kept, nothing is invented. */
+@Composable
+internal fun ActiveSessionReconciliationBanner(modifier: Modifier = Modifier) {
+    val colors = IMFITColors.training
+    Surface(
+        modifier = modifier.fillMaxWidth().testTag("active_workout_reconciliation_banner"),
+        shape = RoundedCornerShape(10.dp),
+        color = colors.primaryContainer
+    ) {
+        Text(
+            text = stringResource(R.string.active_session_reconciliation_notice),
+            modifier = Modifier.padding(12.dp),
+            color = colors.onPrimaryContainer,
+            style = MaterialTheme.typography.bodySmall
+        )
+    }
+}
+
 @Composable
 internal fun ActiveSessionPausedBanner(
     modifier: Modifier = Modifier
@@ -346,6 +364,7 @@ internal fun ActiveExerciseCard(
     isPaused: Boolean,
     onRemoveExercise: () -> Unit,
     onSetComplete: (setIndex: Int) -> Unit,
+    onSetUndo: (setIndex: Int) -> Unit = {},
     onAddSet: () -> Unit,
     onRemoveSet: (setIndex: Int) -> Unit,
     modifier: Modifier = Modifier,
@@ -440,7 +459,7 @@ internal fun ActiveExerciseCard(
                         Text(text = stringResource(R.string.active_session_column_reps), color = colors.muted, style = MaterialTheme.typography.labelSmall, textAlign = TextAlign.Center, modifier = Modifier.weight(1f))
                     }
                     TrackingType.DURATION -> {
-                        Text(text = "DURASI (S)", color = colors.muted, style = MaterialTheme.typography.labelSmall, textAlign = TextAlign.Center, modifier = Modifier.weight(1f))
+                        Text(text = if (exerciseLog.measurementVersion == 3) stringResource(R.string.active_duration_hms).uppercase() else "DURASI (S)", color = colors.muted, style = MaterialTheme.typography.labelSmall, textAlign = TextAlign.Center, modifier = Modifier.weight(1f))
                     }
                     TrackingType.DISTANCE_DURATION -> {
                         Text(text = "JARAK (M)", color = colors.muted, style = MaterialTheme.typography.labelSmall, textAlign = TextAlign.Center, modifier = Modifier.weight(1f))
@@ -473,8 +492,13 @@ internal fun ActiveExerciseCard(
                         canDelete = exerciseLog.sets.size > 1 && !set.isCompleted && mutationEnabled,
                         isPaused = isPaused,
                         onComplete = { onSetComplete(setIndex) },
+                        onUndo = { onSetUndo(setIndex) },
                         onDelete = { onRemoveSet(setIndex) },
                         trackingType = exerciseLog.trackingType,
+                        modality = exerciseLog.modality,
+                        trackingProfile = exerciseLog.inputDefaults?.trackingProfile,
+                        supportedMetrics = exerciseLog.inputDefaults?.supportedMetrics.orEmpty(),
+                        restTargetSeconds = if (set.measurementVersion == 3) runCatching { exerciseLog.restSecondsForSet(set.id) }.getOrNull() else null,
                         onMeasurementUpdate = { measurement -> onSetMeasurementUpdate(setIndex, measurement) },
                         onStopwatchToggle = { onStopwatchToggle(setIndex) }
                     )
@@ -1023,7 +1047,9 @@ internal fun RestTimerCountdownDialog(
     onExtend: () -> Unit,
     onDismiss: () -> Unit,
     onReduce: () -> Unit,
-    totalSeconds: Float = 0f
+    totalSeconds: Float = 0f,
+    isPaused: Boolean = false,
+    onPauseToggle: (() -> Unit)? = null
 ) {
     val colors = IMFITColors.training
     IMFITPlatformDialog(onDismissRequest = {}, properties = DialogProperties(usePlatformDefaultWidth = false)) {
@@ -1098,7 +1124,7 @@ internal fun RestTimerCountdownDialog(
                             textAlign = TextAlign.Center
                         )
                         Text(
-                            text = stringResource(R.string.rest_timer_remaining_label),
+                            text = if (isPaused) stringResource(R.string.rest_paused_label) else stringResource(R.string.rest_timer_remaining_label),
                             color = colors.muted,
                             style = MaterialTheme.typography.bodySmall,
                             fontSize = 12.sp,
@@ -1110,6 +1136,7 @@ internal fun RestTimerCountdownDialog(
                 Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                     OutlinedButton(
                         onClick = onReduce,
+                        enabled = !isPaused,
                         modifier = Modifier.weight(1f).heightIn(min = 48.dp),
                         contentPadding = PaddingValues(horizontal = 8.dp, vertical = 12.dp),
                         shape = RoundedCornerShape(10.dp),
@@ -1127,6 +1154,7 @@ internal fun RestTimerCountdownDialog(
                     }
                     OutlinedButton(
                         onClick = onExtend,
+                        enabled = !isPaused,
                         modifier = Modifier.weight(1f).heightIn(min = 48.dp),
                         contentPadding = PaddingValues(horizontal = 8.dp, vertical = 12.dp),
                         shape = RoundedCornerShape(10.dp),
@@ -1144,8 +1172,23 @@ internal fun RestTimerCountdownDialog(
                     }
 
                 }
+                if (onPauseToggle != null) {
+                    OutlinedButton(
+                        onClick = onPauseToggle,
+                        modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp).testTag("rest_pause_toggle"),
+                        shape = RoundedCornerShape(10.dp),
+                        border = BorderStroke(1.dp, colors.primary),
+                        colors = ButtonDefaults.outlinedButtonColors(containerColor = colors.raised, contentColor = colors.primary)
+                    ) {
+                        Text(
+                            text = stringResource(if (isPaused) R.string.rest_resume_action else R.string.rest_pause_action),
+                            fontWeight = FontWeight.SemiBold
+                        )
+                    }
+                }
                 Button(
                     onClick = onDismiss,
+                    enabled = !isPaused,
                     modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp),
                     shape = RoundedCornerShape(10.dp),
                     colors = ButtonDefaults.buttonColors(

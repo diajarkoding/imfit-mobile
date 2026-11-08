@@ -94,8 +94,8 @@ class WorkoutSummaryScreenTest {
     fun completedSetDetailsKeepFractionalWeightAndExcludeUnfinishedSets() {
         scene.value = Scene(presentation = WorkoutSummaryPresentation.Content(sampleLog.copy(
             exerciseLogs = listOf(sampleExercises.first().copy(sets = listOf(
-                WorkoutSet(3, 62.5f, 10, isCompleted = true),
-                WorkoutSet(4, 99.5f, 20, isCompleted = false)
+                WorkoutSet(3, 62.5, 10, isCompleted = true),
+                WorkoutSet(4, 99.5, 20, isCompleted = false)
             )))
         )))
         show()
@@ -155,16 +155,16 @@ class WorkoutSummaryScreenTest {
             ExerciseLog(
                 exercise = Exercise("1", "Barbell Bench Press", MuscleCategory.CHEST, ""),
                 sets = listOf(
-                    WorkoutSet(1, 60f, 10, isCompleted = true),
-                    WorkoutSet(2, 65f, 10, isCompleted = true),
-                    WorkoutSet(3, 70f, 8, isCompleted = true)
+                    WorkoutSet(1, 60.0, 10, isCompleted = true),
+                    WorkoutSet(2, 65.0, 10, isCompleted = true),
+                    WorkoutSet(3, 70.0, 8, isCompleted = true)
                 )
             ),
             ExerciseLog(
                 exercise = Exercise("2", "Incline Dumbbell Press", MuscleCategory.CHEST, ""),
                 sets = listOf(
-                    WorkoutSet(1, 22f, 12, isCompleted = true),
-                    WorkoutSet(2, 24f, 10, isCompleted = true)
+                    WorkoutSet(1, 22.0, 12, isCompleted = true),
+                    WorkoutSet(2, 24.0, 10, isCompleted = true)
                 )
             )
         )
@@ -192,8 +192,8 @@ class WorkoutSummaryScreenTest {
                 ExerciseLog(
                     exercise = Exercise("1", "Barbell Bench Press", MuscleCategory.CHEST, ""),
                     sets = listOf(
-                        WorkoutSet(1, 60f, 10, isCompleted = false),
-                        WorkoutSet(2, 60f, 10, isCompleted = false)
+                        WorkoutSet(1, 60.0, 10, isCompleted = false),
+                        WorkoutSet(2, 60.0, 10, isCompleted = false)
                     )
                 )
             )

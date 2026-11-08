@@ -139,7 +139,8 @@ internal fun WorkoutSummaryScreenContent(
                                 formattedDuration = formatSummaryDuration(log.durationMinutes, locale),
                                 exerciseLogs = log.exerciseLogs,
                                 locale = locale,
-                                stacked = stacked
+                                stacked = stacked,
+                                formattedActiveTime = log.activeElapsedMs?.let { formatSummaryDuration((it / 60_000).toInt(), locale) }
                             )
                             if (log.dataQuality != "VERIFIED" || log.exerciseLogs.any { it.metricQuality != "VERIFIED" }) {
                                 Text(stringResource(R.string.measurement_legacy_notice), color = colors.muted, style = MaterialTheme.typography.bodySmall)
@@ -185,17 +186,17 @@ private fun WorkoutSummaryScreenPreview() {
         ExerciseLog(
             exercise = Exercise("1", "Barbell Bench Press", MuscleCategory.CHEST, ""),
             sets = listOf(
-                WorkoutSet(1, 60f, 10, isCompleted = true),
-                WorkoutSet(2, 60f, 10, isCompleted = true),
-                WorkoutSet(3, 60f, 10, isCompleted = true)
+                WorkoutSet(1, 60.0, 10, isCompleted = true),
+                WorkoutSet(2, 60.0, 10, isCompleted = true),
+                WorkoutSet(3, 60.0, 10, isCompleted = true)
             )
         ),
         ExerciseLog(
             exercise = Exercise("2", "Dumbbell Shoulder Press", MuscleCategory.SHOULDERS, ""),
             sets = listOf(
-                WorkoutSet(1, 20f, 12, isCompleted = true),
-                WorkoutSet(2, 20f, 12, isCompleted = true),
-                WorkoutSet(3, 20f, 12, isCompleted = true)
+                WorkoutSet(1, 20.0, 12, isCompleted = true),
+                WorkoutSet(2, 20.0, 12, isCompleted = true),
+                WorkoutSet(3, 20.0, 12, isCompleted = true)
             )
         )
     )

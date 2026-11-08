@@ -20,13 +20,13 @@ class WorkoutInteractionTest {
     @Before fun configureWindow() { rule.runOnUiThread { rule.activity.enableEdgeToEdge() } }
 
     @Test fun compactSetKeepsDecimalWeightStableNumberAndAccessibleTargets() {
-        val set = mutableStateOf(WorkoutSet(3, 62.5f, 10))
+        val set = mutableStateOf(WorkoutSet(3, 62.5, 10))
         var completed = 0
         rule.setContent {
             WorkoutTestEnvironment(width = 320, fontScale = 1.3f) {
                 ActiveSetRow(set.value, "Bench", true, true, false,
                     onMeasurementUpdate = { measurement -> set.value = set.value.copy(
-                        weight = measurement.weight ?: 0f, reps = measurement.reps ?: 0) },
+                        weightKg = measurement.weightKg ?: 0.0, reps = measurement.reps ?: 0) },
                     onStopwatchToggle = {},
                     onComplete = { completed++ }, onDelete = {})
             }
@@ -34,7 +34,7 @@ class WorkoutInteractionTest {
         rule.onNodeWithText("Set 3").assertIsDisplayed()
         val field = rule.onNodeWithContentDescription("Bench, set 3, beban dalam kg")
         field.assertIsEnabled().performTextReplacement("67,5")
-        rule.runOnIdle { assertEquals(67.5f, set.value.weight, 0.001f) }
+        rule.runOnIdle { assertEquals(67.5, set.value.weightKg!!, 0.001) }
         val complete = rule.onNodeWithContentDescription("Selesaikan Bench, set 3")
         val density = rule.onNodeWithTag("active_set_3").fetchSemanticsNode().boundsInRoot.width / 320f
         val bounds = complete.fetchSemanticsNode().boundsInRoot
@@ -48,7 +48,7 @@ class WorkoutInteractionTest {
         val enabled = mutableStateOf(true)
         rule.setContent {
             WorkoutTestEnvironment(indonesian = false) {
-                ActiveSetRow(WorkoutSet(4, 60f, 10), "Bench", enabled.value, true, paused.value,
+                ActiveSetRow(WorkoutSet(4, 60.0, 10), "Bench", enabled.value, true, paused.value,
                     onMeasurementUpdate = {}, onStopwatchToggle = {}, onComplete = {}, onDelete = {})
             }
         }

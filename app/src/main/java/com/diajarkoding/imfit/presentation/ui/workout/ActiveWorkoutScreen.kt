@@ -212,7 +212,11 @@ fun ActiveWorkoutScreen(
             onExtend = viewModel::extendRest,
             onReduce = viewModel::reduceRest,
             onDismiss = { viewModel.skipRestTimer() },
-            totalSeconds = restState?.let { it.totalDurationMs / 1000f } ?: 0f
+            totalSeconds = restState?.let { it.totalDurationMs / 1000f } ?: 0f,
+            isPaused = state.isRestPaused,
+            onPauseToggle = if (state.session?.schemaVersion == 3) {
+                { if (state.isRestPaused) viewModel.resumeWorkout() else viewModel.pauseWorkout() }
+            } else null
         )
     }
 
@@ -286,6 +290,7 @@ fun ActiveWorkoutScreen(
         onSetComplete = { exerciseIndex, setIndex ->
             viewModel.completeSet(exerciseIndex, setIndex)
         },
+        onSetUndo = viewModel::undoSetCompletion,
         onAddSet = { exerciseIndex -> viewModel.addSet(exerciseIndex) },
         onRemoveSet = { exerciseIndex, setIndex -> viewModel.removeSet(exerciseIndex, setIndex) }
     )
@@ -304,6 +309,7 @@ internal fun ActiveWorkoutScreenContent(
     onSetMeasurementUpdate: (exerciseIndex: Int, setIndex: Int, measurement: SetMeasurement) -> Unit,
     onStopwatchToggle: (exerciseIndex: Int, setIndex: Int) -> Unit,
     onSetComplete: (exerciseIndex: Int, setIndex: Int) -> Unit,
+    onSetUndo: (exerciseIndex: Int, setIndex: Int) -> Unit = { _, _ -> },
     onAddSet: (exerciseIndex: Int) -> Unit,
     onRemoveSet: (exerciseIndex: Int, setIndex: Int) -> Unit,
     onRetryStart: () -> Unit = {},
@@ -398,6 +404,9 @@ internal fun ActiveWorkoutScreenContent(
                     }
 
                     // 2. Status Banners
+                    if (state.needsTimerReconciliation) {
+                        item(key = "banner_reconciliation") { ActiveSessionReconciliationBanner() }
+                    }
                     if (state.isPaused) {
                         item(key = "banner_paused") {
                             ActiveSessionPausedBanner()
@@ -432,6 +441,7 @@ internal fun ActiveWorkoutScreenContent(
                                     onSetComplete = { setIndex ->
                                         onSetComplete(exerciseIndex, setIndex)
                                     },
+                                    onSetUndo = { setIndex -> onSetUndo(exerciseIndex, setIndex) },
                                     onAddSet = { onAddSet(exerciseIndex) },
                                     onRemoveSet = { setIndex ->
                                         onRemoveSet(exerciseIndex, setIndex)
@@ -467,17 +477,17 @@ private fun ActiveWorkoutScreenPreview() {
         ExerciseLog(
             exercise = Exercise("1", "Barbell Bench Press", MuscleCategory.CHEST, ""),
             sets = listOf(
-                WorkoutSet(1, 60f, 10, isCompleted = true),
-                WorkoutSet(2, 60f, 10, isCompleted = true),
-                WorkoutSet(3, 60f, 10, isCompleted = false)
+                WorkoutSet(1, 60.0, 10, isCompleted = true),
+                WorkoutSet(2, 60.0, 10, isCompleted = true),
+                WorkoutSet(3, 60.0, 10, isCompleted = false)
             )
         ),
         ExerciseLog(
             exercise = Exercise("2", "Dumbbell Shoulder Press", MuscleCategory.SHOULDERS, ""),
             sets = listOf(
-                WorkoutSet(1, 20f, 12, isCompleted = false),
-                WorkoutSet(2, 20f, 12, isCompleted = false),
-                WorkoutSet(3, 20f, 12, isCompleted = false)
+                WorkoutSet(1, 20.0, 12, isCompleted = false),
+                WorkoutSet(2, 20.0, 12, isCompleted = false),
+                WorkoutSet(3, 20.0, 12, isCompleted = false)
             )
         )
     )

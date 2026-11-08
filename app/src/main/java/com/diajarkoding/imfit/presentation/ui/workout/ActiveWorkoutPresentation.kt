@@ -47,7 +47,7 @@ internal fun formatElapsedTime(seconds: Long): String {
 internal fun restCountdownProgress(remainingSeconds: Int, totalSeconds: Float): Float =
     if (totalSeconds > 0f) (remainingSeconds / totalSeconds).coerceIn(0f, 1f) else 0f
 
-internal fun formatSetWeight(weight: Float, locale: Locale): String =
+internal fun formatSetWeight(weight: Double, locale: Locale): String =
     NumberFormat.getNumberInstance(locale).apply {
         isGroupingUsed = false
         maximumFractionDigits = 3
@@ -65,7 +65,7 @@ internal data class WorkoutMeasurements(
     val holdSeconds: Int,
     val cardioSeconds: Int,
     val otherDurationSeconds: Int,
-    val distanceMeters: Int
+    val distanceMeters: Double
 )
 
 internal fun workoutMeasurements(logs: List<ExerciseLog>, verifiedOnly: Boolean = false): WorkoutMeasurements {
@@ -75,15 +75,15 @@ internal fun workoutMeasurements(logs: List<ExerciseLog>, verifiedOnly: Boolean 
     var hold = 0
     var cardio = 0
     var other = 0
-    var distance = 0
+    var distance = 0.0
     for (log in logs) {
         if (verifiedOnly && log.metricQuality != "VERIFIED") continue
         for (set in log.sets) {
             if (!set.isCompleted) continue
             when (log.trackingType) {
-                TrackingType.WEIGHT_REPS -> { external += set.weight.toDouble() * set.reps; reps += set.reps }
-                TrackingType.BODYWEIGHT_REPS -> { additional += (set.additionalWeight ?: 0f).toDouble() * set.reps; reps += set.reps }
-                TrackingType.ASSISTED_REPS, TrackingType.REPS_ONLY -> reps += set.reps
+                TrackingType.WEIGHT_REPS -> { external += (set.weightKg ?: 0.0) * (set.reps ?: 0); reps += set.reps ?: 0 }
+                TrackingType.BODYWEIGHT_REPS -> { additional += (set.additionalWeight ?: 0f).toDouble() * (set.reps ?: 0); reps += set.reps ?: 0 }
+                TrackingType.ASSISTED_REPS, TrackingType.REPS_ONLY -> reps += set.reps ?: 0
                 TrackingType.DURATION, TrackingType.DISTANCE_DURATION -> {
                     val seconds = set.durationSeconds ?: 0
                     when (log.modality) {
@@ -91,7 +91,7 @@ internal fun workoutMeasurements(logs: List<ExerciseLog>, verifiedOnly: Boolean 
                         ExerciseModality.CARDIO, ExerciseModality.CONDITIONING -> cardio += seconds
                         else -> other += seconds
                     }
-                    if (log.trackingType == TrackingType.DISTANCE_DURATION) distance += set.distanceMeters ?: 0
+                    if (log.trackingType == TrackingType.DISTANCE_DURATION) distance += set.distanceMeters ?: 0.0
                 }
             }
         }

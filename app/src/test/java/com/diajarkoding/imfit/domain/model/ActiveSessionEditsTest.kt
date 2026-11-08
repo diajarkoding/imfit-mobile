@@ -5,7 +5,7 @@ import org.junit.Test
 
 class ActiveSessionEditsTest {
     private fun exercise(id: String, complete: Boolean = false) = ExerciseLog(
-        Exercise(id, id, MuscleCategory.CHEST, ""), listOf(WorkoutSet(1, 20f, 8, complete)))
+        Exercise(id, id, MuscleCategory.CHEST, ""), listOf(WorkoutSet(1, 20.0, 8, complete)))
     private fun session() = WorkoutSession("session", "template", "Workout", 123L,
         listOf(exercise("a"), exercise("b", true), exercise("c")), currentExerciseIndex = 1, isPaused = true)
 
@@ -19,7 +19,8 @@ class ActiveSessionEditsTest {
     }
 
     @Test fun completedExerciseCannotBeRemoved() {
-        assertEquals(session(), session().removeIncompleteExercise("b"))
+        val original = session()
+        assertEquals(original, original.removeIncompleteExercise("b"))
     }
 
     @Test(expected = IllegalArgumentException::class)

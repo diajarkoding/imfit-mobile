@@ -8,7 +8,9 @@ data class ExecutionStopwatch(
     val elapsedMs: Long = 0,
     val anchorElapsedMs: Long? = null,
     val bootIdentity: Int? = null,
-    val recoveryRequired: Boolean = false
+    val recoveryRequired: Boolean = false,
+    /** True when a global Pause froze a running stopwatch, so Resume restarts it from the saved elapsed. */
+    val pausedByWorkout: Boolean = false
 ) {
     val isRunning: Boolean get() = anchorElapsedMs != null
 
@@ -37,7 +39,15 @@ data class ExecutionStopwatch(
             anchorElapsedMs = nowElapsedMs, bootIdentity = currentBootIdentity, recoveryRequired = false)
 
     fun pause(nowElapsedMs: Long, currentBootIdentity: Int?): ExecutionStopwatch =
-        checkpoint(nowElapsedMs, currentBootIdentity).copy(anchorElapsedMs = null)
+        checkpoint(nowElapsedMs, currentBootIdentity).copy(anchorElapsedMs = null, pausedByWorkout = false)
+
+    /** Global Pause: freeze at the current elapsed and remember to restart on Resume. */
+    fun pauseForWorkout(nowElapsedMs: Long, currentBootIdentity: Int?): ExecutionStopwatch =
+        if (!isRunning) this else pause(nowElapsedMs, currentBootIdentity).copy(pausedByWorkout = true)
+
+    /** Global Resume: continue from saved elapsed with a new anchor. No-op unless Pause froze it. */
+    fun resumeFromWorkout(nowElapsedMs: Long, currentBootIdentity: Int?): ExecutionStopwatch =
+        if (!pausedByWorkout) this else start(nowElapsedMs, currentBootIdentity).copy(pausedByWorkout = false)
 }
 
 fun WorkoutSet.checkpointExecutionStopwatch(nowElapsedMs: Long, bootIdentity: Int?): WorkoutSet {

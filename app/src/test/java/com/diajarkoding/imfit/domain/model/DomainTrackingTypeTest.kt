@@ -65,16 +65,16 @@ class DomainTrackingTypeTest {
     // A3-01: Domain WEIGHT_REPS: 40 kg x 10 = 400 kg volume
     @Test
     fun testWeightRepsMeasurementAndVolume() {
-        val validMeasurement = SetMeasurement(weight = 40f, reps = 10)
+        val validMeasurement = SetMeasurement(weightKg = (40f).toDouble(), reps = 10)
         assertTrue(validMeasurement.isCompleteEligible(TrackingType.WEIGHT_REPS))
 
-        val zeroWeight = SetMeasurement(weight = 0f, reps = 10)
+        val zeroWeight = SetMeasurement(weightKg = (0f).toDouble(), reps = 10)
         assertFalse(zeroWeight.isCompleteEligible(TrackingType.WEIGHT_REPS))
 
-        val zeroReps = SetMeasurement(weight = 40f, reps = 0)
+        val zeroReps = SetMeasurement(weightKg = (40f).toDouble(), reps = 0)
         assertFalse(zeroReps.isCompleteEligible(TrackingType.WEIGHT_REPS))
 
-        val set = WorkoutSet(setNumber = 1, weight = 40f, reps = 10, isCompleted = true)
+        val set = WorkoutSet(setNumber = 1, weightKg = (40f).toDouble(), reps = 10, isCompleted = true)
         assertEquals(400f, set.volume)
 
         val log = ExerciseLog(
@@ -95,8 +95,8 @@ class DomainTrackingTypeTest {
         val zeroReps = SetMeasurement(reps = 0, additionalWeight = 0f)
         assertFalse(zeroReps.isCompleteEligible(TrackingType.BODYWEIGHT_REPS))
 
-        val unweightedSet = WorkoutSet(setNumber = 1, weight = 0f, reps = 15, isCompleted = true, additionalWeight = 0f)
-        val weightedSet = WorkoutSet(setNumber = 2, weight = 0f, reps = 10, isCompleted = true, additionalWeight = 15f)
+        val unweightedSet = WorkoutSet(setNumber = 1, weightKg = (0f).toDouble(), reps = 15, isCompleted = true, additionalWeight = 0f)
+        val weightedSet = WorkoutSet(setNumber = 2, weightKg = (0f).toDouble(), reps = 10, isCompleted = true, additionalWeight = 15f)
 
         val log = ExerciseLog(
             exercise = pushUpExercise,
@@ -117,7 +117,7 @@ class DomainTrackingTypeTest {
         val measurement = SetMeasurement(reps = 10, assistanceWeight = 20f)
         assertTrue(measurement.isCompleteEligible(TrackingType.ASSISTED_REPS))
 
-        val set = WorkoutSet(setNumber = 1, weight = 0f, reps = 10, isCompleted = true, assistanceWeight = 20f)
+        val set = WorkoutSet(setNumber = 1, weightKg = (0f).toDouble(), reps = 10, isCompleted = true, assistanceWeight = 20f)
         val log = ExerciseLog(
             exercise = assistedPullUpExercise,
             sets = listOf(set),
@@ -170,16 +170,16 @@ class DomainTrackingTypeTest {
     // A3-06: Domain DISTANCE_DURATION: 5000 m / 1800 s valid
     @Test
     fun testDistanceDurationMeasurement() {
-        val measurement = SetMeasurement(distanceMeters = 5000, durationSeconds = 1800)
+        val measurement = SetMeasurement(distanceMeters = 5000.0, durationSeconds = 1800)
         assertTrue(measurement.isCompleteEligible(TrackingType.DISTANCE_DURATION))
 
-        val zeroDistance = SetMeasurement(distanceMeters = 0, durationSeconds = 1800)
+        val zeroDistance = SetMeasurement(distanceMeters = 0.0, durationSeconds = 1800)
         assertFalse(zeroDistance.isCompleteEligible(TrackingType.DISTANCE_DURATION))
 
-        val zeroDuration = SetMeasurement(distanceMeters = 5000, durationSeconds = 0)
+        val zeroDuration = SetMeasurement(distanceMeters = 5000.0, durationSeconds = 0)
         assertFalse(zeroDuration.isCompleteEligible(TrackingType.DISTANCE_DURATION))
 
-        val set = WorkoutSet(setNumber = 1, isCompleted = true, distanceMeters = 5000, durationSeconds = 1800)
+        val set = WorkoutSet(setNumber = 1, isCompleted = true, distanceMeters = 5000.0, durationSeconds = 1800)
         val log = ExerciseLog(
             exercise = treadmillExercise,
             sets = listOf(set),
@@ -187,7 +187,7 @@ class DomainTrackingTypeTest {
         )
         assertEquals(0f, log.totalVolume)
         assertEquals(0, log.totalReps)
-        assertEquals(5000, log.totalDistanceMeters)
+        assertEquals(5000.0, log.totalDistanceMeters!!, 0.0)
         assertEquals(1800, log.totalDurationSeconds)
     }
 
@@ -212,12 +212,12 @@ class DomainTrackingTypeTest {
     fun testWorkoutSessionAndLogMultiModalityAggregates() {
         val benchLog = ExerciseLog(
             exercise = chestExercise,
-            sets = listOf(WorkoutSet(1, weight = 50f, reps = 10, isCompleted = true)),
+            sets = listOf(WorkoutSet(1, weightKg = (50f).toDouble(), reps = 10, isCompleted = true)),
             trackingType = TrackingType.WEIGHT_REPS
         )
         val pushUpLog = ExerciseLog(
             exercise = pushUpExercise,
-            sets = listOf(WorkoutSet(1, weight = 0f, reps = 15, isCompleted = true, additionalWeight = 10f)),
+            sets = listOf(WorkoutSet(1, weightKg = (0f).toDouble(), reps = 15, isCompleted = true, additionalWeight = 10f)),
             trackingType = TrackingType.BODYWEIGHT_REPS
         )
         val plankLog = ExerciseLog(
@@ -227,7 +227,7 @@ class DomainTrackingTypeTest {
         )
         val treadmillLog = ExerciseLog(
             exercise = treadmillExercise,
-            sets = listOf(WorkoutSet(1, isCompleted = true, distanceMeters = 3000, durationSeconds = 1200)),
+            sets = listOf(WorkoutSet(1, isCompleted = true, distanceMeters = 3000.0, durationSeconds = 1200)),
             trackingType = TrackingType.DISTANCE_DURATION
         )
 
@@ -244,7 +244,7 @@ class DomainTrackingTypeTest {
         assertEquals(150f, session.additionalVolume) // 10 * 15
         assertEquals(25, session.totalReps) // 10 + 15
         assertEquals(1260, session.totalDurationSeconds) // 60 + 1200
-        assertEquals(3000, session.totalDistanceMeters) // 3000
+        assertEquals(3000.0, session.totalDistanceMeters!!, 0.0)
         assertEquals(4, session.totalCompletedSets)
 
         val workoutLog = WorkoutLog(
@@ -261,15 +261,15 @@ class DomainTrackingTypeTest {
         assertEquals(150f, workoutLog.additionalVolume)
         assertEquals(25, workoutLog.totalReps)
         assertEquals(1260, workoutLog.totalDurationSeconds)
-        assertEquals(3000, workoutLog.totalDistanceMeters)
+        assertEquals(3000.0, workoutLog.totalDistanceMeters!!, 0.0)
         assertEquals("VERIFIED", workoutLog.dataQuality)
     }
     @Test fun paceRequiresActualPositiveDistanceAndDuration() {
-        assertEquals(360.0, WorkoutSet(1, durationSeconds = 1800, distanceMeters = 5000).paceSecondsPerKilometer!!, 0.001)
-        assertEquals(360.0, WorkoutSet(1, durationSeconds = 90, distanceMeters = 250).paceSecondsPerKilometer!!, 0.001)
+        assertEquals(360.0, WorkoutSet(1, durationSeconds = 1800, distanceMeters = 5000.0).paceSecondsPerKilometer!!, 0.001)
+        assertEquals(360.0, WorkoutSet(1, durationSeconds = 90, distanceMeters = 250.0).paceSecondsPerKilometer!!, 0.001)
         assertNull(WorkoutSet(1, durationSeconds = 1800).paceSecondsPerKilometer)
-        assertNull(WorkoutSet(1, durationSeconds = 1800, distanceMeters = 0).paceSecondsPerKilometer)
-        assertNull(WorkoutSet(1, durationSeconds = 0, distanceMeters = 5000).paceSecondsPerKilometer)
-        assertNull(WorkoutSet(1, durationSeconds = -1, distanceMeters = 5000).paceSecondsPerKilometer)
+        assertNull(WorkoutSet(1, durationSeconds = 1800, distanceMeters = 0.0).paceSecondsPerKilometer)
+        assertNull(WorkoutSet(1, durationSeconds = 0, distanceMeters = 5000.0).paceSecondsPerKilometer)
+        assertNull(WorkoutSet(1, durationSeconds = -1, distanceMeters = 5000.0).paceSecondsPerKilometer)
     }
 }

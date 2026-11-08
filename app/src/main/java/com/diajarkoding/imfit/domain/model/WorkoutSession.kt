@@ -9,7 +9,15 @@ data class WorkoutSession(
     val currentExerciseIndex: Int = 0,
     val isPaused: Boolean = false,
     val totalPausedTimeMs: Long = 0,
-    val lastPauseTime: Long? = null
+    val lastPauseTime: Long? = null,
+    val schemaVersion: Int = 2,
+    val pendingRestTrigger: RestTimerTrigger? = null,
+    /** Routine revision frozen at start (v3 snapshot); null for legacy sessions. */
+    val templateRevision: Long? = null,
+    /** v3 runtime: whole-session active clock (excludes Pause, includes rest). Null for legacy sessions. */
+    val sessionStopwatch: ExecutionStopwatch? = null,
+    /** v3 runtime: runs only while paused; its elapsed is `paused_elapsed_ms`. */
+    val pauseStopwatch: ExecutionStopwatch? = null
 ) {
     val totalVolume: Float
         get() = exerciseLogs.sumOf { it.totalVolume.toDouble() }.toFloat()
@@ -29,8 +37,15 @@ data class WorkoutSession(
     val totalDurationSeconds: Int
         get() = exerciseLogs.sumOf { it.totalDurationSeconds }
 
-    val totalDistanceMeters: Int
-        get() = exerciseLogs.sumOf { it.totalDistanceMeters }
+    val totalDistanceMeters: Double?
+        get() {
+            var total: Double? = if (schemaVersion == 3) null else 0.0
+            for (log in exerciseLogs) log.totalDistanceMeters?.let { total = (total ?: 0.0) + it }
+            return total
+        }
+
+    val recordedLoadVolume: Double
+        get() = exerciseLogs.sumOf { it.recordedLoadVolume }
 
     val currentExercise: ExerciseLog?
         get() = exerciseLogs.getOrNull(currentExerciseIndex)

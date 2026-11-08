@@ -12,9 +12,17 @@ data class WorkoutLog(
     val totalSets: Int = exerciseLogs.sumOf { it.completedSets },
     val totalReps: Int = exerciseLogs.sumOf { it.totalReps },
     val totalDurationSeconds: Int = exerciseLogs.sumOf { it.totalDurationSeconds },
-    val totalDistanceMeters: Int = exerciseLogs.sumOf { it.totalDistanceMeters },
+    val totalDistanceMeters: Double? = exerciseLogs.fold(null as Double?) { sum, log ->
+        log.totalDistanceMeters?.let { (sum ?: 0.0) + it } ?: sum
+    },
     val additionalVolume: Float = exerciseLogs.sumOf { it.additionalVolume.toDouble() }.toFloat(),
-    val dataQuality: String = "VERIFIED"
+    val dataQuality: String = "VERIFIED",
+    val measurementVersion: Int? = null,
+    val recordedLoadVolume: Double? = null,
+    /** v3: total time paused (ms); null for legacy history. */
+    val pausedElapsedMs: Long? = null,
+    /** v3: whole-session time without Pause (includes rest); distinct from gross `endTime - startTime`. */
+    val activeElapsedMs: Long? = null
 ) {
     val durationMinutes: Int
         get() = ((endTime - startTime) / 60000).toInt()

@@ -26,3 +26,31 @@ fun validateActiveSessionEdit(current: WorkoutSession, next: WorkoutSession) {
         "An exercise with completed sets cannot be removed"
     }
 }
+
+private const val MAX_V3_SETS = 20
+
+/**
+ * T41: add an active set to a v3 exercise. A fresh result UUID and a fresh extra target (rest 60) are created;
+ * values follow the exercise's first routine target (not the last result). The routine target list is untouched.
+ */
+fun ExerciseLog.addV3Set(
+    newSetId: String = java.util.UUID.randomUUID().toString(),
+    newRowId: String = java.util.UUID.randomUUID().toString()
+): ExerciseLog {
+    require(measurementVersion == 3) { "Not a v3 exercise" }
+    require(sets.size < MAX_V3_SETS) { "At most $MAX_V3_SETS sets per exercise" }
+    val defaults = requireNotNull(inputDefaults) { "Missing v3 snapshot" }
+    val template = requireNotNull(defaults.setTargets?.firstOrNull()) { "Missing initial target" }
+    val allRowIds = defaults.setTargets.orEmpty().map { it.rowId } + defaults.extraSetTargets.map { it.rowId }
+    require(newRowId !in allRowIds && sets.none { it.id == newSetId }) { "Identity already used" }
+    val target = template.copy(rowId = newRowId, setNumber = defaults.extraSetTargets.size + 1, restSeconds = 60)
+    val strength = trackingType == TrackingType.WEIGHT_REPS
+    val set = WorkoutSet(
+        setNumber = sets.size + 1,
+        weightKg = if (strength) target.weightKg else null,
+        reps = if (strength) target.reps else null,
+        durationSeconds = if (strength) null else target.durationSeconds,
+        isCompleted = false, id = newSetId, targetRowId = newRowId, measurementVersion = 3
+    )
+    return copy(sets = sets + set, inputDefaults = defaults.copy(extraSetTargets = defaults.extraSetTargets + target))
+}

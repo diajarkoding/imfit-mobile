@@ -8,7 +8,8 @@ data class WorkoutTemplate(
     val createdAt: Long = System.currentTimeMillis(),
     val revision: Long = 0L,
     private val explicitPrimaryCategory: MuscleCategory? = null,
-    val exerciseCountOverride: Int? = null
+    val exerciseCountOverride: Int? = null,
+    val measurementVersion: Int? = null
 ) {
     val exerciseCount: Int
         get() = exerciseCountOverride ?: exercises.size
@@ -24,15 +25,15 @@ data class WorkoutTemplate(
             if (exercises.isEmpty()) return null
             val resistance = exercises.filter { it.exercise.muscleCategory != MuscleCategory.CARDIO }
             if (resistance.isEmpty()) return MuscleCategory.CARDIO
-            val totalResistanceSets = resistance.sumOf { it.sets }
+            val totalResistanceSets = resistance.sumOf { it.setCount }
             if (totalResistanceSets == 0) return null
-            val upperSets = resistance.filter { it.exercise.muscleCategory in upperCategories }.sumOf { it.sets }
-            val lowerSets = resistance.filter { it.exercise.muscleCategory == MuscleCategory.LEGS }.sumOf { it.sets }
+            val upperSets = resistance.filter { it.exercise.muscleCategory in upperCategories }.sumOf { it.setCount }
+            val lowerSets = resistance.filter { it.exercise.muscleCategory == MuscleCategory.LEGS }.sumOf { it.setCount }
             if (upperSets >= 0.30 * totalResistanceSets && lowerSets >= 0.25 * totalResistanceSets) {
                 return null // Full Body combination -> neutral / all-muscles
             }
             return resistance.groupBy { it.exercise.muscleCategory }
-                .maxByOrNull { (_, list) -> list.sumOf { it.sets } }
+                .maxByOrNull { (_, list) -> list.sumOf { it.setCount } }
                 ?.key
         }
 

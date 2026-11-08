@@ -318,7 +318,9 @@ object IMFITTypography {
     val compactTitle = text(14, 19.6f, FontWeight.SemiBold)
     val historyHeading = text(10, 14f, FontWeight.SemiBold, 0.4f)
     val historyDate = text(10, 14f)
-    val metricCaption = text(11, 13.2f)
+    val metricCaption = text(11, 15.4f)
+    val metricCaptionCompact = text(10, 14f)
+    val metricSupporting = text(10, 14f)
     val metricValue = text(22, 25.3f, FontWeight.SemiBold, -0.6f)
     val textAction = text(13, 18.2f, FontWeight.SemiBold)
     val sectionTitle = text(20, 28f, FontWeight.Bold, -0.5f)
@@ -387,6 +389,7 @@ object IMFITComponentSizes {
     val sectionStackWidth = 320.dp
     val metricIcon = 14.dp
     val metricDivider = 38.dp
+    val metricStripMinHeight = 96.dp
     val border = 1.dp
     val activeBorder = 2.dp
 }

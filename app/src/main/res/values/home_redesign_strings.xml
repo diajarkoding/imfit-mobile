@@ -6,6 +6,17 @@
     <string name="home_summary_empty">No completed sessions yet</string>
     <string name="home_total_duration">Total duration</string>
     <string name="home_total_volume">Total volume</string>
+    <string name="home_last_workout_duration_label">Duration</string>
+    <string name="home_last_workout_isometric_support">%1$s isometric</string>
+    <string name="home_last_workout_external_volume_label">Ext. volume</string>
+    <string name="home_last_workout_recorded_load_label">Recorded load</string>
+    <string name="home_last_workout_additional_volume_support">%1$s kg additional</string>
+    <string name="home_last_workout_distance_label">Distance</string>
+    <string name="home_last_workout_distance_unit">%1$s km</string>
+    <string name="home_last_workout_cardio_support">%1$s cardio</string>
+    <string name="home_last_workout_legacy_reps_footer">Legacy history · %1$s reps</string>
+    <string name="home_last_workout_legacy_footer">Legacy history</string>
+    <string name="home_last_workout_reps_footer">%1$s reps</string>
     <string name="home_add_day">Add Routine</string>
     <string name="home_resume">Resume Workout</string>
     <string name="home_empty_templates">No routines yet. Tap “Add Routine” to create your first routine.</string>

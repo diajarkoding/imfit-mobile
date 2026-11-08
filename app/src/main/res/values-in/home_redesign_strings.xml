@@ -6,6 +6,17 @@
     <string name="home_summary_empty">Belum ada sesi yang selesai</string>
     <string name="home_total_duration">Durasi total</string>
     <string name="home_total_volume">Total volume</string>
+    <string name="home_last_workout_duration_label">Durasi</string>
+    <string name="home_last_workout_isometric_support">%1$s isometrik</string>
+    <string name="home_last_workout_external_volume_label">Vol. eksternal</string>
+    <string name="home_last_workout_recorded_load_label">Beban tercatat</string>
+    <string name="home_last_workout_additional_volume_support">%1$s kg tambahan</string>
+    <string name="home_last_workout_distance_label">Jarak</string>
+    <string name="home_last_workout_distance_unit">%1$s km</string>
+    <string name="home_last_workout_cardio_support">%1$s kardio</string>
+    <string name="home_last_workout_legacy_reps_footer">Riwayat lama · %1$s repetisi</string>
+    <string name="home_last_workout_legacy_footer">Riwayat lama</string>
+    <string name="home_last_workout_reps_footer">%1$s repetisi</string>
     <string name="home_add_day">Tambah rutinitas</string>
     <string name="home_resume">Lanjutkan sesi</string>
     <string name="home_empty_templates">Belum ada rutinitas. Ketuk “Tambah rutinitas” untuk membuat rutinitas pertamamu.</string>

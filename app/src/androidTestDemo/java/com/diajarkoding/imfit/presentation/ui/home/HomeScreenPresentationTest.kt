@@ -18,14 +18,19 @@ import androidx.compose.ui.test.performScrollTo
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import com.diajarkoding.imfit.R
 import com.diajarkoding.imfit.data.recovery.LegacyRoutineRecovery
+import com.diajarkoding.imfit.domain.model.Exercise
 import com.diajarkoding.imfit.domain.model.ExerciseLog
+import com.diajarkoding.imfit.domain.model.ExerciseModality
 import com.diajarkoding.imfit.domain.model.HomeRemoteReadResult
+import com.diajarkoding.imfit.domain.model.MuscleCategory
 import com.diajarkoding.imfit.domain.model.RegisterResult
 import com.diajarkoding.imfit.domain.model.TemplateExercise
+import com.diajarkoding.imfit.domain.model.TrackingType
 import com.diajarkoding.imfit.domain.model.User
 import com.diajarkoding.imfit.domain.model.UserProfileState
 import com.diajarkoding.imfit.domain.model.WorkoutLog
 import com.diajarkoding.imfit.domain.model.WorkoutSession
+import com.diajarkoding.imfit.domain.model.WorkoutSet
 import com.diajarkoding.imfit.domain.model.WorkoutTemplate
 import com.diajarkoding.imfit.domain.repository.AuthRepository
 import com.diajarkoding.imfit.domain.repository.RoutineRepository
@@ -183,6 +188,119 @@ class HomeScreenPresentationTest {
             .assertIsEnabled()
             .assertHasClickAction()
         assertEquals(0, recovery.exportCalls)
+    }
+
+    @Test
+    fun homeLastWorkoutCardRendersThreeColumnLegacyMultiModalSummary() {
+        val bench = Exercise(
+            id = "ex_bench",
+            name = "Bench Press",
+            muscleCategory = MuscleCategory.CHEST,
+            description = "Chest",
+            defaultTrackingType = TrackingType.WEIGHT_REPS,
+            modality = ExerciseModality.STRENGTH
+        )
+        val dips = Exercise(
+            id = "ex_dips",
+            name = "Weighted Dips",
+            muscleCategory = MuscleCategory.CHEST,
+            description = "Chest",
+            defaultTrackingType = TrackingType.BODYWEIGHT_REPS,
+            modality = ExerciseModality.CALISTHENICS
+        )
+        val pushups = Exercise(
+            id = "ex_pushups",
+            name = "Push-ups",
+            muscleCategory = MuscleCategory.CHEST,
+            description = "Chest",
+            defaultTrackingType = TrackingType.REPS_ONLY,
+            modality = ExerciseModality.CALISTHENICS
+        )
+        val plank = Exercise(
+            id = "ex_plank",
+            name = "Plank",
+            muscleCategory = MuscleCategory.CORE,
+            description = "Core",
+            defaultTrackingType = TrackingType.DURATION,
+            modality = ExerciseModality.ISOMETRIC
+        )
+        val run = Exercise(
+            id = "ex_run",
+            name = "Treadmill Run",
+            muscleCategory = MuscleCategory.LEGS,
+            description = "Cardio",
+            defaultTrackingType = TrackingType.DISTANCE_DURATION,
+            modality = ExerciseModality.CARDIO
+        )
+        val start = 1793678400000L
+        val log = WorkoutLog(
+            id = "legacy_multimodal",
+            userId = "u1",
+            templateName = "Multi-Modal",
+            date = start,
+            startTime = start,
+            endTime = start + 42L * 60_000L,
+            totalVolume = 400f,
+            additionalVolume = 80f,
+            dataQuality = "UNVERIFIED",
+            measurementVersion = null,
+            exerciseLogs = listOf(
+                ExerciseLog(
+                    exercise = bench,
+                    trackingType = TrackingType.WEIGHT_REPS,
+                    modality = ExerciseModality.STRENGTH,
+                    metricQuality = "UNVERIFIED",
+                    sets = listOf(WorkoutSet(setNumber = 1, weightKg = 40.0, reps = 10, isCompleted = true))
+                ),
+                ExerciseLog(
+                    exercise = dips,
+                    trackingType = TrackingType.BODYWEIGHT_REPS,
+                    modality = ExerciseModality.CALISTHENICS,
+                    metricQuality = "UNVERIFIED",
+                    sets = listOf(WorkoutSet(setNumber = 1, reps = 8, additionalWeight = 10f, isCompleted = true))
+                ),
+                ExerciseLog(
+                    exercise = pushups,
+                    trackingType = TrackingType.REPS_ONLY,
+                    modality = ExerciseModality.CALISTHENICS,
+                    metricQuality = "UNVERIFIED",
+                    sets = listOf(WorkoutSet(setNumber = 1, reps = 55, isCompleted = true))
+                ),
+                ExerciseLog(
+                    exercise = plank,
+                    trackingType = TrackingType.DURATION,
+                    modality = ExerciseModality.ISOMETRIC,
+                    metricQuality = "UNVERIFIED",
+                    sets = listOf(WorkoutSet(setNumber = 1, durationSeconds = 45, isCompleted = true))
+                ),
+                ExerciseLog(
+                    exercise = run,
+                    trackingType = TrackingType.DISTANCE_DURATION,
+                    modality = ExerciseModality.CARDIO,
+                    metricQuality = "UNVERIFIED",
+                    sets = listOf(WorkoutSet(setNumber = 1, durationSeconds = 1800, distanceMeters = 5000.0, isCompleted = true))
+                )
+            )
+        )
+
+        rule.setContent {
+            WorkoutTestEnvironment(indonesian = true) {
+                HomeLastWorkout(log = log)
+            }
+        }
+
+        rule.onNodeWithTag("home_last_workout_card").assertIsDisplayed()
+        rule.onNodeWithText("TERAKHIR · MULTI-MODAL").assertIsDisplayed()
+        rule.onNodeWithText("Durasi").assertIsDisplayed()
+        rule.onNodeWithText("42 mnt").assertIsDisplayed()
+        rule.onNodeWithText("45 dtk isometrik").assertIsDisplayed()
+        rule.onNodeWithText("Vol. eksternal").assertIsDisplayed()
+        rule.onNodeWithText("400 kg").assertIsDisplayed()
+        rule.onNodeWithText("80 kg tambahan").assertIsDisplayed()
+        rule.onNodeWithText("Jarak").assertIsDisplayed()
+        rule.onNodeWithText("5,0 km").assertIsDisplayed()
+        rule.onNodeWithText("30 mnt kardio").assertIsDisplayed()
+        rule.onNodeWithText("Riwayat lama · 73 repetisi").assertIsDisplayed()
     }
 
     private fun UserProfileState(isProfileLoadingOverride: Boolean): UserProfileState =

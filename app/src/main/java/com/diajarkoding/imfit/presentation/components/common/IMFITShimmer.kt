@@ -277,10 +277,19 @@ fun ShimmerStatCard(
                 )
             }
             Row(
-                modifier = Modifier.fillMaxWidth(),
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(IMFITSpacing.xl)
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .heightIn(min = IMFITComponentSizes.metricStripMinHeight)
+                    .padding(IMFITComponentSizes.border),
+                verticalAlignment = Alignment.CenterVertically
             ) {
+                ShimmerSummaryMetricColumn(brush = brush, valueWidth = 58.dp, modifier = Modifier.weight(1f))
+                Box(
+                    modifier = Modifier
+                        .width(IMFITComponentSizes.border)
+                        .height(IMFITComponentSizes.metricDivider)
+                        .background(colors.border)
+                )
                 ShimmerSummaryMetricColumn(brush = brush, valueWidth = 64.dp, modifier = Modifier.weight(1f))
                 Box(
                     modifier = Modifier
@@ -288,8 +297,15 @@ fun ShimmerStatCard(
                         .height(IMFITComponentSizes.metricDivider)
                         .background(colors.border)
                 )
-                ShimmerSummaryMetricColumn(brush = brush, valueWidth = 76.dp, modifier = Modifier.weight(1f))
+                ShimmerSummaryMetricColumn(brush = brush, valueWidth = 56.dp, modifier = Modifier.weight(1f))
             }
+            Box(
+                modifier = Modifier
+                    .width(128.dp)
+                    .height(14.dp)
+                    .clip(RoundedCornerShape(4.dp))
+                    .background(brush)
+            )
         }
     }
 }
@@ -301,13 +317,13 @@ private fun ShimmerSummaryMetricColumn(
     modifier: Modifier = Modifier
 ) {
     Column(
-        modifier = modifier,
+        modifier = modifier.padding(vertical = IMFITSpacing.sm),
         horizontalAlignment = Alignment.CenterHorizontally,
-        verticalArrangement = Arrangement.spacedBy(IMFITSpacing.compact)
+        verticalArrangement = Arrangement.spacedBy(IMFITSpacing.compact, Alignment.CenterVertically)
     ) {
         Row(
             verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(IMFITSpacing.inline)
+            horizontalArrangement = Arrangement.spacedBy(IMFITSpacing.xs)
         ) {
             Box(
                 modifier = Modifier
@@ -317,7 +333,7 @@ private fun ShimmerSummaryMetricColumn(
             )
             Box(
                 modifier = Modifier
-                    .width(68.dp)
+                    .width(52.dp)
                     .height(13.dp)
                     .clip(RoundedCornerShape(4.dp))
                     .background(brush)
@@ -328,6 +344,13 @@ private fun ShimmerSummaryMetricColumn(
                 .width(valueWidth)
                 .height(25.dp)
                 .clip(RoundedCornerShape(IMFITCornerRadius.xs))
+                .background(brush)
+        )
+        Box(
+            modifier = Modifier
+                .width(64.dp)
+                .height(14.dp)
+                .clip(RoundedCornerShape(4.dp))
                 .background(brush)
         )
     }

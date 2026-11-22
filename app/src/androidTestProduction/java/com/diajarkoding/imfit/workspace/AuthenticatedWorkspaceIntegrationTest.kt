@@ -25,6 +25,7 @@ import org.junit.Assert.*
 import org.junit.Assume.assumeTrue
 import org.junit.Test
 import org.junit.runner.RunWith
+import com.diajarkoding.imfit.data.sync.WorkoutAggregatePayloadCodec
 import java.time.Instant
 import java.time.ZoneOffset
 import java.time.format.DateTimeFormatter
@@ -90,8 +91,8 @@ class AuthenticatedWorkspaceIntegrationTest {
                 assertEquals(routine.revision, replayedCreate.revision)
                 val saveRequest = UUID.randomUUID().toString()
                 val prescription = listOf(
-                    TemplateExercise(exercise, sets = 3, reps = 8, restSeconds = 30),
-                    TemplateExercise(secondExercise, sets = 1, reps = 5, restSeconds = 15)
+                    TemplateExercise(exercise, sets = 3, reps = 8),
+                    TemplateExercise(secondExercise, sets = 1, reps = 5)
                 )
                 val emptyRevision = routine.revision
                 routine = routines.saveRoutine(routine.id, fixtureName, prescription, emptyRevision,
@@ -113,7 +114,8 @@ class AuthenticatedWorkspaceIntegrationTest {
                 assertEquals(routine.revision, reloaded.revision)
                 assertEquals(3, reloaded.exercises.single().sets)
                 assertEquals(8, reloaded.exercises.single().reps)
-                assertEquals(30, reloaded.exercises.single().restSeconds)
+                // Routine rest is runtime-only: the scalar writer never sends rest_seconds, so the server default applies.
+                assertEquals(60, reloaded.exercises.single().restSeconds)
                 assertEquals(exercise.id, reloaded.exercises.single().id)
 
                 val started = workouts.startWorkout(reloaded)
@@ -169,7 +171,8 @@ class AuthenticatedWorkspaceIntegrationTest {
                     remote.upsertWorkout(JsonObject(snapshot.workout + ("user_id" to JsonPrimitive(UUID.randomUUID().toString()))),
                         snapshot.exercises, snapshot.sets)
                 }
-                assertEquals(SyncRunResult.SUCCESS, ports.sync().run(owner))
+                val syncResult = ports.sync().run(owner)
+                assertEquals("Sync state: ${(ports.sync() as? com.diajarkoding.imfit.data.sync.SyncStateProvider)?.syncState?.value}", SyncRunResult.SUCCESS, syncResult)
                 val synced = requireNotNull(database.workoutLogDao().getWorkoutLogById(finished.id))
                 assertNull(synced.pendingOperation)
                 assertEquals("SYNCED", synced.syncStatus)
@@ -295,32 +298,14 @@ class AuthenticatedWorkspaceIntegrationTest {
 
     private data class Snapshot(val workout: JsonObject, val exercises: JsonArray, val sets: JsonArray)
 
-    /** Match the production sync wire contract, including optional provenance. */
+    /** Use the production codec so the manual upload and SyncManager share one immutable wire payload. */
     private suspend fun snapshot(database: IMFITDatabase, id: String): Snapshot {
         val log = requireNotNull(database.workoutLogDao().getWorkoutLogById(id))
-        val start = Instant.ofEpochMilli(log.startTime).atOffset(ZoneOffset.UTC)
-        val end = Instant.ofEpochMilli(log.endTime).atOffset(ZoneOffset.UTC)
-        return Snapshot(buildJsonObject {
-            put("id", log.id); put("user_id", log.userId)
-            log.templateId?.let { put("template_id", it) }
-            put("template_name", log.templateName); put("date", start.toLocalDate().toString())
-            put("start_time", start.format(DateTimeFormatter.ISO_OFFSET_DATE_TIME))
-            put("end_time", end.format(DateTimeFormatter.ISO_OFFSET_DATE_TIME))
-            put("total_volume", log.totalVolume.toDouble()); put("total_sets", log.totalSets); put("total_reps", log.totalReps)
-        }, JsonArray(database.exerciseLogDao().getExerciseLogsByWorkoutLogId(id).map { exercise ->
-            buildJsonObject {
-                put("id", exercise.id); put("workout_log_id", id); put("exercise_id", exercise.exerciseId)
-                put("exercise_name", exercise.exerciseName); put("muscle_category", exercise.muscleCategory)
-                put("order_index", exercise.orderIndex); put("total_volume", exercise.totalVolume.toDouble())
-                put("total_sets", exercise.totalSets); put("total_reps", exercise.totalReps)
-                exercise.inputDefaults?.let { put("input_defaults", it) }
-            }
-        }), JsonArray(database.workoutSetDao().getSetsByWorkoutLogId(id).map { set ->
-            buildJsonObject {
-                put("id", set.id); put("exercise_log_id", set.exerciseLogId); put("workout_log_id", id)
-                put("exercise_id", set.exerciseId); put("set_number", set.setNumber)
-                put("weight", requireNotNull(set.weight)); put("reps", set.reps); put("is_completed", set.isCompleted)
-            }
-        }))
+        val payload = WorkoutAggregatePayloadCodec.encode(
+            log,
+            database.exerciseLogDao().getExerciseLogsByWorkoutLogId(id),
+            database.workoutSetDao().getSetsByWorkoutLogId(id)
+        )
+        return Snapshot(payload.workout, payload.exercises, payload.sets)
     }
 }

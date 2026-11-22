@@ -295,7 +295,7 @@ class HomeScreenPresentationTest {
         rule.onNodeWithText("42 mnt").assertIsDisplayed()
         rule.onNodeWithText("45 dtk isometrik").assertIsDisplayed()
         rule.onNodeWithText("Vol. eksternal").assertIsDisplayed()
-        rule.onNodeWithText("400 kg").assertIsDisplayed()
+        rule.onNodeWithText("400 kg·repetisi").assertIsDisplayed()
         rule.onNodeWithText("80 kg tambahan").assertIsDisplayed()
         rule.onNodeWithText("Jarak").assertIsDisplayed()
         rule.onNodeWithText("5,0 km").assertIsDisplayed()

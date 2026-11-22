@@ -5,7 +5,7 @@ import io.github.jan.supabase.SupabaseClient
 import io.github.jan.supabase.auth.auth
 import io.github.jan.supabase.postgrest.postgrest
 import kotlinx.serialization.json.*
-import java.time.Instant
+import java.time.OffsetDateTime
 import java.time.ZoneOffset
 
 interface WorkoutRemoteDataSource {
@@ -42,7 +42,7 @@ class SupabaseWorkoutRemoteDataSource(
         val start = detail.getValue("start_time").jsonPrimitive.content
         val complete = JsonObject(detail + mapOf(
             "user_id" to JsonPrimitive(userId),
-            "date" to JsonPrimitive(Instant.parse(start).atZone(ZoneOffset.UTC).toLocalDate().toString()),
+            "date" to JsonPrimitive(OffsetDateTime.parse(start).withOffsetSameInstant(ZoneOffset.UTC).toLocalDate().toString()),
             "total_volume" to JsonPrimitive(detail.getValue("total_volume").jsonPrimitive.double),
             "exercise_logs" to JsonArray(children)
         ))

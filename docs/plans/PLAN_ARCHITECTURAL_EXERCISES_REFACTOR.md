@@ -6,18 +6,20 @@
 
 | Atribut | Kontrak |
 | --- | --- |
-| Versi / tanggal | **1.5 / 2026-11-08** (v1.4 / 2026-11-05 + revisi Active Session Semi-Offline, §17) |
-| Status | **T01–T18 selesai. Backend v3 DEPLOYED live (2026-11-06); Android domain, codec v3, Room v10 dan adapter legacy terimplementasi & terverifikasi (2026-11-07, §15). Android writer v3 belum diaktifkan; Room kini v10. Phase 3 (T19–T25) terimplementasi (§16). Revisi v1.5 (§17) menyusun ulang Phase 4–6: T26–T38 Active Session Semi-Offline; belum ada yang diimplementasikan.** |
+| Versi / tanggal | **1.6 / 2026-11-22** (v1.5 / 2026-11-08 + sinkronisasi status dan verifikasi lokal §18) |
+| Status | **T01–T32, T34–T37 dan T39–T43 selesai; terbuka: T33, T38, T44–T49.** Backend v3 + kontrak rest aktual **DEPLOYED live** (T11 2026-11-06; T37 2026-11-08). Android: Room **v11**, codec v3, routine setup/edit/picker/detail (Phase 3), active session v3 Room-first dengan timer monotonic, Pause/Resume, Undo, rest aktual, metrik cardio dinamis, dan sync aggregate batch. **Writer sesi v3 tetap dimatikan** (`ActiveSessionV3Gate` off) sampai T48. Verifikasi lokal terbaru (Supabase lokal + emulator) di §18. |
 | Prioritas | Konsistensi data dan logging cepat; bukan penambahan mode atau fitur analytics. |
 | Ruang lingkup | Katalog → UI Detail → Setup Form → rutin → sesi aktif → penyimpanan lokal/remote → ringkasan, riwayat, dan progres. |
-| Basis yang diperiksa | Sumber Android `app/src/main`, model domain, Room **v10**, schema `10.json`, migrasi repository, backup/restore dan deployment Supabase live pada **2026-11-06** (§14), serta bukti verifikasi runtime emulator pada **2026-11-07** (§15). |
-| Target versi | Payload sesi **v3** dan kontrak pengukuran **v3** sudah deployed pada backend; Room **v10** dan codec v3 aktif di data layer; writer sesi v3 Android belum diaktifkan (tetap writer v2). |
+| Basis yang diperiksa | Sumber Android `app/src/main`, model domain, Room **v11**, schema `11.json`, 32 migrasi repository, backup/restore dan deployment Supabase live pada **2026-11-06** dan **2026-11-08** (§14, §17.13), bukti runtime emulator 2026-11-07 (§15), serta verifikasi lokal 2026-11-22 (§18). |
+| Target versi | Payload sesi **v3** dan kontrak pengukuran **v3** sudah deployed pada backend; Room **v11** dan codec v3 aktif di data layer; writer sesi v3 Android di balik `ActiveSessionV3Gate` (default off, dinyalakan hanya di T48). |
 | Otoritas | Server menentukan format katalog dan validasi; UI tidak memilih mode pencatatan. Snapshot mempertahankan makna data. |
 | Gate | **Writer Android v3 tidak diaktifkan sampai T26–T38 selesai** (Room-first, finalisasi completed-only, aggregate upload terhubung; §17.9). Status pengujian v1.3 **tidak berlaku untuk v1.4**. Implementasi harus memenuhi acceptance §10 sebelum cutover. |
 
-Revisi ini menggantikan keputusan lama yang mempertahankan enam mode, selector **Waktu saja / Jarak + waktu**, bodyweight reps-first, serta pemisahan input beban tambahan/bantuan untuk data baru. Bukti dan hasil pengujian lama tetap historis: [Phase 5 Verification Report](PHASE5_VERIFICATION_REPORT.md). Angka kelulusan di laporan tersebut bukan bukti kontrak baru ini.
+Revisi ini menggantikan keputusan lama yang mempertahankan enam mode, selector **Waktu saja / Jarak + waktu**, bodyweight reps-first, serta pemisahan input beban tambahan/bantuan untuk data baru. Laporan verifikasi Phase 5 untuk desain multimodality lama sudah dihapus dari repo (tersedia di riwayat Git, commit `d5386d4`/`5cc5457`); angka kelulusannya bukan bukti kontrak baru ini.
 
 **Changelog:** v1.4 menyatukan Strength/bodyweight, memakai dynamic set rows pada setup/edit, menyimpan target/rest per baris, dan membatasi metrik cardio menurut profil/capability exercise. Default jumlah baris hanya diterapkan saat pertama ditambahkan; routine existing tidak direset. Revisi spesifikasi 2026-11-05 hanya dokumentasi. Implementasi/verifikasi terisolasi T01–T03 dicatat di §11; T04–T07 di §12; T08–T10 di §13; **T11 deployment live backend di §14**; **T12–T18 (Phase 2 Android data layer, Room v10, codec v3, adapter legacy) selesai dan terverifikasi pada 2026-11-07 di §15**. Writer Android v3 tetap belum diaktifkan; UI setup/active tetap v2 sampai Phase 3/4.
+
+**Changelog v1.6 (2026-11-22):** sinkronisasi status dengan kode (T26–T43 sebagian besar selesai) dan penambahan §18 (verifikasi lokal penuh). Dokumen tidak terpakai di `docs/plans` dihapus: `PLAN_HOME_REFACTOR`, `PLAN_FLOW_ADD_ROUTINE_REFACTOR` (sudah terimplementasi; kode adalah sumber kebenaran), `PHASE5_VERIFICATION_REPORT` (desain lama) dan paket SQL Phase 1 (salinan `supabase/migrations` dan `supabase/tests`).
 
 **Changelog v1.5 (2026-11-08):** dokumentasi saja. §17 menambahkan kontrak Active Session semi-offline: snapshot immutable, timer monotonic tanpa write per detik, Pause/Resume global, durasi set aktual, **rest aktual** (`rest_elapsed_ms`/`rest_end_reason`) terpisah dari target `rest_seconds`, recovery boot-aware, finalisasi atomik, dan sync satu aggregate per workout. Mengubah keputusan v1.4 "tidak ada rest hasil": yang tetap berlaku adalah rest **bukan input/measurement dan tidak mengubah target**; outcome aktual dicatat terpisah. Daftar task Phase 4–6 diganti (lihat TASKS).
 
@@ -1238,7 +1240,51 @@ Sisa data uji di akun tes: satu workout `d8692a3a-dd04-4cde-8f2f-3fd8d0e02cb7` (
 
 Rujukan UI dibaca read-only dari Pencil MCP (`TXyaw` Sesi Aktif: baris set, teks `Rest target: N s`, Delete terkunci saat completed, label metrik `Kalori (kcal)`, `Jarak (km)`, `Kecepatan (km/h)`, `Lap / Rep`, `Incline (%)`, petunjuk `Metrik opsional · kosong = tidak dicatat`). Implementasi: `ActiveSetRow` (rest target read-only, undo, metrik cardio dinamis), `ActiveExerciseCard`/`ActiveWorkoutScreen` (teruskan metadata snapshot dan callback undo), dialog rest dengan Jeda/Lanjutkan, `ExerciseLog.addV3Set`, `estimateRoutineDurationMinutes`, metrik Waktu aktif di Summary, banner rekonsiliasi. Verifikasi: unit demo 334 / production 328 lulus; Compose `ActiveSetRowV3UiTest` (8) dan `WorkoutSummaryActiveTimeTest` (2) lulus; suite instrumentasi penuh 139 dari 140 lulus.
 
-**Satu kegagalan di luar lingkup:** `HomeScreenPresentationTest.homeLastWorkoutCardRendersThreeColumnLegacyMultiModalSummary` ("400 kg" tidak tampil). File Home (`HomeComponents.kt`, `HomeScreenPresentationTest.kt`, `home_redesign_strings.xml`, drawable `ic_home_*`, `DesignSystem.kt`, `IMFITShimmer.kt`) diubah oleh proses lain pada 12:18–12:19 (bukan oleh pekerjaan ini); kegagalan berasal dari redesign Home yang sedang berjalan dan sudah ada sebelum perubahan UI Active. Tidak disentuh.
+**Satu kegagalan di luar lingkup (sudah selesai 2026-11-22, §18.5):** `HomeScreenPresentationTest.homeLastWorkoutCardRendersThreeColumnLegacyMultiModalSummary` gagal karena ekspektasi usang (UI memakai `kg·repetisi`); test diperbarui dan lulus.
 
 **Masih terbuka:** T33 (test kill proses nyata), T38 (History/Progress waktu aktif + audit volume), lalu T44–T49 (integrasi, kompatibilitas, build rilis, cutover T48, finalisasi).
 
+## 18. Verifikasi lokal penuh — 2026-11-22
+
+Tujuan: membuktikan seluruh kontrak T01–T43 berjalan pada Supabase **lokal** (bukan produksi) dengan emulator Android. Tidak ada request ke Supabase produksi; `local.properties` hanya dialihkan sementara ke `http://10.0.2.2:54321` dan dipulihkan setelahnya.
+
+### 18.1 Lingkungan
+
+| Komponen | Nilai |
+| --- | --- |
+| Stack | Supabase CLI 2.122.0, PostgreSQL 17.11, Docker via colima; service dibatasi `127.0.0.1` |
+| Emulator | `Pixel_5_API_34`, flavor `production` (backend lokal) dan `demo` |
+| Akun uji | dibuat di GoTrue lokal; kredensial dikirim lewat file sementara di perangkat dan dihapus setelahnya |
+
+### 18.2 Catatan setup (penting untuk reproduksi)
+
+Replay 32 migration dari database kosong **tidak berjalan apa adanya**: seed repo (`20260828130132_imfit_catalog_seed.sql`) hanya berisi 81 exercise, sedangkan migration `20261101000100` mewajibkan katalog live 161 exercise. Cara yang dipakai: terapkan 16 migration pertama (sampai `20261031154000`), muat **hanya tabel katalog** (`muscle_categories` 8 baris, `exercises` 161 baris, tanpa data user) dari backup `backup-20261106T131705Z`, lalu terapkan 16 migration sisanya (T11 dan T37). Hasil: ledger 32 migration; katalog 138 Strength, 2 Isometric, 12 Cardio, 9 Conditioning (sesuai §11.3). Database lokal bersifat sementara.
+
+### 18.3 SQL (`supabase/tests`)
+
+| Test | Hasil |
+| --- | --- |
+| `exercise_catalog_capabilities`, `legacy_snapshot_metadata`, `routine_rest_contract`, `routine_target_validation_v3`, `workout_results_v3`, `routine_revision_targets_v3`, `active_session_v3`, `local_workout_aggregate_v3`, `workout_read_contract_v3`, `rest_outcome_contract` | PASS |
+| `phase2_verification_regressions` | PASS 14/14 |
+| `phase2_test_matrix` | PASS |
+| `phase1_assertions` | PASS setelah diperbarui ke kontrak T02/T03 (default `WEIGHT_REPS`/`DURATION`, mode legacy tetap ada, ≥196 relasi — kini 218, riwayat legacy dibatasi `measurement_version IS NULL`). Dijalankan pada data tanpa penulisan pasca-cutover. |
+
+### 18.4 Android
+
+| Pemeriksaan | Hasil |
+| --- | --- |
+| Unit `testDemoDebugUnitTest` | **334 PASS**, 0 gagal |
+| Unit `testProductionDebugUnitTest` | **328 PASS**, 0 gagal |
+| Instrumentasi demo (emulator) | 141 test: 127 PASS, 13 dilewati, 1 gagal (Home, §18.5; lulus 4/4 setelah perbaikan) |
+| E2E production ke Supabase lokal: `RestOutcomeEndToEndTest` | PASS (routine v3 → start → timer → Complete → rest outcome → Pause/Resume → Finish hanya Room → satu upload aggregate → read-back identik) |
+| E2E production: `AuthenticatedWorkspaceIntegrationTest` | PASS 2/2 setelah perbaikan §18.5 |
+| `RestTimerProductionReleaseTest` (16) | **Tidak dijalankan**: hanya valid pada build `productionRelease` ber-minify (asersi "Must test minified productionRelease") |
+
+### 18.5 Temuan dan perbaikan
+
+1. **Bug aplikasi:** `WorkoutRemoteDataSource.fetchLatestCompletedWorkoutLog` memakai `Instant.parse` yang gagal pada timestamp `…+00:00` di emulator API 34; Home diam-diam jatuh ke `LocalFallback`. Diganti `OffsetDateTime.parse(...).withOffsetSameInstant(UTC)`. Dampak pada produksi belum diverifikasi.
+2. **Test usang diperbarui:** Home mengharapkan `400 kg` (UI kini `400 kg·repetisi`); `AuthenticatedWorkspaceIntegrationTest` mengharapkan `restSeconds=30` dari writer scalar (rest rutin kini runtime-only, default 60) dan membangun payload agregat manual berbeda dari `WorkoutAggregatePayloadCodec` sehingga ditolak `IDEMPOTENCY_MISMATCH` (perilaku server benar; helper kini memakai codec produksi); `phase1_assertions.sql` (§18.3).
+
+### 18.6 Belum terbukti
+
+Acceptance A-01–A-32 secara penuh (T45), kill proses nyata (T33), mode pesawat literal, layout 360/412, build rilis ber-minify dan test timer rilis (T47), backward compatibility penuh v1/v2 (T46), dan cutover writer v3 (T48). Semua tetap terbuka di TASKS.

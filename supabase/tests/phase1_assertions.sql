@@ -32,20 +32,28 @@ BEGIN
     LEFT JOIN public.exercises e ON e.id=m.exercise_id
     WHERE e.id IS NULL
   ) THEN RAISE EXCEPTION 'FAIL: mode has orphan exercise'; END IF;
-  IF EXISTS (SELECT 1 FROM public.exercise_logs WHERE metric_quality <> 'LEGACY_UNVERIFIED')
-     OR EXISTS (SELECT 1 FROM public.workout_logs WHERE data_quality <> 'LEGACY_UNVERIFIED')
+  -- Phase 1 gate: run against pre-existing history. Only pre-v3 (measurement_version IS NULL) rows must stay unverified;
+  -- v3 writes (and rows written by the current app after cutover) are legitimately VERIFIED.
+  IF EXISTS (SELECT 1 FROM public.exercise_logs WHERE measurement_version IS NULL AND metric_quality <> 'LEGACY_UNVERIFIED')
+     OR EXISTS (SELECT 1 FROM public.workout_logs WHERE measurement_version IS NULL AND data_quality <> 'LEGACY_UNVERIFIED')
   THEN RAISE EXCEPTION 'FAIL: historical workout incorrectly verified'; END IF;
   IF EXISTS (SELECT 1 FROM public.template_exercises WHERE reps IS NULL)
   THEN RAISE EXCEPTION 'FAIL: legacy template reps modified'; END IF;
   IF (SELECT COUNT(*) FROM public.exercises WHERE id IN
       ('ex_chest_4','ex_core_1','ex_back_17','ex_cardio_1')) <> 4
-     OR NOT EXISTS (SELECT 1 FROM public.exercises WHERE id='ex_chest_4' AND default_tracking_type='BODYWEIGHT_REPS')
+     -- T02/T03 canonical defaults: Strength -> WEIGHT_REPS, Isometric/Cardio -> DURATION.
+     OR NOT EXISTS (SELECT 1 FROM public.exercises WHERE id='ex_chest_4' AND default_tracking_type='WEIGHT_REPS')
      OR NOT EXISTS (SELECT 1 FROM public.exercises WHERE id='ex_core_1' AND default_tracking_type='DURATION')
-     OR NOT EXISTS (SELECT 1 FROM public.exercises WHERE id='ex_back_17' AND default_tracking_type='ASSISTED_REPS')
-     OR NOT EXISTS (SELECT 1 FROM public.exercises WHERE id='ex_cardio_1' AND default_tracking_type='DISTANCE_DURATION')
+     OR NOT EXISTS (SELECT 1 FROM public.exercises WHERE id='ex_back_17' AND default_tracking_type='WEIGHT_REPS')
+     OR NOT EXISTS (SELECT 1 FROM public.exercises WHERE id='ex_cardio_1' AND default_tracking_type='DURATION')
+     -- Legacy modes stay readable (never deleted) even though they are no longer the default.
+     OR NOT EXISTS (SELECT 1 FROM public.exercise_tracking_modes WHERE exercise_id='ex_chest_4' AND tracking_type='BODYWEIGHT_REPS')
+     OR NOT EXISTS (SELECT 1 FROM public.exercise_tracking_modes WHERE exercise_id='ex_back_17' AND tracking_type='ASSISTED_REPS')
+     OR NOT EXISTS (SELECT 1 FROM public.exercise_tracking_modes WHERE exercise_id='ex_cardio_1' AND tracking_type='DISTANCE_DURATION')
   THEN RAISE EXCEPTION 'FAIL: critical exercise incorrect mapping'; END IF;
   SELECT COUNT(*) INTO v_modes FROM public.exercise_tracking_modes;
-  IF v_modes<>196 THEN RAISE EXCEPTION 'FAIL: expected 196 mode relations but got %',v_modes; END IF;
+  -- 196 legacy relations are never removed; T02/T03 only add canonical modes.
+  IF v_modes<196 THEN RAISE EXCEPTION 'FAIL: expected at least 196 mode relations but got %',v_modes; END IF;
   RAISE NOTICE 'PASS: % exercises; % allowed mode relations; legacy unchanged',v_total,v_modes;
 END;
 $imfit_assertions$;

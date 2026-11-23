@@ -70,7 +70,7 @@ class RedesignNavigationTest {
         rule.waitForIdle()
         waitForText(text(R.string.nav_progress))
         rule.onNodeWithText(text(R.string.nav_progress)).performClick()
-        try { waitForText(text(R.string.progress_overview_volume)) }
+        try { waitForText(text(R.string.progress_overview_volume_compact)) }
         catch (e: Exception) { screenshot("progress-failure"); throw e }
         screenshot("progress-after")
         rule.onNode(hasScrollToNodeAction()).performScrollToNode(hasContentDescription(text(R.string.calendar_view_yearly)))
@@ -126,7 +126,7 @@ class RedesignNavigationTest {
                 waitForText(text(R.string.muscle_category_chest))
                 screenshot("exercise-$suffix")
                 rule.onNodeWithText(text(R.string.nav_progress)).performClick()
-                waitForText(text(R.string.progress_overview_volume))
+                waitForText(text(R.string.progress_overview_volume_compact))
                 screenshot("progress-$suffix")
             }
         } finally {
@@ -181,11 +181,10 @@ class RedesignNavigationTest {
                 }) }
                 requireNotNull(repository.finishWorkout())
             }
-            val localized = LocaleManager.getUpdatedContext(rule.activity)
-            val locale = localized.resources.configuration.locales[0]
-            val heading = localized.getString(R.string.home_summary_heading, name.uppercase(locale))
-            waitForText(heading)
-            rule.onNodeWithText(heading).assertIsDisplayed()
+            val inLastWorkoutCard = androidx.compose.ui.test.hasText(name) and
+                androidx.compose.ui.test.hasAnyAncestor(androidx.compose.ui.test.hasTestTag("home_last_workout_card"))
+            rule.waitUntil(5_000) { rule.onAllNodes(inLastWorkoutCard).fetchSemanticsNodes().isNotEmpty() }
+            rule.onNode(inLastWorkoutCard).assertIsDisplayed()
         } finally { runBlocking { repository.cancelWorkout(); deleteFixture(ports.routines(), template.id) } }
     }
 

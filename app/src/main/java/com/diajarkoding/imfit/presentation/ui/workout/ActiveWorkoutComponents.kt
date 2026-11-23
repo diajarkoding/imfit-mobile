@@ -85,6 +85,10 @@ import com.diajarkoding.imfit.presentation.components.common.Delete
 import com.diajarkoding.imfit.presentation.components.common.FitnessCenter
 import com.diajarkoding.imfit.presentation.components.common.IMFITPlatformDialog
 import com.diajarkoding.imfit.presentation.components.common.KeyboardArrowRight
+import com.diajarkoding.imfit.presentation.components.common.KeyboardArrowDown
+import com.diajarkoding.imfit.presentation.components.common.KeyboardArrowUp
+import com.diajarkoding.imfit.presentation.ui.home.formatHomeDistanceKilometers
+import com.diajarkoding.imfit.presentation.ui.home.formatHomeSupportingDurationSeconds
 import com.diajarkoding.imfit.presentation.components.common.Pause
 import com.diajarkoding.imfit.presentation.components.common.PlayArrow
 import com.diajarkoding.imfit.presentation.components.common.RoutineButton
@@ -92,6 +96,7 @@ import com.diajarkoding.imfit.presentation.components.common.Schedule
 import com.diajarkoding.imfit.presentation.components.common.Symbols
 import com.diajarkoding.imfit.presentation.components.common.Timer
 import com.diajarkoding.imfit.theme.IMFITColors
+import com.diajarkoding.imfit.theme.IMFITShapes
 import kotlinx.coroutines.launch
 
 import java.util.Locale
@@ -184,12 +189,160 @@ internal fun ActiveSessionOverview(
     totalSets: Int,
     exerciseLogs: List<ExerciseLog>,
     locale: Locale,
-    stacked: Boolean,
     modifier: Modifier = Modifier
 ) {
-    Column(modifier.fillMaxWidth().testTag("active_session_overview"), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-        ActiveMetricCard(Symbols.Filled.CheckCircle, stringResource(R.string.active_session_sets_completed), "$completedSets / $totalSets")
-        WorkoutMeasurementMetrics(exerciseLogs, locale, stacked)
+    val colors = IMFITColors.training
+    var expanded by rememberSaveable { mutableStateOf(false) }
+    val metrics = remember(exerciseLogs) { workoutMeasurements(exerciseLogs) }
+    val number = remember(locale) { NumberFormat.getNumberInstance(locale).apply { maximumFractionDigits = 2 } }
+    val repsText = number.format(metrics.repetitions)
+    val volumeText = stringResource(R.string.redesign_kg, number.format(metrics.externalVolume))
+    val additionalText = stringResource(R.string.redesign_kg, number.format(metrics.additionalVolume))
+    val isometricText = formatHomeSupportingDurationSeconds(metrics.holdSeconds, locale)
+    val cardioText = formatHomeSupportingDurationSeconds(metrics.cardioSeconds, locale, preferMinutesWhenZero = true)
+    val otherText = formatHomeSupportingDurationSeconds(metrics.otherDurationSeconds, locale)
+    val distanceText = stringResource(
+        R.string.home_last_workout_distance_unit,
+        formatHomeDistanceKilometers(metrics.distanceMeters, locale)
+    )
+    val stats = buildList {
+        if (metrics.repetitions > 0) add(stringResource(R.string.active_session_stat_reps) to repsText)
+        if (metrics.externalVolume > 0) add(stringResource(R.string.active_session_stat_load_volume) to volumeText)
+        if (metrics.additionalVolume > 0) add(stringResource(R.string.active_session_stat_additional_volume) to additionalText)
+        if (metrics.holdSeconds > 0) add(stringResource(R.string.active_session_stat_isometric) to isometricText)
+        if (metrics.cardioSeconds > 0) add(stringResource(R.string.active_session_stat_cardio) to cardioText)
+        if (metrics.otherDurationSeconds > 0) add(stringResource(R.string.active_session_stat_other_duration) to otherText)
+        if (metrics.distanceMeters > 0) add(stringResource(R.string.active_session_stat_distance) to distanceText)
+    }
+    val primaryParts = buildList {
+        if (metrics.repetitions > 0) add(stringResource(R.string.active_session_summary_reps, repsText))
+        if (metrics.externalVolume > 0) add(volumeText)
+        if (metrics.cardioSeconds > 0) add(stringResource(R.string.active_session_summary_cardio, cardioText))
+    }
+    val fallbackParts = buildList {
+        if (metrics.additionalVolume > 0) add(additionalText)
+        if (metrics.holdSeconds > 0) add(stringResource(R.string.active_session_summary_isometric, isometricText))
+        if (metrics.distanceMeters > 0) add(distanceText)
+        if (metrics.otherDurationSeconds > 0) add(otherText)
+    }
+    val secondaryParts = primaryParts.ifEmpty { fallbackParts }
+    val progress = if (totalSets > 0) (completedSets.toFloat() / totalSets).coerceIn(0f, 1f) else 0f
+    Surface(
+        modifier = modifier.fillMaxWidth().testTag("active_session_overview"),
+        shape = IMFITShapes.CardSmall,
+        color = colors.surface,
+        border = BorderStroke(1.dp, colors.border)
+    ) {
+        Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.Bottom,
+                horizontalArrangement = Arrangement.SpaceBetween
+            ) {
+                Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                        Icon(Symbols.Filled.CheckCircle, null, Modifier.size(14.dp), tint = colors.primary)
+                        Text(
+                            stringResource(R.string.active_session_sets_completed),
+                            color = colors.muted,
+                            fontSize = 11.sp,
+                            lineHeight = 15.sp
+                        )
+                    }
+                    Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                        Text(
+                            completedSets.toString(),
+                            color = colors.primary,
+                            fontSize = 24.sp,
+                            fontWeight = FontWeight.Bold,
+                            lineHeight = 26.sp,
+                            modifier = Modifier.alignByBaseline()
+                        )
+                        Text(
+                            "/ $totalSets",
+                            color = colors.muted,
+                            fontSize = 15.sp,
+                            fontWeight = FontWeight.SemiBold,
+                            lineHeight = 20.sp,
+                            modifier = Modifier.alignByBaseline()
+                        )
+                    }
+                }
+                if (stats.isNotEmpty()) {
+                    Row(
+                        modifier = Modifier
+                            .heightIn(min = 48.dp)
+                            .clip(RoundedCornerShape(8.dp))
+                            .clickable(role = Role.Button) { expanded = !expanded }
+                            .padding(horizontal = 4.dp)
+                            .testTag("active_session_stats_toggle"),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(2.dp)
+                    ) {
+                        Text(
+                            stringResource(
+                                if (expanded) R.string.active_session_stats_close else R.string.active_session_stats_toggle
+                            ),
+                            color = colors.primary,
+                            fontSize = 12.sp,
+                            fontWeight = FontWeight.SemiBold,
+                            lineHeight = 16.sp
+                        )
+                        Icon(
+                            if (expanded) Symbols.Filled.KeyboardArrowUp else Symbols.Filled.KeyboardArrowDown,
+                            null,
+                            Modifier.size(14.dp),
+                            tint = colors.primary
+                        )
+                    }
+                }
+            }
+            Box(
+                Modifier
+                    .fillMaxWidth()
+                    .height(6.dp)
+                    .clip(RoundedCornerShape(3.dp))
+                    .background(colors.border)
+            ) {
+                Box(
+                    Modifier
+                        .fillMaxWidth(progress)
+                        .height(6.dp)
+                        .clip(RoundedCornerShape(3.dp))
+                        .background(colors.primary)
+                )
+            }
+            if (expanded && stats.isNotEmpty()) {
+                Column(Modifier.fillMaxWidth().testTag("active_session_stats_list")) {
+                    HorizontalDivider(thickness = 1.dp, color = colors.border)
+                    Spacer(Modifier.height(4.dp))
+                    stats.forEach { (label, value) ->
+                        Row(
+                            modifier = Modifier.fillMaxWidth().padding(vertical = 6.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.SpaceBetween
+                        ) {
+                            Text(label, color = colors.muted, fontSize = 12.sp, lineHeight = 17.sp)
+                            Text(
+                                value,
+                                color = colors.text,
+                                fontSize = 13.sp,
+                                fontWeight = FontWeight.SemiBold,
+                                lineHeight = 18.sp
+                            )
+                        }
+                    }
+                }
+            } else if (secondaryParts.isNotEmpty()) {
+                Text(
+                    secondaryParts.joinToString(" · "),
+                    color = colors.muted,
+                    fontSize = 12.sp,
+                    lineHeight = 17.sp,
+                    modifier = Modifier.testTag("active_session_secondary_line")
+                )
+            }
+        }
     }
 }
 

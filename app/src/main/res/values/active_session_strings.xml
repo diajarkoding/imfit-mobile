@@ -43,4 +43,16 @@
     <string name="rest_timer_unit_seconds">Seconds</string>
     <string name="rest_timer_minus_30">−30 seconds</string>
     <string name="execution_stopwatch_review">Stopwatch paused after a device restart or an unverified clock. Review the saved duration, then resume or edit it manually.</string>
+    <string name="active_session_stats_toggle">Stats</string>
+    <string name="active_session_stats_close">Close</string>
+    <string name="active_session_stat_reps">Reps</string>
+    <string name="active_session_stat_load_volume">Load volume</string>
+    <string name="active_session_stat_additional_volume">Additional load</string>
+    <string name="active_session_stat_isometric">Isometric</string>
+    <string name="active_session_stat_cardio">Cardio</string>
+    <string name="active_session_stat_other_duration">Other duration</string>
+    <string name="active_session_stat_distance">Distance</string>
+    <string name="active_session_summary_reps">%1$s reps</string>
+    <string name="active_session_summary_cardio">%1$s cardio</string>
+    <string name="active_session_summary_isometric">%1$s isometric</string>
 </resources>

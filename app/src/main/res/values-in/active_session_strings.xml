@@ -43,4 +43,16 @@
     <string name="rest_timer_unit_seconds">Detik</string>
     <string name="rest_timer_minus_30">−30 detik</string>
     <string name="execution_stopwatch_review">Stopwatch dijeda setelah perangkat dimulai ulang atau jam tidak dapat diverifikasi. Tinjau durasi tersimpan, lalu lanjutkan atau edit manual.</string>
+    <string name="active_session_stats_toggle">Statistik</string>
+    <string name="active_session_stats_close">Tutup</string>
+    <string name="active_session_stat_reps">Repetisi</string>
+    <string name="active_session_stat_load_volume">Volume beban</string>
+    <string name="active_session_stat_additional_volume">Beban tambahan</string>
+    <string name="active_session_stat_isometric">Isometrik</string>
+    <string name="active_session_stat_cardio">Kardio</string>
+    <string name="active_session_stat_other_duration">Durasi lain</string>
+    <string name="active_session_stat_distance">Jarak</string>
+    <string name="active_session_summary_reps">%1$s reps</string>
+    <string name="active_session_summary_cardio">%1$s kardio</string>
+    <string name="active_session_summary_isometric">%1$s isometrik</string>
 </resources>

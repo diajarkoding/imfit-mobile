@@ -398,8 +398,7 @@ internal fun ActiveWorkoutScreenContent(
                             completedSets = completedSets,
                             totalSets = totalSets,
                             exerciseLogs = session.exerciseLogs,
-                            locale = locale,
-                            stacked = stacked
+                            locale = locale
                         )
                     }
 

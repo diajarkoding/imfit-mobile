@@ -34,4 +34,9 @@
     <string name="home_sync_failed_description">Data lokal tetap ada. Coba lagi saat online.</string>
     <string name="home_last_workout_error">Tidak dapat memuat ringkasan latihan terakhir.</string>
     <string name="home_templates_error">Tidak dapat memuat daftar rutinitas.</string>
+    <string name="home_last_workout_overline">LATIHAN TERAKHIR · %1$s</string>
+    <string name="home_last_workout_session_duration">Durasi sesi</string>
+    <string name="home_last_workout_load_volume">Volume beban</string>
+    <string name="home_last_workout_reps_label">Repetisi</string>
+    <string name="unit_km">km</string>
 </resources>

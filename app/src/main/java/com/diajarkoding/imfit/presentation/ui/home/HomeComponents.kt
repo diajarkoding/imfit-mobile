@@ -170,7 +170,9 @@ internal data class HomeLastWorkoutSummary(
     val distanceKmText: String,
     val cardioDurationText: String,
     val repetitionsCount: Int,
-    val repetitionsText: String
+    val repetitionsText: String,
+    val primaryVolumeKg: Double = 0.0,
+    val distanceMeters: Double = 0.0
 )
 
 internal fun isIndonesianLocale(locale: Locale): Boolean =
@@ -295,7 +297,9 @@ internal fun homeLastWorkoutSummary(log: WorkoutLog?, locale: Locale): HomeLastW
             preferMinutesWhenZero = true
         ),
         repetitionsCount = repetitionsCount,
-        repetitionsText = numberFormat.format(repetitionsCount)
+        repetitionsText = numberFormat.format(repetitionsCount),
+        primaryVolumeKg = primaryVolumeKg,
+        distanceMeters = distanceMeters
     )
 }
 
@@ -304,37 +308,34 @@ internal fun HomeLastWorkout(log: WorkoutLog?, modifier: Modifier = Modifier) {
     val colors = homePalette()
     val locale = LocalConfiguration.current.locales[0] ?: Locale.ROOT
     val dash = stringResource(R.string.placeholder_dash)
-    val headingText = if (log != null) {
-        stringResource(R.string.home_summary_heading, log.templateName.uppercase(locale))
-    } else {
-        stringResource(R.string.home_summary_heading, dash)
-    }
     val dateText = if (log != null) {
         Instant.ofEpochMilli(log.startTime)
             .atZone(ZoneId.systemDefault())
             .format(DateTimeFormatter.ofPattern("d MMM yyyy", locale))
+            .uppercase(locale)
     } else {
         dash
     }
     val summary = remember(log, locale) { homeLastWorkoutSummary(log, locale) }
     val durationText = summary.durationText ?: stringResource(R.string.workout_duration_zero)
-    val volumeCaption = stringResource(
-        if (summary.isV3) {
-            R.string.home_last_workout_recorded_load_label
-        } else {
-            R.string.home_last_workout_external_volume_label
+    val metrics = buildList {
+        add(HomeCompactMetricValue(stringResource(R.string.home_last_workout_session_duration),
+            durationText.substringBeforeLast(' '), durationText.substringAfterLast(' ', "").ifBlank { null }))
+        if (log != null && summary.primaryVolumeKg > 0.0) {
+            add(HomeCompactMetricValue(
+                stringResource(if (summary.isV3) R.string.home_last_workout_load_volume
+                    else R.string.home_last_workout_external_volume_label),
+                summary.primaryVolumeText, stringResource(R.string.unit_kg)))
         }
-    )
-    val footerText = when {
-        log == null -> stringResource(R.string.home_summary_empty)
-        summary.isLegacyOrUnverified && summary.repetitionsCount > 0 ->
-            stringResource(R.string.home_last_workout_legacy_reps_footer, summary.repetitionsText)
-        summary.isLegacyOrUnverified ->
-            stringResource(R.string.home_last_workout_legacy_footer)
-        summary.repetitionsCount > 0 ->
-            stringResource(R.string.home_last_workout_reps_footer, summary.repetitionsText)
-        else -> null
-    }
+        if (log != null && summary.distanceMeters > 0.0) {
+            add(HomeCompactMetricValue(stringResource(R.string.home_last_workout_distance_label),
+                summary.distanceKmText, stringResource(R.string.unit_km)))
+        }
+        if (log != null && summary.isV3 && summary.repetitionsCount > 0) {
+            add(HomeCompactMetricValue(stringResource(R.string.home_last_workout_reps_label),
+                summary.repetitionsText, null))
+        }
+    }.take(3)
     Surface(
         modifier = modifier.fillMaxWidth().testTag("home_last_workout_card"),
         shape = IMFITShapes.CardSmall,
@@ -343,91 +344,98 @@ internal fun HomeLastWorkout(log: WorkoutLog?, modifier: Modifier = Modifier) {
     ) {
         Column(
             Modifier.padding(IMFITSpacing.cardPadding),
-            verticalArrangement = Arrangement.spacedBy(IMFITSpacing.summaryGap)
+            verticalArrangement = Arrangement.spacedBy(14.dp)
         ) {
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(IMFITSpacing.compact)
+                horizontalArrangement = Arrangement.spacedBy(IMFITSpacing.sm)
             ) {
-                Icon(
-                    painterResource(R.drawable.ic_home_history),
-                    null,
-                    Modifier.size(IMFITComponentSizes.metricIcon),
-                    tint = colors.muted
-                )
-                Text(
-                    headingText,
-                    Modifier.weight(1f),
-                    color = colors.muted,
-                    style = IMFITTypography.historyHeading
-                )
-                Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(IMFITSpacing.xs)
-                ) {
+                Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
                     Text(
-                        dateText,
+                        stringResource(R.string.home_last_workout_overline, dateText),
                         color = colors.muted,
-                        style = IMFITTypography.historyDate,
-                        textAlign = TextAlign.End
+                        fontSize = 10.sp,
+                        fontWeight = FontWeight.SemiBold,
+                        lineHeight = 13.sp,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
                     )
-                    Icon(
-                        painterResource(R.drawable.ic_home_chevron_right),
-                        null,
-                        Modifier.size(IMFITSizes.iconXs),
-                        tint = colors.muted
+                    Text(
+                        log?.templateName?.ifBlank { dash } ?: dash,
+                        color = colors.text,
+                        fontSize = 16.sp,
+                        fontWeight = FontWeight.SemiBold,
+                        lineHeight = 21.sp,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
                     )
                 }
-            }
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .heightIn(min = IMFITComponentSizes.metricStripMinHeight)
-                    .padding(IMFITComponentSizes.border),
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                HomeSummaryMetric(
-                    value = durationText,
-                    caption = stringResource(R.string.home_last_workout_duration_label),
-                    supporting = stringResource(
-                        R.string.home_last_workout_isometric_support,
-                        summary.isometricDurationText
-                    ),
-                    icon = R.drawable.ic_home_timer,
-                    captionStyle = IMFITTypography.metricCaption,
-                    modifier = Modifier.weight(1f)
-                )
-                HomeSummaryMetricDivider(color = colors.border)
-                HomeSummaryMetric(
-                    value = stringResource(R.string.progress_volume_unit, summary.primaryVolumeText),
-                    caption = volumeCaption,
-                    supporting = stringResource(
-                        R.string.home_last_workout_additional_volume_support,
-                        summary.additionalVolumeText
-                    ),
-                    icon = R.drawable.ic_home_dumbbell,
-                    captionStyle = IMFITTypography.metricCaptionCompact,
-                    modifier = Modifier.weight(1f)
-                )
-                HomeSummaryMetricDivider(color = colors.border)
-                HomeSummaryMetric(
-                    value = stringResource(R.string.home_last_workout_distance_unit, summary.distanceKmText),
-                    caption = stringResource(R.string.home_last_workout_distance_label),
-                    supporting = stringResource(
-                        R.string.home_last_workout_cardio_support,
-                        summary.cardioDurationText
-                    ),
-                    icon = R.drawable.ic_home_footprints,
-                    captionStyle = IMFITTypography.metricCaption,
-                    modifier = Modifier.weight(1f)
+                Icon(
+                    painterResource(R.drawable.ic_home_chevron_right),
+                    null,
+                    Modifier.size(18.dp),
+                    tint = colors.muted
                 )
             }
-            if (footerText != null) {
+            if (log == null) {
                 Text(
-                    text = footerText,
+                    stringResource(R.string.home_summary_empty),
                     color = colors.muted,
                     style = IMFITTypography.metricSupporting
+                )
+            } else {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(12.dp)
+                ) {
+                    metrics.forEach { metric ->
+                        HomeCompactMetric(metric, Modifier.weight(1f))
+                    }
+                }
+            }
+        }
+    }
+}
+
+private data class HomeCompactMetricValue(val caption: String, val number: String, val unit: String?)
+
+@Composable
+private fun HomeCompactMetric(metric: HomeCompactMetricValue, modifier: Modifier = Modifier) {
+    val colors = homePalette()
+    Column(
+        modifier = modifier,
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.spacedBy(2.dp)
+    ) {
+        Text(
+            metric.caption,
+            color = colors.muted,
+            fontSize = 11.sp,
+            lineHeight = 15.sp,
+            textAlign = TextAlign.Center,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis
+        )
+        Row(
+            verticalAlignment = Alignment.Bottom,
+            horizontalArrangement = Arrangement.spacedBy(3.dp)
+        ) {
+            Text(
+                metric.number,
+                color = colors.text,
+                fontSize = 20.sp,
+                fontWeight = FontWeight.SemiBold,
+                lineHeight = 24.sp,
+                modifier = Modifier.alignByBaseline()
+            )
+            if (metric.unit != null) {
+                Text(
+                    metric.unit,
+                    color = colors.muted,
+                    fontSize = 11.sp,
+                    lineHeight = 18.sp,
+                    modifier = Modifier.alignByBaseline()
                 )
             }
         }
@@ -483,63 +491,6 @@ internal fun HomeSectionErrorCard(
                 )
             }
         }
-    }
-}
-
-@Composable
-private fun HomeSummaryMetricDivider(color: Color) {
-    Box(
-        modifier = Modifier
-            .width(IMFITComponentSizes.border)
-            .height(IMFITComponentSizes.metricDivider)
-            .background(color)
-    )
-}
-
-@Composable
-private fun HomeSummaryMetric(
-    value: String,
-    caption: String,
-    supporting: String,
-    @DrawableRes icon: Int,
-    captionStyle: TextStyle,
-    modifier: Modifier = Modifier
-) {
-    val colors = homePalette()
-    Column(
-        modifier = modifier.padding(vertical = IMFITSpacing.sm),
-        horizontalAlignment = Alignment.CenterHorizontally,
-        verticalArrangement = Arrangement.spacedBy(IMFITSpacing.compact, Alignment.CenterVertically)
-    ) {
-        Row(
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(IMFITSpacing.xs)
-        ) {
-            Icon(
-                painterResource(icon),
-                null,
-                Modifier.size(IMFITComponentSizes.metricIcon),
-                tint = colors.primary
-            )
-            Text(
-                caption,
-                color = colors.muted,
-                style = captionStyle,
-                textAlign = TextAlign.Center
-            )
-        }
-        Text(
-            value,
-            color = colors.text,
-            style = IMFITTypography.metricValue,
-            textAlign = TextAlign.Center
-        )
-        Text(
-            supporting,
-            color = colors.muted,
-            style = IMFITTypography.metricSupporting,
-            textAlign = TextAlign.Center
-        )
     }
 }
 

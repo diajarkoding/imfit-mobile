@@ -59,7 +59,7 @@ class HomeScreenPresentationTest {
     private fun text(id: Int) = LocaleManager.getUpdatedContext(rule.activity).getString(id)
 
     @Test
-    fun loadingShowsComponentMatchingShimmersThenEmptyWorkoutRendersZeroMetrics() {
+    fun loadingShowsComponentMatchingShimmersThenEmptyWorkoutRendersEmptySummary() {
         val lastLogGate = CompletableDeferred<HomeRemoteReadResult<WorkoutLog?>>()
         val templatesGate = CompletableDeferred<Result<List<WorkoutTemplate>>>()
         val auth = FakeHomeUiAuthRepository(
@@ -108,7 +108,8 @@ class HomeScreenPresentationTest {
 
         rule.waitForIdle()
         rule.onNodeWithTag("home_last_workout_card").assertIsDisplayed()
-        rule.onNodeWithText(text(R.string.workout_duration_zero)).assertIsDisplayed()
+        rule.onNodeWithText(text(R.string.home_summary_empty)).assertIsDisplayed()
+        rule.onNodeWithText(text(R.string.workout_duration_zero)).assertDoesNotExist()
         rule.onAllNodesWithTag("legacy_routine_recovery").assertCountEquals(0)
     }
 
@@ -290,17 +291,18 @@ class HomeScreenPresentationTest {
         }
 
         rule.onNodeWithTag("home_last_workout_card").assertIsDisplayed()
-        rule.onNodeWithText("TERAKHIR · MULTI-MODAL").assertIsDisplayed()
-        rule.onNodeWithText("Durasi").assertIsDisplayed()
-        rule.onNodeWithText("42 mnt").assertIsDisplayed()
-        rule.onNodeWithText("45 dtk isometrik").assertIsDisplayed()
+        rule.onNodeWithText("LATIHAN TERAKHIR", substring = true).assertIsDisplayed()
+        rule.onNodeWithText("Multi-Modal").assertIsDisplayed()
+        rule.onNodeWithText("Durasi sesi").assertIsDisplayed()
+        rule.onNodeWithText("42").assertIsDisplayed()
         rule.onNodeWithText("Vol. eksternal").assertIsDisplayed()
-        rule.onNodeWithText("400 kg·repetisi").assertIsDisplayed()
-        rule.onNodeWithText("80 kg tambahan").assertIsDisplayed()
+        rule.onNodeWithText("400").assertIsDisplayed()
         rule.onNodeWithText("Jarak").assertIsDisplayed()
-        rule.onNodeWithText("5,0 km").assertIsDisplayed()
-        rule.onNodeWithText("30 mnt kardio").assertIsDisplayed()
-        rule.onNodeWithText("Riwayat lama · 73 repetisi").assertIsDisplayed()
+        rule.onNodeWithText("5,0").assertIsDisplayed()
+        rule.onNodeWithText("80 kg tambahan").assertDoesNotExist()
+        rule.onNodeWithText("45 dtk isometrik").assertDoesNotExist()
+        rule.onNodeWithText("30 mnt kardio").assertDoesNotExist()
+        rule.onNodeWithText("Riwayat lama · 73 repetisi").assertDoesNotExist()
     }
 
     private fun UserProfileState(isProfileLoadingOverride: Boolean): UserProfileState =

@@ -34,4 +34,9 @@
     <string name="home_sync_failed_description">Local data is still saved. Try again when online.</string>
     <string name="home_last_workout_error">Unable to load latest workout summary.</string>
     <string name="home_templates_error">Unable to load routines.</string>
+    <string name="home_last_workout_overline">LAST WORKOUT · %1$s</string>
+    <string name="home_last_workout_session_duration">Session duration</string>
+    <string name="home_last_workout_load_volume">Load volume</string>
+    <string name="home_last_workout_reps_label">Reps</string>
+    <string name="unit_km">km</string>
 </resources>

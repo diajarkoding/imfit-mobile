@@ -37,4 +37,6 @@
     <string name="progress_metric_unavailable">—</string>
     <string name="progress_no_external_volume">No verified external-load volume</string>
     <string name="progress_unverified_notice">%1$d sessions contain unverified historical measurements. Those measurements are excluded from typed progress; session duration remains included.</string>
+    <string name="progress_overview_volume_compact">Volume</string>
+    <string name="progress_overview_training_time">Training time</string>
 </resources>

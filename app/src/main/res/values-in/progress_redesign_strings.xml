@@ -34,4 +34,6 @@
     <string name="progress_metric_unavailable">—</string>
     <string name="progress_no_external_volume">Belum ada volume beban eksternal terverifikasi</string>
     <string name="progress_unverified_notice">%1$d sesi berisi pengukuran historis yang belum terverifikasi. Pengukuran tersebut tidak dihitung dalam progres per metrik; durasi sesi tetap dihitung.</string>
+    <string name="progress_overview_volume_compact">Volume</string>
+    <string name="progress_overview_training_time">Waktu latihan</string>
 </resources>

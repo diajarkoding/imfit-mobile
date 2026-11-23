@@ -76,32 +76,17 @@ internal fun ProgressMetricOverview(metrics: ProgressMetrics) {
     val locale = LocalConfiguration.current.locales[0] ?: Locale.ROOT
     val number = NumberFormat.getNumberInstance(locale).apply { maximumFractionDigits = 1 }
     val period = metrics.month.format(DateTimeFormatter.ofPattern("LLLL yyyy", locale)).replaceFirstChar { it.uppercaseChar() }
-    val cards = mutableListOf<Triple<String, String, ImageVector>>()
-    cards += Triple(
-        if (metrics.monthlyVolume > 0) stringResource(R.string.progress_volume_unit, number.format(metrics.monthlyVolume))
-        else stringResource(R.string.progress_metric_unavailable),
-        stringResource(R.string.progress_overview_volume), Symbols.Outlined.FitnessCenter)
-    if (metrics.monthlyAdditionalVolume > 0) cards += Triple(
-        stringResource(R.string.progress_volume_unit, number.format(metrics.monthlyAdditionalVolume)),
-        stringResource(R.string.progress_additional_volume), Symbols.Outlined.FitnessCenter)
-    if (metrics.monthlyRepetitions > 0) cards += Triple(
-        stringResource(R.string.progress_repetitions_unit, number.format(metrics.monthlyRepetitions)),
-        stringResource(R.string.progress_repetitions), Symbols.Outlined.FitnessCenter)
-    if (metrics.monthlyHoldDurationSeconds > 0) cards += Triple(
-        stringResource(R.string.progress_seconds_unit, number.format(metrics.monthlyHoldDurationSeconds)),
-        stringResource(R.string.progress_hold_duration), Symbols.Default.Timer)
-    if (metrics.monthlyCardioDurationSeconds > 0) cards += Triple(
-        stringResource(R.string.progress_seconds_unit, number.format(metrics.monthlyCardioDurationSeconds)),
-        stringResource(R.string.progress_cardio_duration), Symbols.Default.Timer)
-    if (metrics.monthlyCardioDistanceMeters > 0) cards += Triple(
-        stringResource(R.string.progress_meters_unit, number.format(metrics.monthlyCardioDistanceMeters)),
-        stringResource(R.string.progress_cardio_distance), Symbols.Default.LocalFireDepartment)
-    if (metrics.monthlyOtherDurationSeconds > 0) cards += Triple(
-        stringResource(R.string.progress_seconds_unit, number.format(metrics.monthlyOtherDurationSeconds)),
-        stringResource(R.string.measurement_other_duration), Symbols.Default.Timer)
-    cards += Triple(
-        pluralStringResource(R.plurals.progress_overview_minutes, metrics.monthlyMinutes, metrics.monthlyMinutes),
-        stringResource(R.string.progress_overview_weekly_time), Symbols.Default.Timer)
+    val cards = listOf(
+        Triple(
+            if (metrics.monthlyVolume > 0) stringResource(R.string.redesign_kg, number.format(metrics.monthlyVolume))
+            else stringResource(R.string.progress_metric_unavailable),
+            stringResource(R.string.progress_overview_volume_compact), Symbols.Outlined.FitnessCenter
+        ),
+        Triple(
+            pluralStringResource(R.plurals.progress_overview_minutes, metrics.monthlyMinutes, metrics.monthlyMinutes),
+            stringResource(R.string.progress_overview_training_time), Symbols.Default.Timer
+        )
+    )
     Column(verticalArrangement = Arrangement.spacedBy(IMFITSpacing.md)) {
         BoxWithConstraints(Modifier.fillMaxWidth()) {
             val stacked = maxWidth < IMFITComponentSizes.sectionStackWidth ||

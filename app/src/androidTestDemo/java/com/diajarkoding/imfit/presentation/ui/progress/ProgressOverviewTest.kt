@@ -61,13 +61,15 @@ class ProgressOverviewTest {
             }
         }
         rule.onAllNodesWithText(period).assertCountEquals(2)
-        rule.onNodeWithText(context.getString(R.string.progress_volume_unit, "125")).assertIsDisplayed()
+        rule.onNodeWithText(context.getString(R.string.redesign_kg, "125")).assertIsDisplayed()
+        rule.onNodeWithText(context.getString(R.string.progress_overview_volume_compact)).assertIsDisplayed()
+        rule.onNodeWithText(context.getString(R.string.progress_overview_training_time)).assertIsDisplayed()
         rule.onNodeWithText(context.resources.getQuantityString(R.plurals.progress_overview_minutes, 120, 120)).assertIsDisplayed()
         rule.onNodeWithText(context.getString(R.string.progress_overview_all_history)).assertDoesNotExist()
         rule.onNodeWithText(context.getString(R.string.progress_overview_this_week)).assertDoesNotExist()
     }
 
-    @Test fun typedOverviewDisplaysEveryMetricWithItsOwnMeaningAndUnit() {
+    @Test fun overviewShowsOnlyVolumeAndTrainingTimeCards() {
         val context = InstrumentationRegistry.getInstrumentation().targetContext
         rule.setContent {
             CompositionLocalProvider(LocalConfiguration provides context.resources.configuration,
@@ -82,23 +84,19 @@ class ProgressOverviewTest {
                 }
             }
         }
-        listOf(R.string.progress_overview_volume, R.string.progress_additional_volume,
-            R.string.progress_repetitions, R.string.progress_hold_duration,
-            R.string.progress_cardio_duration, R.string.progress_cardio_distance,
-            R.string.progress_overview_weekly_time).forEach { caption ->
-            rule.onNodeWithText(context.getString(caption)).performScrollTo().assertIsDisplayed()
-        }
         val number = java.text.NumberFormat.getNumberInstance(context.resources.configuration.locales[0])
-        listOf(R.string.progress_volume_unit to 500, R.string.progress_volume_unit to 100,
-            R.string.progress_repetitions_unit to 68, R.string.progress_seconds_unit to 90,
-            R.string.progress_seconds_unit to 600, R.string.progress_meters_unit to 2000).forEach { (unit, value) ->
-            rule.onNodeWithText(context.getString(unit, number.format(value))).performScrollTo().assertIsDisplayed()
-        }
+        rule.onNodeWithText(context.getString(R.string.progress_overview_volume_compact)).assertIsDisplayed()
+        rule.onNodeWithText(context.getString(R.string.redesign_kg, number.format(500))).assertIsDisplayed()
+        rule.onNodeWithText(context.getString(R.string.progress_overview_training_time)).assertIsDisplayed()
         rule.onNodeWithText(context.resources.getQuantityString(R.plurals.progress_overview_minutes, 60, 60))
-            .performScrollTo().assertIsDisplayed()
+            .assertIsDisplayed()
+        listOf(R.string.progress_additional_volume, R.string.progress_repetitions, R.string.progress_hold_duration,
+            R.string.progress_cardio_duration, R.string.progress_cardio_distance).forEach { caption ->
+            rule.onNodeWithText(context.getString(caption)).assertDoesNotExist()
+        }
     }
 
-    @Test fun bodyweightOverviewShowsRepetitionsAndLegacyNoticeNotInventedZeroKgProgress() {
+    @Test fun bodyweightOverviewShowsLegacyNoticeNotInventedZeroKgProgress() {
         val context = InstrumentationRegistry.getInstrumentation().targetContext
         rule.setContent {
             CompositionLocalProvider(LocalConfiguration provides context.resources.configuration,
@@ -111,7 +109,7 @@ class ProgressOverviewTest {
                 }
             }
         }
-        rule.onNodeWithText(context.getString(R.string.progress_repetitions_unit, "15"))
+        rule.onNodeWithText(context.getString(R.string.progress_metric_unavailable))
             .performScrollTo().assertIsDisplayed()
         rule.onNodeWithText(context.getString(R.string.progress_no_external_volume))
             .performScrollTo().assertIsDisplayed()
@@ -119,6 +117,7 @@ class ProgressOverviewTest {
             .performScrollTo().assertIsDisplayed()
         rule.onNodeWithText(context.getString(R.string.redesign_kg, "0")).assertDoesNotExist()
         rule.onNodeWithText(context.getString(R.string.progress_volume_unit, "0")).assertDoesNotExist()
+        rule.onNodeWithText(context.getString(R.string.progress_repetitions_unit, "15")).assertDoesNotExist()
         rule.onNodeWithText(context.getString(R.string.progress_hold_duration)).assertDoesNotExist()
         rule.onNodeWithText(context.getString(R.string.progress_cardio_duration)).assertDoesNotExist()
         rule.onNodeWithText(context.getString(R.string.progress_cardio_distance)).assertDoesNotExist()
